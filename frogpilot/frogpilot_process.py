@@ -10,7 +10,7 @@ from openpilot.common.time_helpers import system_time_valid
 
 from openpilot.frogpilot.assets.theme_manager import THEME_COMPONENT_PARAMS, ThemeManager
 from openpilot.frogpilot.common.frogpilot_backups import backup_toggles
-from openpilot.frogpilot.common.frogpilot_functions import update_maps, update_openpilot
+from openpilot.frogpilot.common.frogpilot_functions import capture_report, update_maps, update_openpilot
 from openpilot.frogpilot.common.frogpilot_utilities import ThreadManager, flash_panda, is_url_pingable, lock_doors
 from openpilot.frogpilot.common.frogpilot_variables import ERROR_LOGS_PATH, FrogPilotVariables
 from openpilot.frogpilot.controls.frogpilot_planner import FrogPilotPlanner
@@ -27,6 +27,11 @@ def check_assets(theme_manager, thread_manager, params_memory, frogpilot_toggles
 
   if params_memory.get_bool("FlashPanda"):
     thread_manager.run_with_lock(flash_panda, (params_memory))
+
+  report_data = params_memory.get("IssueReported")
+  if report_data:
+    capture_report(report_data["DiscordUser"], report_data["Issue"], vars(frogpilot_toggles))
+    params_memory.remove("IssueReported")
 
 def transition_offroad(frogpilot_planner, theme_manager, thread_manager, time_validated, sm, params, frogpilot_toggles):
   params.put("LastGPSPosition", json.dumps(frogpilot_planner.gps_position))
