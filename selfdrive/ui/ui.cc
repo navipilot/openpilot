@@ -77,6 +77,8 @@ static void update_state(UIState *s, FrogPilotUIState *fs) {
   if (scene.started) {
     frogpilot_scene.started_timer += 1;
   }
+  scene.started |= frogpilot_scene.frogpilot_toggles.value("force_onroad").toBool();
+  scene.started &= !frogpilot_scene.frogpilot_toggles.value("force_offroad").toBool();
 }
 
 void ui_update_params(UIState *s) {

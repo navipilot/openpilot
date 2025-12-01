@@ -306,6 +306,8 @@ class FrogPilotVariables:
       toggle.liveValid = False
 
     toggle.debug_mode = self.params.get_bool("DebugMode")
+    toggle.force_offroad = self.params.get_bool("ForceOffroad")
+    toggle.force_onroad = self.params.get_bool("ForceOnroad")
 
     toggle.is_metric = self.params.get_bool("IsMetric")
     distance_conversion = 1 if toggle.is_metric else CV.FOOT_TO_METER
@@ -475,7 +477,7 @@ class FrogPilotVariables:
     toggle.device_shutdown_time = DEVICE_SHUTDOWN_TIMES.get(self.get_value("DeviceShutdown", cast=int, condition=device_management))
     toggle.increase_thermal_limits = self.get_value("IncreaseThermalLimits", condition=device_management)
     toggle.low_voltage_shutdown = self.get_value("LowVoltageShutdown", cast=float, condition=device_management, min=VBATT_PAUSE_CHARGING, max=12.5)
-    toggle.no_logging = self.get_value("NoLogging", condition=device_management and not self.vetting_branch)
+    toggle.no_logging = self.get_value("NoLogging", condition=device_management and not self.vetting_branch) or toggle.force_onroad
     toggle.no_uploads = self.get_value("NoUploads", condition=device_management and not self.vetting_branch)
     toggle.no_onroad_uploads = self.get_value("DisableOnroadUploads", condition=toggle.no_uploads)
 
@@ -592,7 +594,7 @@ class FrogPilotVariables:
 
     screen_management = self.get_value("ScreenManagement")
     toggle.screen_brightness = max(self.get_value("ScreenBrightness", cast=float, condition=screen_management), 1)
-    toggle.screen_brightness_onroad = self.get_value("ScreenBrightnessOnroad", cast=float, condition=(screen_management))
+    toggle.screen_brightness_onroad = self.get_value("ScreenBrightnessOnroad", cast=float, condition=(screen_management and not toggle.force_onroad))
     toggle.screen_recorder = self.get_value("ScreenRecorder", condition=screen_management) or toggle.debug_mode
     toggle.screen_timeout = self.get_value("ScreenTimeout", cast=float, condition=screen_management)
     toggle.screen_timeout_onroad = self.get_value("ScreenTimeoutOnroad", cast=float, condition=screen_management)

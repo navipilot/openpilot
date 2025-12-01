@@ -40,6 +40,34 @@ FrogPilotUtilitiesPanel::FrogPilotUtilitiesPanel(FrogPilotSettingsWindow *parent
   }
   addItem(flashPandaButton);
 
+  FrogPilotButtonsControl *forceStartedButton = new FrogPilotButtonsControl(tr("Force Drive State"), tr("<b>Force openpilot to be offroad or onroad.</b>"), "", {tr("OFFROAD"), tr("ONROAD"), tr("OFF")}, true);
+  QObject::connect(forceStartedButton, &FrogPilotButtonsControl::buttonClicked, [this](int id) {
+    if (id == 0) {
+      params.putBool("ForceOffroad", true);
+      params.putBool("ForceOnroad", false);
+
+      updateFrogPilotToggles();
+    } else if (id == 1) {
+      params.put("CarParams", params.get("CarParamsPersistent"));
+      params.put("FrogPilotCarParams", params.get("FrogPilotCarParamsPersistent"));
+
+      params.putBool("ForceOffroad", false);
+      params.putBool("ForceOnroad", true);
+
+      updateFrogPilotToggles();
+    } else if (id == 2) {
+      params.putBool("ForceOffroad", false);
+      params.putBool("ForceOnroad", false);
+
+      updateFrogPilotToggles();
+    }
+  });
+  forceStartedButton->setCheckedButton(2);
+  if (forceOpenDescriptions) {
+    forceStartedButton->showDescription();
+  }
+  addItem(forceStartedButton);
+
   ButtonControl *resetTogglesButton = new ButtonControl(tr("Reset Toggles to Default"), tr("RESET"), tr("<b>Reset all toggles to their default values.</b>"));
   QObject::connect(resetTogglesButton, &ButtonControl::clicked, [parent, resetTogglesButton, this]() {
     if (ConfirmationDialog::confirm(tr("Are you sure you want to reset all toggles to their default values?"), tr("Reset"), this)) {
