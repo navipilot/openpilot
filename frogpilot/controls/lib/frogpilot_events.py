@@ -13,6 +13,7 @@ class FrogPilotEvents:
     self.stopped_for_light = False
 
     self.max_acceleration = 0
+    self.tracked_lead_distance = 0
 
     self.played_events = set()
 
@@ -46,6 +47,18 @@ class FrogPilotEvents:
 
     if "holidayActive" not in self.played_events and self.startup_seen and alerts_empty and len(self.events) == 0 and frogpilot_toggles.current_holiday_theme != "stock":
       self.events.add(FrogPilotEventName.holidayActive)
+
+    if self.frogpilot_planner.tracking_lead and sm["carState"].standstill and sm["carState"].gearShifter not in NON_DRIVING_GEARS:
+      if self.tracked_lead_distance == 0:
+        self.tracked_lead_distance = self.frogpilot_planner.lead_one.dRel
+
+      lead_departing = self.frogpilot_planner.lead_one.dRel - self.tracked_lead_distance >= 1
+      lead_departing &= self.frogpilot_planner.lead_one.vLead >= 1
+
+      if lead_departing and frogpilot_toggles.lead_departing_alert:
+        self.events.add(FrogPilotEventName.leadDeparting)
+    else:
+      self.tracked_lead_distance = 0
 
     if self.error_log.is_file():
       self.events.add(FrogPilotEventName.openpilotCrashed)
