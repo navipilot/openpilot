@@ -70,6 +70,11 @@ private:
 
   // FrogPilot variables
   void showEvent(QShowEvent *event);
+  void updateTheme();
 
   Params params;
+
+  QSharedPointer<QMovie> flag_gif;
+  QSharedPointer<QMovie> home_gif;
+  QSharedPointer<QMovie> settings_gif;
 };

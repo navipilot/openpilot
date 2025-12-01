@@ -39,6 +39,7 @@ public:
   WifiManager *wifi;
 
 signals:
+  void themeUpdated();
 };
 
 FrogPilotUIState *frogpilotUIState();

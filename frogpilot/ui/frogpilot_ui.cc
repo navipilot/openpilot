@@ -16,6 +16,9 @@ static void update_state(FrogPilotUIState *fs) {
   }
   if (fpsm.updated("frogpilotPlan")) {
     const cereal::FrogPilotPlan::Reader &frogpilotPlan = fpsm["frogpilotPlan"].getFrogpilotPlan();
+    if (frogpilotPlan.getThemeUpdated()) {
+      emit fs->themeUpdated();
+    }
     capnp::Text::Reader toggles = frogpilotPlan.getFrogpilotToggles();
     QByteArray current_toggles(toggles.cStr(), toggles.size());
     static QByteArray previous_toggles;

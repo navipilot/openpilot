@@ -32,10 +32,15 @@ private:
   // FrogPilot variables
   void showEvent(QShowEvent *event) override;
   void updateBackgroundColor();
+  void updateTheme();
 
   Params params_memory{"", true};
 
   QColor background_color;
+
+  QPixmap wheel_img;
+
+  QSharedPointer<QMovie> wheel_gif;
 };
 
 void drawIcon(QPainter &p, const QPoint &center, const QPixmap &img, const QBrush &bg, float opacity);
