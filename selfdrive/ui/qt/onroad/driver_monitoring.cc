@@ -73,6 +73,8 @@ void DriverMonitorRenderer::draw(QPainter &painter, const QRect &surface_rect) {
   float y = surface_rect.height() - offset;
   float opacity = is_active ? 0.65f : 0.2f;
 
+  // FrogPilot variables
+
   drawIcon(painter, QPoint(x, y), dm_img, QColor(0, 0, 0, 70), opacity);
 
   QPointF keypoints[std::size(DEFAULT_FACE_KPTS_3D)];
@@ -104,4 +106,11 @@ void DriverMonitorRenderer::draw(QPainter &painter, const QRect &surface_rect) {
   painter.drawArc(QRectF(x - arc_l / 2, std::min(y + delta_y, y), arc_l, std::abs(delta_y)), (driver_pose_sins[0] > 0 ? 0 : 180) * 16, 180 * 16);
 
   painter.restore();
+
+  // FrogPilot variables
+  if (frogpilot_nvg) {
+    frogpilot_nvg->dmIconPosition.setX(x);
+    frogpilot_nvg->dmIconPosition.setY(y);
+    frogpilot_nvg->rightHandDM = is_rhd;
+  }
 }

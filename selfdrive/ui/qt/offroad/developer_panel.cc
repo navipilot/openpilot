@@ -45,6 +45,8 @@ DeveloperPanel::DeveloperPanel(SettingsWindow *parent) : ListWidget(parent) {
 
   // Toggles should be not available to change in onroad state
   QObject::connect(uiState(), &UIState::offroadTransition, this, &DeveloperPanel::updateToggles);
+
+  // FrogPilot variables
 }
 
 void DeveloperPanel::updateToggles(bool _offroad) {
@@ -59,6 +61,8 @@ void DeveloperPanel::updateToggles(bool _offroad) {
     if (btn != experimentalLongitudinalToggle) {
       btn->setEnabled(_offroad);
     }
+
+    // FrogPilot variables
   }
 
   // longManeuverToggle and experimentalLongitudinalToggle should not be toggleable if the car does not have longitudinal control
@@ -81,6 +85,8 @@ void DeveloperPanel::updateToggles(bool _offroad) {
     experimentalLongitudinalToggle->setVisible(CP.getAlphaLongitudinalAvailable() && !is_release);
 
     longManeuverToggle->setEnabled(hasLongitudinalControl(CP) && _offroad);
+
+    // FrogPilot variables
   } else {
     longManeuverToggle->setEnabled(false);
     experimentalLongitudinalToggle->setVisible(false);
@@ -88,8 +94,12 @@ void DeveloperPanel::updateToggles(bool _offroad) {
   experimentalLongitudinalToggle->refresh();
 
   offroad = _offroad;
+
+  // FrogPilot variables
 }
 
 void DeveloperPanel::showEvent(QShowEvent *event) {
   updateToggles(offroad);
+
+  // FrogPilot variables
 }

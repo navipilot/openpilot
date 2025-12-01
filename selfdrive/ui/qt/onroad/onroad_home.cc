@@ -37,15 +37,27 @@ OnroadWindow::OnroadWindow(QWidget *parent) : QWidget(parent) {
   setAttribute(Qt::WA_OpaquePaintEvent);
   QObject::connect(uiState(), &UIState::uiUpdate, this, &OnroadWindow::updateState);
   QObject::connect(uiState(), &UIState::offroadTransition, this, &OnroadWindow::offroadTransition);
+
+  // FrogPilot variables
+  frogpilot_nvg = new FrogPilotAnnotatedCameraWidget(this);
+  frogpilot_onroad = new FrogPilotOnroadWindow(this);
+  frogpilot_onroad->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+
+  stacked_layout->addWidget(frogpilot_nvg);
+  stacked_layout->addWidget(frogpilot_onroad);
+
+  frogpilot_onroad->raise();
+
+  nvg->frogpilot_nvg = frogpilot_nvg;
 }
 
-void OnroadWindow::updateState(const UIState &s) {
+void OnroadWindow::updateState(const UIState &s, const FrogPilotUIState &fs) {
   if (!s.scene.started) {
     return;
   }
 
-  alerts->updateState(s);
-  nvg->updateState(s);
+  alerts->updateState(s, fs);
+  nvg->updateState(s, fs);
 
   QColor bgColor = bg_colors[s.status];
   if (bg != bgColor) {
@@ -53,6 +65,24 @@ void OnroadWindow::updateState(const UIState &s) {
     bg = bgColor;
     update();
   }
+
+  // FrogPilot variables
+  const FrogPilotUIScene &frogpilot_scene = fs.frogpilot_scene;
+
+  frogpilot_nvg->alertHeight = alerts->alertHeight;
+
+  frogpilot_onroad->bg = bg;
+
+  nvg->frogpilot_nvg = frogpilot_nvg;
+
+  nvg->frogpilot_scene = frogpilot_scene;
+  frogpilot_nvg->frogpilot_scene = frogpilot_scene;
+  frogpilot_onroad->frogpilot_scene = frogpilot_scene;
+
+  frogpilot_onroad->setGeometry(rect());
+
+  frogpilot_nvg->updateState(s, fs);
+  frogpilot_onroad->updateState(s, fs);
 }
 
 void OnroadWindow::offroadTransition(bool offroad) {
@@ -62,4 +92,16 @@ void OnroadWindow::offroadTransition(bool offroad) {
 void OnroadWindow::paintEvent(QPaintEvent *event) {
   QPainter p(this);
   p.fillRect(rect(), QColor(bg.red(), bg.green(), bg.blue(), 255));
+}
+
+// FrogPilot variables
+void OnroadWindow::mousePressEvent(QMouseEvent* mouseEvent) {
+  frogpilot_nvg->mousePressEvent(mouseEvent);
+
+  if (mouseEvent->isAccepted()) {
+    return;
+  }
+
+  // propagation event to parent(HomeWindow)
+  QWidget::mousePressEvent(mouseEvent);
 }

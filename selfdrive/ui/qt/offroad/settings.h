@@ -25,6 +25,9 @@ public:
 protected:
   void showEvent(QShowEvent *event) override;
 
+  // FrogPilot variables
+  void hideEvent(QHideEvent *event) override;
+
 signals:
   void closeSettings();
   void reviewTrainingGuide();
@@ -32,11 +35,16 @@ signals:
   void expandToggleDescription(const QString &param);
   void scrollToToggle(const QString &param);
 
+  // FrogPilot variables
+
 private:
   QPushButton *sidebar_alert_widget;
   QWidget *sidebar_widget;
   QButtonGroup *nav_btns;
   QStackedWidget *panel_widget;
+
+  // FrogPilot variables
+  Params params;
 };
 
 class DevicePanel : public ListWidget {
@@ -64,6 +72,9 @@ class TogglesPanel : public ListWidget {
 public:
   explicit TogglesPanel(SettingsWindow *parent);
   void showEvent(QShowEvent *event) override;
+
+signals:
+  // FrogPilot variables
 
 public slots:
   void expandToggleDescription(const QString &param);

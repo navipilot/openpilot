@@ -33,6 +33,8 @@ public:
   void setMinLength(int length);
   void show();
 
+  // FrogPilot variables
+
 private:
   int minLength;
   QLineEdit *line;
@@ -41,6 +43,8 @@ private:
   QLabel *sublabel;
   QVBoxLayout *main_layout;
   QPushButton *eye_btn;
+
+  // FrogPilot variables
 
 private slots:
   void handleEnter();

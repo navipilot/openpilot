@@ -20,6 +20,8 @@ class Sidebar : public QFrame {
   Q_PROPERTY(int netStrength MEMBER net_strength NOTIFY valueChanged);
   Q_PROPERTY(bool recordingAudio MEMBER recording_audio NOTIFY valueChanged);
 
+  // FrogPilot properties
+
 public:
   explicit Sidebar(QWidget* parent = 0);
 
@@ -29,7 +31,7 @@ signals:
 
 public slots:
   void offroadTransition(bool offroad);
-  void updateState(const UIState &s);
+  void updateState(const UIState &s, const FrogPilotUIState &fs);
 
 protected:
   void paintEvent(QPaintEvent *event) override;
@@ -60,7 +62,14 @@ protected:
   QString net_type;
   int net_strength = 0;
 
+  // FrogPilot variables
+
 private:
   std::unique_ptr<PubMaster> pm;
   Networking *networking = nullptr;
+
+  // FrogPilot variables
+  void showEvent(QShowEvent *event);
+
+  Params params;
 };

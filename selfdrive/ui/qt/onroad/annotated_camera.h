@@ -8,12 +8,19 @@
 #include "selfdrive/ui/qt/onroad/model.h"
 #include "selfdrive/ui/qt/widgets/cameraview.h"
 
+#include "frogpilot/ui/qt/onroad/frogpilot_buttons.h"
+
 class AnnotatedCameraWidget : public CameraWidget {
   Q_OBJECT
 
 public:
   explicit AnnotatedCameraWidget(VisionStreamType type, QWidget* parent = 0);
-  void updateState(const UIState &s);
+  void updateState(const UIState &s, const FrogPilotUIState &fs);
+
+  // FrogPilot variables
+  FrogPilotAnnotatedCameraWidget *frogpilot_nvg;
+
+  FrogPilotUIScene frogpilot_scene;
 
 private:
   QVBoxLayout *main_layout;
@@ -25,6 +32,8 @@ private:
 
   int skip_frame_count = 0;
   bool wide_cam_requested = false;
+
+  // FrogPilot variables
 
 protected:
   void paintGL() override;

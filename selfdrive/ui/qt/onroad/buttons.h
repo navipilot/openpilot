@@ -12,7 +12,10 @@ class ExperimentalButton : public QPushButton {
 
 public:
   explicit ExperimentalButton(QWidget *parent = 0);
-  void updateState(const UIState &s);
+  void updateState(const UIState &s, const FrogPilotUIState &fs);
+
+  // FrogPilot variables
+  FrogPilotUIScene frogpilot_scene;
 
 private:
   void paintEvent(QPaintEvent *event) override;
@@ -23,6 +26,9 @@ private:
   QPixmap experimental_img;
   bool experimental_mode;
   bool engageable;
+
+  // FrogPilot variables
+  void showEvent(QShowEvent *event) override;
 };
 
 void drawIcon(QPainter &p, const QPoint &center, const QPixmap &img, const QBrush &bg, float opacity);

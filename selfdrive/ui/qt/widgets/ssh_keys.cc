@@ -19,6 +19,7 @@ SshControl::SshControl() :
     } else {
       params.remove("GithubUsername");
       params.remove("GithubSshKeys");
+
       refresh();
     }
   });

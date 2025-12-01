@@ -18,7 +18,7 @@ static void update_sockets(UIState *s) {
   s->sm->update(0);
 }
 
-static void update_state(UIState *s) {
+static void update_state(UIState *s, FrogPilotUIState *fs) {
   SubMaster &sm = *(s->sm);
   UIScene &scene = s->scene;
 
@@ -63,6 +63,20 @@ static void update_state(UIState *s) {
 
   auto params = Params();
   scene.recording_audio = params.getBool("RecordAudio") && scene.started;
+
+  // FrogPilot variables
+  FrogPilotUIScene &frogpilot_scene = fs->frogpilot_scene;
+
+  if (sm.updated("carState")) {
+    const cereal::CarState::Reader &carState = sm["carState"].getCarState();
+    frogpilot_scene.parked = carState.getGearShifter() == cereal::CarState::GearShifter::PARK;
+    frogpilot_scene.reverse = carState.getGearShifter() == cereal::CarState::GearShifter::REVERSE;
+    frogpilot_scene.standstill = carState.getStandstill() && !frogpilot_scene.reverse;
+  }
+
+  if (scene.started) {
+    frogpilot_scene.started_timer += 1;
+  }
 }
 
 void ui_update_params(UIState *s) {
@@ -70,15 +84,23 @@ void ui_update_params(UIState *s) {
   s->scene.is_metric = params.getBool("IsMetric");
 }
 
-void UIState::updateStatus() {
+void UIState::updateStatus(FrogPilotUIState *fs) {
+  // FrogPilot variables
+  FrogPilotUIScene &frogpilot_scene = fs->frogpilot_scene;
+
   if (scene.started && sm->updated("selfdriveState")) {
     auto ss = (*sm)["selfdriveState"].getSelfdriveState();
     auto state = ss.getState();
+
+    // FrogPilot variables
+
     if (state == cereal::SelfdriveState::OpenpilotState::PRE_ENABLED || state == cereal::SelfdriveState::OpenpilotState::OVERRIDING) {
       status = STATUS_OVERRIDE;
     } else {
       status = ss.getEnabled() ? STATUS_ENGAGED : STATUS_DISENGAGED;
     }
+
+    // FrogPilot variables
   }
 
   if (engaged() != engaged_prev) {
@@ -94,6 +116,8 @@ void UIState::updateStatus() {
     }
     started_prev = scene.started;
     emit offroadTransition(!scene.started);
+
+    // FrogPilot variables
   }
 }
 
@@ -114,13 +138,19 @@ UIState::UIState(QObject *parent) : QObject(parent) {
 
 void UIState::update() {
   update_sockets(this);
-  update_state(this);
-  updateStatus();
+  update_state(this, frogpilotUIState());
+  updateStatus(frogpilotUIState());
 
   if (sm->frame % UI_FREQ == 0) {
     watchdog_kick(nanos_since_boot());
   }
-  emit uiUpdate(*this);
+  emit uiUpdate(*this, *frogpilotUIState());
+
+  // FrogPilot variables
+  FrogPilotUIState *fs = frogpilotUIState();
+  FrogPilotUIScene &frogpilot_scene = fs->frogpilot_scene;
+
+  fs->update();
 }
 
 Device::Device(QObject *parent) : brightness_filter(BACKLIGHT_OFFROAD, BACKLIGHT_TS, BACKLIGHT_DT), QObject(parent) {
@@ -130,9 +160,9 @@ Device::Device(QObject *parent) : brightness_filter(BACKLIGHT_OFFROAD, BACKLIGHT
   QObject::connect(uiState(), &UIState::uiUpdate, this, &Device::update);
 }
 
-void Device::update(const UIState &s) {
-  updateBrightness(s);
-  updateWakefulness(s);
+void Device::update(const UIState &s, const FrogPilotUIState &fs) {
+  updateBrightness(s, fs);
+  updateWakefulness(s, fs);
 }
 
 void Device::setAwake(bool on) {
@@ -147,11 +177,16 @@ void Device::setAwake(bool on) {
 void Device::resetInteractiveTimeout(int timeout) {
   if (timeout == -1) {
     timeout = (ignition_on ? 10 : 30);
+  } else {
+    // FrogPilot variables
   }
   interactive_timeout = timeout * UI_FREQ;
 }
 
-void Device::updateBrightness(const UIState &s) {
+void Device::updateBrightness(const UIState &s, const FrogPilotUIState &fs) {
+  // FrogPilot variables
+  const FrogPilotUIScene &frogpilot_scene = fs.frogpilot_scene;
+
   float clipped_brightness = offroad_brightness;
   if (s.scene.started && s.scene.light_sensor >= 0) {
     clipped_brightness = s.scene.light_sensor;
@@ -180,7 +215,10 @@ void Device::updateBrightness(const UIState &s) {
   }
 }
 
-void Device::updateWakefulness(const UIState &s) {
+void Device::updateWakefulness(const UIState &s, const FrogPilotUIState &fs) {
+  // FrogPilot variables
+  const FrogPilotUIScene &frogpilot_scene = fs.frogpilot_scene;
+
   bool ignition_just_turned_off = !s.scene.ignition && ignition_on;
   ignition_on = s.scene.ignition;
 

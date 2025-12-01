@@ -141,6 +141,8 @@ InputDialog::InputDialog(const QString &title, QWidget *parent, const QString &s
   QObject::connect(k, &Keyboard::emitEnter, this, &InputDialog::handleEnter);
   QObject::connect(k, &Keyboard::emitBackspace, this, [=]() {
     line->backspace();
+
+    // FrogPilot variables
   });
   QObject::connect(k, &Keyboard::emitKey, this, [=](const QString &key) {
     line->insert(key.left(1));
@@ -154,6 +156,9 @@ QString InputDialog::getText(const QString &prompt, QWidget *parent, const QStri
   InputDialog d(prompt, parent, subtitle, secret);
   d.line->setText(defaultText);
   d.setMinLength(minLength);
+
+  // FrogPilot variables
+
   const int ret = d.exec();
   return ret ? d.text() : QString();
 }
@@ -185,6 +190,8 @@ void InputDialog::setMessage(const QString &message, bool clearInputField) {
 void InputDialog::setMinLength(int length) {
   minLength = length;
 }
+
+// FrogPilot variables
 
 // ConfirmationDialog
 

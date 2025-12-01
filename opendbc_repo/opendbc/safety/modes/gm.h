@@ -123,6 +123,8 @@ static void gm_rx_hook(const CANPacket_t *msg) {
       gas_pressed = gas_interceptor > GM_GAS_INTERCEPTOR_THRESHOLD;
     }
   }
+
+  // FrogPilot variables
 }
 
 static bool gm_tx_hook(const CANPacket_t *msg) {

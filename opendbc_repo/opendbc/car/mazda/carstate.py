@@ -115,6 +115,8 @@ class CarState(CarStateBase):
     # TODO: add button types for inc and dec
     ret.buttonEvents = create_button_events(self.distance_button, prev_distance_button, {1: ButtonType.gapAdjustCruise})
 
+    # FrogPilot variables
+
     return ret
 
   @staticmethod

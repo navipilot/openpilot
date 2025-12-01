@@ -158,6 +158,8 @@ static void ford_rx_hook(const CANPacket_t *msg) {
       unsigned int cruise_state = msg->data[1] & 0x07U;
       bool cruise_engaged = (cruise_state == 4U) || (cruise_state == 5U);
       pcm_cruise_check(cruise_engaged);
+
+      // FrogPilot variables
     }
   }
 }

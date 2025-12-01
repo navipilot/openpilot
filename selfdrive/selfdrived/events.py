@@ -9,6 +9,7 @@ from cereal import log, car
 import cereal.messaging as messaging
 from openpilot.common.constants import CV
 from openpilot.common.git import get_short_branch
+from openpilot.common.params import Params
 from openpilot.common.realtime import DT_CTRL
 from openpilot.selfdrive.locationd.calibrationd import MIN_SPEED_FILTER
 from openpilot.system.micd import SAMPLE_RATE, SAMPLE_BUFFER
@@ -20,6 +21,8 @@ AlertStatus = log.SelfdriveState.AlertStatus
 VisualAlert = car.CarControl.HUDControl.VisualAlert
 AudibleAlert = car.CarControl.HUDControl.AudibleAlert
 EventName = log.OnroadEvent.EventName
+
+# FrogPilot variables
 
 
 # Alert priorities
@@ -48,6 +51,8 @@ class ET:
 
 # get event name from enum
 EVENT_NAME = {v: k for k, v in EventName.schema.enumerants.items()}
+
+# FrogPilot variables
 
 
 class Events:
@@ -387,6 +392,9 @@ def invalid_lkas_setting_alert(CP: car.CarParams, CS: car.CarState, sm: messagin
   elif CP.brand == "nissan":
     text = "Disable your car's stock LKAS to engage"
   return NormalPermanentAlert("Invalid LKAS setting", text)
+
+
+# FrogPilot variables
 
 
 
@@ -1018,6 +1026,10 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   EventName.audioFeedback: {
     ET.PERMANENT: audio_feedback_alert,
   },
+}
+
+# FrogPilot variables
+FROGPILOT_EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
 }
 
 

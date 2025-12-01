@@ -119,6 +119,8 @@ TogglesPanel::TogglesPanel(SettingsWindow *parent) : ListWidget(parent) {
   // Toggles with confirmation dialogs
   toggles["ExperimentalMode"]->setActiveIcon("../assets/icons/experimental.svg");
   toggles["ExperimentalMode"]->setConfirmation(true, true);
+
+  // FrogPilot variables
 }
 
 void TogglesPanel::updateState(const UIState &s) {
@@ -201,6 +203,10 @@ void TogglesPanel::updateToggles() {
   } else {
     experimental_mode_toggle->setDescription(e2e_description);
   }
+
+  // FrogPilot variables
+  FrogPilotUIState &fs = *frogpilotUIState();
+  FrogPilotUIScene &frogpilot_scene = fs.frogpilot_scene;
 }
 
 DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
@@ -406,6 +412,10 @@ void SettingsWindow::showEvent(QShowEvent *event) {
   setCurrentPanel(0);
 }
 
+// FrogPilot variables
+void SettingsWindow::hideEvent(QHideEvent *event) {
+}
+
 void SettingsWindow::setCurrentPanel(int index, const QString &param) {
   if (!param.isEmpty()) {
     // Check if param ends with "Panel" to determine if it's a panel name
@@ -454,7 +464,10 @@ SettingsWindow::SettingsWindow(QWidget *parent) : QFrame(parent) {
   close_btn->setFixedSize(200, 200);
   sidebar_layout->addSpacing(45);
   sidebar_layout->addWidget(close_btn, 0, Qt::AlignCenter);
-  QObject::connect(close_btn, &QPushButton::clicked, this, &SettingsWindow::closeSettings);
+  QObject::connect(close_btn, &QPushButton::clicked, [this]() {
+    // FrogPilot variables
+    closeSettings();
+  });
 
   // setup panels
   DevicePanel *device = new DevicePanel(this);
@@ -467,6 +480,8 @@ SettingsWindow::SettingsWindow(QWidget *parent) : QFrame(parent) {
 
   auto networking = new Networking(this);
   QObject::connect(uiState()->prime_state, &PrimeState::changed, networking, &Networking::setPrimeType);
+
+  // FrogPilot variables
 
   QList<QPair<QString, QWidget *>> panels = {
     {tr("Device"), device},
@@ -508,6 +523,8 @@ SettingsWindow::SettingsWindow(QWidget *parent) : QFrame(parent) {
     panel_widget->addWidget(panel_frame);
 
     QObject::connect(btn, &QPushButton::clicked, [=, w = panel_frame]() {
+      // FrogPilot variables
+
       btn->setChecked(true);
       panel_widget->setCurrentWidget(w);
     });

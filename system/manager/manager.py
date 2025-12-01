@@ -21,6 +21,8 @@ from openpilot.common.swaglog import cloudlog, add_file_handler
 from openpilot.system.version import get_build_metadata, terms_version, training_version
 from openpilot.system.hardware.hw import Paths
 
+from openpilot.frogpilot.common.frogpilot_functions import frogpilot_boot_functions, install_frogpilot, uninstall_frogpilot
+
 
 def manager_init() -> None:
   save_bootlog()
@@ -37,6 +39,8 @@ def manager_init() -> None:
 
   if params.get_bool("RecordFrontLock"):
     params.put_bool("RecordFront", True)
+
+  # FrogPilot variables
 
   # set unset params to their default value
   for k in params.all_keys():
@@ -93,6 +97,10 @@ def manager_init() -> None:
   for p in managed_processes.values():
     p.prepare()
 
+  # FrogPilot variables
+  install_frogpilot()
+  frogpilot_boot_functions()
+
 
 def manager_cleanup() -> None:
   # send signals to kill all procs
@@ -129,6 +137,8 @@ def manager_thread() -> None:
   started_prev = False
   ignition_prev = False
 
+  # FrogPilot variables
+
   while True:
     sm.update(1000)
 
@@ -136,8 +146,12 @@ def manager_thread() -> None:
 
     if started and not started_prev:
       params.clear_all(ParamKeyFlag.CLEAR_ON_ONROAD_TRANSITION)
+
+      # FrogPilot variables
     elif not started and started_prev:
       params.clear_all(ParamKeyFlag.CLEAR_ON_OFFROAD_TRANSITION)
+
+      # FrogPilot variables
 
     ignition = any(ps.ignitionLine or ps.ignitionCan for ps in sm['pandaStates'] if ps.pandaType != log.PandaState.PandaType.unknown)
     if ignition and not ignition_prev:
@@ -181,6 +195,8 @@ def manager_thread() -> None:
     if shutdown:
       break
 
+    # FrogPilot variables
+
 
 def main() -> None:
   manager_init()
@@ -201,7 +217,7 @@ def main() -> None:
   params = Params()
   if params.get_bool("DoUninstall"):
     cloudlog.warning("uninstalling")
-    HARDWARE.uninstall()
+    uninstall_frogpilot()
   elif params.get_bool("DoReboot"):
     cloudlog.warning("reboot")
     HARDWARE.reboot()

@@ -9,8 +9,11 @@ class OnroadAlerts : public QWidget {
 
 public:
   OnroadAlerts(QWidget *parent = 0) : QWidget(parent) {}
-  void updateState(const UIState &s);
+  void updateState(const UIState &s, const FrogPilotUIState &fs);
   void clear();
+
+  // FrogPilot variables
+  int alertHeight;
 
 protected:
   struct Alert {
@@ -36,4 +39,6 @@ protected:
 
   QColor bg;
   Alert alert = {};
+
+  // FrogPilot variables
 };

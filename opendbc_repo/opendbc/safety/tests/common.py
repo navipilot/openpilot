@@ -301,6 +301,8 @@ class TorqueSteeringSafetyTestBase(SafetyTestBase, abc.ABC):
     for _ in range(10):
       self.assertFalse(self._tx(self._torque_cmd_msg(self.MAX_TORQUE, 1)))
 
+  # FrogPilot variables
+
 
 class SteerRequestCutSafetyTest(TorqueSteeringSafetyTestBase, abc.ABC):
 
@@ -805,6 +807,8 @@ class AngleSteeringSafetyTest(VehicleSpeedSafetyTest):
     self.assertFalse(self._tx(self._angle_cmd_msg(0, True, increment_timer=False)))
     for _ in range(5):
       self.assertTrue(self._tx(self._angle_cmd_msg(0, True, increment_timer=False)))
+
+  # FrogPilot variables
 
 
 class SafetyTest(SafetyTestBase):

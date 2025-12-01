@@ -69,6 +69,8 @@ public:
   void changeTetheringPassword(const QString &newPassword);
   QString getTetheringPassword();
 
+  // FrogPilot variables
+
 private:
   QString adapter;  // Path to network manager wifi-device
   QTimer timer;

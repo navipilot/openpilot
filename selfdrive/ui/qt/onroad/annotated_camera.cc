@@ -19,12 +19,21 @@ AnnotatedCameraWidget::AnnotatedCameraWidget(VisionStreamType type, QWidget *par
 
   experimental_btn = new ExperimentalButton(this);
   main_layout->addWidget(experimental_btn, 0, Qt::AlignTop | Qt::AlignRight);
+
+  // FrogPilot variables
 }
 
-void AnnotatedCameraWidget::updateState(const UIState &s) {
+void AnnotatedCameraWidget::updateState(const UIState &s, const FrogPilotUIState &fs) {
   // update engageability/experimental mode button
-  experimental_btn->updateState(s);
+  experimental_btn->updateState(s, fs);
   dmon.updateState(s);
+
+  // FrogPilot variables
+  const SubMaster &sm = *(s.sm);
+
+  const cereal::CarState::Reader &carState = sm["carState"].getCarState();
+
+  frogpilot_nvg->experimentalButtonPosition = QPoint(experimental_btn->x(), experimental_btn->y());
 }
 
 void AnnotatedCameraWidget::initializeGL() {
@@ -129,10 +138,21 @@ void AnnotatedCameraWidget::paintGL() {
   painter.setRenderHint(QPainter::Antialiasing);
   painter.setPen(Qt::NoPen);
 
+  // FrogPilot variables
+  dmon.frogpilot_nvg = frogpilot_nvg;
+  hud.frogpilot_nvg = frogpilot_nvg;
+  model.frogpilot_nvg = frogpilot_nvg;
+
+  experimental_btn->frogpilot_scene = frogpilot_scene;
+  model.frogpilot_scene = frogpilot_scene;
+
   model.draw(painter, rect());
   dmon.draw(painter, rect());
   hud.updateState(*s);
   hud.draw(painter, rect());
+
+  // FrogPilot variables
+  frogpilot_nvg->paintFrogPilotWidgets(painter, *s);
 
   double cur_draw_t = millis_since_boot();
   double dt = cur_draw_t - prev_draw_t;

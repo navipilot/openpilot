@@ -42,13 +42,15 @@ HomeWindow::HomeWindow(QWidget* parent) : QWidget(parent) {
   QObject::connect(uiState(), &UIState::uiUpdate, this, &HomeWindow::updateState);
   QObject::connect(uiState(), &UIState::offroadTransition, this, &HomeWindow::offroadTransition);
   QObject::connect(uiState(), &UIState::offroadTransition, sidebar, &Sidebar::offroadTransition);
+
+  // FrogPilot variables
 }
 
 void HomeWindow::showSidebar(bool show) {
   sidebar->setVisible(show);
 }
 
-void HomeWindow::updateState(const UIState &s) {
+void HomeWindow::updateState(const UIState &s, const FrogPilotUIState &fs) {
   const SubMaster &sm = *(s.sm);
 
   // switch to the generic robot UI
@@ -56,13 +58,22 @@ void HomeWindow::updateState(const UIState &s) {
     body->setEnabled(true);
     slayout->setCurrentWidget(body);
   }
+
+  // FrogPilot variables
+  const FrogPilotUIScene &frogpilot_scene = fs.frogpilot_scene;
 }
 
 void HomeWindow::offroadTransition(bool offroad) {
+  // FrogPilot variables
+  FrogPilotUIState &fs = *frogpilotUIState();
+  FrogPilotUIScene &frogpilot_scene = fs.frogpilot_scene;
+
   body->setEnabled(false);
   sidebar->setVisible(offroad);
   if (offroad) {
     slayout->setCurrentWidget(home);
+
+    // FrogPilot variables
   } else {
     slayout->setCurrentWidget(onroad);
   }
@@ -76,12 +87,16 @@ void HomeWindow::showDriverView(bool show) {
     slayout->setCurrentWidget(home);
   }
   sidebar->setVisible(show == false);
+
+  // FrogPilot variables
 }
 
 void HomeWindow::mousePressEvent(QMouseEvent* e) {
   // Handle sidebar collapsing
   if ((onroad->isVisible() || body->isVisible()) && (!sidebar->isVisible() || e->x() > sidebar->width())) {
     sidebar->setVisible(!sidebar->isVisible());
+
+    // FrogPilot variables
   }
 }
 
@@ -108,6 +123,8 @@ OffroadHome::OffroadHome(QWidget* parent) : QFrame(parent) {
   QHBoxLayout* header_layout = new QHBoxLayout();
   header_layout->setContentsMargins(0, 0, 0, 0);
   header_layout->setSpacing(16);
+
+  // FrogPilot variables
 
   update_notif = new QPushButton(tr("UPDATE"));
   update_notif->setVisible(false);
@@ -240,4 +257,8 @@ void OffroadHome::refresh() {
   if (alerts) {
     alert_notif->setText(QString::number(alerts) + (alerts > 1 ? tr(" ALERTS") : tr(" ALERT")));
   }
+
+  // FrogPilot variables
+  FrogPilotUIState &fs = *frogpilotUIState();
+  FrogPilotUIScene &frogpilot_scene = fs.frogpilot_scene;
 }
