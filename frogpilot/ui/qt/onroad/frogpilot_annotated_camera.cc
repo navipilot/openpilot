@@ -50,6 +50,12 @@ void FrogPilotAnnotatedCameraWidget::mousePressEvent(QMouseEvent *mouseEvent) {
 }
 
 void FrogPilotAnnotatedCameraWidget::paintFrogPilotWidgets(QPainter &p, UIState &s) {
+  if (!hideBottomIcons && frogpilot_toggles.value("compass").toBool()) {
+    paintCompass(p);
+  } else {
+    compassPosition.setX(0);
+    compassPosition.setY(0);
+  }
 }
 
 void FrogPilotAnnotatedCameraWidget::paintBlindSpotPath(QPainter &p) {
@@ -67,6 +73,92 @@ void FrogPilotAnnotatedCameraWidget::paintBlindSpotPath(QPainter &p) {
   if (track_adjacent_vertices[1].boundingRect().width() > 0 && blindspotRight) {
     p.drawPolygon(track_adjacent_vertices[1]);
   }
+
+  p.restore();
+}
+
+void FrogPilotAnnotatedCameraWidget::paintCompass(QPainter &p) {
+  if (dmIconPosition == QPoint(0, 0)) {
+    return;
+  }
+
+  p.save();
+
+  constexpr double PIXELS_PER_DEGREE = 2.5;
+
+  constexpr int BASE_RIBBON_WIDTH = static_cast<int>(360 * PIXELS_PER_DEGREE);
+  constexpr int BORDER_WIDTH = 10;
+  constexpr int MARGIN = 5;
+  constexpr int TRIANGLE_SIZE = 40;
+
+  static QPixmap compassRibbon = [&]() {
+    QPixmap ribbon(BASE_RIBBON_WIDTH * 2, widget_size);
+    ribbon.fill(Qt::transparent);
+
+    QPainter ribbonPainter(&ribbon);
+    ribbonPainter.setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing);
+
+    QFont font = InterFont(65, QFont::Bold);
+    ribbonPainter.setFont(font);
+    QFontMetrics fm(font);
+
+    QMap<int, QString> directionLabels = {{0, "N"}, {45, "NE"}, {90, "E"}, {135, "SE"}, {180, "S"}, {225, "SW"}, {270, "W"}, {315, "NW"}, {360, "N"}};
+
+    for (int cycle = 0; cycle < 2; ++cycle) {
+      int xOffset = cycle * 360;
+
+      for (int degree = 0; degree < 360; ++degree) {
+        int x = qRound((xOffset + degree) * PIXELS_PER_DEGREE);
+
+        if (directionLabels.contains(degree)) {
+          QString label = directionLabels[degree];
+          ribbonPainter.setPen(whiteColor());
+          ribbonPainter.drawText(x - fm.horizontalAdvance(label) / 2, fm.ascent(), label);
+        }
+
+        int notchHeight = (degree % 45 == 0) ? 35 : (degree % 15 == 0) ? 25 : 15;
+        int notchWidth = (degree % 45 == 0) ? 5 : (degree % 15 == 0) ? 4 : 3;
+
+        ribbonPainter.setPen(QPen(whiteColor(), notchWidth));
+        ribbonPainter.drawLine(x, widget_size - notchHeight - MARGIN, x, widget_size);
+      }
+    }
+
+    return ribbon;
+  }();
+
+  compassPosition.rx() = rightHandDM ? UI_BORDER_SIZE + widget_size / 2 : width() - UI_BORDER_SIZE - btn_size;
+  compassPosition.ry() = dmIconPosition.y() - widget_size / 2;
+
+  QRect compassWidget(compassPosition, QSize(widget_size, widget_size));
+
+  p.setBrush(blackColor(166));
+  p.setPen(QPen(blackColor(), BORDER_WIDTH));
+  p.drawRoundedRect(compassWidget, 24, 24);
+
+  QPainterPath clipPath;
+  clipPath.addRoundedRect(compassWidget.adjusted(MARGIN, MARGIN, -MARGIN, -MARGIN), 24, 24);
+  p.setClipPath(clipPath);
+
+  double rawBearing = QJsonDocument::fromJson(QByteArray::fromStdString(params_memory.get("LastGPSPosition"))).object().value("bearing").toDouble(0.0);
+  int bearing = qRound(fmod(rawBearing + 360.0, 360.0));
+  int offset = qRound(bearing * PIXELS_PER_DEGREE) % BASE_RIBBON_WIDTH;
+  int drawX = compassWidget.center().x() - offset;
+
+  p.drawPixmap(drawX - BASE_RIBBON_WIDTH, compassWidget.top() + MARGIN, compassRibbon);
+  p.drawPixmap(drawX, compassWidget.top() + MARGIN, compassRibbon);
+
+  int triangleX = compassWidget.center().x();
+  int triangleY = compassWidget.bottom() - TRIANGLE_SIZE;
+  QPolygon triangle({
+    QPoint(triangleX, triangleY - TRIANGLE_SIZE),
+    QPoint(triangleX - TRIANGLE_SIZE / 1.5, triangleY),
+    QPoint(triangleX + TRIANGLE_SIZE / 1.5, triangleY)
+  });
+
+  p.setBrush(whiteColor());
+  p.setPen(Qt::NoPen);
+  p.drawPolygon(triangle);
 
   p.restore();
 }
