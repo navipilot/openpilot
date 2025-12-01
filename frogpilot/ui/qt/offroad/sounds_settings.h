@@ -15,6 +15,8 @@ protected:
   void showEvent(QShowEvent *event) override;
 
 private:
+  void initializeSoundPlayer();
+  void testSound(const QString &key);
   void updateState(const UIState &s);
   void updateToggles();
 
@@ -32,4 +34,6 @@ private:
 
   Params params;
   Params params_memory{"", true};
+
+  QProcess *soundPlayerProcess;
 };

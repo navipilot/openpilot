@@ -98,6 +98,14 @@ FrogPilotSoundsPanel::FrogPilotSoundsPanel(FrogPilotSettingsWindow *parent, bool
     });
   }
 
+  for (const QString &key : alertVolumeControlKeys) {
+    FrogPilotParamValueButtonControl *toggle = static_cast<FrogPilotParamValueButtonControl*>(toggles[key]);
+    QObject::connect(toggle, &FrogPilotParamValueButtonControl::buttonClicked, [key, toggle, this]() {
+      toggle->updateParam();
+      testSound(key);
+    });
+  }
+
   QObject::connect(parent, &FrogPilotSettingsWindow::closeSubPanel, [soundsLayout, soundsPanel, this] {
     openDescriptions(forceOpenDescriptions, toggles);
     soundsLayout->setCurrentWidget(soundsPanel);
@@ -110,11 +118,40 @@ FrogPilotSoundsPanel::FrogPilotSoundsPanel(FrogPilotSettingsWindow *parent, bool
     }
   }
 
+  initializeSoundPlayer();
+
   updateToggles();
 }
 
 void FrogPilotSoundsPanel::showEvent(QShowEvent *event) {
   updateToggles();
+}
+
+void FrogPilotSoundsPanel::initializeSoundPlayer() {
+  QString program = R"(
+import numpy as np
+import sounddevice as sd
+import sys
+import wave
+
+while True:
+  try:
+    line = sys.stdin.readline()
+    if not line:
+      break
+    path, volume = line.strip().split('|')
+
+    sound_file = wave.open(path, 'rb')
+    audio = np.frombuffer(sound_file.readframes(sound_file.getnframes()), dtype=np.int16).astype(np.float32) / 32768.0
+
+    sd.play(audio * float(volume), sound_file.getframerate())
+    sd.wait()
+  except Exception:
+    pass
+)";
+
+  soundPlayerProcess = new QProcess(this);
+  soundPlayerProcess->start("python3", QStringList{"-u", "-c", program});
 }
 
 void FrogPilotSoundsPanel::updateState(const UIState &s) {
@@ -161,4 +198,25 @@ void FrogPilotSoundsPanel::updateToggles() {
   openDescriptions(forceOpenDescriptions, toggles);
 
   update();
+}
+
+void FrogPilotSoundsPanel::testSound(const QString &key) {
+  QString baseName = QString(key).remove("Volume");
+
+  if (started) {
+    updateFrogPilotToggles();
+
+    util::sleep_for(UI_FREQ);
+
+    QString camelCaseAlert = QString(baseName).replace(0, 1, baseName[0].toLower());
+    params_memory.put("TestAlert", camelCaseAlert.toStdString());
+  } else {
+    QString snakeCaseAlert = QString(baseName).replace(QRegularExpression("([A-Z])"), "_\\1").toLower().mid(1);
+    QString stockPath = "../../selfdrive/assets/sounds/" + snakeCaseAlert + ".wav";
+    QString themePath = "../../frogpilot/assets/active_theme/sounds/" + snakeCaseAlert + ".wav";
+
+    float volume = params.getFloat(key.toStdString()) / 100.0f;
+
+    soundPlayerProcess->write(((QFile::exists(themePath) ? themePath : stockPath) + "|" + QString::number(volume) + "\n").toUtf8());
+  }
 }
