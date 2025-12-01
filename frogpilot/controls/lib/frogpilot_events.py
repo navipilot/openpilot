@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from openpilot.selfdrive.selfdrived.events import ET, EVENT_NAME, FROGPILOT_EVENT_NAME, EventName, FrogPilotEventName, Events
 
+from openpilot.frogpilot.common.frogpilot_variables import NON_DRIVING_GEARS
+
 class FrogPilotEvents:
   def __init__(self, FrogPilotPlanner, error_log):
     self.frogpilot_planner = FrogPilotPlanner
@@ -8,6 +10,7 @@ class FrogPilotEvents:
     self.events = Events(frogpilot=True)
 
     self.startup_seen = False
+    self.stopped_for_light = False
 
     self.max_acceleration = 0
 
@@ -32,6 +35,14 @@ class FrogPilotEvents:
 
     if self.frogpilot_planner.frogpilot_vcruise.forcing_stop:
       self.events.add(FrogPilotEventName.forcingStop)
+
+    if not self.frogpilot_planner.tracking_lead and sm["carState"].standstill and sm["carState"].gearShifter not in NON_DRIVING_GEARS:
+      if not self.frogpilot_planner.model_stopped and self.stopped_for_light and frogpilot_toggles.green_light_alert:
+        self.events.add(FrogPilotEventName.greenLight)
+
+      self.stopped_for_light = self.frogpilot_planner.frogpilot_cem.stop_light_detected
+    else:
+      self.stopped_for_light = False
 
     if self.error_log.is_file():
       self.events.add(FrogPilotEventName.openpilotCrashed)
