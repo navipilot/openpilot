@@ -35,7 +35,7 @@ void ModelRenderer::draw(QPainter &painter, const QRect &surface_rect) {
   drawLaneLines(painter);
   drawPath(painter, model, surface_rect.height());
 
-  if (longitudinal_control && sm.alive("radarState") && !frogpilot_toggles.value("hide_lead_marker").toBool()) {
+  if ((longitudinal_control || frogpilot_toggles.value("lead_info").toBool()) && sm.alive("radarState") && !frogpilot_toggles.value("hide_lead_marker").toBool()) {
     update_leads(radar_state, model.getPosition());
     const auto &lead_two = radar_state.getLeadTwo();
     if (lead_one.getStatus()) {
@@ -46,6 +46,8 @@ void ModelRenderer::draw(QPainter &painter, const QRect &surface_rect) {
       }
     } else {
       // FrogPilot variables
+      frogpilot_nvg->leadTextRect = QRect();
+    }
     if (lead_two.getStatus() && (std::abs(lead_one.getDRel() - lead_two.getDRel()) > 3.0)) {
       drawLead(painter, lead_two, lead_vertices[1], surface_rect, QColor(frogpilot_toggles.value("lead_marker_color").toString()));
     }
@@ -59,11 +61,18 @@ void ModelRenderer::draw(QPainter &painter, const QRect &surface_rect) {
 
     updateAdjacentLeads(frogpilot_radar_state, model.getPosition());
 
-    if (lead_left.getStatus()) {
+    frogpilot_nvg->adjacentLeadTextRect = QRect();
+
+    if (lead_left.getStatus() && lead_right.getStatus() && (lead_left.getDRel() < lead_right.getDRel())) {
       drawLead(painter, reinterpret_cast<const cereal::RadarState::LeadData::Reader&>(lead_left), adjacent_lead_vertices[0], surface_rect, frogpilot_nvg->blueColor(), true);
-    }
-    if (lead_right.getStatus()) {
       drawLead(painter, reinterpret_cast<const cereal::RadarState::LeadData::Reader&>(lead_right), adjacent_lead_vertices[1], surface_rect, frogpilot_nvg->purpleColor(), true);
+    } else {
+      if (lead_left.getStatus()) {
+        drawLead(painter, reinterpret_cast<const cereal::RadarState::LeadData::Reader&>(lead_left), adjacent_lead_vertices[0], surface_rect, frogpilot_nvg->blueColor(), true);
+      }
+      if (lead_right.getStatus()) {
+        drawLead(painter, reinterpret_cast<const cereal::RadarState::LeadData::Reader&>(lead_right), adjacent_lead_vertices[1], surface_rect, frogpilot_nvg->purpleColor(), true);
+      }
     }
   }
 
@@ -277,6 +286,9 @@ void ModelRenderer::drawLead(QPainter &painter, const cereal::RadarState::LeadDa
   painter.drawPolygon(chevron, std::size(chevron));
 
   // FrogPilot variables
+  if (frogpilot_toggles.value("lead_info").toBool()) {
+    frogpilot_nvg->paintLeadMetrics(painter, adjacent, chevron, lead_data);
+  }
 }
 
 // Projects a point in car to space to the corresponding point in full frame image space.
