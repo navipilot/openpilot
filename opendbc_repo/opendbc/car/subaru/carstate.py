@@ -127,6 +127,13 @@ class CarState(CarStateBase):
     # FrogPilot variables
     fp_ret = custom.FrogPilotCarState.new_message()
 
+    if frogpilot_toggles.subaru_sng:
+      self.brake_pedal_msg = copy.copy(cp.vl["Brake_Pedal"])
+      self.car_follow = cp_es_distance.vl["ES_Distance"]["Car_Follow"]
+      self.close_distance = cp_es_distance.vl["ES_Distance"]["Close_Distance"]
+      self.cruise_state = cp_cam.vl["ES_DashStatus"]["Cruise_State"]
+      self.throttle_msg = copy.copy(cp.vl["Throttle"])
+
     return ret, fp_ret
 
   @staticmethod
