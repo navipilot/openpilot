@@ -64,4 +64,5 @@ private:
   QString wheelToDownload;
 
   Params params;
+  Params params_memory{"", true};
 };

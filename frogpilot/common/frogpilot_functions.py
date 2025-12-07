@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 
 from openpilot.common.basedir import BASEDIR
+from openpilot.common.params import Params
 from openpilot.common.time_helpers import system_time_valid
 from openpilot.system.hardware import HARDWARE
 
@@ -12,6 +13,8 @@ from openpilot.frogpilot.common.frogpilot_utilities import run_cmd
 
 
 def frogpilot_boot_functions():
+  params_memory = Params(memory=True)
+
   def boot_thread():
     while not system_time_valid():
       print("Waiting for system time to become valid...")

@@ -452,6 +452,7 @@ def main() -> None:
     first_run = True
 
     # FrogPilot variables
+    params_memory = Params(memory=True)
 
     while True:
       wait_helper.ready_event.clear()
