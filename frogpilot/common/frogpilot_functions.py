@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+import random
+import string
 import threading
 import time
 
@@ -12,7 +14,7 @@ from openpilot.system.hardware import HARDWARE
 from openpilot.frogpilot.common.frogpilot_utilities import run_cmd
 
 
-def frogpilot_boot_functions():
+def frogpilot_boot_functions(params):
   params_memory = Params(memory=True)
 
   def boot_thread():
@@ -23,11 +25,14 @@ def frogpilot_boot_functions():
   threading.Thread(target=boot_thread, daemon=True).start()
 
 
-def install_frogpilot():
+def install_frogpilot(params):
   paths = [
   ]
   for path in paths:
     path.mkdir(parents=True, exist_ok=True)
+
+  if params.get("FrogPilotDongleId") is None:
+    params.put("FrogPilotDongleId", "".join(random.choices(string.ascii_lowercase + string.digits, k=16)))
 
   update_boot_logo(frogpilot=True)
 

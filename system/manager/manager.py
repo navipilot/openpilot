@@ -99,8 +99,8 @@ def manager_init() -> None:
     p.prepare()
 
   # FrogPilot variables
-  install_frogpilot()
-  frogpilot_boot_functions()
+  install_frogpilot(params)
+  frogpilot_boot_functions(params)
 
 
 def manager_cleanup() -> None:
