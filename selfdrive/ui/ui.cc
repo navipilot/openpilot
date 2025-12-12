@@ -96,6 +96,7 @@ void UIState::updateStatus(FrogPilotUIState *fs) {
     auto state = ss.getState();
 
     // FrogPilot variables
+    const UIStatus previous_status = status;
 
     if (state == cereal::SelfdriveState::OpenpilotState::PRE_ENABLED || state == cereal::SelfdriveState::OpenpilotState::OVERRIDING) {
       status = STATUS_OVERRIDE;
@@ -106,6 +107,7 @@ void UIState::updateStatus(FrogPilotUIState *fs) {
     }
 
     // FrogPilot variables
+    frogpilot_scene.wake_up_screen = ss.getAlertStatus() != cereal::SelfdriveState::AlertStatus::NORMAL || (status != previous_status && status != STATUS_OVERRIDE);
   }
 
   if (engaged() != engaged_prev) {
@@ -220,6 +222,8 @@ void Device::updateBrightness(const UIState &s, const FrogPilotUIState &fs) {
   int brightness = brightness_filter.update(clipped_brightness);
   if (!awake) {
     brightness = 0;
+  } else if (s.scene.started && !frogpilot_scene.wake_up_screen && interactive_timeout == 0 && frogpilot_toggles.value("standby_mode").toBool()) {
+    brightness = 0;
   } else if (s.scene.started && frogpilot_toggles.value("screen_brightness_onroad").toInt() != 101) {
     brightness = interactive_timeout > 0 ? fmax(5, frogpilot_toggles.value("screen_brightness_onroad").toInt()) : frogpilot_toggles.value("screen_brightness_onroad").toInt();
   } else if (frogpilot_toggles.value("screen_brightness").toInt() != 101) {
@@ -242,7 +246,13 @@ void Device::updateWakefulness(const UIState &s, const FrogPilotUIState &fs) {
   bool ignition_just_turned_off = !s.scene.ignition && ignition_on;
   ignition_on = s.scene.ignition;
 
-  if (ignition_just_turned_off) {
+  if (ignition_on && frogpilot_toggles.value("standby_mode").toBool()) {
+    if (frogpilot_scene.wake_up_screen) {
+      resetInteractiveTimeout(frogpilot_toggles.value("screen_timeout").toInt(), frogpilot_toggles.value("screen_timeout_onroad").toInt());
+    } else {
+      resetInteractiveTimeout(0, 0);
+    }
+  } else if (ignition_just_turned_off) {
     resetInteractiveTimeout(frogpilot_toggles.value("screen_timeout").toInt(), frogpilot_toggles.value("screen_timeout_onroad").toInt());
   } else if (ignition_on && frogpilot_toggles.value("screen_brightness_onroad").toInt() == 0) {
     resetInteractiveTimeout(0, 0);

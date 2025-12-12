@@ -15,6 +15,7 @@ struct FrogPilotUIScene {
   bool reverse;
   bool sidebars_open;
   bool standstill;
+  bool wake_up_screen;
 
   int conditional_status;
   int driver_camera_timer;
