@@ -74,7 +74,7 @@ class FrogPilotPlanner:
 
     self.driving_in_curve = abs(self.lateral_acceleration) >= MINIMUM_LATERAL_ACCELERATION
 
-    self.frogpilot_events.update(v_cruise, sm, frogpilot_toggles)
+    self.frogpilot_events.update(long_control_active, v_cruise, sm, frogpilot_toggles)
 
     self.frogpilot_following.update(long_control_active, v_ego, sm, frogpilot_toggles)
 
