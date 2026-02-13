@@ -14,6 +14,19 @@ from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import T_IDX
 from openpilot.selfdrive.controls.lib.drive_helpers import CONTROL_N, get_accel_from_plan
 from openpilot.selfdrive.car.cruise import V_CRUISE_MAX, V_CRUISE_UNSET
 from openpilot.common.swaglog import cloudlog
+from dragonpilot.selfdrive.controls.lib.acm import ACM
+from dragonpilot.selfdrive.controls.lib.aem import AEM
+from dragonpilot.selfdrive.controls.lib.dtsc import DTSC
+from dragonpilot.selfdrive.controls.lib.apm import APM
+from dragonpilot.selfdrive.controls.lib.dasr import DASR
+
+# dragonpilot: maa turn speed integration
+try:
+  from dragonpilot.dashy.maa.lib.longitudinal_helper import LongitudinalHelper, RadarStateWrapper
+  MAA_PLANNER_AVAILABLE = True
+except ImportError:
+  MAA_PLANNER_AVAILABLE = False
+  RadarStateWrapper = None
 
 LON_MPC_STEP = 0.2  # first step is 0.2s
 A_CRUISE_MAX_VALS = [1.6, 1.2, 0.8, 0.6]
@@ -27,6 +40,11 @@ _A_TOTAL_MAX_V = [1.7, 3.2]
 _A_TOTAL_MAX_BP = [20., 40.]
 
 class DPFlags:
+  ACM = 1
+  AEM = 2
+  DTSC = 2 ** 2
+  APM = 2 ** 3
+  DASR = 2 ** 4
   pass
 
 def get_max_accel(v_ego):
@@ -70,6 +88,14 @@ class LongitudinalPlanner:
     self.a_desired_trajectory = np.zeros(CONTROL_N)
     self.j_desired_trajectory = np.zeros(CONTROL_N)
     self.solverExecutionTime = 0.0
+    self.acm = ACM()
+    self.aem = AEM()
+    self.dtsc = DTSC(aggressiveness=0.8)
+    self.apm = APM()
+    self.dasr = DASR()
+
+    # dp: maa turn speed helper
+    self.maa_helper = LongitudinalHelper() if MAA_PLANNER_AVAILABLE else None
 
   @staticmethod
   def parse_model(model_msg):
@@ -93,6 +119,10 @@ class LongitudinalPlanner:
 
   def update(self, sm, dp_flags = 0):
     mode = 'blended' if sm['selfdriveState'].experimentalMode else 'acc'
+
+    if dp_flags & DPFlags.AEM:
+      self.aem.update_states(model_msg=sm['modelV2'], radar_msg=sm['radarState'], v_ego=sm['carState'].vEgo)
+      mode = self.aem.get_mode(mode)
 
     if len(sm['carControl'].orientationNED) == 3:
       accel_coast = get_coast_accel(sm['carControl'].orientationNED[1])
@@ -122,6 +152,11 @@ class LongitudinalPlanner:
     else:
       accel_clip = [ACCEL_MIN, ACCEL_MAX]
 
+    # dp - MAA turn speed control
+    virtual_lead = None
+    if self.maa_helper is not None:
+      v_cruise, accel_clip, virtual_lead = self.maa_helper.process(sm, v_ego, v_cruise, accel_clip)
+
     if reset_state:
       self.v_desired_filter.x = v_ego
       # Clip aEgo to cruise limits to prevent large accelerations when becoming active
@@ -141,12 +176,41 @@ class LongitudinalPlanner:
     if force_slow_decel:
       v_cruise = 0.0
 
-    self.mpc.set_weights(prev_accel_constraint, personality=sm['selfdriveState'].personality)
+    personality = sm['selfdriveState'].personality
+    if dp_flags & DPFlags.APM:
+      personality = self.apm.get_personality(v_ego, personality)
+
+    self.mpc.set_weights(prev_accel_constraint, personality=personality)
     self.mpc.set_cur_state(self.v_desired_filter.x, self.a_desired)
-    self.mpc.update(sm['radarState'], v_cruise, x, v, a, j, personality=sm['selfdriveState'].personality)
+
+    # dp - Wrap radarState with virtual lead if available (for turn deceleration)
+    if virtual_lead and RadarStateWrapper:
+      radar_state = RadarStateWrapper(sm['radarState'], virtual_lead)
+    else:
+      radar_state = sm['radarState']
+
+    # Apply DTSC curve speed constraints if enabled
+    if dp_flags & DPFlags.DTSC:
+      # Get modified acceleration constraints based on curvature
+      a_min_dtsc, a_max_dtsc = self.dtsc.get_mpc_constraints(
+        sm['modelV2'], v_ego, accel_clip[0], accel_clip[1])
+
+      # Update MPC parameters with curve constraints
+      # This directly modifies the acceleration bounds in the MPC solver
+      for i in range(len(a_min_dtsc)):
+        # Apply the more restrictive constraint
+        self.mpc.params[i, 0] = max(accel_clip[0], a_min_dtsc[i])  # a_min
+        self.mpc.params[i, 1] = min(accel_clip[1], a_max_dtsc[i])  # a_max
+
+    self.mpc.update(radar_state, v_cruise, x, v, a, j, personality=personality)
 
     self.v_desired_trajectory = np.interp(CONTROL_N_T_IDX, T_IDXS_MPC, self.mpc.v_solution)
     self.a_desired_trajectory = np.interp(CONTROL_N_T_IDX, T_IDXS_MPC, self.mpc.a_solution)
+    # ACM - Adaptive Coasting Module
+    if dp_flags & DPFlags.ACM:
+      user_control = long_control_off if self.CP.openpilotLongitudinalControl else not sm['selfdriveState'].enabled
+      self.acm.update_states(sm['carControl'], sm['radarState'], user_control, v_ego, v_cruise)
+      self.a_desired_trajectory = self.acm.update_a_desired_trajectory(self.a_desired_trajectory)
     self.j_desired_trajectory = np.interp(CONTROL_N_T_IDX, T_IDXS_MPC[:-1], self.mpc.j_solution)
 
     # TODO counter is only needed because radar is glitchy, remove once radar is gone
@@ -172,8 +236,10 @@ class LongitudinalPlanner:
       output_a_target = min(output_a_target_mpc, output_a_target_e2e)
       self.output_should_stop = output_should_stop_e2e or output_should_stop_mpc
 
+    if dp_flags & DPFlags.DASR:
+      self.dasr.update(v_ego)
     for idx in range(2):
-      accel_clip[idx] = np.clip(accel_clip[idx], self.prev_accel_clip[idx] - 0.05, self.prev_accel_clip[idx] + 0.05)
+      accel_clip[idx] = np.clip(accel_clip[idx], self.prev_accel_clip[idx] - self.dasr.slew_rate, self.prev_accel_clip[idx] + self.dasr.slew_rate)
     self.output_a_target = np.clip(output_a_target, accel_clip[0], accel_clip[1])
     self.prev_accel_clip = accel_clip
 

@@ -75,7 +75,7 @@ _services: dict[str, tuple] = {
   "modelV2": (True, 20., None, QueueSize.BIG),
   "managerState": (True, 2., 1),
   "uploaderState": (True, 0., 1),
-  "navInstruction": (True, 1., 10),
+  # "navInstruction": (True, 1., 10), # dp - make it 0 hz
   "navRoute": (True, 0.),
   "navThumbnail": (True, 0.),
   "qRoadEncodeIdx": (False, 20.),
@@ -102,6 +102,15 @@ _services: dict[str, tuple] = {
   "customReservedRawData0": (True, 0.),
   "customReservedRawData1": (True, 0.),
   "customReservedRawData2": (True, 0.),
+  "controlsStateExt": (True, 100.),
+  "carStateExt": (True, 100.),
+  "modelExt": (True, 20.),
+  # dashy
+  "navInstruction": (True, 0.),
+  "navInstructionExt": (True, 0.),
+  "liveGPS": (True, 0.),       # GPS fusion from gpsd (optional)
+  "maaControl": (True, 0.),    # Map-Aware Assist control signals (optional)
+  "dashyState": (True, 0.),    # Aggregated dashy UI state (optional)
 }
 SERVICE_LIST = {name: Service(*vals) for
                 idx, (name, vals) in enumerate(_services.items())}

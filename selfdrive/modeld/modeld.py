@@ -30,6 +30,15 @@ from openpilot.selfdrive.modeld.fill_model_msg import fill_model_msg, fill_pose_
 from openpilot.selfdrive.modeld.constants import ModelConstants, Plan
 from openpilot.selfdrive.modeld.models.commonmodel_pyx import DrivingModelFrame, CLContext
 from openpilot.selfdrive.modeld.runners.tinygrad_helpers import qcom_tensor_from_opencl_address
+from dragonpilot.selfdrive.controls.lib.road_edge_detector import RoadEdgeDetector
+
+LITE = os.getenv("LITE") is not None
+# dragonpilot: maa turn desire integration
+try:
+  from dragonpilot.dashy.maa.lib.model_helper import ModelHelper
+  MAA_MODEL_AVAILABLE = True
+except ImportError:
+  MAA_MODEL_AVAILABLE = False
 
 
 PROCESS_NAME = "selfdrive.modeld.modeld"
@@ -46,7 +55,7 @@ MIN_LAT_CONTROL_SPEED = 0.3
 
 
 def get_action_from_model(model_output: dict[str, np.ndarray], prev_action: log.ModelDataV2.Action,
-                          lat_action_t: float, long_action_t: float, v_ego: float) -> log.ModelDataV2.Action:
+                          lat_action_t: float, long_action_t: float, v_ego: float, dp_lat_offset_cm: int) -> log.ModelDataV2.Action:
     plan = model_output['plan'][0]
     desired_accel, should_stop = get_accel_from_plan(plan[:,Plan.VELOCITY][:,0],
                                                      plan[:,Plan.ACCELERATION][:,0],
@@ -63,6 +72,12 @@ def get_action_from_model(model_output: dict[str, np.ndarray], prev_action: log.
       desired_curvature = smooth_value(desired_curvature, prev_action.desiredCurvature, LAT_SMOOTH_SECONDS)
     else:
       desired_curvature = prev_action.desiredCurvature
+
+    # Apply lateral offset (driving style adjustment)
+    if dp_lat_offset_cm != 0:
+        lat_offset_m = dp_lat_offset_cm / 100.0
+        curvature_offset = 2.0 * lat_offset_m / 900.0
+        desired_curvature += curvature_offset
 
     return log.ModelDataV2.Action(desiredCurvature=float(desired_curvature),
                                   desiredAcceleration=float(desired_accel),
@@ -261,8 +276,9 @@ def main(demo=False):
     cloudlog.warning(f"connected extra cam with buffer size: {vipc_client_extra.buffer_len} ({vipc_client_extra.width} x {vipc_client_extra.height})")
 
   # messaging
-  pm = PubMaster(["modelV2", "drivingModelData", "cameraOdometry"])
-  sm = SubMaster(["deviceState", "carState", "roadCameraState", "liveCalibration", "driverMonitoringState", "carControl", "liveDelay"])
+  pm = PubMaster(["modelV2", "drivingModelData", "cameraOdometry", "modelExt"])
+  sm = SubMaster(["deviceState", "carState", "roadCameraState", "liveCalibration", "driverMonitoringState", "carControl", "liveDelay", "maaControl"],
+                 ignore_alive=['maaControl'])
 
   publish_state = PublishState()
   params = Params()
@@ -292,7 +308,15 @@ def main(demo=False):
   long_delay = CP.longitudinalActuatorDelay + LONG_SMOOTH_SECONDS
   prev_action = log.ModelDataV2.Action()
 
-  DH = DesireHelper()
+  dp_lat_lca_speed = int(params.get("dp_lat_lca_speed"))
+  dp_lat_lca_auto_sec = float(params.get("dp_lat_lca_auto_sec"))
+  DH = DesireHelper(dp_lat_lca_speed=dp_lat_lca_speed, dp_lat_lca_auto_sec=dp_lat_lca_auto_sec)
+
+  dp_dev_is_rhd = params.get_bool("dp_dev_is_rhd")
+  RED = RoadEdgeDetector(params.get_bool("dp_lat_road_edge_detection"))
+  maa_helper = ModelHelper() if MAA_MODEL_AVAILABLE else None  # dragonpilot
+
+  dp_lat_offset_cm = int(params.get("dp_lat_offset_cm") or 0)
 
   while True:
     # Keep receiving frames until we are at least 1 frame ahead of previous extra frame
@@ -328,8 +352,9 @@ def main(demo=False):
       meta_extra = meta_main
 
     sm.update(0)
-    desire = DH.desire
-    is_rhd = sm["driverMonitoringState"].isRHD
+    # dp: get desire from maa helper (handles maaControl + lane change combination)
+    desire = maa_helper.get_desire(sm, DH.desire) if maa_helper else DH.desire
+    is_rhd = dp_dev_is_rhd if LITE else sm["driverMonitoringState"].isRHD
     frame_id = sm["roadCameraState"].frameId
     v_ego = max(sm["carState"].vEgo, 0.)
     lat_delay = sm["liveDelay"].lateralDelay + LAT_SMOOTH_SECONDS
@@ -376,8 +401,9 @@ def main(demo=False):
       modelv2_send = messaging.new_message('modelV2')
       drivingdata_send = messaging.new_message('drivingModelData')
       posenet_send = messaging.new_message('cameraOdometry')
+      model_ext_send = messaging.new_message('modelExt')
 
-      action = get_action_from_model(model_output, prev_action, lat_delay + DT_MDL, long_delay + DT_MDL, v_ego)
+      action = get_action_from_model(model_output, prev_action, lat_delay + DT_MDL, long_delay + DT_MDL, v_ego, dp_lat_offset_cm)
       prev_action = action
       fill_model_msg(drivingdata_send, modelv2_send, model_output, action,
                      publish_state, meta_main.frame_id, meta_extra.frame_id, frame_id,
@@ -387,16 +413,23 @@ def main(demo=False):
       l_lane_change_prob = desire_state[log.Desire.laneChangeLeft]
       r_lane_change_prob = desire_state[log.Desire.laneChangeRight]
       lane_change_prob = l_lane_change_prob + r_lane_change_prob
-      DH.update(sm['carState'], sm['carControl'].latActive, lane_change_prob)
+      RED.update(modelv2_send.modelV2.roadEdgeStds, modelv2_send.modelV2.laneLineProbs)
+      model_ext_send.modelExt.leftEdgeDetected = RED.left_edge_detected
+      model_ext_send.modelExt.rightEdgeDetected = RED.right_edge_detected
+      DH.update(sm['carState'], sm['carControl'].latActive, lane_change_prob, RED.left_edge_detected, RED.right_edge_detected)
       modelv2_send.modelV2.meta.laneChangeState = DH.lane_change_state
       modelv2_send.modelV2.meta.laneChangeDirection = DH.lane_change_direction
       drivingdata_send.drivingModelData.meta.laneChangeState = DH.lane_change_state
       drivingdata_send.drivingModelData.meta.laneChangeDirection = DH.lane_change_direction
 
       fill_pose_msg(posenet_send, model_output, meta_main.frame_id, vipc_dropped_frames, meta_main.timestamp_eof, live_calib_seen)
+      # dp: update maa helper with model outputs for next frame
+      if maa_helper:
+        maa_helper.update(modelv2_send.modelV2, desire_state)
       pm.send('modelV2', modelv2_send)
       pm.send('drivingModelData', drivingdata_send)
       pm.send('cameraOdometry', posenet_send)
+      pm.send('modelExt', model_ext_send)
     last_vipc_frame_id = meta_main.frame_id
 
 

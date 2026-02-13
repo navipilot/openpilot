@@ -48,6 +48,14 @@ class CerealOutgoingMessageProxy:
     for service, updated in self.sm.updated.items():
       if not updated:
         continue
+
+      # Pass through pre-serialized JSON for dashyState (no re-serialization)
+      if service == 'dashyState':
+        json_bytes = self.sm[service].json
+        for channel in self.channels:
+          channel.send(json_bytes)
+        continue
+
       msg_dict = self.to_json(self.sm[service])
       mono_time, valid = self.sm.logMonoTime[service], self.sm.valid[service]
       outgoing_msg = {"type": service, "logMonoTime": mono_time, "valid": valid, "data": msg_dict}

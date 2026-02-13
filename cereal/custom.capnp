@@ -10,25 +10,101 @@ $Cxx.namespace("cereal");
 # DO rename the structs
 # DON'T change the identifier (e.g. @0x81c2f05a394cf4af)
 
-struct CustomReserved0 @0x81c2f05a394cf4af {
+struct ControlsStateExt @0x81c2f05a394cf4af {
+  alkaActive @0 :Bool;
 }
 
-struct CustomReserved1 @0xaedffd8f31e7b55d {
+struct CarStateExt @0xaedffd8f31e7b55d {
+  # dp - ALKA: lkasOn state from carstate (mirrors panda's lkas_on)
+  lkasOn @0 :Bool;
 }
 
-struct CustomReserved2 @0xf35cc4560bbf6ec2 {
+struct ModelExt @0xf35cc4560bbf6ec2 {
+  leftEdgeDetected @0 :Bool;
+  rightEdgeDetected @1 :Bool;
 }
 
-struct CustomReserved3 @0xda96579883444c35 {
+struct LiveGPS @0xda96579883444c35 {
+  # Position
+  latitude @0 :Float64;                # degrees
+  longitude @1 :Float64;               # degrees
+  altitude @2 :Float64;                # meters (WGS84)
+
+  # Motion
+  speed @3 :Float32;                   # m/s (horizontal speed)
+  bearingDeg @4 :Float32;              # degrees (heading)
+
+  # Accuracy
+  horizontalAccuracy @5 :Float32;      # meters
+  verticalAccuracy @6 :Float32;        # meters
+
+  # Status
+  gpsOK @7 :Bool;                      # livePose valid + GPS fresh
+  status @8 :Status;
+
+  enum Status {
+    uninitialized @0;    # no GPS data yet
+    uncalibrated @1;     # has GPS but fusion not ready (raw passthrough)
+    valid @2;            # fusion active with calibrated bearing
+  }
+
+  # Metadata
+  unixTimestampMillis @9 :Int64;
+  lastGpsTimestamp @10 :UInt64;        # logMonoTime of last GPS
+
+  # livePose health (for debugging fusion issues)
+  livePoseOk @11 :Bool;                # livePose valid and providing orientation/velocity
 }
 
-struct CustomReserved4 @0x80ae746ee2596b11 {
+struct MaaControl @0x80ae746ee2596b11 {
+  # Map-Aware Assist control signals
+
+  # Curvature data (for lateral control)
+  curvature @0 :Float32;           # current nav curvature (1/m)
+  curvatureValid @1 :Bool;         # curvature data is valid
+
+  # Turn speed data (for longitudinal control)
+  turnSpeedLimit @2 :Float32;      # target speed for turn (m/s)
+  turnDistance @3 :Float32;        # distance to turn (m)
+  turnDirection @4 :TurnDirection;
+  turnValid @5 :Bool;              # turn data is valid
+  maneuverType @6 :ManeuverType;   # type of maneuver (turn vs lane change)
+  turnAngle @7 :Float32;           # expected turn angle in degrees (positive=left, negative=right)
+  turnCurvature @8 :Float32;       # curvature at turn point (1/m), used for speed limit calc
+
+  # Turn execution (heading-based tracking)
+  desireActive @9 :Bool;           # true when turn desire should be sent to model
+  turnState @10 :UInt8;            # TurnState enum: 0=none, 1=approaching, 2=executing, 3=complete
+  turnProgress @11 :Float32;       # accumulated heading change during turn (degrees)
+
+  # Driver acknowledgment (blinker = commit to turn)
+  driverAcknowledged @12 :Bool;    # driver turned on blinker matching turn direction
+  speedLimitActive @13 :Bool;      # turn speed limit should be enforced (blinker on)
+  blockLaneChange @14 :Bool;       # within commit distance, block lane change desire
+
+  enum TurnDirection {
+    none @0;
+    left @1;
+    right @2;
+  }
+
+  enum ManeuverType {
+    none @0;
+    turn @1;        # intersection turn - use turnLeft/Right desire
+    laneChange @2;  # highway exit/fork - use laneChangeLeft/Right desire
+  }
 }
 
-struct CustomReserved5 @0xa5cd762cd951a455 {
+struct DashyState @0xa5cd762cd951a455 {
+  # Pre-serialized JSON bytes for dashy UI
+  # Aggregates all topics needed by dashy into single message
+  json @0 :Data;
 }
 
-struct CustomReserved6 @0xf98d843bfd7004a3 {
+struct NavInstructionExt @0xf98d843bfd7004a3 {
+  # Extension fields for NavInstruction (not in upstream)
+  turnAngle @0 :Float32;      # degrees, positive=left, negative=right
+  turnCurvature @1 :Float32;  # 1/m, positive=left, negative=right
 }
 
 struct CustomReserved7 @0xb86e6369214c01c8 {
