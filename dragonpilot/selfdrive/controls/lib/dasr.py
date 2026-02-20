@@ -19,8 +19,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 import numpy as np
 
 # Dynamic accel slew rate - how fast accel bounds can change per frame
-SLEW_RATE_BP = [11.12, 16.67]          # m/s (~40-60 km/h)
-SLEW_RATE_V = [0.10, 0.05]             # faster response at lower speeds, smoother at highway
+SLEW_RATE_BP = [5.56, 11.12, 16.67]          # m/s (~40-60 km/h)
+SLEW_RATE_V = [0.15, 0.10, 0.05]             # faster response at lower speeds, smoother at highway
 
 
 class DASR:
