@@ -123,6 +123,9 @@ class Car:
       if self.params.get_bool("dp_vag_avoid_eps_lockout"):
         dp_params |= structs.DPFlags.VagAvoidEPSLockout
 
+      if self.params.get_bool("dp_honda_nidec_stock_long"):
+        dp_params |= structs.DPFlags.HondaNidecStockLong
+
       dp_fingerprint = str(self.params.get("dp_dev_model_selected") or "")
       self.CI = get_car(*self.can_callbacks, obd_callback(self.params), alpha_long_allowed, is_release, num_pandas, dp_params, cached_params, dp_fingerprint=dp_fingerprint)
       self.RI = interfaces[self.CI.CP.carFingerprint].RadarInterface(self.CI.CP)

@@ -5,6 +5,19 @@ except:
 
 SETTINGS = [
   {
+    "title": "Honda / Acura",
+    "condition": "brand == 'honda'",
+    "settings": [
+      {
+        "key": "dp_honda_nidec_stock_long",
+        "type": "toggle_item",
+        "title": lambda: tr("Nidec: Use Stock Longitudinal Control"),
+        "description": lambda: tr("Use Honda's factory ACC for gas/brake control instead of openpilot. openpilot will only control steering. Requires reboot to take effect."),
+        "brands": ["honda"],
+      },
+    ],
+  },
+  {
     "title": "Toyota / Lexus",
     "condition": "brand == 'toyota'",
     "settings": [

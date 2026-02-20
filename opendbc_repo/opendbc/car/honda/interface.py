@@ -54,6 +54,9 @@ class CarInterface(CarInterfaceBase):
       ret.safetyConfigs = [get_safety_config(structs.CarParams.SafetyModel.hondaNidec)]
       ret.openpilotLongitudinalControl = True
 
+      if dp_params & structs.DPFlags.HondaNidecStockLong:
+        ret.openpilotLongitudinalControl = False
+
       ret.pcmCruise = True
 
     if candidate == CAR.HONDA_CRV_5G:
@@ -230,6 +233,8 @@ class CarInterface(CarInterfaceBase):
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.RADARLESS.value
     if candidate in HONDA_BOSCH_CANFD:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.BOSCH_CANFD.value
+    if not ret.openpilotLongitudinalControl and candidate not in HONDA_BOSCH:
+      ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.NIDEC_STOCK_LONG.value
 
     # min speed to enable ACC. if car can do stop and go, then set enabling speed
     # to a negative value, so it won't matter. Otherwise, add 0.5 mph margin to not
