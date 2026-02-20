@@ -22,4 +22,5 @@ CarParamsT = capnp.lib.capnp._StructModule
 class DPFlags:
   LatALKA = 1
   ExtRadar = 2
+  HondaNidecStockLong = 2 ** 2
   pass
