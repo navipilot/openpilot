@@ -21,33 +21,53 @@ jobs:
           set -e
           echo "Fetching branches from upstream repositories..."
 
-          # ajouatom branches
-          git remote add ajouatom https://github.com/ajouatom/openpilot.git
-          git fetch ajouatom carrot2-v9 --no-tags || echo "⚠️ ajouatom carrot2-v9 fetch failed"
-          
-          # sunnypilot branch
-          git remote add sunnypilot https://github.com/sunnypilot/sunnypilot.git
+          # Helper: add or update remote safely
+          add_or_update_remote () {
+            local name="$1"
+            local url="$2"
+            if git remote get-url "$name" >/dev/null 2>&1; then
+              git remote set-url "$name" "$url"
+            else
+              git remote add "$name" "$url"
+            fi
+          }
+
+          # Carrotpilot (ajouatom/openpilot) branch: carrot2-v9
+          add_or_update_remote carrotpilot https://github.com/ajouatom/openpilot.git
+          git fetch carrotpilot carrot2-v9 --no-tags || echo "⚠️ carrotpilot carrot2-v9 fetch failed"
+
+          # Sunnypilot (sunnypilot/sunnypilot) branch: staging
+          add_or_update_remote sunnypilot https://github.com/sunnypilot/sunnypilot.git
           git fetch sunnypilot staging --no-tags || echo "⚠️ sunnypilot staging fetch failed"
-          
-          # dragonpilot branch
-          git remote add dragonpilot https://github.com/dragonpilot/dragonpilot.git
+
+          # Dragonpilot (dragonpilot/dragonpilot) branch: pre-build
+          add_or_update_remote dragonpilot https://github.com/dragonpilot/dragonpilot.git
           git fetch dragonpilot pre-build --no-tags || echo "⚠️ dragonpilot pre-build fetch failed"
 
-      - name: Push branches to your repository
+          # FrogPilot (FrogAi/FrogPilot) branch: FrogPilot
+          add_or_update_remote frogpilot https://github.com/FrogAi/FrogPilot.git
+          git fetch frogpilot FrogPilot --no-tags || echo "⚠️ frogpilot FrogPilot fetch failed"
+
+      - name: Push branches to your repository (rename to fork names)
         run: |
           set +e
 
-          # ajouatom carrot2-v9
-          git checkout -B carrot2-v9 ajouatom/carrot2-v9 \
-            && git push origin carrot2-v9 --force \
-            || echo "⚠️ carrot2-v9 push skipped"
-          
-          # sunnypilot staging
-          git checkout -B sunnypilot-staging sunnypilot/staging \
-            && git push origin sunnypilot-staging --force \
-            || echo "⚠️ sunnypilot-staging push skipped"
-          
-          # dragonpilot pre-build
-          git checkout -B dragonpilot-pre-build dragonpilot/pre-build \
-            && git push origin dragonpilot-pre-build --force \
-            || echo "⚠️ dragonpilot-pre-build push skipped"
+          # Carrotpilot: ajouatom/carrot2-v9 -> Carrotpilot
+          git checkout -B Carrotpilot carrotpilot/carrot2-v9 \
+            && git push origin Carrotpilot --force \
+            || echo "⚠️ Carrotpilot push skipped"
+
+          # Sunnypilot: sunnypilot/staging -> Sunnypilot
+          git checkout -B Sunnypilot sunnypilot/staging \
+            && git push origin Sunnypilot --force \
+            || echo "⚠️ Sunnypilot push skipped"
+
+          # Dragonpilot: dragonpilot/pre-build -> Dragonpilot
+          git checkout -B Dragonpilot dragonpilot/pre-build \
+            && git push origin Dragonpilot --force \
+            || echo "⚠️ Dragonpilot push skipped"
+
+          # FrogPilot: FrogAi/FrogPilot -> FrogPilot
+          git checkout -B FrogPilot frogpilot/FrogPilot \
+            && git push origin FrogPilot --force \
+            || echo "⚠️ FrogPilot push skipped"
