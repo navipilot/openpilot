@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Dashy by dragonpilot</title>
+    <link rel="icon" href="/icons/icon-192x192.png">
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+
+    <div id="app-container" class="w-full h-full">
+
+        <!-- Loading Overlay (shown when server is unreachable, hidden by JS when connected) -->
+        <div id="loading-screen" style="display: flex" class="fixed inset-0 z-[400] flex-col items-center justify-center bg-black/95">
+            <img src="/icons/dashy.png" alt="Dashy" class="w-24 h-24 mb-6">
+            <span class="loading loading-spinner loading-lg text-primary mb-4"></span>
+            <div id="loading-status" class="text-white/70 text-sm">Connecting to device...</div>
+        </div>
+
+        <!-- HUD Page (full-screen, default when enabled) -->
+        <div id="hud-page" class="hud-page">
+            <div id="hud-page-content" class="relative w-full h-full">
+                <!-- Video element created dynamically by theme if needed -->
+                <canvas id="uiCanvas" class="absolute inset-0 w-full h-full pointer-events-none z-10"></canvas>
+            </div>
+        </div>
+
+        <!-- Panel Backdrop -->
+        <div id="panel-backdrop" class="panel-backdrop"></div>
+
+        <!-- Slide-up Panel -->
+        <div id="panel" class="panel">
+            <!-- Panel Header with Tabs -->
+            <div class="panel-header">
+                <div class="panel-handle"></div>
+                <div class="flex items-center justify-between w-full gap-2">
+                    <div class="join flex-1 max-w-sm">
+                        <button id="panel-tab-controls" class="join-item btn btn-primary btn-sm sm:btn-md flex-1">Controls</button>
+                        <button id="panel-tab-settings" class="join-item btn btn-ghost btn-sm sm:btn-md flex-1">Settings</button>
+                        <button id="panel-tab-files" class="join-item btn btn-ghost btn-sm sm:btn-md flex-1">Files</button>
+                    </div>
+                    <button id="panel-close" class="btn btn-circle btn-ghost btn-sm sm:btn-md shrink-0" aria-label="Close panel">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Panel Content -->
+            <div class="panel-content">
+                <!-- Controls Tab -->
+                <div id="controls-content" class="panel-page active">
+                    <div class="max-w-2xl landscape:max-w-5xl mx-auto space-y-4">
+                        <div id="controls-content-inner"></div>
+                    </div>
+                </div>
+
+                <!-- Settings Tab -->
+                <div id="settings-content" class="panel-page">
+                    <div class="max-w-2xl landscape:max-w-5xl mx-auto p-3">
+                        <div id="local-settings-content" class="space-y-4"></div>
+                    </div>
+                </div>
+
+                <!-- Files Tab -->
+                <div id="files-content" class="panel-page">
+                    <div id="files-breadcrumbs" class="breadcrumbs text-sm mb-4">
+                        <ul></ul>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table id="files-table" class="table table-zebra w-full">
+                            <thead>
+                                <tr>
+                                    <th class="w-12"></th>
+                                    <th>Name</th>
+                                    <th>Last Modified</th>
+                                    <th class="text-right">Size</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main app -->
+    <script src="/js/app.js"></script>
+</body>
+</html>

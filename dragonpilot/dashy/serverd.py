@@ -1,0 +1,998 @@
+#!/usr/bin/env python3
+
+"""
+Copyright (c) 2026, Rick Lan
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, and/or sublicense,
+for non-commercial purposes only, subject to the following conditions:
+
+- The above copyright notice and this permission notice shall be included in
+  all copies or substantial portions of the Software.
+- Commercial use (e.g. use in a product, service, or activity intended to
+  generate revenue) is prohibited without explicit written permission from
+  the copyright holder.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+Dashy HTTP Server
+
+Provides REST API and static file serving for the dashy web UI.
+- Settings management (read/write params)
+- Navigation API (destination, search, places, tiles)
+- File browser for drive logs
+- WebRTC stream proxy
+- Static file serving for web UI
+"""
+
+import argparse
+import asyncio
+import json
+import os
+import logging
+import time
+from datetime import datetime
+from functools import wraps
+from urllib.parse import quote
+
+from aiohttp import web, ClientSession, ClientTimeout, ClientConnectorError
+
+from cereal import messaging
+
+from openpilot.common.params import Params
+from openpilot.system.hardware import PC, HARDWARE
+from openpilot.system.ui.lib.multilang import multilang as base_multilang
+from dragonpilot.settings import SETTINGS
+from dragonpilot.dashy.maa.providers import MapService
+from dragonpilot.dashy.maa.providers.models import Coordinate
+
+# --- Configuration ---
+DEFAULT_DIR = os.path.realpath(os.path.join(os.path.dirname(__file__), '..') if PC else '/data/media/0/realdata')
+WEB_DIST_PATH = os.path.join(os.path.dirname(__file__), "web", "dist")
+WEBRTC_TIMEOUT = ClientTimeout(total=10)
+CAR_PARAMS_CACHE_TTL = 30  # seconds
+
+logger = logging.getLogger("dashy")
+
+
+class MockParams:
+    """In-memory params mock for dev mode."""
+    _store = {}
+    def get(self, key, default=None): return self._store.get(key, default)
+    def get_bool(self, key, default=False): return bool(self._store.get(key)) if key in self._store else default
+    def put(self, key, value): self._store[key] = value
+    def put_bool(self, key, value): self._store[key] = value
+    def remove(self, key): self._store.pop(key, None)
+    def check_key(self, key): return True
+
+
+# --- Caching Layer ---
+class AppCache:
+    """Centralized cache for expensive operations."""
+
+    def __init__(self):
+        self._params = None
+        self._car_params = None
+        self._car_params_time = 0
+        self._context = None
+        self._context_time = 0
+        self._settings_cache = None
+        self._settings_cache_time = 0
+
+    @property
+    def params(self):
+        """Get shared Params instance (or mock if unavailable)."""
+        if self._params is None:
+            try:
+                self._params = Params()
+            except Exception as e:
+                logger.warning(f"Params unavailable, using mock: {e}")
+                self._params = MockParams()
+        return self._params
+
+    def get_car_params(self):
+        """Get cached CarParams data (brand, longitudinal control)."""
+        now = time.time()
+        if self._car_params is None or (now - self._car_params_time) > CAR_PARAMS_CACHE_TTL:
+            self._car_params = self._parse_car_params()
+            self._car_params_time = now
+        return self._car_params
+
+    def _parse_car_params(self):
+        """Parse CarParams from Params store."""
+        result = {'brand': '', 'openpilot_longitudinal_control': False}
+        try:
+            car_params_bytes = self.params.get("CarParams")
+            if car_params_bytes:
+                from cereal import car
+                with car.CarParams.from_bytes(car_params_bytes) as cp:
+                    result['brand'] = cp.brand
+                    result['openpilot_longitudinal_control'] = cp.openpilotLongitudinalControl
+        except Exception as e:
+            logger.debug(f"Could not parse CarParams: {e}")
+        return result
+
+    def get_settings_context(self):
+        """Get context dict for settings condition evaluation."""
+        now = time.time()
+        if self._context is None or (now - self._context_time) > CAR_PARAMS_CACHE_TTL:
+            car_params = self.get_car_params()
+            self._context = {
+                'brand': car_params['brand'],
+                'openpilotLongitudinalControl': car_params['openpilot_longitudinal_control'],
+                'LITE': os.getenv("LITE") is not None,
+                'MICI': self._check_mici()
+            }
+            self._context_time = now
+        return self._context
+
+    def _check_mici(self):
+        """Check if device is MICI type."""
+        try:
+            return HARDWARE.get_device_type() == "mici"
+        except Exception:
+            return False
+
+    def get_bool_safe(self, key, default=False):
+        """Safely get a boolean param with default."""
+        try:
+            return self.params.get_bool(key)
+        except Exception:
+            return default
+
+    def invalidate(self):
+        """Invalidate all caches."""
+        self._car_params = None
+        self._context = None
+        self._settings_cache = None
+
+
+# --- Helper Functions ---
+def api_handler(func):
+    """Decorator for API handlers with consistent error handling."""
+    @wraps(func)
+    async def wrapper(request):
+        try:
+            return await func(request)
+        except web.HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"{func.__name__} error: {e}", exc_info=True)
+            return web.json_response({'error': str(e)}, status=500)
+    return wrapper
+
+
+def get_safe_path(requested_path):
+    """Ensures the requested path is within DEFAULT_DIR."""
+    combined_path = os.path.join(DEFAULT_DIR, requested_path.lstrip('/'))
+    safe_path = os.path.realpath(combined_path)
+    if os.path.commonpath((safe_path, DEFAULT_DIR)) == DEFAULT_DIR:
+        return safe_path
+    return None
+
+
+def eval_condition(condition, context):
+    """Safely evaluate a condition string."""
+    if not condition:
+        return True
+    try:
+        return eval(condition, {"__builtins__": {}}, context)
+    except Exception as e:
+        logger.debug(f"Condition evaluation failed: {condition}, error: {e}")
+        return False
+
+
+def resolve_value(value):
+    """Resolve callable values (lambdas) for JSON serialization."""
+    return value() if callable(value) else value
+
+
+# --- API Endpoints ---
+@api_handler
+async def init_api(request):
+    """Provide initial data to the client."""
+    cache: AppCache = request.app['cache']
+    return web.json_response({
+        'dp_dev_dashy': cache.get_bool_safe("dp_dev_dashy", True),
+    })
+
+
+@api_handler
+async def list_files_api(request):
+    """List files and folders."""
+    path_param = request.query.get('path', '/')
+    safe_path = get_safe_path(path_param)
+
+    if not safe_path or not os.path.isdir(safe_path):
+        return web.json_response({'error': 'Invalid or Not Found Path'}, status=404)
+
+    items = []
+    for entry in os.listdir(safe_path):
+        full_path = os.path.join(safe_path, entry)
+        try:
+            stat = os.stat(full_path)
+            is_dir = os.path.isdir(full_path)
+            items.append({
+                'name': entry,
+                'is_dir': is_dir,
+                'mtime': datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M'),
+                'size': stat.st_size if not is_dir else 0
+            })
+        except FileNotFoundError:
+            continue
+
+    # Sort: directories first (by mtime desc), then files (by mtime desc)
+    dirs = sorted([i for i in items if i['is_dir']], key=lambda x: x['mtime'], reverse=True)
+    files = sorted([i for i in items if not i['is_dir']], key=lambda x: x['mtime'], reverse=True)
+
+    relative_path = os.path.relpath(safe_path, DEFAULT_DIR)
+    return web.json_response({
+        'path': '' if relative_path == '.' else relative_path,
+        'files': dirs + files
+    })
+
+
+@api_handler
+async def serve_player_api(request):
+    """Serve the HLS player page."""
+    file_path = request.query.get('file')
+    if not file_path:
+        return web.Response(text="File parameter is required.", status=400)
+
+    player_html_path = os.path.join(WEB_DIST_PATH, 'pages', 'player.html')
+    try:
+        with open(player_html_path, 'r') as f:
+            html_template = f.read()
+    except FileNotFoundError:
+        return web.Response(text="Player HTML not found.", status=500)
+
+    html = html_template.replace('{{FILE_PATH}}', quote(file_path))
+    return web.Response(text=html, content_type='text/html')
+
+
+@api_handler
+async def serve_manifest_api(request):
+    """Dynamically generate m3u8 playlist."""
+    file_path = request.query.get('file', '').lstrip('/')
+    if not file_path:
+        return web.Response(text="File parameter is required.", status=400)
+
+    encoded_path = quote(file_path)
+    manifest = f"#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:60\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXTINF:60.0,\n/media/{encoded_path}\n#EXT-X-ENDLIST\n"
+    return web.Response(text=manifest, content_type='application/vnd.apple.mpegurl')
+
+
+@api_handler
+async def get_settings_config_api(request):
+    """Get the settings configuration from settings.py."""
+    cache: AppCache = request.app['cache']
+
+    # Return cached settings if fresh (2 second TTL)
+    now = time.time()
+    if cache._settings_cache is not None and (now - cache._settings_cache_time) < 2:
+        return web.json_response(cache._settings_cache)
+
+    params = cache.params
+
+    # Update language if changed
+    current_lang = params.get("LanguageSetting")
+    if current_lang:
+        lang_str = current_lang.decode() if isinstance(current_lang, bytes) else str(current_lang)
+        lang_str = lang_str.removeprefix("main_")
+        if lang_str != base_multilang.language and lang_str in base_multilang.languages.values():
+            base_multilang._language = lang_str
+            base_multilang.setup()
+
+    context = cache.get_settings_context()
+    settings_with_values = []
+
+    for section in SETTINGS:
+        if not eval_condition(section.get('condition'), context):
+            continue
+
+        section_copy = section.copy()
+        settings_list = []
+
+        for setting in section.get('settings', []):
+            if not eval_condition(setting.get('condition'), context):
+                continue
+
+            setting_copy = setting.copy()
+            key = setting['key']
+
+            # Resolve callable values
+            for field in ['title', 'description', 'suffix', 'special_value_text']:
+                if field in setting_copy:
+                    setting_copy[field] = resolve_value(setting_copy[field])
+            if 'options' in setting_copy:
+                setting_copy['options'] = [resolve_value(opt) for opt in setting_copy['options']]
+
+            # Get current value based on type
+            setting_copy['current_value'] = _get_setting_value(params, setting)
+            settings_list.append(setting_copy)
+
+        if settings_list:
+            section_copy['settings'] = settings_list
+            settings_with_values.append(section_copy)
+
+    response_data = {'settings': settings_with_values}
+    cache._settings_cache = response_data
+    cache._settings_cache_time = now
+    return web.json_response(response_data)
+
+
+def _get_setting_value(params, setting):
+    """Get current value for a setting from Params."""
+    key = setting['key']
+    setting_type = setting['type']
+    default = setting.get('default', 0)
+
+    try:
+        if setting_type == 'toggle_item':
+            return params.get_bool(key)
+        elif setting_type == 'double_spin_button_item':
+            value = params.get(key)
+            return float(value) if value is not None else float(default)
+        else:  # spin_button_item, text_spin_button_item
+            value = params.get(key)
+            return int(value) if value is not None else int(default)
+    except Exception as e:
+        logger.warning(f"Error getting value for {key}: {e}")
+        if setting_type == 'toggle_item':
+            return False
+        elif setting_type == 'double_spin_button_item':
+            return float(default)
+        return int(default)
+
+
+@api_handler
+async def save_param_api(request):
+    """Save a single param value.
+
+    Usage: POST /api/settings/params/{name}
+    Body: { "value": <value> }
+    """
+    param_name = request.match_info.get('param_name')
+    if not param_name:
+        return web.json_response({'error': 'param_name is required'}, status=400)
+
+    cache: AppCache = request.app['cache']
+    params = cache.params
+    data = await request.json()
+
+    if 'value' not in data:
+        return web.json_response({'error': 'value is required in body'}, status=400)
+
+    _save_param(params, param_name, data['value'])
+    cache.invalidate()
+    logger.info(f"Param saved: {param_name}={data['value']}")
+
+    return web.json_response({'status': 'success', 'key': param_name, 'value': data['value']})
+
+
+def _save_param(params, key, value):
+    """Save a single param value with proper type handling."""
+    try:
+        param_type = params.get_type(key)
+
+        if param_type == 1:  # BOOL
+            params.put_bool(key, bool(value))
+        elif param_type == 2:  # INT
+            params.put(key, int(value))
+        elif param_type == 3:  # FLOAT
+            params.put(key, float(value))
+        elif isinstance(value, bool):
+            params.put_bool(key, value)
+        else:
+            params.put(key, str(value) if not isinstance(value, str) else value)
+
+        logger.debug(f"Saved {key}={value} (type={param_type})")
+    except Exception as e:
+        logger.error(f"Error saving param {key}={value}: {e}")
+        raise
+
+
+def _get_param_value(params, key):
+    """Get a single param value with proper type handling."""
+    try:
+        # Try get_bool first for boolean params
+        return params.get_bool(key)
+    except Exception:
+        pass
+
+    try:
+        raw_value = params.get(key)
+        if raw_value is None:
+            return None
+        elif isinstance(raw_value, bytes):
+            return raw_value.decode('utf-8')
+        return raw_value
+    except Exception:
+        return None
+
+
+@api_handler
+async def get_param_api(request):
+    """Get a single param value."""
+    param_name = request.match_info.get('param_name')
+    if not param_name:
+        return web.json_response({'error': 'param_name is required'}, status=400)
+
+    cache: AppCache = request.app['cache']
+    try:
+        value = _get_param_value(cache.params, param_name)
+    except Exception:
+        value = None
+
+    return web.json_response({'key': param_name, 'value': value})
+
+
+@api_handler
+async def get_model_list_api(request):
+    """Get the model list and current selection."""
+    cache: AppCache = request.app['cache']
+    params = cache.params
+
+    # Get model list
+    model_list = {}
+    try:
+        model_list_raw = params.get("dp_dev_model_list")
+        if model_list_raw:
+            model_list = json.loads(model_list_raw)
+    except Exception as e:
+        logger.debug(f"Could not parse dp_dev_model_list: {e}")
+
+    # Get current selection
+    selected_model = ""
+    try:
+        selected_raw = params.get("dp_dev_model_selected")
+        if selected_raw:
+            selected_model = selected_raw.decode('utf-8') if isinstance(selected_raw, bytes) else str(selected_raw)
+    except Exception as e:
+        logger.debug(f"Could not get dp_dev_model_selected: {e}")
+
+    return web.json_response({
+        'model_list': model_list,
+        'selected_model': selected_model
+    })
+
+
+@api_handler
+async def save_model_selection_api(request):
+    """Save the selected model."""
+    cache: AppCache = request.app['cache']
+    params = cache.params
+    data = await request.json()
+
+    selected_model = data.get('selected_model', '')
+
+    if not selected_model or selected_model == "[AUTO]":
+        params.put("dp_dev_model_selected", "")
+        logger.info("Model selection cleared (AUTO mode)")
+    else:
+        params.put("dp_dev_model_selected", selected_model)
+        logger.info(f"Model selection saved: {selected_model}")
+
+    return web.json_response({'status': 'success'})
+
+
+@api_handler
+async def webrtc_stream_proxy(request):
+    """Proxy WebRTC stream requests to webrtcd."""
+    host = request.host.split(':')[0]
+    body = await request.read()
+    session: ClientSession = request.app['http_session']
+
+    try:
+        async with session.post(
+            f'http://{host}:5001/stream',
+            data=body,
+            headers={'Content-Type': 'application/json'}
+        ) as resp:
+            response_body = await resp.read()
+            return web.Response(
+                body=response_body,
+                status=resp.status,
+                content_type=resp.content_type
+            )
+    except ClientConnectorError:
+        # webrtcd not running - return 503 Service Unavailable
+        return web.json_response(
+            {'error': 'Stream service unavailable', 'code': 'WEBRTCD_UNAVAILABLE'},
+            status=503
+        )
+
+# --- Navigation API Endpoints ---
+@api_handler
+async def nav_get_destination_api(request):
+    """Get current navigation destination.
+
+    GET /api/nav/destination
+    Returns: { latitude, longitude, name } or {}
+    """
+    cache: AppCache = request.app['cache']
+    params = cache.params
+
+    destination = {}
+    try:
+        # JSON type params return dict directly
+        dest = params.get("dp_maa_destination")
+        if dest:
+            destination = dest
+    except Exception as e:
+        logger.debug(f"Could not get dp_maa_destination: {e}")
+
+    return web.json_response(destination)
+
+
+@api_handler
+async def nav_set_destination_api(request):
+    """Set navigation destination.
+
+    POST /api/nav/destination
+    Body: { "latitude": float, "longitude": float, "name": string (optional) }
+    """
+    cache: AppCache = request.app['cache']
+    params = cache.params
+    data = await request.json()
+
+    if 'latitude' not in data or 'longitude' not in data:
+        return web.json_response({'error': 'latitude and longitude required'}, status=400)
+
+    destination = {
+        'latitude': float(data['latitude']),
+        'longitude': float(data['longitude']),
+        'name': data.get('name', '')
+    }
+
+    try:
+        # Use native dict with put_nonblocking for JSON types
+        params.put_nonblocking("dp_maa_destination", destination)
+        logger.info(f"Nav destination set: {destination['latitude']:.6f}, {destination['longitude']:.6f}")
+    except Exception as e:
+        logger.warning(f"Could not save NavDestination to params: {e}")
+
+    return web.json_response({'status': 'success', 'destination': destination})
+
+
+@api_handler
+async def nav_clear_destination_api(request):
+    """Clear navigation destination.
+
+    DELETE /api/nav/destination
+    """
+    cache: AppCache = request.app['cache']
+    params = cache.params
+    try:
+        params.remove("dp_maa_destination")
+        logger.info("Nav destination cleared")
+    except Exception as e:
+        logger.warning(f"Could not remove NavDestination from params: {e}")
+    return web.json_response({'status': 'success'})
+
+
+@api_handler
+async def nav_search_api(request):
+    """Search for places/addresses.
+
+    GET /api/nav/search?q=<query>&lat=<lat>&lon=<lon>&limit=<limit>
+    Returns: [{ name, address, latitude, longitude, distance }, ...]
+    """
+    query = request.query.get('q', '').strip()
+    if not query or len(query) < 2:
+        return web.json_response([])
+
+    # Parse optional proximity
+    proximity = None
+    lat_str = request.query.get('lat')
+    lon_str = request.query.get('lon')
+    if lat_str and lon_str:
+        try:
+            proximity = Coordinate(float(lat_str), float(lon_str))
+        except ValueError:
+            pass
+
+    limit = min(int(request.query.get('limit', 10)), 20)
+
+    # Get map service from app cache
+    map_service: MapService = request.app.get('map_service')
+    if not map_service:
+        cache: AppCache = request.app['cache']
+        map_service = MapService(cache.params)
+        request.app['map_service'] = map_service
+
+    try:
+        results = await map_service.search_provider.search(query, proximity, limit)
+        # Log which provider was used
+        if results:
+            provider = results[0].provider if hasattr(results[0], 'provider') else 'unknown'
+            logger.info(f"Search '{query}' returned {len(results)} results via {provider}")
+        return web.json_response([
+            {
+                'name': r.name,
+                'address': r.address,
+                'latitude': r.coordinate.latitude,
+                'longitude': r.coordinate.longitude,
+                'distance': r.distance,
+            }
+            for r in results
+        ])
+    except Exception as e:
+        logger.error(f"Search error: {e}")
+        return web.json_response([])
+
+
+@api_handler
+async def nav_route_api(request):
+    """Calculate route between two points.
+
+    POST /api/nav/route
+    Body: { "start": {"lat": float, "lon": float}, "end": {"lat": float, "lon": float} }
+    Returns: { distance_m, duration_s, polyline, maneuvers, has_traffic }
+    """
+    data = await request.json()
+
+    start = data.get('start', {})
+    end = data.get('end', {})
+
+    if not all([start.get('lat'), start.get('lon'), end.get('lat'), end.get('lon')]):
+        return web.json_response({'error': 'start and end coordinates required'}, status=400)
+
+    origin = Coordinate(float(start['lat']), float(start['lon']))
+    destination = Coordinate(float(end['lat']), float(end['lon']))
+
+    # Get map service
+    map_service: MapService = request.app.get('map_service')
+    if not map_service:
+        cache: AppCache = request.app['cache']
+        map_service = MapService(cache.params)
+        request.app['map_service'] = map_service
+
+    try:
+        route = await map_service.route_provider.get_route(origin, destination)
+        if not route:
+            return web.json_response({'error': 'No route found'}, status=404)
+
+        logger.info(f"Route calculated: {route.distance/1000:.1f}km via {route.provider}")
+        return web.json_response({
+            'distance_m': route.distance,
+            'duration_s': route.duration,
+            'polyline': _encode_polyline(route.geometry) if route.geometry else '',
+            'geometry': [[c.latitude, c.longitude] for c in route.geometry] if route.geometry else [],
+            'maneuvers': [
+                {
+                    'instruction': step.name or '',
+                    'distance_m': step.distance,
+                    'duration_s': step.duration,
+                    'position': {
+                        'lat': step.maneuver_point.latitude,
+                        'lon': step.maneuver_point.longitude
+                    } if step.maneuver_point else None,
+                    'type': step.maneuver_type,
+                    'modifier': step.maneuver_modifier,
+                }
+                for step in route.steps
+            ],
+            'has_traffic': route.has_traffic,
+            'provider': route.provider,
+        })
+    except Exception as e:
+        logger.error(f"Route error: {e}")
+        return web.json_response({'error': str(e)}, status=500)
+
+
+def _encode_polyline(coordinates: list) -> str:
+    """Encode coordinates to Google polyline format."""
+    if not coordinates:
+        return ''
+
+    result = []
+    prev_lat = 0
+    prev_lon = 0
+
+    for coord in coordinates:
+        lat = int(round(coord.latitude * 1e5))
+        lon = int(round(coord.longitude * 1e5))
+
+        d_lat = lat - prev_lat
+        d_lon = lon - prev_lon
+
+        for val in [d_lat, d_lon]:
+            val = ~(val << 1) if val < 0 else (val << 1)
+            while val >= 0x20:
+                result.append(chr((0x20 | (val & 0x1f)) + 63))
+                val >>= 5
+            result.append(chr(val + 63))
+
+        prev_lat = lat
+        prev_lon = lon
+
+    return ''.join(result)
+
+
+@api_handler
+async def nav_tiles_config_api(request):
+    """Get tile provider configuration.
+
+    GET /api/nav/tiles/config
+    Returns: { url_template, style_url, attribution, min_zoom, max_zoom }
+    """
+    map_service: MapService = request.app.get('map_service')
+    if not map_service:
+        cache: AppCache = request.app['cache']
+        map_service = MapService(cache.params)
+        request.app['map_service'] = map_service
+
+    try:
+        config = map_service.tile_provider.get_tile_config()
+        return web.json_response({
+            'url_template': config.url_template,
+            'style_url': config.style_url,
+            'attribution': config.attribution,
+            'min_zoom': config.min_zoom,
+            'max_zoom': config.max_zoom,
+        })
+    except Exception as e:
+        logger.error(f"Tile config error: {e}")
+        return web.json_response({'error': str(e)}, status=500)
+
+
+# --- Places API (Favorites + Recent) ---
+# In-memory cache (persists for server session even if params fails)
+_places_cache = {"home": None, "work": None, "recent": []}
+
+def _get_places(params) -> dict:
+    """Get places data from dp_maa_places param or memory cache."""
+    global _places_cache
+    try:
+        # JSON type params return dict/list directly
+        data = params.get("dp_maa_places")
+        if data:
+            _places_cache = data  # sync to memory
+            return data
+    except Exception as e:
+        logger.debug(f"Could not parse dp_maa_places: {e}")
+    return _places_cache
+
+
+def _save_places(params, places: dict):
+    """Save places data to dp_maa_places param and memory cache."""
+    global _places_cache
+    _places_cache = places  # always save to memory first
+    try:
+        # JSON type params accept dict/list directly
+        params.put("dp_maa_places", places)
+    except Exception as e:
+        logger.warning(f"Failed to save places to params: {e}")
+
+
+def _haversine_distance(lat1, lon1, lat2, lon2) -> float:
+    """Calculate distance between two points in meters."""
+    import math
+    R = 6371000
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    d_phi = math.radians(lat2 - lat1)
+    d_lambda = math.radians(lon2 - lon1)
+    a = math.sin(d_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda / 2) ** 2
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def _add_to_recent(places: dict, place: dict) -> dict:
+    """Add a place to recent list with deduplication."""
+    recent = [r for r in places.get("recent", [])
+              if _haversine_distance(r["lat"], r["lon"], place["lat"], place["lon"]) > 100]
+    recent.insert(0, place)
+    places["recent"] = recent[:5]
+    return places
+
+
+@api_handler
+async def nav_get_places_api(request):
+    """GET /api/nav/places - Get all places."""
+    cache: AppCache = request.app['cache']
+    return web.json_response(_get_places(cache.params))
+
+
+@api_handler
+async def nav_set_place_api(request):
+    """POST /api/nav/places/{place_type} - Set home or work."""
+    place_type = request.match_info.get('place_type')
+    if place_type not in ('home', 'work'):
+        return web.json_response({'error': 'Invalid place type'}, status=400)
+
+    cache: AppCache = request.app['cache']
+    data = await request.json()
+    if 'lat' not in data or 'lon' not in data:
+        return web.json_response({'error': 'lat and lon required'}, status=400)
+
+    places = _get_places(cache.params)
+    places[place_type] = {
+        'name': data.get('name', place_type.capitalize()),
+        'address': data.get('address', ''),
+        'lat': float(data['lat']),
+        'lon': float(data['lon'])
+    }
+    _save_places(cache.params, places)
+    return web.json_response({'success': True, place_type: places[place_type]})
+
+
+@api_handler
+async def nav_delete_place_api(request):
+    """DELETE /api/nav/places/{place_type} - Delete home or work."""
+    place_type = request.match_info.get('place_type')
+    if place_type not in ('home', 'work'):
+        return web.json_response({'error': 'Invalid place type'}, status=400)
+
+    cache: AppCache = request.app['cache']
+    places = _get_places(cache.params)
+    places[place_type] = None
+    _save_places(cache.params, places)
+    return web.json_response({'success': True})
+
+
+@api_handler
+async def nav_add_recent_api(request):
+    """POST /api/nav/places/recent - Add to recent."""
+    cache: AppCache = request.app['cache']
+    data = await request.json()
+    if 'lat' not in data or 'lon' not in data:
+        return web.json_response({'error': 'lat and lon required'}, status=400)
+
+    places = _get_places(cache.params)
+    place = {'name': data.get('name', 'Unknown'), 'address': data.get('address', ''),
+             'lat': float(data['lat']), 'lon': float(data['lon'])}
+    places = _add_to_recent(places, place)
+    _save_places(cache.params, places)
+    return web.json_response({'success': True, 'recent': places['recent']})
+
+
+@api_handler
+async def nav_clear_recent_api(request):
+    """DELETE /api/nav/places/recent - Clear recent."""
+    cache: AppCache = request.app['cache']
+    places = _get_places(cache.params)
+    places['recent'] = []
+    _save_places(cache.params, places)
+    return web.json_response({'success': True})
+
+
+# --- WebSocket endpoint for data streaming ---
+async def websocket_handler(request):
+    """WebSocket endpoint for data-only connections - streams dashyState directly."""
+    ws = web.WebSocketResponse()
+    await ws.prepare(request)
+
+    logger.info("WebSocket client connected")
+
+    # Create a SubMaster for this connection
+    sm = messaging.SubMaster(['dashyState'])
+
+    try:
+        while not ws.closed:
+            sm.update(0)
+            if sm.updated['dashyState']:
+                json_data = sm['dashyState'].json
+                if isinstance(json_data, bytes):
+                    json_data = json_data.decode('utf-8')
+                await ws.send_str(json_data)
+            await asyncio.sleep(0.01)
+    except Exception as e:
+        logger.warning(f"WebSocket error: {e}")
+    finally:
+        logger.info("WebSocket client disconnected")
+
+    return ws
+
+
+# --- CORS Middleware ---
+@web.middleware
+async def cors_middleware(request, handler):
+    response = await handler(request)
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+
+    # Disable caching for web assets
+    path = request.path.lower()
+    if path.endswith(('.html', '.js', '.css')) or path == '/':
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+
+    return response
+
+
+async def handle_cors_preflight(request):
+    return web.Response(status=200, headers={
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Max-Age': '86400',
+    })
+
+
+# --- Application Setup ---
+async def on_startup(app):
+    """Initialize app-level resources."""
+    app['cache'] = AppCache()
+    app['http_session'] = ClientSession(timeout=WEBRTC_TIMEOUT)
+    logger.info("Dashy server started")
+
+
+async def on_cleanup(app):
+    """Cleanup app-level resources."""
+    await app['http_session'].close()
+    logger.info("Dashy server stopped")
+
+
+def setup_aiohttp_app(host: str, port: int, debug: bool):
+    logging.basicConfig(
+        level=logging.DEBUG if debug else logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+
+    app = web.Application(middlewares=[cors_middleware])
+    app['port'] = port
+
+    # API routes
+    app.router.add_get("/api/init", init_api)
+    app.router.add_get("/api/files", list_files_api)
+    app.router.add_get("/api/play", serve_player_api)
+    app.router.add_get("/api/manifest.m3u8", serve_manifest_api)
+    app.router.add_get("/api/settings", get_settings_config_api)
+    app.router.add_get("/api/settings/params/{param_name}", get_param_api)
+    app.router.add_post("/api/settings/params/{param_name}", save_param_api)
+    app.router.add_get("/api/models", get_model_list_api)
+    app.router.add_post("/api/models/select", save_model_selection_api)
+    app.router.add_post("/api/stream", webrtc_stream_proxy)
+    app.router.add_get("/api/ws", websocket_handler)  # WebSocket for data streaming
+
+    # Navigation routes
+    app.router.add_get("/api/nav/destination", nav_get_destination_api)
+    app.router.add_post("/api/nav/destination", nav_set_destination_api)
+    app.router.add_delete("/api/nav/destination", nav_clear_destination_api)
+    app.router.add_get("/api/nav/search", nav_search_api)
+    app.router.add_post("/api/nav/route", nav_route_api)
+    app.router.add_get("/api/nav/tiles/config", nav_tiles_config_api)
+
+    # Places routes (favorites + recent) - specific routes before parametrized
+    app.router.add_get("/api/nav/places", nav_get_places_api)
+    app.router.add_post("/api/nav/places/recent", nav_add_recent_api)
+    app.router.add_delete("/api/nav/places/recent", nav_clear_recent_api)
+    app.router.add_post("/api/nav/places/{place_type}", nav_set_place_api)
+    app.router.add_delete("/api/nav/places/{place_type}", nav_delete_place_api)
+
+    app.router.add_route('OPTIONS', '/{tail:.*}', handle_cors_preflight)
+
+    # Static files
+    app.router.add_static('/media', path=DEFAULT_DIR, name='media', show_index=False, follow_symlinks=False)
+    app.router.add_static('/download', path=DEFAULT_DIR, name='download', show_index=False, follow_symlinks=False)
+    app.router.add_get("/", lambda r: web.FileResponse(os.path.join(WEB_DIST_PATH, "index.html")))
+    app.router.add_static("/", path=WEB_DIST_PATH)
+
+    app.on_startup.append(on_startup)
+    app.on_cleanup.append(on_cleanup)
+
+    return app
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Dashy Server")
+    parser.add_argument("--host", type=str, default="0.0.0.0", help="Host to listen on")
+    parser.add_argument("--port", type=int, default=5088, help="Port to listen on")
+    parser.add_argument("--debug", action="store_true", help="Enable debug mode")
+    args = parser.parse_args()
+
+    app = setup_aiohttp_app(args.host, args.port, args.debug)
+    web.run_app(app, host=args.host, port=args.port)
+
+
+if __name__ == "__main__":
+    main()
