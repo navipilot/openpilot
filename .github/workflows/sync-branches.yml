@@ -32,13 +32,9 @@ jobs:
             fi
           }
 
-          # Carrotpilot (ajouatom/openpilot) branch: carrot2-v9
+          # Carrotpilot (ajouatom/openpilot) branch: c3-v9
           add_or_update_remote carrotpilot https://github.com/ajouatom/openpilot.git
-          git fetch carrotpilot carrot2-v9 --no-tags || echo "⚠️ carrotpilot carrot2-v9 fetch failed"
-
-          # Sunnypilot (sunnypilot/sunnypilot) branch: staging
-          add_or_update_remote sunnypilot https://github.com/sunnypilot/sunnypilot.git
-          git fetch sunnypilot staging --no-tags || echo "⚠️ sunnypilot staging fetch failed"
+          git fetch carrotpilot c3-v9 --no-tags || echo "⚠️ carrotpilot  -v9 fetch failed"
 
           # Dragonpilot (dragonpilot/dragonpilot) branch: pre-build
           add_or_update_remote dragonpilot https://github.com/dragonpilot/dragonpilot.git
@@ -53,14 +49,10 @@ jobs:
           set +e
 
           # Carrotpilot: ajouatom/carrot2-v9 -> Carrotpilot
-          git checkout -B Carrotpilot carrotpilot/carrot2-v9 \
+          git checkout -B Carrotpilot carrotpilot/c3-v9 \
             && git push origin Carrotpilot --force \
             || echo "⚠️ Carrotpilot push skipped"
 
-          # Sunnypilot: sunnypilot/staging -> Sunnypilot
-          git checkout -B Sunnypilot sunnypilot/staging \
-            && git push origin Sunnypilot --force \
-            || echo "⚠️ Sunnypilot push skipped"
 
           # Dragonpilot: dragonpilot/pre-build -> Dragonpilot
           git checkout -B Dragonpilot dragonpilot/pre-build \
