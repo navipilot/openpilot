@@ -12,6 +12,7 @@
 #include "board/stm32f4/sound.h"
 #include "board/drivers/clock_source.h"
 #include "board/boards/dos.h"
+#include "board/boards/black.h"
 
 void detect_board_type(void) {
   set_gpio_output(GPIOC, 14, 1);
@@ -19,6 +20,9 @@ void detect_board_type(void) {
   if (!detect_with_pull(GPIOB, 1, PULL_UP) && !detect_with_pull(GPIOB, 7, PULL_UP)) {
     hw_type = HW_TYPE_DOS;
     current_board = &board_dos;
+  } else {
+    hw_type = HW_TYPE_BLACK_PANDA;
+    current_board = &board_black;
   }
 
   // Return A13 to the alt mode to fix SWD
