@@ -1,4 +1,5 @@
-# Navipilot / CP搭子 (CPlink) - 智能化 Comma3 导航数据桥梁
+# Navipilot / CP搭子 (CPlink) - 智能化 Comma3 导航数据桥梁 
+## URL binge.fit/cp
 
 一款由 [JixieXiaoGe](https://github.com/jixiexiaoge) 开发的专为 Comma3 设备与 CarrotPilot 深度打造的 Android “导航数据桥接”应用。
 
