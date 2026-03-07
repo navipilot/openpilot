@@ -20,7 +20,9 @@ class CarState(CarStateBase):
     self.low_speed_alert = False
     self.lkas_allowed_speed = False
     self.lkas_disabled = False
-    
+    self.lkas_init_complete = False
+    self.lkas_init_frames = 0
+
     self.prev_distance_button = 0
     self.distance_button = 0
 
@@ -32,7 +34,7 @@ class CarState(CarStateBase):
 
     self.prev_distance_button = self.distance_button
     self.distance_button = cp.vl["CRZ_BTNS"]["DISTANCE_LESS"]
-    
+
     self.prev_cruise_buttons = self.cruise_buttons
 
     if bool(cp.vl["CRZ_BTNS"]["SET_P"]):
@@ -43,7 +45,7 @@ class CarState(CarStateBase):
       self.cruise_buttons = Buttons.RESUME
     else:
       self.cruise_buttons = Buttons.NONE
-      
+
     ret.wheelSpeeds = self.get_wheel_speeds(
       cp.vl["WHEEL_SPEEDS"]["FL"],
       cp.vl["WHEEL_SPEEDS"]["FR"],
@@ -60,6 +62,7 @@ class CarState(CarStateBase):
     can_gear = int(cp.vl["GEAR"]["GEAR"])
     ret.gearShifter = self.parse_gear_shifter(self.shifter_values.get(can_gear, None))
     ret.gearStep = cp.vl["GEAR"]["GEAR_BOX"]
+    ret.engineRpm = cp.vl["ENGINE_DATA"]["RPM"]
 
     ret.genericToggle = bool(cp.vl["BLINK_INFO"]["HIGH_BEAMS"])
     ret.leftBlindspot = cp.vl["BSM"]["LEFT_BS_STATUS"] != 0
@@ -99,12 +102,29 @@ class CarState(CarStateBase):
     else:
       self.lkas_allowed_speed = True
 
+    # CX-5 2022: LKAS_BLOCK is always ON at standstill (EPS boot). Track when
+    # it clears for the first time — after that, trust it as a real fault signal.
+    # Timeout after 5s (500 frames) so a persistent fault from startup is never hidden.
+    # VW uses the same pattern (eps_init_complete, frame > 600).
+    if ret.standstill:
+      self.lkas_init_complete = False
+      self.lkas_init_frames = 0
+    elif not lkas_blocked or self.lkas_init_frames > 500:
+      self.lkas_init_complete = True
+    else:
+      self.lkas_init_frames += 1
+
     # TODO: the signal used for available seems to be the adaptive cruise signal, instead of the main on
     #       it should be used for carState.cruiseState.nonAdaptive instead
     ret.cruiseState.available = cp.vl["CRZ_CTRL"]["CRZ_AVAILABLE"] == 1
     ret.cruiseState.enabled = cp.vl["CRZ_CTRL"]["CRZ_ACTIVE"] == 1
     ret.cruiseState.standstill = cp.vl["PEDALS"]["STANDSTILL"] == 1
     ret.cruiseState.speed = cp.vl["CRZ_EVENTS"]["CRZ_SPEED"] * CV.KPH_TO_MS
+
+    # 将CAN总线上的DISTANCE_SETTING值转换为与车辆显示一致的值
+    can_distance_setting = cp.vl["CRZ_CTRL"]["DISTANCE_SETTING"]
+    # 假设最大值为4，使用5减去CAN值来获取正确的显示值
+    ret.pcmCruiseGap = 5 - can_distance_setting if 1 <= can_distance_setting <= 4 else can_distance_setting
 
     # stock lkas should be on
     # TODO: is this needed?
@@ -118,9 +138,13 @@ class CarState(CarStateBase):
     ret.lowSpeedAlert = self.low_speed_alert
 
     # Check if LKAS is disabled due to lack of driver torque when all other states indicate
-    # it should be enabled (steer lockout). Don't warn until we actually get lkas active
-    # and lose it again, i.e, after initial lkas activation
-    ret.steerFaultTemporary = self.lkas_allowed_speed and lkas_blocked
+    # it should be enabled (steer lockout).
+    if self.CP.minSteerSpeed > 0:
+      ret.steerFaultTemporary = self.lkas_allowed_speed and lkas_blocked
+    else:
+      # lkas_init_complete gates this so the fault can only fire after LKAS_BLOCK
+      # has cleared at least once, filtering the standstill boot sequence.
+      ret.steerFaultTemporary = self.lkas_init_complete and lkas_blocked
 
     self.acc_active_last = ret.cruiseState.enabled
 
@@ -134,7 +158,7 @@ class CarState(CarStateBase):
 
     self.lkas_previously_enabled = self.lkas_enabled
     self.lkas_enabled = not self.lkas_disabled
-    
+
     # TODO: add button types for inc and dec
     #ret.buttonEvents = create_button_events(self.distance_button, prev_distance_button, {1: ButtonType.gapAdjustCruise})
     ret.buttonEvents = [

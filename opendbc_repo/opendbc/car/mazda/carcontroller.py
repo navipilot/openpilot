@@ -12,10 +12,11 @@ VisualAlert = structs.CarControl.HUDControl.VisualAlert
 class CarController(CarControllerBase):
   def __init__(self, dbc_names, CP):
     super().__init__(dbc_names, CP)
+    self.params = CarControllerParams(CP)
     self.apply_torque_last = 0
     self.packer = CANPacker(dbc_names[Bus.pt])
     self.brake_counter = 0
-    
+
     self.activateCruise = 0
     self.speed_from_pcm = 1
 
@@ -31,9 +32,9 @@ class CarController(CarControllerBase):
 
     if CC.latActive:
       # calculate steer and also set limits due to driver torque
-      new_torque = int(round(CC.actuators.torque * CarControllerParams.STEER_MAX))
+      new_torque = int(round(CC.actuators.torque * self.params.STEER_MAX))
       apply_torque = apply_driver_steer_torque_limits(new_torque, self.apply_torque_last,
-                                                      CS.out.steeringTorque, CarControllerParams)
+                                                      CS.out.steeringTorque, self.params)
 
     if CC.cruiseControl.cancel:
       # If brake is pressed, let us wait >70ms before trying to disable crz to avoid
@@ -73,7 +74,7 @@ class CarController(CarControllerBase):
                                                       self.frame, apply_torque, CS.cam_lkas))
 
     new_actuators = CC.actuators.as_builder()
-    new_actuators.torque = apply_torque / CarControllerParams.STEER_MAX
+    new_actuators.torque = apply_torque / self.params.STEER_MAX
     new_actuators.torqueOutputCan = apply_torque
 
     self.frame += 1

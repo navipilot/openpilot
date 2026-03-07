@@ -23,7 +23,11 @@ class CarControllerParams:
   STEER_STEP = 1  # 100 Hz
 
   def __init__(self, CP):
-    pass
+    if CP.carFingerprint == CAR.MAZDA_CX5_2022:
+      self.STEER_MAX = 1200
+      self.STEER_DELTA_UP = 15
+      self.STEER_DELTA_DOWN = 38
+      self.STEER_ERROR_MAX = 450
 
 
 @dataclass
@@ -35,6 +39,11 @@ class MazdaCarDocs(CarDocs):
 @dataclass(frozen=True, kw_only=True)
 class MazdaCarSpecs(CarSpecs):
   tireStiffnessFactor: float = 0.7  # not optimized yet
+
+
+@dataclass(frozen=True, kw_only=True)
+class MazdaCX5_2022CarSpecs(MazdaCarSpecs):
+  tireStiffnessFactor: float = 0.9  # learned from torqued
 
 
 class MazdaFlags(IntFlag):
@@ -72,7 +81,7 @@ class CAR(Platforms):
   )
   MAZDA_CX5_2022 = MazdaPlatformConfig(
     [MazdaCarDocs("Mazda CX-5 2022-25")],
-    MAZDA_CX5.specs,
+    MazdaCX5_2022CarSpecs(mass=3728 * CV.LB_TO_KG, wheelbase=2.698, steerRatio=15.5),
   )
 
 
