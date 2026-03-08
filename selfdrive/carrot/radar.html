@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>雷达数据监控</title>
+    <style>
+        * { 
+            margin: 0; 
+            padding: 0; 
+            box-sizing: border-box; 
+        }
+
+        body { 
+            background: #1a1a1a; 
+            color: white; 
+            font-family: Arial, sans-serif;
+            padding: 10px;
+            line-height: 1.4;
+            font-size: 14px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 15px;
+            padding: 12px;
+            background: #2d2d2d;
+            border-radius: 8px;
+            flex-shrink: 0;
+        }
+
+        .header h1 {
+            color: #4CAF50;
+            margin-bottom: 8px;
+            font-size: clamp(1.0rem, 4vw, 1.5rem);
+        }
+
+        .header p {
+            color: #ccc;
+            margin-bottom: 10px;
+            font-size: clamp(0.8rem, 3vw, 1rem);
+        }
+        .content {
+			display: block;
+			margin-bottom: 15px;
+		}
+        .panel {
+            background: #2d2d2d;
+            border-radius: 10px;
+            padding: 15px;
+            border: 1px solid #444;
+            width: 100%;
+            overflow: hidden;
+			margin-bottom: 15px;
+        }
+		.panel:last-child {
+			margin-bottom: 0;
+		}
+        .panel-title {
+            color: #4CAF50;
+            margin-bottom: 12px;
+            font-size: clamp(1rem, 3.5vw, 1.2em);
+            border-bottom: 1px solid #444;
+            padding-bottom: 8px;
+        }
+        .canvas-container {
+            width: 100%;
+            position: relative;
+            background: #1e1e1e;
+            border-radius: 5px;
+            border: 2px solid #444;
+            overflow: hidden;
+            height: 500px;
+        }
+        #radarCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: clamp(0.7rem, 2.5vw, 0.9rem);
+        }
+        .data-table th, .data-table td {
+            padding: 6px 8px;
+            text-align: left;
+            border-bottom: 1px solid #444;
+            word-break: break-word;
+        }
+        .data-table th {
+            background: #333;
+            color: #4CAF50;
+            font-size: clamp(0.75rem, 2.5vw, 0.85rem);
+        }
+        .data-table tr:hover {
+            background: #333;
+        }
+        .stats {
+			display: block;
+			margin-top: 12px;
+			overflow: hidden;
+		}
+        .stat-item {
+            background: #333;
+            padding: 8px;
+            border-radius: 5px;
+            text-align: center;
+			float: left;
+			width: 33.33%;
+			margin-bottom: 8px;
+			box-sizing: border-box;
+        }
+        .stat-value {
+            font-size: clamp(1.2rem, 4vw, 1.5em);
+            font-weight: bold;
+            color: #4CAF50;
+        }
+        .stat-label {
+            font-size: clamp(0.7rem, 2.5vw, 0.8em);
+            color: #ccc;
+        }
+        .connection-info {
+            text-align: center;
+            color: #888;
+            margin-top: 15px;
+            font-size: clamp(0.7rem, 2.5vw, 0.85rem);
+            padding: 0 5px;
+        }
+        .positive { color: #4CAF50; }
+        .negative { color: #f44336; }
+        .warning { color: #ff9800; }
+
+        .table-container {
+            max-height: 400px;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚗 雷达数据监控</h1>
+            <p>实时雷达点云数据与目标跟踪</p>
+        </div>
+        
+        <div class="content">
+            <div class="panel">
+                <div class="panel-title">📡 雷达点云图</div>
+                <div class="canvas-container">
+                    <canvas id="radarCanvas"></canvas>
+                </div>
+                <div class="stats">
+                    <div class="stat-item">
+                        <div class="stat-value" id="points-count">0</div>
+                        <div class="stat-label">检测点数</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="tracks-count">0</div>
+                        <div class="stat-label">跟踪目标</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="leads-count">0</div>
+                        <div class="stat-label">前车目标</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="panel">
+                <div class="panel-title">📊 目标跟踪数据</div>
+                <div class="table-container">
+                    <table class="data-table" id="targets-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>距离(m)</th>
+                                <th>横向(m)</th>
+                                <th>速度(m/s)</th>
+                                <th>状态</th>
+                            </tr>
+                        </thead>
+                        <tbody id="targets-body">
+                            <!-- 数据将通过JavaScript填充 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <div class="panel">
+            <div class="panel-title">🔍 前车检测数据</div>
+            <div class="table-container">
+                <table class="data-table" id="leads-table">
+                    <thead>
+                        <tr>
+                            <th>类型</th>
+                            <th>距离(m)</th>
+                            <th>横向(m)</th>
+                            <th>相对速度(m/s)</th>
+                            <th>状态</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leads-body">
+                        <!-- 数据将通过JavaScript填充 -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <div class="connection-info">
+            系统运行中 | 最后更新: <span id="last-update">-</span> | 
+            访问地址: <span id="radar-ip">-</span>:8088/radar
+        </div>
+    </div>
+
+    <script>
+        function RadarVisualizer(canvasId) {
+            this.canvas = document.getElementById(canvasId);
+            this.ctx = this.canvas.getContext('2d');
+            this.range = 100;
+            this.lastData = null;
+
+            this.setupCanvas();
+
+            var self = this;
+            window.addEventListener('resize', function() {
+                self.setupCanvas();
+                if (self.lastData) {
+                    self.drawRadar(self.lastData);
+                }
+            });
+        }
+
+        RadarVisualizer.prototype.setupCanvas = function() {
+            var container = this.canvas.parentElement;
+            var width = container.clientWidth;
+            var height = container.clientHeight;
+
+            this.canvas.width = width;
+            this.canvas.height = height;
+        };
+
+        RadarVisualizer.prototype.drawRadar = function(data) {
+            this.lastData = data;
+            
+            var ctx = this.ctx;
+            var width = this.canvas.width;
+            var height = this.canvas.height;
+            var scale = height * 0.8 / this.range;
+            var carWidth = Math.max(30, width * 0.08);
+            var carLength = carWidth * 2;
+            var carBottom = height - 20;
+            var carTop = carBottom - carLength;
+            var radarOriginX = width / 2;
+            var radarOriginY = carTop;
+
+            ctx.clearRect(0, 0, width, height);
+            this.drawGrid(ctx, radarOriginX, radarOriginY, scale, width, height);
+            this.drawEgoVehicle(ctx, radarOriginX, carBottom, carWidth, carLength);
+
+            if (data.points && data.points.length > 0) {
+                for (var i = 0; i < data.points.length; i++) {
+                    this.drawRadarPoint(ctx, radarOriginX, radarOriginY, scale, data.points[i]);
+                }
+            }
+
+            if (data.tracks && data.tracks.length > 0) {
+                for (var i = 0; i < data.tracks.length; i++) {
+                    this.drawTrack(ctx, radarOriginX, radarOriginY, scale, data.tracks[i]);
+                }
+            }
+
+            if (data.leads && data.leads.length > 0) {
+                for (var i = 0; i < data.leads.length; i++) {
+                    this.drawLeadVehicle(ctx, radarOriginX, radarOriginY, scale, data.leads[i]);
+                }
+            }
+        };
+
+        RadarVisualizer.prototype.drawGrid = function(ctx, originX, originY, scale, width, height) {
+            ctx.strokeStyle = '#444';
+            ctx.fillStyle = '#888';
+            ctx.lineWidth = 1.5;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.font = '12px Arial';
+
+            var maxHeight = originY - 10;
+
+            for (var distance = 20; distance <= this.range; distance += 20) {
+                var radius = distance * scale;
+
+                if (originY - radius > 10) {
+                    ctx.beginPath();
+                    ctx.arc(originX, originY, radius, Math.PI, 0, false);
+                    ctx.stroke();
+                    ctx.fillText(distance + 'm', originX, originY - radius);
+                }
+            }
+
+            for (var angle = -60; angle <= 60; angle += 30) {
+                var rad = angle * Math.PI / 180;
+                var maxDistance = maxHeight / Math.cos(rad) / scale;
+                var endX = originX + maxDistance * scale * Math.sin(rad);
+                var endY = originY - maxDistance * scale * Math.cos(rad);
+                
+                ctx.beginPath();
+                ctx.moveTo(originX, originY);
+                ctx.lineTo(endX, endY);
+                ctx.stroke();
+
+                if (angle !== 0) {
+                    var labelX = originX + (maxDistance * scale + 10) * Math.sin(rad);
+                    var labelY = originY - (maxDistance * scale + 10) * Math.cos(rad);
+
+                    if (labelX > 10 && labelX < width - 10 && 
+                        labelY > 10 && labelY < height - 10) {
+                        ctx.fillText(angle + '°', labelX, labelY);
+                    }
+                }
+            }
+        };
+
+        RadarVisualizer.prototype.drawEgoVehicle = function(ctx, centerX, bottomY, carWidth, carLength) {
+            ctx.fillStyle = '#4CAF50';
+            ctx.strokeStyle = '#4CAF50';
+            ctx.lineWidth = 2;
+
+            var carTop = bottomY - carLength;
+            var carHeight = carLength;
+
+            ctx.beginPath();
+            ctx.moveTo(centerX - carWidth/2, bottomY);
+            ctx.lineTo(centerX + carWidth/2, bottomY);
+            ctx.lineTo(centerX + carWidth/2, bottomY - carHeight * 0.3);
+
+            ctx.quadraticCurveTo(
+                centerX + carWidth/2, carTop + carHeight * 0.1,
+                centerX + carWidth/3, carTop + carHeight * 0.05
+            );
+            ctx.quadraticCurveTo(
+                centerX, carTop,
+                centerX - carWidth/3, carTop + carHeight * 0.05
+            );
+            ctx.quadraticCurveTo(
+                centerX - carWidth/2, carTop + carHeight * 0.1,
+                centerX - carWidth/2, bottomY - carHeight * 0.3
+            );
+
+            ctx.closePath();
+            ctx.stroke();
+
+            ctx.strokeStyle = '#2E7D32';
+            ctx.beginPath();
+            ctx.moveTo(centerX - carWidth/4, bottomY - carHeight * 0.25);
+            ctx.quadraticCurveTo(
+                centerX, bottomY - carHeight * 0.35,
+                centerX + carWidth/4, bottomY - carHeight * 0.25
+            );
+            ctx.stroke();
+
+            ctx.fillStyle = '#333';
+            var wheelRadius = carWidth * 0.1;
+            ctx.beginPath();
+            ctx.arc(centerX - carWidth/3, bottomY - wheelRadius/2, wheelRadius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(centerX + carWidth/3, bottomY - wheelRadius/2, wheelRadius, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#FFFFFF';
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 2;
+
+            var baseFontSize = Math.max(16, carWidth * 0.4);
+            ctx.font = 'bold ' + baseFontSize + 'px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            var textX = centerX;
+            var textY = carTop + carHeight * 0.5;
+            var charSpacing = baseFontSize * 1.5;
+
+            ctx.strokeText('本', textX, textY - charSpacing/2);
+            ctx.fillText('本', textX, textY - charSpacing/2);
+
+            ctx.strokeText('车', textX, textY + charSpacing/2);
+            ctx.fillText('车', textX, textY + charSpacing/2); 
+        };
+
+        RadarVisualizer.prototype.drawRadarPoint = function(ctx, originX, originY, scale, point) {
+            var x = originX + point.yRel * scale;
+            var y = originY - point.dRel * scale;
+
+            if (y < originY && x > 0 && x < this.canvas.width && y > 0) {
+                ctx.fillStyle = point.vRel > 0 ? '#4CAF50' : '#f44336';
+                ctx.beginPath();
+                ctx.arc(x, y, 2, 0, 2 * Math.PI);
+                ctx.fill();
+            }
+        };
+
+        RadarVisualizer.prototype.drawTrack = function(ctx, originX, originY, scale, track) {
+            var x = originX + track.yRel * scale;
+            var y = originY - track.dRel * scale;
+
+            if (y < originY && x > 0 && x < this.canvas.width && y > 0) {
+                ctx.fillStyle = '#ff9800';
+                ctx.strokeStyle = '#ff9800';
+                ctx.lineWidth = 1.5;
+
+                var size = 6;
+                ctx.beginPath();
+                ctx.rect(x - size/2, y - size/2, size, size);
+                ctx.stroke();
+
+                var fontSize = Math.max(8, scale * 2);
+                ctx.font = fontSize + 'px Arial';
+
+                if (y - 12 > 10) {
+                    ctx.fillText('T' + track.id, x, y - 12);
+                }
+                if (y - 5 > 10) {
+                    ctx.fillText(track.vRel.toFixed(1) + 'm/s', x, y - 5);
+                }
+            }
+        };
+
+        RadarVisualizer.prototype.drawLeadVehicle = function(ctx, originX, originY, scale, lead) {
+            var x = originX + lead.yRel * scale;
+            var y = originY - lead.dRel * scale;
+
+            if (y < originY && x > 0 && x < this.canvas.width && y > 0) {
+                var color = '#2196F3';
+                if (lead.type === 'leadOne') color = '#2196F3';
+                else if (lead.type === 'leadLeft') color = '#9C27B0';
+                else if (lead.type === 'leadRight') color = '#673AB7';
+                
+                ctx.fillStyle = color;
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 1.5;
+
+                var width = 10;
+                var height = 6;
+                ctx.beginPath();
+                ctx.rect(x - width/2, y - height/2, width, height);
+                ctx.stroke();
+
+                var fontSize = Math.max(8, scale * 2);
+                ctx.font = fontSize + 'px Arial';
+                var typeText = lead.type.replace('lead', '');
+
+                if (y - 12 > 10) {
+                    ctx.fillText(typeText, x, y - 12);
+                }
+                if (y - 5 > 10) {
+                    ctx.fillText(lead.dRel.toFixed(1) + 'm', x, y - 5);
+                }
+            }
+        };
+
+        var radar = new RadarVisualizer('radarCanvas');
+
+        function updateDisplay(data) {
+            var pointsCount = document.getElementById('points-count');
+            var tracksCount = document.getElementById('tracks-count');
+            var leadsCount = document.getElementById('leads-count');
+            
+            pointsCount.textContent = (data.points && data.points.length) || 0;
+            tracksCount.textContent = (data.tracks && data.tracks.length) || 0;
+            leadsCount.textContent = (data.leads && data.leads.length) || 0;
+
+            updateTargetsTable(data.tracks || []);
+            updateLeadsTable(data.leads || []);
+            radar.drawRadar(data);
+
+            document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
+        }
+        
+        function updateTargetsTable(tracks) {
+            var tbody = document.getElementById('targets-body');
+            tbody.innerHTML = '';
+            
+            for (var i = 0; i < tracks.length; i++) {
+                var track = tracks[i];
+                var row = document.createElement('tr');
+                var speedClass = track.vRel > 0 ? 'positive' : 'negative';
+                
+                row.innerHTML = '<td>T-' + track.id + '</td>' +
+                    '<td>' + track.dRel.toFixed(2) + '</td>' +
+                    '<td>' + track.yRel.toFixed(2) + '</td>' +
+                    '<td class="' + speedClass + '">' + track.vRel.toFixed(2) + '</td>' +
+                    '<td>' + getStatusText(track.status) + '</td>';
+                tbody.appendChild(row);
+            }
+        }
+        
+        function updateLeadsTable(leads) {
+            var tbody = document.getElementById('leads-body');
+            tbody.innerHTML = '';
+            
+            for (var i = 0; i < leads.length; i++) {
+                var lead = leads[i];
+                var row = document.createElement('tr');
+                var speedClass = lead.vRel > 0 ? 'positive' : 'negative';
+                var typeText = lead.type.replace('lead', '');
+                
+                row.innerHTML = '<td>' + typeText + '</td>' +
+                    '<td>' + lead.dRel.toFixed(2) + '</td>' +
+                    '<td>' + (lead.yRel || 0).toFixed(2) + '</td>' +
+                    '<td class="' + speedClass + '">' + lead.vRel.toFixed(2) + '</td>' +
+                    '<td>' + getStatusText(lead.status) + '</td>';
+                tbody.appendChild(row);
+            }
+        }
+        
+        function getStatusText(status) {
+            var statusMap = {
+                0: '无效',
+                1: '新目标',
+                2: '更新中',
+                3: '稳定跟踪',
+                4: '即将消失'
+            };
+            return statusMap[status] || '未知';
+        }
+        
+        function fetchRadarData() {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '/radar_data', true);
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4 && xhr.status === 200) {
+                    try {
+                        var data = JSON.parse(xhr.responseText);
+                        updateDisplay(data);
+                    } catch (error) {
+                        console.error('解析雷达数据失败:', error);
+                    }
+                } else if (xhr.readyState === 4) {
+                    console.error('获取雷达数据失败:', xhr.status);
+                }
+            };
+            xhr.send();
+        }
+        
+        setInterval(fetchRadarData, 100);
+        fetchRadarData();
+        document.getElementById('radar-ip').textContent = window.location.hostname;
+    </script>
+</body>
+</html>

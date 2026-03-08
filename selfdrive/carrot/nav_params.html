@@ -1,0 +1,1536 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CP导航参数设置</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #1a1a1a;
+            color: white;
+            font-family: Arial, sans-serif;
+            padding: 10px;
+            line-height: 1.4;
+            font-size: 14px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 15px;
+            padding: 12px;
+            background: #2d2d2d;
+            border-radius: 8px;
+            flex-shrink: 0;
+        }
+
+        .header h1 {
+            color: #4CAF50;
+            margin-bottom: 8px;
+            font-size: clamp(1.0rem, 4vw, 1.5rem);
+        }
+
+        .header p {
+            color: #ccc;
+            margin-bottom: 10px;
+            font-size: clamp(0.8rem, 3vw, 1rem);
+        }
+
+        .search-container {
+            margin-bottom: 15px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: #1a1a1a;
+            padding: 5px 0;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #555;
+            border-radius: 5px;
+            background: #2d2d2d;
+            color: white;
+            font-size: clamp(0.6rem, 3vw, 0.8rem);
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #4CAF50;
+        }
+
+        .params-container {
+            background: #2d2d2d;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .category-title {
+            margin: 15px 0 10px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            font-weight: bold;
+            color: white;
+        }
+
+        .category-title::before {
+            content: '▶';
+            margin-right: 8px;
+            font-size: 12px;
+            transition: transform 0.3s;
+        }
+
+        .category-title.expanded::before {
+            transform: rotate(90deg);
+        }
+
+        .category-content {
+            display: none;
+        }
+
+        .category-content.expanded {
+            display: block;
+        }
+
+        .param-item {
+            margin: 10px 0;
+            padding: 10px;
+            background: #333;
+            border-radius: 5px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .param-label {
+            color: #4CAF50;
+            font-weight: bold;
+            font-size: 14px;
+            min-width: 180px;
+            margin-right: 10px;
+        }
+
+        .param-controls {
+            display: flex;
+            align-items: center;
+            flex: 1;
+        }
+        .param-controls > * {
+            margin-right: 10px;
+        }
+        .param-controls > *:last-child {
+            margin-right: 0;
+        }
+
+        .param-input {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #444;
+            border-radius: 4px;
+            background: #2d2d2d;
+            color: white;
+            font-size: 13px;
+            min-width: 80px;
+            text-align: center;
+            -moz-appearance: textfield;
+            outline: none;
+            border: none;
+            background: transparent;
+            box-shadow: none;
+        }
+
+        .param-input:focus {
+            outline: none;
+            border: none;
+            box-shadow: none;
+        }
+
+        .param-input::-webkit-outer-spin-button,
+        .param-input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        .param-select {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #555;
+            border-radius: 4px;
+            background: #2d2d2d;
+            color: white;
+            font-size: 13px;
+            min-width: 120px;
+        }
+
+        .param-number-controls {
+            display: flex;
+            align-items: center;
+            background: #3a3a3a;
+            border-radius: 4px;
+            padding: 4px;
+        }
+
+        .number-btn {
+            background: #555;
+            color: white;
+            border: none;
+            width: 26px;
+            height: 26px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            margin-right: 5px;
+        }
+        .number-btn:last-child {
+            margin-right: 0;
+        }
+
+        .number-btn:hover {
+            background: #666;
+        }
+
+        .param-info {
+            flex-basis: 100%;
+            margin-top: 8px;
+            color: #ccc;
+            font-size: 0.8rem;
+        }
+
+        .param-description {
+            margin-bottom: 4px;
+            line-height: 1.75;
+        }
+
+        .param-default {
+            color: #9fadfc;
+        }
+
+        .buttons {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 15px;
+            position: sticky;
+            bottom: 0;
+            z-index: 100;
+            background: #1a1a1a;
+            padding: 10px 0;
+        }
+
+        .save-btn, .reset-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            transition: all 0.3s;
+            margin: 0 5px;
+        }
+
+        .save-btn {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .save-btn:hover {
+            background: #45a049;
+        }
+
+        .reset-btn {
+            background: #ff9800;
+            color: white;
+        }
+
+        .reset-btn:hover {
+            background: #e68900;
+        }
+
+        .status {
+            text-align: center;
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+            display: none;
+            font-weight: bold;
+            font-size: 13px;
+            position: sticky;
+            bottom: 70px;
+            z-index: 1000;
+            background: #1a1a1a;
+        }
+
+        .success {
+            background: rgba(76, 175, 80, 0.6);
+            color: #fff;
+            border: 1px solid #4CAF50;
+        }
+
+        .error {
+            background: rgba(244, 67, 54, 0.8);
+            color: #fff;
+            border: 1px solid #f44336;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 15px;
+            color: #ccc;
+            display: none;
+        }
+
+        .expand-all {
+            text-align: right;
+            margin-bottom: 10px;
+            position: sticky;
+            top: 45px;
+            z-index: 99;
+            background: #1a1a1a;
+            padding: 5px 0;
+        }
+
+        .expand-btn {
+            background: transparent;
+            color: #4CAF50;
+            border: 1px solid #4CAF50;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .subgroup {
+            margin-bottom: 15px;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .subgroup-title {
+            padding: 8px 12px;
+            font-size: 14px;
+            font-weight: bold;
+            color: white;
+        }
+
+        .highway-subgroup .subgroup-title {
+            background-color: #E91E63;
+            text-align: center;
+        }
+
+        .normal-road-subgroup .subgroup-title {
+            background-color: #9C27B0;
+            text-align: center;
+        }
+
+        .subgroup-content {
+            padding: 10px;
+        }
+
+        .highway-subgroup .subgroup-content {
+            background: rgba(233, 30, 99, 0.4);
+        }
+
+        .normal-road-subgroup .subgroup-content {
+            background: rgba(156, 39, 176, 0.4);
+        }
+
+        .subgroup-content .param-item {
+            background: transparent !important;
+            margin: 8px 0;
+        }
+
+        @media (max-width: 768px) {
+            .param-item {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .param-label {
+                min-width: auto;
+                margin-right: 0;
+                margin-bottom: 10px;
+            }
+
+            .param-controls {
+                width: 100%;
+            }
+
+            .save-btn, .reset-btn {
+                margin: 5px;
+            }
+        }
+        .connection-info {
+            text-align: center;
+            color: #888;
+            margin-top: 15px;
+            font-size: clamp(0.7rem, 2.5vw, 0.85rem);
+            padding: 0 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>⚙️ CP导航参数设置</h1>
+            <p>根据参数下面的说明设置适合的值</p>
+        </div>
+
+        <div class="search-container">
+            <input type="text" class="search-input" id="search-input" placeholder="搜索参数名称或描述...">
+        </div>
+        <div class="expand-all">
+            <button class="expand-btn" id="expand-all-btn">展开所有参数</button>
+            <button class="expand-btn" id="collapse-all-btn" style="display:none;">折叠所有参数</button>
+        </div>
+
+        <div class="params-container" id="params-container">
+        </div>
+
+        <div class="no-results" id="no-results">
+            没有找到匹配的参数
+        </div>
+
+        <div>
+            <textarea
+                id="toggleValuesBox"
+                class="form-control"
+                style="width:100%; height: 300px; font-family: monospace;"
+                placeholder='在此输入或粘贴要设置的参数...'
+            ></textarea>
+        </div>
+
+        <div class="buttons">
+            <button class="reset-btn" onclick="fetchToggleValues()">🔄 从OP读取参数</button>
+            <button class="save-btn" onclick="importParams()">💾 写入参数到OP</button>
+        </div>
+
+        <div class="status" id="status-message"></div>
+
+        <div class="buttons">
+            <button class="save-btn" onclick="saveParams()">💾 保存参数设置</button>
+            <button class="reset-btn" onclick="resetParams()">🔄 恢复默认参数</button>
+        </div>
+
+        <div class="connection-info">
+            系统运行中 | 访问地址: <span id="nav_params-ip">-</span>:8088/nav_params
+        </div>
+    </div>
+
+    <script>
+        // 使用ES5兼容的语法
+        var paramConfig = {
+            "RoadType": {
+                chineseName: "设置道路类型(-1)",
+                defaultValue: -1,
+                description: "-2:从导航获取(>=85km/h快速路，>=100高速，公路类型由导航决定)<br>-1:自动(<85km/h公路，>=85快速路，>=100高速路)<br>0:高速(无应急车道)<br>1:高速(有应急车道)<br>>=2：其它道路",
+                inputRange: [-2, -1, 0, 1, 2],
+                uiType: "select",
+                options: [
+                    { value: -2, text: "从导航获取" },
+                    { value: -1, text: "自动" },
+                    { value: 0, text: "高速(无应急车道)" },
+                    { value: 1, text: "高速(有应急车道)" },
+                    { value: 2, text: "普通公路" }
+                ],
+                category: "公共参数设置"
+            },
+            "SameSpiCamFilter": {
+                chineseName: "过滤相同测速数据(1)",
+                defaultValue: 1,
+                description: "0:关闭，1:打开",
+                inputRange: [0, 1],
+                uiType: "select",
+                options: [
+                    { value: 0, text: "关闭" },
+                    { value: 1, text: "打开" }
+                ],
+                category: "公共参数设置"
+            },
+            "StockBlinkerCtrl": {
+                chineseName: "外接控制原车转向拨杆(0)",
+                defaultValue: 0,
+                description: "0:关闭，1:打开",
+                inputRange: [0, 1],
+                uiType: "select",
+                options: [
+                    { value: 0, text: "关闭" },
+                    { value: 1, text: "打开" }
+                ],
+                category: "公共参数设置"
+            },
+            "ExtBlinkerCtrlTest": {
+                chineseName: "外接控制器自检(1)",
+                defaultValue: 0,
+                description: "0:关闭，1:打开",
+                inputRange: [0, 1],
+                uiType: "select",
+                options: [
+                    { value: 0, text: "关闭" },
+                    { value: 1, text: "打开" }
+                ],
+                category: "公共参数设置"
+            },
+            "BlinkerMode": {
+                chineseName: "手动打灯控制模式(0)",
+                defaultValue: 1,
+                description: "0:自动,1:仅变道",
+                inputRange: [0, 1],
+                uiType: "select",
+                options: [
+                    { value: 0, text: "自动" },
+                    { value: 1, text: "仅变道" }
+                ],
+                category: "公共参数设置"
+            },
+            "ShowDebugLog": {
+                chineseName: "调试信息显示",
+                defaultValue: 0,
+                description: "设置不同的值，输出不同的调试信息",
+                inputRange: [0, 256],
+                step: 1,
+                uiType: "number",
+                category: "公共参数设置"
+            },
+            "LaneStabTime": {
+                chineseName: "车道数稳定时间(10x0.1s)",
+                defaultValue: 50,
+                description: "当检测车道数稳定时间超过设定值后，则认为已经稳定，单位为0.1秒",
+                inputRange: [2, 100],
+                step: 1,
+                uiType: "number",
+                category: "公共参数设置"
+            },
+            "DynamicBlindRange": {
+                chineseName: "动态盲区宽度",
+                defaultValue: 0,
+                description: "盲区的侧面宽度是否动态调整",
+                inputRange: [0, 2],
+                uiType: "select",
+                options: [
+                    { value: 0, text: "盲区宽度固定" },
+                    { value: 1, text: "导航时动态调整盲区宽度" },
+                    { value: 2, text: "动态调整盲区宽度" }
+                ],
+                category: "公共参数设置"
+            },
+            "DynamicBlindDistance": {
+                chineseName: "动态盲区距离",
+                defaultValue: 0,
+                description: "是否通过前后车的速度和时间计算允许变道的距离",
+                inputRange: [0, 2],
+                uiType: "select",
+                options: [
+                    { value: 0, text: "固定的盲区距离" },
+                    { value: 1, text: "导航变道时动态盲区距离" },
+                    { value: 2, text: "车速时距动态盲区距离" }
+                ],
+                category: "公共参数设置"
+            },
+            "DisableBlindSpot": {
+                chineseName: "禁用原车盲区信号(0)",
+                defaultValue: 0,
+                description: "0:不禁用,1:禁用",
+                inputRange: [0, 1],
+                uiType: "select",
+                options: [
+                    { value: 0, text: "不禁用原车盲区" },
+                    { value: 1, text: "禁用原车盲区" }
+                ],
+                category: "公共参数设置"
+            },
+            "BsdDelayTime": {
+                chineseName: "后盲区有车延时(20x0.1s)",
+                defaultValue: 20,
+                description: "当后盲区有车信号消失后，经过延时的秒数后允许变道",
+                inputRange: [0, 100],
+                step: 1,
+                uiType: "number",
+                category: "公共参数设置"
+            },
+            "SideBsdDelayTime": {
+                chineseName: "侧前方有车延时(20x0.1s)",
+                defaultValue: 20,
+                description: "当侧前方有车信号消失后，经过延时的秒数后允许变道",
+                inputRange: [0, 100],
+                step: 1,
+                uiType: "number",
+                category: "公共参数设置"
+            },
+            "SideRelDistTime": {
+                chineseName: "侧前方有车变道相对距离",
+                defaultValue: 10,
+                description: "当与侧前方车辆相对距离小于本车速度x时间时不允许变道，单位0.1秒",
+                inputRange: [0, 50],
+                step: 1,
+                uiType: "number",
+                category: "公共参数设置"
+            },
+            "SidevRelDistTime": {
+                chineseName: "侧前方有车变道等效距离",
+                defaultValue: 10,
+                description: "侧前方车辆速度x3+相对距离小于本车速度x(时间+3)时，不允许变道，单位0.1秒",
+                inputRange: [0, 50],
+                step: 1,
+                uiType: "number",
+                category: "公共参数设置"
+            },
+            "SideRadarMinDist": {
+                chineseName: "侧面最小雷达距离(0m)",
+                defaultValue: 0,
+                description: "在左右两侧的车道上，忽略小于此雷达探测距离的车辆，单位为0.1m",
+                inputRange: [-50, 100],
+                step: 1,
+                uiType: "number",
+                category: "公共参数设置"
+            },
+            "DynamicExperimentalSpeed": {
+                chineseName: "实验模式:条件实验模式速度(-5)",
+                defaultValue: -5,
+                description: "当车速小于此速度(km/h)时，将会进入实验模式，=0表示动态实验模式，<0表示关闭",
+                inputRange: [-5, 140],
+                step: 5,
+                uiType: "number",
+                category: "公共参数设置"
+            },
+            "DynamicExperimentalLatA": {
+                chineseName: "实验模式:条件实验模式弯道横向加速度(x0.1m/s^2)",
+                defaultValue: 0,
+                description: "当变道横向加速度大于此值时时，将会进入实验模式，=0表示关闭，>0表示打开",
+                inputRange: [0, 30],
+                step: 1,
+                uiType: "number",
+                category: "公共参数设置"
+            },
+            "AutoForkDistOffsetH": {
+                chineseName: "高速提前靠边行驶距离(1000m)",
+                defaultValue: 1000,
+                description: "在距离匝道口多少米时开始变道到最侧面车道，设置0则不提前变道",
+                inputRange: [0, 5000],
+                step: 5,
+                uiType: "number",
+                category: "高速公路参数"
+            },
+            "AutoEnTurnNewLaneTimeH": {
+                chineseName: "高速继续变道新车道时间(0s)",
+                defaultValue: 0,
+                description: "车辆已在最侧边车道，若新车道出现的时间超过设置值后允许再次变道，推荐值20秒，0关闭",
+                inputRange: [0, 120],
+                step: 1,
+                uiType: "number",
+                category: "高速公路参数"
+            },
+            "AutoDoForkBlinkerDistH": {
+                chineseName: "高速进匝道打灯距离偏移(30m)",
+                defaultValue: 30,
+                description: "在距离匝道口多少米时开始打转向灯转变变道，但不是一定会立即变道，还需要等匝道出现的条件成立，软件根据速度计算的距离+此偏移量为实际距离",
+                inputRange: [0, 200],
+                step: 2,
+                uiType: "number",
+                category: "高速公路参数"
+            },
+            "AutoDoForkNavDistH": {
+                chineseName: "高速进匝道转向距离(50m)",
+                defaultValue: 50,
+                description: "在距离导航匝道口小于多少米时开始变道进入匝道，此距离为绝对距离，0代表不生效",
+                inputRange: [0, 200],
+                step: 1,
+                uiType: "number",
+                category: "高速公路参数"
+            },
+            "AutoKeepForkSpeedH": {
+                chineseName: "高速进匝道保持速度时间(0s)",
+                defaultValue: 5,
+                description: "进入匝道后保持当前速度行驶的时间，0表述关闭",
+                inputRange: [0, 60],
+                step: 1,
+                uiType: "number",
+                category: "高速公路参数"
+            },
+            "AutoForkDistOffset": {
+                chineseName: "普通公路:提前靠边行驶距离(30m)",
+                defaultValue: 30,
+                description: "在距离公路岔路口多少米时开始变道到最佳面车道，设置0则不提前变道",
+                inputRange: [0, 2000],
+                step: 5,
+                uiType: "number",
+                category: "普通公路参数"
+            },
+            "AutoEnTurnNewLaneTime": {
+                chineseName: "普通公路:继续变道新车道时间(0s)",
+                defaultValue: 0,
+                description: "车辆已在最侧边车道，若新车道出现的时间超过设置值后允许再次变道，推荐值5秒，0关闭",
+                inputRange: [0, 120],
+                step: 1,
+                uiType: "number",
+                category: "普通公路参数"
+            },
+            "AutoDoForkBlinkerDist": {
+                chineseName: "普通公路:进岔路口打灯距离偏移(15m)",
+                defaultValue: 15,
+                description: "在距离公路岔路口多少米时提前打转向灯准备变道，但不一定立即变道，还需要等到岔路口出现时的条件成立，软件根据速度计算的距离+此偏移值为实际距离",
+                inputRange: [0, 200],
+                step: 1,
+                uiType: "number",
+                category: "普通公路参数"
+            },
+            "AutoDoForkNavDist": {
+                chineseName: "普通公路:进岔路口转向距离(20m)",
+                defaultValue: 15,
+                description: "在距离导航岔路口小于多少米时开始变道进入匝道，此距离为绝对距离，0代表不生效",
+                inputRange: [0, 200],
+                step: 1,
+                uiType: "number",
+                category: "普通公路参数"
+            },
+            "AutoKeepForkSpeed": {
+                chineseName: "普通公路:进岔路口保持速度时间(0s)",
+                defaultValue: 5,
+                description: "进入岔路口后保持当前速度行驶的时间，0表示关闭",
+                inputRange: [0, 60],
+                step: 1,
+                uiType: "number",
+                category: "普通公路参数"
+            },
+            "NewLaneWidthDiff": {
+                chineseName: "ATC新车道出现标准(0.8m)",
+                defaultValue: 8,
+                description: "当侧面的车道在1秒内的宽度增加这个宽度时，则认为有新车道出现，推荐值0.8m，1代表0.1m",
+                inputRange: [2, 10],
+                step: 1,
+                uiType: "number",
+                category: "ATC参数"
+            },
+            "AutoTurnDistOffset": {
+                chineseName: "ATC自动转弯距离偏移(0m)",
+                defaultValue: 0,
+                description: "提前自动转弯的距离，一般为0，仅针对转弯类型(非变道)",
+                inputRange: [-100, 200],
+                step: 1,
+                uiType: "number",
+                category: "ATC参数"
+            },
+            "AutoTurnInNotRoadEdge": {
+                chineseName: "ATC非侧边车道允许变道(0)",
+                defaultValue: 1,
+                description: "0-不允许在非侧边车道自动变道，1-允许",
+                inputRange: [0, 1],
+                uiType: "select",
+                options: [
+                    { value: 0, text: "不允许" },
+                    { value: 1, text: "允许" }
+                ],
+                category: "ATC参数"
+            },
+            "ContinuousLaneChange": {
+                chineseName: "ATC允许连续变道(0)",
+                defaultValue: 1,
+                description: "0-关闭，1-允许连续变多条车道",
+                inputRange: [0, 1],
+                uiType: "select",
+                options: [
+                    { value: 0, text: "关闭" },
+                    { value: 1, text: "允许" }
+                ],
+                category: "ATC参数"
+            },
+            "ContinuousLaneChangeCnt": {
+                chineseName: "ATC允许连续变道次数(x+1)",
+                defaultValue: 4,
+                description: "允许连续变道的次数=x+1次",
+                inputRange: [0, 4],
+                step: 1,
+                uiType: "number",
+                category: "ATC参数"
+            },
+            "ContinuousLaneChangeInterval": {
+                chineseName: "ATC连续变道间隔(2秒)",
+                defaultValue: 2,
+                description: "变道后允许再次变道的时间间隔(秒)",
+                inputRange: [0, 30],
+                step: 1,
+                uiType: "number",
+                category: "ATC参数"
+            },
+            "AutoTurnLeft": {
+                chineseName: "ATC允许自动左变道(1)",
+                defaultValue: 1,
+                description: "0-需要驾驶员打左转向灯变道，1-允许自动左变道",
+                inputRange: [0, 1],
+                uiType: "select",
+                options: [
+                    { value: 0, text: "需要驾驶员打灯" },
+                    { value: 1, text: "允许自动左变道" }
+                ],
+                category: "ATC参数"
+            },
+            "AutoUpHighwayRoadLimit": {
+                chineseName: "提高60以下的高速限速(0)",
+                defaultValue: 0,
+                description: "0-关闭，1-当高速公路限度低于60km/h时，会把道路限速 + 此提速偏移值",
+                inputRange: [0, 1],
+                uiType: "select",
+                options: [
+                    { value: 0, text: "关闭" },
+                    { value: 1, text: "开启" }
+                ],
+                category: "速度参数"
+            },
+            "AutoUpHighwayRoadLimit40KMH": {
+                chineseName: "40以下高速提速(15km/h)",
+                defaultValue: 15,
+                description: "允许提高限速时，会把道路限速 + 此提速偏移值",
+                inputRange: [0, 50],
+                step: 1,
+                uiType: "number",
+                category: "速度参数"
+            },
+            "AutoCurveSpeedFactorH": {
+                chineseName: "高速:降速弯道曲率系数(80%)",
+                defaultValue: 80,
+                description: "模型预测横摆角速度x此系数，系数越大降速越多",
+                inputRange: [50, 300],
+                step: 1,
+                uiType: "number",
+                category: "速度参数"
+            },
+            "AutoCurveSpeedAggressivenessH": {
+                chineseName: "高速:降速横向加速度系数(120%)",
+                defaultValue: 120,
+                description: "目标横向加速度x此系数，系数越小降速越多",
+                inputRange: [50, 300],
+                step: 1,
+                uiType: "number",
+                category: "速度参数"
+            },
+            "AutoDoForkDecalDistH": {
+                chineseName: "高速进匝道减速距离偏移(50m)",
+                defaultValue: 50,
+                description: "在距离匝道口多少米时开始减速，软件根据速度计算的距离加上此偏移为实际距离",
+                inputRange: [0, 500],
+                step: 5,
+                uiType: "number",
+                category: "速度参数"
+            },
+            "AutoForkDecalRateH": {
+                chineseName: "高速进匝道前降速比率(80%)",
+                defaultValue: 80,
+                description: "在进入匝道前把车速降至道路限速的比率，0表述关闭此功能",
+                inputRange: [0, 100],
+                step: 5,
+                uiType: "number",
+                category: "速度参数"
+            },
+            "AutoForkSpeedMinH": {
+                chineseName: "高速进匝道最低速度(60)",
+                defaultValue: 60,
+                description: "在进入匝道口前允许把车速降至该最低速度，低于该速度时不再继续降低",
+                inputRange: [0, 100],
+                step: 5,
+                uiType: "number",
+                category: "速度参数"
+            },
+            "AutoUpRoadLimit": {
+                chineseName: "提高60以下的公路限速(0)",
+                defaultValue: 0,
+                description: "0-关闭，1-当普通公路限速低于60km/h时，会把道路限速+提速偏移值",
+                inputRange: [0, 1],
+                uiType: "select",
+                options: [
+                    { value: 0, text: "关闭" },
+                    { value: 1, text: "开启" }
+                ],
+                category: "速度参数"
+            },
+            "AutoUpRoadLimit40KMH": {
+                chineseName: "40以下公路提速(15km/h）",
+                defaultValue: 15,
+                description: "允许提高限速时，会把道路限速 + 此提速偏移值",
+                inputRange: [0, 50],
+                step: 1,
+                uiType: "number",
+                category: "速度参数"
+            },
+            "AutoDoForkDecalDist": {
+                chineseName: "普通公路:进岔路口减速距离偏移(20m)",
+                defaultValue: 20,
+                description: "在距离公路岔路口多少米时开始减速，软件根据速度计算的距离+此偏移为实际距离",
+                inputRange: [0, 120],
+                step: 5,
+                uiType: "number",
+                category: "速度参数"
+            },
+            "AutoForkDecalRate": {
+                chineseName: "普通公路:进岔路口前降速比率(80%)",
+                defaultValue: 80,
+                description: "在进公路岔路口时把车速降至道路限速的比率，0表示关闭此功能",
+                inputRange: [0, 100],
+                step: 5,
+                uiType: "number",
+                category: "速度参数"
+            },
+            "AutoForkSpeedMin": {
+                chineseName: "普通公路:进入岔路口最低速度(45)",
+                defaultValue: 45,
+                description: "在进公路岔路口时前允许把车速降的最低速度，低于此速度时则不再继续降低",
+                inputRange: [0, 100],
+                step: 5,
+                uiType: "number",
+                category: "速度参数"
+            },
+        };
+
+        var categoryColors = {
+            "公共参数设置": "#3F51B5",
+            "高速公路参数": "#E91E63",
+            "普通公路参数": "#9C27B0",
+            "ATC参数": "#009688",
+            "速度参数": "#FF9800",
+        };
+
+        var NavParamsData = {};
+        var expandedCategories = {};
+
+        function loadNavParams() {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '/nav_params_data', true);
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        try {
+                            NavParamsData = JSON.parse(xhr.responseText);
+
+                            if (!NavParamsData || Object.keys(NavParamsData).length === 0) {
+                                for (var key in paramConfig) {
+                                    if (paramConfig.hasOwnProperty(key)) {
+                                        NavParamsData[key] = paramConfig[key].defaultValue;
+                                    }
+                                }
+                            }
+
+                            renderParams();
+                        } catch (error) {
+                            console.error('加载参数失败:', error);
+                            showStatus('加载参数失败: ' + error, 'error');
+
+                            for (var key in paramConfig) {
+                                if (paramConfig.hasOwnProperty(key)) {
+                                    NavParamsData[key] = paramConfig[key].defaultValue;
+                                }
+                            }
+                            renderParams();
+                        }
+                    } else {
+                        console.error('加载参数失败: ' + xhr.status);
+                        showStatus('加载参数失败: ' + xhr.status, 'error');
+
+                        for (var key in paramConfig) {
+                            if (paramConfig.hasOwnProperty(key)) {
+                                NavParamsData[key] = paramConfig[key].defaultValue;
+                            }
+                        }
+                        renderParams();
+                    }
+                }
+            };
+            xhr.send();
+        }
+
+        function renderParams() {
+            var container = document.getElementById('params-container');
+            var html = '';
+
+            var categories = {};
+            for (var key in paramConfig) {
+                if (paramConfig.hasOwnProperty(key)) {
+                    var category = paramConfig[key].category;
+                    if (!categories[category]) {
+                        categories[category] = [];
+                    }
+                    categories[category].push(key);
+                }
+            }
+
+            for (var category in categories) {
+                if (categories.hasOwnProperty(category)) {
+                    var categoryId = category.replace(/\s+/g, '-');
+                    var isExpanded = expandedCategories[category] || false;
+                    var categoryColor = categoryColors[category] || "#4CAF50";
+
+                    html += '<div class="category-title ' + (isExpanded ? 'expanded' : '') + '" data-category="' + category + '" style="background-color: ' + categoryColor + '">' +
+                        category +
+                    '</div>' +
+                    '<div class="category-content ' + (isExpanded ? 'expanded' : '') + '" id="' + categoryId + '">';
+
+                    if (category === "速度参数") {
+                        html += '<div class="subgroup highway-subgroup">' +
+                            '<div class="subgroup-title">高速公路速度参数</div>' +
+                            '<div class="subgroup-content">';
+
+                        var highwayKeys = categories[category];
+                        for (var i = 0; i < highwayKeys.length; i++) {
+                            var key = highwayKeys[i];
+                            if (key.indexOf('H') !== -1 || key.indexOf('Highway') !== -1) {
+                                var config = paramConfig[key];
+                                var value = NavParamsData[key] !== undefined ? NavParamsData[key] : config.defaultValue;
+
+                                html += '<div class="param-item" data-param-key="' + key + '">' +
+                                    '<div class="param-label">' + config.chineseName + '</div>' +
+                                    '<div class="param-controls">' +
+                                        generateInputField(key, config, value) +
+                                    '</div>' +
+                                    '<div class="param-info">' +
+                                        '<div class="param-description">' + config.description + '</div>' +
+                                        '<div class="param-default">默认值: ' + config.defaultValue + '</div>' +
+                                    '</div>' +
+                                '</div>';
+                            }
+                        }
+
+                        html += '</div>' +
+                        '</div>' +
+                        '<div class="subgroup normal-road-subgroup">' +
+                            '<div class="subgroup-title">普通公路速度参数</div>' +
+                            '<div class="subgroup-content">';
+
+                        var normalRoadKeys = categories[category];
+                        for (var j = 0; j < normalRoadKeys.length; j++) {
+                            var key = normalRoadKeys[j];
+                            if (key.indexOf('H') === -1 && key.indexOf('Highway') === -1) {
+                                var config = paramConfig[key];
+                                var value = NavParamsData[key] !== undefined ? NavParamsData[key] : config.defaultValue;
+
+                                html += '<div class="param-item" data-param-key="' + key + '">' +
+                                    '<div class="param-label">' + config.chineseName + '</div>' +
+                                    '<div class="param-controls">' +
+                                        generateInputField(key, config, value) +
+                                    '</div>' +
+                                    '<div class="param-info">' +
+                                        '<div class="param-description">' + config.description + '</div>' +
+                                        '<div class="param-default">默认值: ' + config.defaultValue + '</div>' +
+                                    '</div>' +
+                                '</div>';
+                            }
+                        }
+
+                        html += '</div>' +
+                        '</div>';
+                    } else {
+                        var categoryKeys = categories[category];
+                        for (var k = 0; k < categoryKeys.length; k++) {
+                            var key = categoryKeys[k];
+                            var config = paramConfig[key];
+                            var value = NavParamsData[key] !== undefined ? NavParamsData[key] : config.defaultValue;
+
+                            html += '<div class="param-item" data-param-key="' + key + '">' +
+                                '<div class="param-label">' + config.chineseName + '</div>' +
+                                '<div class="param-controls">' +
+                                    generateInputField(key, config, value) +
+                                '</div>' +
+                                '<div class="param-info">' +
+                                    '<div class="param-description">' + config.description + '</div>' +
+                                    '<div class="param-default">默认值: ' + config.defaultValue + '</div>' +
+                                '</div>' +
+                            '</div>';
+                        }
+                    }
+
+                    html += '</div>';
+                }
+            }
+
+            container.innerHTML = html;
+
+            setupCategoryToggles();
+            setupSearch();
+            disableInputFields();
+        }
+
+        function generateInputField(key, config, value) {
+            if (config.uiType === 'select') {
+                var options = '';
+                for (var i = 0; i < config.options.length; i++) {
+                    var option = config.options[i];
+                    var selected = option.value == value ? 'selected' : '';
+                    options += '<option value="' + option.value + '" ' + selected + '>' + option.text + '</option>';
+                }
+
+                return '<select class="param-select" id="' + key + '">' + options + '</select>';
+            } else if (config.uiType === 'number') {
+                return '<div class="param-number-controls">' +
+                    '<button type="button" class="number-btn" onclick="adjustNumber(\'' + key + '\', -' + config.step + ')">-</button>' +
+                    '<input type="number" class="param-input" id="' + key + '" ' +
+                           'value="' + value + '" min="' + config.inputRange[0] + '" ' +
+                           'max="' + config.inputRange[1] + '" step="' + config.step + '" readonly>' +
+                    '<button type="button" class="number-btn" onclick="adjustNumber(\'' + key + '\', ' + config.step + ')">+</button>' +
+                '</div>';
+            } else {
+                return '<input type="text" class="param-input" id="' + key + '" value="' + value + '" readonly>';
+            }
+        }
+
+        function disableInputFields() {
+            var inputs = document.querySelectorAll('.param-input');
+            for (var i = 0; i < inputs.length; i++) {
+                var input = inputs[i];
+
+                input.addEventListener('keydown', function(e) {
+                    e.preventDefault();
+                    return false;
+                });
+
+                input.addEventListener('paste', function(e) {
+                    e.preventDefault();
+                    return false;
+                });
+
+                input.addEventListener('drop', function(e) {
+                    e.preventDefault();
+                    return false;
+                });
+            }
+        }
+
+        function adjustNumber(id, step) {
+            var input = document.getElementById(id);
+            if (!input) return;
+
+            var value = parseFloat(input.value) || 0;
+            var min = parseFloat(input.min);
+            var max = parseFloat(input.max);
+
+            value += step;
+
+            if (value < min) value = min;
+            if (value > max) value = max;
+
+            input.value = value;
+        }
+
+        function setupCategoryToggles() {
+            var categoryTitles = document.querySelectorAll('.category-title');
+
+            for (var i = 0; i < categoryTitles.length; i++) {
+                (function() {
+                    var title = categoryTitles[i];
+
+                    title.addEventListener('click', function() {
+                        var category = this.getAttribute('data-category');
+                        var content = this.nextElementSibling;
+
+                        if (hasClass(content, 'expanded')) {
+                            removeClass(content, 'expanded');
+                            removeClass(this, 'expanded');
+                            expandedCategories[category] = false;
+                        } else {
+                            collapseAllCategories();
+
+                            addClass(content, 'expanded');
+                            addClass(this, 'expanded');
+                            expandedCategories[category] = true;
+                        }
+
+                        updateExpandButtons();
+                    });
+                })();
+            }
+
+            document.getElementById('expand-all-btn').addEventListener('click', expandAllCategories);
+            document.getElementById('collapse-all-btn').addEventListener('click', collapseAllCategories);
+        }
+
+        function hasClass(element, className) {
+            if (element.classList) {
+                return element.classList.contains(className);
+            } else {
+                return new RegExp('(^| )' + className + '( |$)', 'gi').test(element.className);
+            }
+        }
+
+        function addClass(element, className) {
+            if (element.classList) {
+                element.classList.add(className);
+            } else {
+                element.className += ' ' + className;
+            }
+        }
+
+        function removeClass(element, className) {
+            if (element.classList) {
+                element.classList.remove(className);
+            } else {
+                element.className = element.className.replace(new RegExp('(^|\\b)' + className.split(' ').join('|') + '(\\b|$)', 'gi'), ' ');
+            }
+        }
+
+        function expandAllCategories() {
+            var categories = document.querySelectorAll('.category-title');
+            var contents = document.querySelectorAll('.category-content');
+
+            for (var i = 0; i < categories.length; i++) {
+                var category = categories[i];
+                addClass(category, 'expanded');
+                var categoryName = category.getAttribute('data-category');
+                expandedCategories[categoryName] = true;
+            }
+
+            for (var j = 0; j < contents.length; j++) {
+                var content = contents[j];
+                addClass(content, 'expanded');
+            }
+
+            updateExpandButtons();
+        }
+
+        function collapseAllCategories() {
+            var categories = document.querySelectorAll('.category-title');
+            var contents = document.querySelectorAll('.category-content');
+
+            for (var i = 0; i < categories.length; i++) {
+                var category = categories[i];
+                removeClass(category, 'expanded');
+                var categoryName = category.getAttribute('data-category');
+                expandedCategories[categoryName] = false;
+            }
+
+            for (var j = 0; j < contents.length; j++) {
+                var content = contents[j];
+                removeClass(content, 'expanded');
+            }
+
+            updateExpandButtons();
+        }
+
+        function updateExpandButtons() {
+            var expandBtn = document.getElementById('expand-all-btn');
+            var collapseBtn = document.getElementById('collapse-all-btn');
+
+            var isAnyExpanded = false;
+            for (var key in expandedCategories) {
+                if (expandedCategories.hasOwnProperty(key)) {
+                    if (expandedCategories[key]) {
+                        isAnyExpanded = true;
+                        break;
+                    }
+                }
+            }
+
+            if (isAnyExpanded) {
+                expandBtn.style.display = 'none';
+                collapseBtn.style.display = 'inline-block';
+            } else {
+                expandBtn.style.display = 'inline-block';
+                collapseBtn.style.display = 'none';
+            }
+        }
+
+        function setupSearch() {
+            var searchInput = document.getElementById('search-input');
+            var paramItems = document.querySelectorAll('.param-item');
+            var noResults = document.getElementById('no-results');
+
+            searchInput.addEventListener('input', function() {
+                var searchTerm = this.value.toLowerCase();
+                var visibleCount = 0;
+
+                for (var i = 0; i < paramItems.length; i++) {
+                    var item = paramItems[i];
+                    var key = item.getAttribute('data-param-key');
+                    var config = paramConfig[key];
+                    var text = (config.chineseName + ' ' + config.description).toLowerCase();
+
+                    if (text.indexOf(searchTerm) !== -1) {
+                        item.style.display = 'flex';
+                        visibleCount++;
+
+                        var categoryContent = item.closest('.category-content');
+                        var categoryTitle = categoryContent.previousElementSibling;
+                        var category = categoryTitle.getAttribute('data-category');
+
+                        if (!hasClass(categoryContent, 'expanded')) {
+                            addClass(categoryContent, 'expanded');
+                            addClass(categoryTitle, 'expanded');
+                            expandedCategories[category] = true;
+                        }
+                    } else {
+                        item.style.display = 'none';
+                    }
+                }
+
+                if (visibleCount === 0 && searchTerm) {
+                    noResults.style.display = 'block';
+                } else {
+                    noResults.style.display = 'none';
+                }
+
+                updateExpandButtons();
+            });
+        }
+
+        function saveParams() {
+            var formData = {};
+
+            for (var key in paramConfig) {
+                if (paramConfig.hasOwnProperty(key)) {
+                    var element = document.getElementById(key);
+                    if (element) {
+                        var value;
+
+                        if (paramConfig[key].uiType === 'select') {
+                            value = parseInt(element.value, 10);
+                        } else if (paramConfig[key].uiType === 'number') {
+                            value = parseFloat(element.value);
+                        } else {
+                            value = element.value;
+                        }
+
+                        var config = paramConfig[key];
+                        if (config.inputRange && Array.isArray(config.inputRange)) {
+                            if (value < config.inputRange[0]) value = config.inputRange[0];
+                            if (value > config.inputRange[1]) value = config.inputRange[1];
+                        }
+
+                        formData[key] = value;
+                    }
+                }
+            }
+
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', '/nav_params', true);
+            xhr.setRequestHeader('Content-Type', 'application/json');
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        try {
+                            var result = JSON.parse(xhr.responseText);
+                            if (result.status === 'success') {
+                                showStatus('参数保存成功', 'success');
+                                NavParamsData = formData;
+                            } else {
+                                showStatus('保存失败: ' + result.message, 'error');
+                            }
+                        } catch (error) {
+                            showStatus('保存失败: ' + error, 'error');
+                        }
+                    } else {
+                        showStatus('保存失败: ' + xhr.status, 'error');
+                    }
+                }
+            };
+            xhr.send(JSON.stringify(formData));
+        }
+
+        function resetParams() {
+			var xhr = new XMLHttpRequest();
+			xhr.open('GET', '/get_default_nav_params', true);
+			xhr.onreadystatechange = function() {
+				if (xhr.readyState === 4) {
+					if (xhr.status === 200) {
+						try {
+							var defaultData = JSON.parse(xhr.responseText);
+
+							for (var key in paramConfig) {
+								if (paramConfig.hasOwnProperty(key)) {
+									if (defaultData.hasOwnProperty(key)) {
+										NavParamsData[key] = defaultData[key];
+									} else {
+										NavParamsData[key] = paramConfig[key].defaultValue;
+									}
+								}
+							}
+
+							var saveXhr = new XMLHttpRequest();
+							saveXhr.open('POST', '/nav_params', true);
+							saveXhr.setRequestHeader('Content-Type', 'application/json');
+							saveXhr.onreadystatechange = function() {
+								if (saveXhr.readyState === 4) {
+									if (saveXhr.status === 200) {
+										try {
+											var result = JSON.parse(saveXhr.responseText);
+											if (result.status === 'success') {
+												showStatus('接口获取默认参数值恢复成功', 'success');
+												renderParams();
+											} else {
+												throw new Error(result.message);
+											}
+										} catch (error) {
+											throw new Error(error);
+										}
+									} else {
+										throw new Error('保存失败: ' + saveXhr.status);
+									}
+								}
+							};
+							saveXhr.send(JSON.stringify(NavParamsData));
+
+						} catch (error) {
+							// 如果从服务器获取默认值失败，则使用本地默认值
+							for (var key in paramConfig) {
+								if (paramConfig.hasOwnProperty(key)) {
+									NavParamsData[key] = paramConfig[key].defaultValue;
+								}
+							}
+
+							var saveXhr = new XMLHttpRequest();
+							saveXhr.open('POST', '/nav_params', true);
+							saveXhr.setRequestHeader('Content-Type', 'application/json');
+							saveXhr.onreadystatechange = function() {
+								if (saveXhr.readyState === 4) {
+									if (saveXhr.status === 200) {
+										try {
+											var result = JSON.parse(saveXhr.responseText);
+											if (result.status === 'success') {
+												showStatus('本地获取默认参数恢复成功', 'success');
+												renderParams();
+											} else {
+												showStatus('默认参数恢复失败: ' + result.message, 'error');
+											}
+										} catch (error) {
+											showStatus('默认参数恢复失败: ' + error, 'error');
+										}
+									} else {
+										showStatus('默认参数保存失败: ' + saveXhr.status, 'error');
+									}
+								}
+							};
+							saveXhr.send(JSON.stringify(NavParamsData));
+						}
+					} else {
+						// 如果从服务器获取默认值失败，则使用本地默认值
+						for (var key in paramConfig) {
+							if (paramConfig.hasOwnProperty(key)) {
+								NavParamsData[key] = paramConfig[key].defaultValue;
+							}
+						}
+
+						var saveXhr = new XMLHttpRequest();
+						saveXhr.open('POST', '/nav_params', true);
+						saveXhr.setRequestHeader('Content-Type', 'application/json');
+						saveXhr.onreadystatechange = function() {
+							if (saveXhr.readyState === 4) {
+								if (saveXhr.status === 200) {
+									try {
+										var result = JSON.parse(saveXhr.responseText);
+										if (result.status === 'success') {
+											showStatus('本地获取默认参数恢复成功', 'success');
+											renderParams();
+										} else {
+											showStatus('默认参数恢复失败: ' + result.message, 'error');
+										}
+									} catch (error) {
+										showStatus('默认参数恢复失败: ' + error, 'error');
+									}
+								} else {
+									showStatus('默认参数保存失败: ' + saveXhr.status, 'error');
+								}
+							}
+						};
+						saveXhr.send(JSON.stringify(NavParamsData));
+					}
+				}
+			};
+			xhr.send();
+        }
+
+        function showStatus(message, type) {
+            var status = document.getElementById('status-message');
+            status.textContent = message;
+            status.className = 'status ' + type;
+            status.style.display = 'block';
+            setTimeout(function() {
+                status.style.display = 'none';
+            }, 3000);
+        }
+
+        function fetchToggleValues() {
+            const textarea = document.getElementById("toggleValuesBox");
+            showStatus("正在从 OP 读取参数...", "tip");
+
+            const xhr = new XMLHttpRequest();
+            xhr.open("GET", "/fetch_params", true);
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        try {
+                            const jsonData = JSON.parse(xhr.responseText);
+                            textarea.value = JSON.stringify(jsonData, null, 2);
+                            showStatus("参数读取成功", "success");
+                        } catch (e) {
+                            showStatus("读取失败: " + e, "error");
+                        }
+                    } else {
+                        showStatus("读取失败: HTTP " + xhr.status, "error");
+                    }
+                }
+            };
+            xhr.send();
+        }
+
+        function importParams() {
+            const textarea = document.getElementById("toggleValuesBox");
+            const text = textarea.value.trim();
+
+            if (!text) {
+                showStatus("文本框为空，未发送", "error");
+                return;
+            }
+
+            try {
+                JSON.parse(text);  // 校验 JSON
+                showStatus("正在写入参数...", "tip");
+
+                const xhr = new XMLHttpRequest();
+                xhr.open("POST", "/save_params", true);
+                xhr.setRequestHeader("Content-Type", "application/json");
+                xhr.onreadystatechange = function () {
+                    if (xhr.readyState === 4) {
+                        if (xhr.status === 200) {
+                            try {
+                                const result = JSON.parse(xhr.responseText);
+                                if (result.status === "success") showStatus("参数写入成功", "success");
+                                else showStatus("写入失败: " + result.message, "error");
+                            } catch (e) {
+                                showStatus("写入失败: " + e, "error");
+                            }
+                        } else {
+                            showStatus("写入失败: HTTP " + xhr.status, "error");
+                        }
+                    }
+                };
+                xhr.send(text);
+            } catch (e) {
+                showStatus("JSON 格式错误", "error");
+            }
+        }
+
+        // 页面加载完成后初始化
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', loadNavParams);
+        } else {
+            loadNavParams();
+        }
+		document.getElementById('nav_params-ip').textContent = window.location.hostname;
+    </script>
+</body>
+</html>
