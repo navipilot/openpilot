@@ -24,7 +24,7 @@ static safety_config volkswagen_meb_init(uint16_t param) {
 
   static RxCheck volkswagen_meb_rx_checks[] = {
     {.msg = {{MSG_LH_EPS_03, 0, 8, .max_counter = 15U, .frequency = 100U}, { 0 }, { 0 }}},
-    {.msg = {{MSG_ESC_51, 0, 48, .ignore_checksum = true, .ignore_counter = true, .frequency = 50U}, { 0 }, { 0 }}},
+    {.msg = {{MSG_ESC_51, 0, 128, .ignore_checksum = true, .ignore_counter = true, .frequency = 50U}, { 0 }, { 0 }}},
     {.msg = {{MSG_QFK_01, 0, 32, .ignore_checksum = true, .ignore_counter = true, .frequency = 100U}, { 0 }, { 0 }}},
     {.msg = {{MSG_VMM_02, 0, 32, .ignore_checksum = true, .ignore_counter = true, .frequency = 50U}, { 0 }, { 0 }}},
     {.msg = {{MSG_MOTOR_51, 0, 32, .ignore_checksum = true, .ignore_counter = true, .frequency = 50U}, { 0 }, { 0 }}},
@@ -51,11 +51,15 @@ static void volkswagen_meb_rx_hook(const CANPacket_t *to_push) {
     // Signal: ESC_51.VL_Radgeschw, VR_Radgeschw, HL_Radgeschw, HR_Radgeschw
     if (addr == MSG_ESC_51) {
       // Check all wheel speeds for any movement
+      // HL_Radgeschw: bit 64 = bytes 8-9
+      // HR_Radgeschw: bit 80 = bytes 10-11
+      // VL_Radgeschw: bit 96 = bytes 12-13
+      // VR_Radgeschw: bit 112 = bytes 14-15
       int speed = 0;
-      speed += GET_BYTE(to_push, 0) | ((GET_BYTE(to_push, 1) & 0xFFU) << 8);
       speed += GET_BYTE(to_push, 8) | ((GET_BYTE(to_push, 9) & 0xFFU) << 8);
-      speed += GET_BYTE(to_push, 16) | ((GET_BYTE(to_push, 17) & 0xFFU) << 8);
-      speed += GET_BYTE(to_push, 24) | ((GET_BYTE(to_push, 25) & 0xFFU) << 8);
+      speed += GET_BYTE(to_push, 10) | ((GET_BYTE(to_push, 11) & 0xFFU) << 8);
+      speed += GET_BYTE(to_push, 12) | ((GET_BYTE(to_push, 13) & 0xFFU) << 8);
+      speed += GET_BYTE(to_push, 14) | ((GET_BYTE(to_push, 15) & 0xFFU) << 8);
       vehicle_moving = speed > 0;
     }
 
