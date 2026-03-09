@@ -4,6 +4,10 @@ import opendbc.car.volkswagen.mqbcan as mqbcan
 create_eps_update = mqbcan.create_eps_update
 create_lka_hud_control = mqbcan.create_lka_hud_control
 create_acc_buttons_control = mqbcan.create_acc_buttons_control
+acc_control_value = mqbcan.acc_control_value
+acc_hud_status_value = mqbcan.acc_hud_status_value
+create_acc_accel_control = mqbcan.create_acc_accel_control
+create_acc_hud_control = mqbcan.create_acc_hud_control
 
 
 def create_steering_control(packer, bus, apply_curvature, lkas_enabled, power):
