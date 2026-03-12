@@ -4,7 +4,13 @@ from collections.abc import Callable
 from openpilot.common.time_helpers import system_time_valid
 from openpilot.system.ui.widgets.scroller import Scroller
 from openpilot.selfdrive.ui.mici.widgets.button import BigButton, BigToggle, BigParamControl
-from openpilot.selfdrive.ui.mici.widgets.dialog import BigDialog, BigInputDialog
+from openpilot.selfdrive.ui.mici.widgets.dialog import BigDialog, BigInputDialog, BigMultiOptionDialog
+from openpilot.selfdrive.ui.mici.layouts.settings.fingerprint_catalog import (
+  FingerprintModelOption,
+  format_fingerprint_value,
+  get_fingerprint_catalog,
+  shorten_model_label,
+)
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.widgets import NavWidget
 from openpilot.selfdrive.ui.layouts.settings.common import restart_needed_callback
@@ -41,9 +47,24 @@ class DeveloperLayoutMici(NavWidget):
     self._ssh_keys_btn = BigButton("SSH keys", "Not set" if not github_username else github_username, icon=txt_ssh)
     self._ssh_keys_btn.set_click_callback(ssh_keys_callback)
 
+    # Fingerprint controls
+    (
+      self._make_options,
+      self._models_by_make,
+      self._models_by_value,
+      self._make_by_model,
+    ) = get_fingerprint_catalog()
+    self._car_make_btn = BigButton("car make", self._get_display_make())
+    self._car_make_btn.set_click_callback(self._open_make_selector)
+    self._car_model_btn = BigButton("car model", self._get_display_model())
+    self._car_model_btn.set_click_callback(self._open_model_selector)
+    self._force_fingerprint_toggle = BigParamControl("disable auto fingerprint", "ForceFingerprint",
+                                                     toggle_callback=lambda checked: restart_needed_callback(checked))
+
     # adb, ssh, ssh keys, debug mode, joystick debug mode, longitudinal maneuver mode, ip address
     # ******** Main Scroller ********
     self._adb_toggle = BigParamControl("enable ADB", "AdbEnabled")
+    self._use_prebuilt_toggle = BigParamControl("use prebuilt binaries", "UsePrebuilt")
     self._ssh_toggle = BigParamControl("enable SSH", "SshEnabled")
     self._joystick_toggle = BigToggle("joystick debug mode",
                                       initial_state=ui_state.params.get_bool("JoystickDebugMode"),
@@ -60,8 +81,12 @@ class DeveloperLayoutMici(NavWidget):
 
     self._scroller = Scroller([
       self._adb_toggle,
+      self._use_prebuilt_toggle,
       self._ssh_toggle,
       self._ssh_keys_btn,
+      self._car_make_btn,
+      self._car_model_btn,
+      self._force_fingerprint_toggle,
       self._joystick_toggle,
       self._long_maneuver_toggle,
       self._alpha_long_toggle,
@@ -71,13 +96,15 @@ class DeveloperLayoutMici(NavWidget):
     # Toggle lists
     self._refresh_toggles = (
       ("AdbEnabled", self._adb_toggle),
+      ("UsePrebuilt", self._use_prebuilt_toggle),
       ("SshEnabled", self._ssh_toggle),
+      ("ForceFingerprint", self._force_fingerprint_toggle),
       ("JoystickDebugMode", self._joystick_toggle),
       ("LongitudinalManeuverMode", self._long_maneuver_toggle),
       ("AlphaLongitudinalEnabled", self._alpha_long_toggle),
       ("ShowDebugInfo", self._debug_mode_toggle),
     )
-    onroad_blocked_toggles = (self._adb_toggle, self._joystick_toggle)
+    onroad_blocked_toggles = (self._adb_toggle, self._car_make_btn, self._car_model_btn, self._force_fingerprint_toggle, self._joystick_toggle)
     release_blocked_toggles = (self._joystick_toggle, self._long_maneuver_toggle, self._alpha_long_toggle)
     engaged_blocked_toggles = (self._long_maneuver_toggle, self._alpha_long_toggle)
 
@@ -99,6 +126,116 @@ class DeveloperLayoutMici(NavWidget):
       gui_app.set_show_fps(True)
 
     ui_state.add_offroad_transition_callback(self._update_toggles)
+
+  def _get_display_make(self) -> str:
+    make = ui_state.params.get("CarMake") or ""
+    if make:
+      return make
+
+    model = ui_state.params.get("CarModel") or ""
+    if model:
+      return self._make_by_model.get(model, format_fingerprint_value(model.split("_", 1)[0]))
+    return "Select"
+
+  def _get_selected_model_option(self) -> FingerprintModelOption | None:
+    model = ui_state.params.get("CarModel") or ""
+    if not model:
+      return None
+
+    model_name = ui_state.params.get("CarModelName") or ""
+    make = ui_state.params.get("CarMake") or self._make_by_model.get(model, "")
+    if make and model_name:
+      for option in self._models_by_make.get(make, ()):
+        if option.value == model and option.label == model_name:
+          return option
+
+    return self._models_by_value.get(model)
+
+  def _get_display_model(self) -> str:
+    selected_option = self._get_selected_model_option()
+    if selected_option is not None:
+      return selected_option.button_label
+
+    model = ui_state.params.get("CarModel") or ""
+    model_name = ui_state.params.get("CarModelName") or ""
+    if model:
+      model_option = self._models_by_value.get(model)
+      if model_option is not None:
+        return model_option.button_label
+
+    if model_name:
+      return shorten_model_label(self._get_display_make(), model_name)
+    if model:
+      return format_fingerprint_value(model)
+    return "Select"
+
+  def _set_car_make(self, make: str):
+    ui_state.params.put("CarMake", make)
+    self._car_make_btn.set_value(make)
+
+  def _set_car_model(self, model: str | FingerprintModelOption):
+    if isinstance(model, FingerprintModelOption):
+      model_option = model
+      model_value = model.value
+      model_name = model.label
+    else:
+      model_value = model
+      model_option = self._models_by_value.get(model_value)
+      model_name = model_option.label if model_option is not None else format_fingerprint_value(model_value)
+
+    make = self._make_by_model.get(model_value)
+    if make is not None:
+      ui_state.params.put("CarMake", make)
+      self._car_make_btn.set_value(make)
+
+    ui_state.params.put("CarModel", model_value)
+    ui_state.params.put("CarModelName", model_name)
+    self._car_model_btn.set_value(self._get_display_model())
+    restart_needed_callback(True)
+
+  def _open_make_selector(self):
+    options = list(self._make_options)
+    if not options:
+      gui_app.set_modal_overlay(BigDialog("No fingerprint list available", ""))
+      return
+
+    current_make = self._get_display_make()
+    default_make = current_make if current_make in options else options[0]
+
+    def on_selected():
+      selected_make = option_dialog.get_selected_option()
+      self._set_car_make(selected_make)
+
+      current_model = ui_state.params.get("CarModel") or ""
+      available_models = {option.value for option in self._models_by_make.get(selected_make, ())}
+      if current_model not in available_models:
+        default_model = self._models_by_make[selected_make][0]
+        self._set_car_model(default_model)
+
+    option_dialog = BigMultiOptionDialog(options=options, default=default_make, right_btn_callback=on_selected)
+    gui_app.set_modal_overlay(option_dialog)
+
+  def _open_model_selector(self):
+    make = self._get_display_make()
+    model_options = self._models_by_make.get(make, ())
+    if not model_options:
+      gui_app.set_modal_overlay(BigDialog("Select a car make first", ""))
+      return
+
+    current_model = ui_state.params.get("CarModel") or ""
+    current_model_name = ui_state.params.get("CarModelName") or ""
+    option_labels = [option.option_label for option in model_options]
+    selected_by_label = {option.option_label: option for option in model_options}
+    default_model = next((option.option_label for option in model_options if option.value == current_model and option.label == current_model_name), None)
+    if default_model is None:
+      default_model = next((option.option_label for option in model_options if option.value == current_model), option_labels[0])
+
+    def on_selected():
+      selected_model = selected_by_label[option_dialog.get_selected_option()]
+      self._set_car_model(selected_model)
+
+    option_dialog = BigMultiOptionDialog(options=option_labels, default=default_model, right_btn_callback=on_selected)
+    gui_app.set_modal_overlay(option_dialog)
 
   def show_event(self):
     super().show_event()
@@ -132,6 +269,9 @@ class DeveloperLayoutMici(NavWidget):
     # Refresh toggles from params to mirror external changes
     for key, item in self._refresh_toggles:
       item.set_checked(ui_state.params.get_bool(key))
+
+    self._car_make_btn.set_value(self._get_display_make())
+    self._car_model_btn.set_value(self._get_display_model())
 
   def _on_joystick_debug_mode(self, state: bool):
     ui_state.params.put_bool("JoystickDebugMode", state)

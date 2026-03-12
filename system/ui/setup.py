@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-from openpilot.system.ui.lib.application import gui_app
+from openpilot.system.hardware import HARDWARE
 import openpilot.system.ui.tici_setup as tici_setup
 import openpilot.system.ui.mici_setup as mici_setup
 
 
 def main():
-  if gui_app.big_ui():
+  if HARDWARE.get_device_type() in ("tici", "tizi"):
     tici_setup.main()
   else:
     mici_setup.main()

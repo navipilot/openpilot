@@ -185,7 +185,7 @@ class TorqueBar(Widget):
 
     # animate alpha and angle span
     if not self._demo:
-      self._torque_line_alpha_filter.update(ui_state.status != UIStatus.DISENGAGED)
+      self._torque_line_alpha_filter.update(1.0)
     else:
       self._torque_line_alpha_filter.update(1.0)
 

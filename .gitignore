@@ -13,6 +13,8 @@ venv/
 a.out
 .hypothesis
 .cache/
+.comma_sysroot/
+.venv-linux-arm64/
 
 /docs_site/
 
@@ -44,14 +46,13 @@ clcache
 compile_commands.json
 compare_runtime*.html
 
-selfdrive/pandad/pandad
 cereal/services.h
 cereal/gen
-cereal/messaging/bridge
 selfdrive/ui/translations/tmp
 selfdrive/car/tests/cars_dump
-system/camerad/camerad
 system/camerad/test/ae_gray_test
+selfdrive/ui/ui.macos
+selfdrive/ui/ui.larch64
 
 .coverage*
 coverage.xml
@@ -65,6 +66,16 @@ cppcheck_report.txt
 comma*.sh
 
 selfdrive/modeld/models/*.pkl
+!selfdrive/modeld/models/driving_vision_tinygrad.pkl
+!selfdrive/modeld/models/driving_policy_tinygrad.pkl
+!selfdrive/modeld/models/driving_vision_metadata.pkl
+!selfdrive/modeld/models/driving_policy_metadata.pkl
+!selfdrive/modeld/models/dmonitoring_model_tinygrad.pkl
+!selfdrive/modeld/models/dmonitoring_model_metadata.pkl
+!selfdrive/modeld/models/warp_1928x1208_tinygrad.pkl
+!selfdrive/modeld/models/warp_1344x760_tinygrad.pkl
+!selfdrive/modeld/models/dm_warp_1928x1208_tinygrad.pkl
+!selfdrive/modeld/models/dm_warp_1344x760_tinygrad.pkl
 
 # openpilot log files
 *.bz2
@@ -95,3 +106,29 @@ Pipfile
 # Ignore all local history of files
 .history
 .ionide
+
+# Keep prebuilt runtime artifacts trackable
+!cereal/messaging/bridge
+!system/camerad/camerad
+!system/loggerd/loggerd
+!system/loggerd/encoderd
+!system/loggerd/bootlog
+!selfdrive/pandad/pandad
+!cereal/services.h
+!cereal/libcereal.a
+!cereal/libsocketmaster.a
+!common/params_pyx.so
+!common/params_pyx.cpp
+!common/transformations/transformations.so
+!selfdrive/modeld/models/commonmodel_pyx.so
+!selfdrive/pandad/pandad_api_impl.so
+!selfdrive/controls/lib/lateral_mpc_lib/c_generated_code/acados_ocp_solver_pyx.so
+!selfdrive/controls/lib/lateral_mpc_lib/c_generated_code/libacados_ocp_solver_lat.so
+!selfdrive/controls/lib/longitudinal_mpc_lib/c_generated_code/acados_ocp_solver_pyx.so
+!selfdrive/controls/lib/longitudinal_mpc_lib/c_generated_code/libacados_ocp_solver_long.so
+!common/libcommon.a
+!msgq_repo/msgq/ipc_pyx.so
+!msgq_repo/msgq/visionipc/visionipc_pyx.so
+!rednose_repo/rednose/helpers/ekf_sym_pyx.so
+!panda/board/obj/
+!panda/board/obj/**

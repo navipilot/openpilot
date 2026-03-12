@@ -8,8 +8,10 @@ from openpilot.system.ui.lib.application import gui_app, MousePos, MAX_TOUCH_SLO
 try:
   from openpilot.selfdrive.ui.ui_state import device
 except ImportError:
+
   class Device:
     awake = True
+
   device = Device()  # type: ignore
 
 
@@ -38,8 +40,7 @@ class Widget(abc.ABC):
     return self._rect
 
   def set_rect(self, rect: rl.Rectangle) -> None:
-    changed = (self._rect.x != rect.x or self._rect.y != rect.y or
-               self._rect.width != rect.width or self._rect.height != rect.height)
+    changed = self._rect.x != rect.x or self._rect.y != rect.y or self._rect.width != rect.width or self._rect.height != rect.height
     self._rect = rect
     if changed:
       self._update_layout_rects()
@@ -79,7 +80,7 @@ class Widget(abc.ABC):
     return self._touch_valid_callback() if self._touch_valid_callback else True
 
   def set_position(self, x: float, y: float) -> None:
-    changed = (self._rect.x != x or self._rect.y != y)
+    changed = self._rect.x != x or self._rect.y != y
     self._rect = rl.Rectangle(x, y, self._rect.width, self._rect.height)
     if changed:
       self._update_layout_rects()
@@ -228,6 +229,7 @@ class NavWidget(Widget, abc.ABC):
   """
   A full screen widget that supports back navigation by swiping down from the top.
   """
+
   BACK_TOUCH_AREA_PERCENTAGE = 0.65
 
   def __init__(self):
@@ -318,12 +320,10 @@ class NavWidget(Widget, abc.ABC):
       self._set_up = True
       if hasattr(self, '_scroller'):
         original_enabled = self._scroller._enabled
-        self._scroller.set_enabled(lambda: not self._swiping_away and (original_enabled() if callable(original_enabled) else
-                                                                       original_enabled))
+        self._scroller.set_enabled(lambda: not self._swiping_away and (original_enabled() if callable(original_enabled) else original_enabled))
       elif hasattr(self, '_scroll_panel'):
         original_enabled = self._scroll_panel.enabled
-        self._scroll_panel.set_enabled(lambda: not self._swiping_away and (original_enabled() if callable(original_enabled) else
-                                                                          original_enabled))
+        self._scroll_panel.set_enabled(lambda: not self._swiping_away and (original_enabled() if callable(original_enabled) else original_enabled))
 
     if self._trigger_animate_in:
       self._pos_filter.x = self._rect.height

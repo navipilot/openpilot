@@ -3,13 +3,14 @@ import numpy as np
 import pyray as rl
 from cereal import messaging, car, log
 from msgq.visionipc import VisionStreamType
-from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
+from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.selfdrive.ui.mici.onroad import SIDE_PANEL_WIDTH
 from openpilot.selfdrive.ui.mici.onroad.alert_renderer import AlertRenderer
 from openpilot.selfdrive.ui.mici.onroad.driver_state import DriverStateRenderer
 from openpilot.selfdrive.ui.mici.onroad.hud_renderer import HudRenderer
 from openpilot.selfdrive.ui.mici.onroad.model_renderer import ModelRenderer
 from openpilot.selfdrive.ui.mici.onroad.confidence_ball import ConfidenceBall
+from openpilot.selfdrive.ui.mici.onroad.starpilot_status import get_border_color, get_experimental_mode_banner_text
 from openpilot.selfdrive.ui.mici.onroad.cameraview import CameraView
 from openpilot.system.ui.lib.application import FontWeight, gui_app, MousePos, MouseEvent
 from openpilot.system.ui.widgets.label import UnifiedLabel
@@ -129,6 +130,54 @@ class BookmarkIcon(Widget):
       rl.draw_texture(self._icon, int(icon_x), int(icon_y), rl.WHITE)
 
 
+class ExperimentalModeBanner(Widget):
+  SHOW_TIME_SECONDS = 2.5
+
+  def __init__(self):
+    super().__init__()
+    self._last_mode: str | None = None
+    self._visible_until = 0.0
+    self._label = UnifiedLabel(
+      "",
+      34,
+      FontWeight.BOLD,
+      text_color=rl.WHITE,
+      alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
+      alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_MIDDLE,
+    )
+
+  def _update_state(self):
+    current_mode = get_experimental_mode_banner_text(ui_state)
+    if current_mode is None:
+      return
+
+    if self._last_mode is None:
+      self._last_mode = current_mode
+      return
+
+    if current_mode != self._last_mode:
+      self._last_mode = current_mode
+      self._label.set_text(f"{current_mode} MODE")
+      self._visible_until = time.monotonic() + self.SHOW_TIME_SECONDS
+
+  def _render(self, rect):
+    if not ui_state.started or time.monotonic() > self._visible_until:
+      return
+
+    banner_width = min(rect.width - 120, 520)
+    banner_height = 72
+    banner_rect = rl.Rectangle(
+      rect.x + (rect.width - banner_width) / 2,
+      rect.y + 22,
+      banner_width,
+      banner_height,
+    )
+
+    rl.draw_rectangle_rounded(banner_rect, 0.3, 12, rl.Color(0, 0, 0, 175))
+    rl.draw_rectangle_rounded_lines_ex(banner_rect, 0.3, 12, 4, get_border_color(ui_state))
+    self._label.render(banner_rect)
+
+
 class AugmentedRoadView(CameraView):
   def __init__(self, bookmark_callback=None, stream_type: VisionStreamType = VisionStreamType.VISION_STREAM_ROAD):
     super().__init__("camerad", stream_type)
@@ -154,6 +203,7 @@ class AugmentedRoadView(CameraView):
     self._alert_renderer = AlertRenderer()
     self._driver_state_renderer = DriverStateRenderer()
     self._confidence_ball = ConfidenceBall()
+    self._experimental_mode_banner = ExperimentalModeBanner()
     self._offroad_label = UnifiedLabel("start the car to\nuse openpilot", 54, FontWeight.DISPLAY,
                                        text_color=rl.Color(255, 255, 255, int(255 * 0.9)),
                                        alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
@@ -209,38 +259,42 @@ class AugmentedRoadView(CameraView):
     # Render the base camera view
     super()._render(self._content_rect)
 
+    in_reverse = self._is_in_reverse()
+
     # Draw all UI overlays
-    self._model_renderer.render(self._content_rect)
+    if not in_reverse:
+      self._model_renderer.render(self._content_rect)
 
     # Fade out bottom of overlays for looks
     rl.draw_texture_ex(self._fade_texture, rl.Vector2(self._content_rect.x, self._content_rect.y), 0.0, 1.0, rl.WHITE)
 
     alert_to_render, not_animating_out = self._alert_renderer.will_render()
 
-    # Hide DMoji when disengaged unless AlwaysOnDM is enabled
-    should_draw_dmoji = (not self._hud_renderer.drawing_top_icons() and ui_state.is_onroad() and
-                         (ui_state.status != UIStatus.DISENGAGED or ui_state.always_on_dm))
+    should_draw_dmoji = (not in_reverse) and (not self._hud_renderer.drawing_top_icons()) and ui_state.is_onroad()
     self._driver_state_renderer.set_should_draw(should_draw_dmoji)
     self._driver_state_renderer.set_position(self._rect.x + 16, self._rect.y + 10)
-    self._driver_state_renderer.render()
+    if not in_reverse:
+      self._driver_state_renderer.render()
 
-    self._hud_renderer.set_can_draw_top_icons(alert_to_render is None)
-    self._hud_renderer.set_wheel_critical_icon(alert_to_render is not None and not not_animating_out and
+    self._hud_renderer.set_can_draw_top_icons((not in_reverse) and (alert_to_render is None))
+    self._hud_renderer.set_wheel_critical_icon((not in_reverse) and alert_to_render is not None and not not_animating_out and
                                                alert_to_render.visual_alert == car.CarControl.HUDControl.VisualAlert.steerRequired)
     # TODO: have alert renderer draw offroad mici label below
     if ui_state.started:
       self._alert_renderer.render(self._content_rect)
-    self._hud_renderer.render(self._content_rect)
-
-    # Draw fake rounded border
-    rl.draw_rectangle_rounded_lines_ex(self._content_rect, 0.2 * 1.02, 10, 50, rl.BLACK)
+    if not in_reverse:
+      self._hud_renderer.render(self._content_rect)
+    if (not in_reverse) and alert_to_render is None:
+      self._experimental_mode_banner.render(self._content_rect)
 
     # End clipping region
     rl.end_scissor_mode()
 
     # Custom UI extension point - add custom overlays here
     # Use self._content_rect for positioning within camera bounds
-    self._confidence_ball.render(self.rect)
+    if not in_reverse:
+      self._confidence_ball.render(self.rect)
+      self._draw_border()
 
     self._bookmark_icon.render(self.rect)
 
@@ -253,6 +307,30 @@ class AugmentedRoadView(CameraView):
     msg = messaging.new_message('uiDebug')
     msg.uiDebug.drawTimeMillis = (time.monotonic() - start_draw) * 1000
     self._pm.send('uiDebug', msg)
+
+  def _draw_border(self):
+    border_size = 8
+    # Keep full border visible by drawing outside scissor with an inset rect.
+    border_rect = rl.Rectangle(
+      self._content_rect.x + border_size / 2,
+      self._content_rect.y + border_size / 2,
+      self._content_rect.width - border_size,
+      self._content_rect.height - border_size,
+    )
+    rl.draw_rectangle_rounded_lines_ex(border_rect, 0.12, 16, border_size, get_border_color(ui_state))
+
+  @staticmethod
+  def _is_in_reverse() -> bool:
+    try:
+      gear = ui_state.sm["carState"].gearShifter
+    except Exception:
+      return False
+
+    reverse_enum = getattr(car.CarState.GearShifter, "reverse", None)
+    if reverse_enum is not None and gear == reverse_enum:
+      return True
+
+    return str(gear).lower().endswith("reverse")
 
   def _switch_stream_if_needed(self, sm):
     if sm['selfdriveState'].experimentalMode and WIDE_CAM in self.available_streams:

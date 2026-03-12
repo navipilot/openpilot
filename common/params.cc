@@ -97,7 +97,7 @@ Params::Params(const std::string &path, bool memory) {
   // FrogPilot variables
   std::string params_folder;
   if (memory) {
-    params_folder = "/dev/shm/params";
+    params_folder = Path::shm_path() + "/params";
   } else {
     cache_path = "/cache/params" + params_prefix + "/";
     params_folder = path;

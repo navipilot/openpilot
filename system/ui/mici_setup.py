@@ -30,7 +30,8 @@ from openpilot.selfdrive.ui.mici.widgets.dialog import BigInputDialog
 
 NetworkType = log.DeviceState.NetworkType
 
-OPENPILOT_URL = "https://openpilot.comma.ai"
+NETWORK_CHECK_URL = "https://openpilot.comma.ai"
+DEFAULT_INSTALLER_URL = "https://installer.comma.ai/firestar5683/StarPilot"
 USER_AGENT = f"AGNOSSetup-{HARDWARE.get_os_version()}"
 
 CONTINUE_PATH = "/data/continue.sh"
@@ -77,7 +78,7 @@ class NetworkConnectivityMonitor:
     while not self._stop_event.is_set():
       if self._should_check():
         try:
-          request = urllib.request.Request(OPENPILOT_URL, method="HEAD")
+          request = urllib.request.Request(NETWORK_CHECK_URL, method="HEAD")
           urllib.request.urlopen(request, timeout=0.5)
           self.network_connected.set()
           if HARDWARE.get_network_type() == NetworkType.wifi:
@@ -112,12 +113,16 @@ class StartPage(Widget):
 
     self._start_bg_txt = gui_app.texture("icons_mici/setup/green_button.png", 520, 224)
     self._start_bg_pressed_txt = gui_app.texture("icons_mici/setup/green_button_pressed.png", 520, 224)
+    # Match The Galaxy accent palette while keeping existing setup assets/layout intact.
+    self._start_bg_tint = rl.Color(94, 200, 200, 255)
+    self._start_bg_pressed_tint = rl.Color(75, 168, 168, 255)
 
   def _render(self, rect: rl.Rectangle):
     draw_x = rect.x + (rect.width - self._start_bg_txt.width) / 2
     draw_y = rect.y + (rect.height - self._start_bg_txt.height) / 2
     texture = self._start_bg_pressed_txt if self.is_pressed else self._start_bg_txt
-    rl.draw_texture(texture, int(draw_x), int(draw_y), rl.WHITE)
+    tint = self._start_bg_pressed_tint if self.is_pressed else self._start_bg_tint
+    rl.draw_texture(texture, int(draw_x), int(draw_y), tint)
 
     self._title.render(rect)
 
@@ -127,7 +132,7 @@ class SoftwareSelectionPage(Widget):
                use_custom_software_callback: Callable):
     super().__init__()
 
-    self._openpilot_slider = LargerSlider("slide to use\nopenpilot", use_openpilot_callback)
+    self._openpilot_slider = LargerSlider("slide to use\nstarpilot", use_openpilot_callback)
     self._custom_software_slider = LargerSlider("slide to use\ncustom software", use_custom_software_callback, green=False)
 
   def reset(self):
@@ -620,7 +625,7 @@ class Setup(Widget):
   def _network_setup_continue_button_callback(self):
     self._network_monitor.stop()
     if self.state == SetupState.NETWORK_SETUP:
-      self.download(OPENPILOT_URL)
+      self.download(DEFAULT_INSTALLER_URL)
     elif self.state == SetupState.NETWORK_SETUP_CUSTOM_SOFTWARE:
       self._set_state(SetupState.CUSTOM_SOFTWARE)
 
@@ -658,6 +663,8 @@ class Setup(Widget):
       run_cmd(["chmod", "+x", TMP_CONTINUE_PATH])
       shutil.move(TMP_CONTINUE_PATH, CONTINUE_PATH)
       shutil.copyfile(INSTALLER_SOURCE_PATH, INSTALLER_DESTINATION_PATH)
+      with open(INSTALLER_URL_PATH, "w") as f:
+        f.write(DEFAULT_INSTALLER_URL)
 
       # give time for installer UI to take over
       time.sleep(0.1)
@@ -722,6 +729,9 @@ class Setup(Widget):
 
       with open(INSTALLER_URL_PATH, "w") as f:
         f.write(self.download_url)
+
+      if os.path.isfile(VALID_CACHE_PATH):
+        os.remove(VALID_CACHE_PATH)
 
       # give time for installer UI to take over
       time.sleep(0.1)

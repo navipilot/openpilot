@@ -1,5 +1,8 @@
 import os, sys, pickle, time, re
 import numpy as np
+if "FLOAT16" not in os.environ: os.environ["FLOAT16"] = "1"
+if "IMAGE" not in os.environ: os.environ["IMAGE"] = "2"
+if "NOLOCALS" not in os.environ: os.environ[ "NOLOCALS" ] = "1"
 if "JIT_BATCH_SIZE" not in os.environ: os.environ["JIT_BATCH_SIZE"] = "0"
 
 from tinygrad import fetch, Tensor, TinyJit, Context, GlobalCounters, Device, dtypes

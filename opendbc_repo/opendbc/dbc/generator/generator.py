@@ -3,6 +3,7 @@ import os
 import re
 import glob
 import subprocess
+import sys
 
 generator_path = os.path.dirname(os.path.realpath(__file__))
 opendbc_root = os.path.join(generator_path, '../')
@@ -45,8 +46,14 @@ def create_all(output_path: str):
     os.remove(f)
 
   # run python generator scripts first
+  script_env = os.environ.copy()
+  opendbc_repo_root = os.path.normpath(os.path.join(generator_path, "../../.."))
+  existing_pythonpath = script_env.get("PYTHONPATH", "")
+  script_env["PYTHONPATH"] = (
+    f"{opendbc_repo_root}:{existing_pythonpath}" if existing_pythonpath else opendbc_repo_root
+  )
   for f in glob.glob(f"{generator_path}/*/*.py"):
-    subprocess.check_call(f)
+    subprocess.check_call([sys.executable, f], env=script_env)
 
   for src_dir, _, filenames in os.walk(generator_path):
     if src_dir == generator_path:

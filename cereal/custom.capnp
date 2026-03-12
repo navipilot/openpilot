@@ -81,6 +81,7 @@ struct FrogPilotCarState @0xf35cc4560bbf6ec2 {
   pauseLongitudinal @12 :Bool;
   sportGear @13 :Bool;
   trafficModeEnabled @14 :Bool;
+  gasStack @15 :Bool;  # Compatibility with older StarPilot payloads
 }
 
 struct FrogPilotDeviceState @0xda96579883444c35 {
@@ -183,6 +184,7 @@ struct FrogPilotPlan @0xf98d843bfd7004a3 {
   vCruise @32 :Float32;
   weatherDaytime @33 :Bool;
   weatherId @34 :Int16;
+  disableThrottle @35 :Bool;
 }
 
 struct FrogPilotRadarState @0xb86e6369214c01c8 {

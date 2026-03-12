@@ -4,6 +4,7 @@ import pyray as rl
 
 from openpilot.system.hardware import TICI
 from openpilot.common.realtime import config_realtime_process, set_core_affinity
+from openpilot.common.watchdog import kick_watchdog
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.selfdrive.ui.layouts.main import MainLayout
 from openpilot.selfdrive.ui.mici.layouts.main import MiciMainLayout
@@ -21,6 +22,7 @@ def main():
     main_layout = MiciMainLayout()
   main_layout.set_rect(rl.Rectangle(0, 0, gui_app.width, gui_app.height))
   for should_render in gui_app.render():
+    kick_watchdog()
     ui_state.update()
     if should_render:
       main_layout.render()

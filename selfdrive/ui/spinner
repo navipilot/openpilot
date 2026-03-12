@@ -1,0 +1,27 @@
+#!/bin/sh
+
+DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT_DIR="$(cd "${DIR}/../.." && pwd)"
+
+device_type() {
+  if [ -f /sys/firmware/devicetree/base/model ]; then
+    tr -d '\000' </sys/firmware/devicetree/base/model 2>/dev/null | sed 's/.*comma //'
+  fi
+}
+
+if [ -f /TICI ]; then
+  DT="$(device_type)"
+  if [ "${DT}" != "tici" ] && [ "${DT}" != "tizi" ]; then
+    PYTHON="${ROOT_DIR}/.venv/bin/python"
+    if [ ! -x "${PYTHON}" ]; then
+      PYTHON="python3"
+    fi
+    exec "${PYTHON}" "${ROOT_DIR}/system/ui/spinner.py" "$1"
+  fi
+
+  if [ ! -f "${DIR}/_spinner" ]; then
+    cp "${DIR}/qt/spinner_larch64" "${DIR}/_spinner"
+  fi
+fi
+
+exec "${DIR}/_spinner" "$1"

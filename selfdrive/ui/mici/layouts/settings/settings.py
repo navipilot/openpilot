@@ -5,10 +5,10 @@ from collections.abc import Callable
 
 from openpilot.common.params import Params
 from openpilot.system.ui.widgets.scroller import Scroller
-from openpilot.selfdrive.ui.mici.widgets.button import BigButton
+from openpilot.selfdrive.ui.mici.widgets.button import BigButton, BigMultiToggle
 from openpilot.selfdrive.ui.mici.layouts.settings.toggles import TogglesLayoutMici
 from openpilot.selfdrive.ui.mici.layouts.settings.network import NetworkLayoutMici
-from openpilot.selfdrive.ui.mici.layouts.settings.device import DeviceLayoutMici, PairBigButton
+from openpilot.selfdrive.ui.mici.layouts.settings.device import DeviceLayoutMici, PairBigButton, GalaxyBigButton
 from openpilot.selfdrive.ui.mici.layouts.settings.developer import DeveloperLayoutMici
 from openpilot.selfdrive.ui.mici.layouts.settings.firehose import FirehoseLayout
 from openpilot.system.ui.lib.application import gui_app, FontWeight
@@ -30,6 +30,36 @@ class PanelInfo:
   instance: Widget
 
 
+class ForceDriveStateBigButton(BigMultiToggle):
+  def __init__(self):
+    super().__init__("force drive state", ["offroad", "onroad", "off"])
+    self._params = Params()
+    self.refresh()
+
+  def _handle_mouse_release(self, mouse_pos):
+    super()._handle_mouse_release(mouse_pos)
+    self._apply_mode(self.value)
+
+  def _apply_mode(self, mode: str):
+    if mode == "offroad":
+      self._params.put_bool("ForceOffroad", True)
+      self._params.put_bool("ForceOnroad", False)
+    elif mode == "onroad":
+      self._params.put_bool("ForceOffroad", False)
+      self._params.put_bool("ForceOnroad", True)
+    else:
+      self._params.put_bool("ForceOffroad", False)
+      self._params.put_bool("ForceOnroad", False)
+
+  def refresh(self):
+    if self._params.get_bool("ForceOffroad"):
+      self.set_value("offroad")
+    elif self._params.get_bool("ForceOnroad"):
+      self.set_value("onroad")
+    else:
+      self.set_value("off")
+
+
 class SettingsLayout(NavWidget):
   def __init__(self):
     super().__init__()
@@ -48,11 +78,15 @@ class SettingsLayout(NavWidget):
     firehose_btn = BigButton("firehose", "", "icons_mici/settings/comma_icon.png")
     firehose_btn.set_click_callback(lambda: self._set_current_panel(PanelType.FIREHOSE))
 
+    self._force_drive_state_btn = ForceDriveStateBigButton()
+
     self._scroller = Scroller([
       toggles_btn,
       network_btn,
+      self._force_drive_state_btn,
       device_btn,
       PairBigButton(),
+      GalaxyBigButton(),
       #BigDialogButton("manual", "", "icons_mici/settings/manual_icon.png", "Check out the mici user\nmanual at comma.ai/setup"),
       firehose_btn,
       developer_btn,
@@ -77,6 +111,7 @@ class SettingsLayout(NavWidget):
 
   def show_event(self):
     super().show_event()
+    self._force_drive_state_btn.refresh()
     self._set_current_panel(None)
     self._scroller.show_event()
     if self._current_panel is not None:

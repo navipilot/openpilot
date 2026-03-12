@@ -61,17 +61,19 @@ class FrogPilotPlanner:
     self.lead_one = sm["radarState"].leadOne
 
     long_control_active = sm["carControl"].longActive
+    controls_enabled = sm["selfdriveState"].enabled
+    planner_active = controls_enabled or long_control_active
 
     v_cruise = min(sm["carState"].vCruise, V_CRUISE_MAX) * CV.KPH_TO_MS
     v_ego = max(sm["carState"].vEgo, 0)
 
-    if long_control_active:
+    if planner_active:
       self.frogpilot_acceleration.update(v_ego, sm, frogpilot_toggles)
     else:
       self.frogpilot_acceleration.max_accel = 0
       self.frogpilot_acceleration.min_accel = 0
 
-    if long_control_active and frogpilot_toggles.conditional_experimental_mode:
+    if planner_active and frogpilot_toggles.conditional_experimental_mode:
       self.frogpilot_cem.update(v_ego, sm, frogpilot_toggles)
     else:
       self.frogpilot_cem.experimental_mode = False
@@ -79,9 +81,9 @@ class FrogPilotPlanner:
 
     self.driving_in_curve = abs(self.lateral_acceleration) >= MINIMUM_LATERAL_ACCELERATION
 
-    self.frogpilot_events.update(long_control_active, v_cruise, sm, frogpilot_toggles)
+    self.frogpilot_events.update(planner_active, v_cruise, sm, frogpilot_toggles)
 
-    self.frogpilot_following.update(long_control_active, v_ego, sm, frogpilot_toggles)
+    self.frogpilot_following.update(planner_active, v_ego, sm, frogpilot_toggles)
 
     gps_location = sm[self.gps_location_service]
     self.gps_position = {
@@ -109,24 +111,25 @@ class FrogPilotPlanner:
     self.model_length = sm["modelV2"].position.x[-1]
 
     self.model_stopped = self.model_length < CRUISING_SPEED * PLANNER_TIME
+    self.model_stopped |= self.frogpilot_vcruise.forcing_stop
 
     self.road_curvature, self.time_to_curve = calculate_road_curvature(sm["modelV2"])
 
     self.road_curvature_detected = (1 / abs(self.road_curvature))**0.5 < v_ego > CRUISING_SPEED and not (sm["carState"].leftBlinker or sm["carState"].rightBlinker)
 
     if not sm["carState"].standstill:
-      self.tracking_lead = self.update_lead_status()
+      self.tracking_lead = self.update_lead_status(frogpilot_toggles.stop_distance)
 
-    self.v_cruise = self.frogpilot_vcruise.update(long_control_active, now, time_validated, v_cruise, v_ego, sm, frogpilot_toggles)
+    self.v_cruise = self.frogpilot_vcruise.update(planner_active, now, time_validated, v_cruise, v_ego, sm, frogpilot_toggles)
 
     if self.gps_valid and time_validated and frogpilot_toggles.weather_presets:
       self.frogpilot_weather.update_weather(now, frogpilot_toggles)
     else:
       self.frogpilot_weather.weather_id = 0
 
-  def update_lead_status(self):
+  def update_lead_status(self, stop_distance=STOP_DISTANCE):
     following_lead = self.lead_one.status
-    following_lead &= self.lead_one.dRel < self.model_length + STOP_DISTANCE
+    following_lead &= self.lead_one.dRel < self.model_length + max(float(stop_distance), 4.0)
 
     self.tracking_lead_filter.update(following_lead)
     return self.tracking_lead_filter.x >= THRESHOLD
@@ -147,6 +150,7 @@ class FrogPilotPlanner:
     frogpilotPlan.cscTraining = self.frogpilot_vcruise.csc.enable_training
 
     frogpilotPlan.desiredFollowDistance = int(self.frogpilot_following.desired_follow_distance)
+    frogpilotPlan.disableThrottle = self.frogpilot_following.disable_throttle
 
     frogpilotPlan.experimentalMode = self.frogpilot_cem.experimental_mode or self.frogpilot_vcruise.slc.experimental_mode
 

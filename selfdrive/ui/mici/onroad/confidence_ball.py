@@ -34,12 +34,8 @@ class ConfidenceBall(Widget):
     if self._demo:
       return
 
-    # animate status dot in from bottom
-    if ui_state.status == UIStatus.DISENGAGED:
-      self._confidence_filter.update(-0.5)
-    else:
-      self._confidence_filter.update((1 - max(ui_state.sm['modelV2'].meta.disengagePredictions.brakeDisengageProbs or [1])) *
-                                                        (1 - max(ui_state.sm['modelV2'].meta.disengagePredictions.steerOverrideProbs or [1])))
+    self._confidence_filter.update((1 - max(ui_state.sm['modelV2'].meta.disengagePredictions.brakeDisengageProbs or [1])) *
+                                                      (1 - max(ui_state.sm['modelV2'].meta.disengagePredictions.steerOverrideProbs or [1])))
 
   def _render(self, _):
     content_rect = rl.Rectangle(
@@ -54,7 +50,7 @@ class ConfidenceBall(Widget):
     dot_height = self._rect.y + dot_height
 
     # confidence zones
-    if ui_state.status == UIStatus.ENGAGED or self._demo:
+    if ui_state.status != UIStatus.OVERRIDE or self._demo:
       if self._confidence_filter.x > 0.5:
         top_dot_color = rl.Color(0, 255, 204, 255)
         bottom_dot_color = rl.Color(0, 255, 38, 255)
@@ -68,10 +64,6 @@ class ConfidenceBall(Widget):
     elif ui_state.status == UIStatus.OVERRIDE:
       top_dot_color = rl.Color(255, 255, 255, 255)
       bottom_dot_color = rl.Color(82, 82, 82, 255)
-
-    else:
-      top_dot_color = rl.Color(50, 50, 50, 255)
-      bottom_dot_color = rl.Color(13, 13, 13, 255)
 
     draw_circle_gradient(content_rect.x + content_rect.width - status_dot_radius,
                          dot_height, status_dot_radius,

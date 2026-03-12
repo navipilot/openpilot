@@ -12,6 +12,7 @@
 #include "frogpilot/ui/qt/offroad/vehicle_settings.h"
 #include "frogpilot/ui/qt/offroad/visual_settings.h"
 #include "frogpilot/ui/qt/offroad/wheel_settings.h"
+#include "system/hardware/hw.h"
 
 bool nnffLogFileExists(const QString &carFingerprint) {
   static QStringList models;
@@ -68,7 +69,7 @@ void FrogPilotSettingsWindow::createPanelButtons(FrogPilotListWidget *list) {
   FrogPilotLateralPanel *frogpilotLateralPanel = new FrogPilotLateralPanel(this, !shownDescriptions.value("FrogPilotLateralPanel").toBool(false));
   FrogPilotLongitudinalPanel *frogpilotLongitudinalPanel = new FrogPilotLongitudinalPanel(this, !shownDescriptions.value("FrogPilotLongitudinalPanel").toBool(false));
   FrogPilotMapsPanel *frogpilotMapsPanel = new FrogPilotMapsPanel(this, !shownDescriptions.value("FrogPilotMapsPanel").toBool(false));
-  FrogPilotModelPanel *frogpilotModelPanel = new FrogPilotModelPanel(this, !shownDescriptions.value("FrogPilotModelPanel").toBool(false));
+  FrogPilotModelPanel *frogpilotModelPanel = new FrogPilotModelPanel(this);
   FrogPilotNavigationPanel *frogpilotNavigationPanel = new FrogPilotNavigationPanel(this, !shownDescriptions.value("FrogPilotNavigationPanel").toBool(false));
   FrogPilotSoundsPanel *frogpilotSoundsPanel = new FrogPilotSoundsPanel(this, !shownDescriptions.value("FrogPilotSoundsPanel").toBool(false));
   FrogPilotThemesPanel *frogpilotThemesPanel = new FrogPilotThemesPanel(this, !shownDescriptions.value("FrogPilotThemesPanel").toBool(false));
@@ -307,6 +308,32 @@ void FrogPilotSettingsWindow::updateVariables() {
   FrogPilotUIScene &frogpilot_scene = fs.frogpilot_scene;
   QJsonObject &frogpilot_toggles = frogpilot_scene.frogpilot_toggles;
 
+  auto applyDesktopVehicleFallback = [&]() {
+    QString fallbackMake = frogpilot_toggles.value("car_make").toString();
+    QString fallbackModel = frogpilot_toggles.value("car_model").toString();
+    if (fallbackMake.isEmpty()) {
+      fallbackMake = "gm";
+    }
+    if (fallbackModel.isEmpty()) {
+      fallbackModel = "CHEVROLET_BOLT_ACC_2022_2023";
+    }
+
+    carMake = fallbackMake.toStdString();
+    std::string fallbackFingerprint = fallbackModel.toStdString();
+
+    hasPedal = frogpilot_toggles.value("has_pedal").toBool(true);
+    hasSDSU = frogpilot_toggles.value("has_sdsu").toBool();
+    hasZSS = frogpilot_toggles.value("has_zss").toBool();
+    isBolt = fallbackFingerprint.rfind("CHEVROLET_BOLT", 0) == 0;
+    isGM = carMake == "gm";
+    isHKG = carMake == "hyundai";
+    isSubaru = carMake == "subaru";
+    isToyota = carMake == "toyota";
+    isVolt = fallbackFingerprint.rfind("CHEVROLET_VOLT", 0) == 0;
+    canUsePedal = hasPedal || isBolt;
+    canUseSDSU = hasSDSU;
+  };
+
   isFrogsGoMoo = ::isFrogsGoMoo();
 
   std::string carParams = params.get("CarParamsPersistent");
@@ -332,7 +359,7 @@ void FrogPilotSettingsWindow::updateVariables() {
     hasSNG = CP.getAutoResumeSng();
     hasZSS = frogpilot_toggles.value("has_zss").toBool();
     isAngleCar = CP.getSteerControlType() == cereal::CarParams::SteerControlType::ANGLE;
-    isBolt = carFingerprint == "CHEVROLET_BOLT_CC" || carFingerprint == "CHEVROLET_BOLT_EUV";
+    isBolt = carFingerprint.rfind("CHEVROLET_BOLT", 0) == 0;
     isGM = carMake == "gm";
     isHKG = carMake == "hyundai";
     isHKGCanFd = isHKG && safetyModel == cereal::CarParams::SafetyModel::HYUNDAI_CANFD;
@@ -340,7 +367,7 @@ void FrogPilotSettingsWindow::updateVariables() {
     isTorqueCar = CP.getLateralTuning().which() == cereal::CarParams::LateralTuning::TORQUE;
     isToyota = carMake == "toyota";
     isTSK = CP.getSecOcRequired();
-    isVolt = carFingerprint == "CHEVROLET_VOLT";
+    isVolt = carFingerprint.rfind("CHEVROLET_VOLT", 0) == 0;
     latAccelFactor = CP.getLateralTuning().getTorque().getLatAccelFactor();
     lkasAllowedForAOL = frogpilot_toggles.value("lkas_allowed_for_aol").toBool();
     longitudinalActuatorDelay = CP.getLongitudinalActuatorDelay();
@@ -441,6 +468,12 @@ void FrogPilotSettingsWindow::updateVariables() {
       }
       params.putFloatNonBlocking("VEgoStoppingStock", vEgoStopping);
     }
+
+    if (Hardware::PC() && (carMake == "mock" || carFingerprint == "MOCK")) {
+      applyDesktopVehicleFallback();
+    }
+  } else if (Hardware::PC()) {
+    applyDesktopVehicleFallback();
   }
 
   std::string frogpilotCarParams = params.get("FrogPilotCarParamsPersistent");
@@ -464,7 +497,7 @@ void FrogPilotSettingsWindow::updateVariables() {
     hasAutoTune = LTP.getUseParams();
   }
 
-  drivingPanelButtons->setVisibleButton(0, false);
+  drivingPanelButtons->setVisibleButton(0, tuningLevel >= frogpilotToggleLevels.value("DrivingModel").toDouble());
   drivingPanelButtons->setVisibleButton(1, hasOpenpilotLongitudinal);
 
   systemPanelButtons->setVisibleButton(1, tuningLevel >= frogpilotToggleLevels.value("DeviceManagement").toDouble() || tuningLevel >= frogpilotToggleLevels.value("ScreenManagement").toDouble());

@@ -1,10 +1,10 @@
 from typing import Any, cast
-import functools, operator, itertools
+import functools, itertools
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from tinygrad.dtype import dtypes, ImageDType, DType, AddrSpace, Invalid, PtrDType
-from tinygrad.uop.ops import UOp, Ops, UPat, PatternMatcher, graph_rewrite, GroupOp, identity_element
-from tinygrad.uop.symbolic import uop_given_valid, parse_valid, sym, symbolic, invalid_gate
+from tinygrad.uop.ops import UOp, Ops, UPat, PatternMatcher, GroupOp, identity_element
+from tinygrad.uop.symbolic import uop_given_valid, parse_valid, invalid_gate
 from tinygrad.helpers import getenv, flatten, AMX, prod
 from tinygrad.renderer import Renderer
 
@@ -26,7 +26,6 @@ def simplify_valid_load(buf:UOp, start_idx:UOp, valid:UOp) -> UOp|None:
     # for X0 + X1 + ... >= 1, check if it's out of bound when Xi = 0 for all i
     if not is_upper_bound and c == 1 and all(u.op in GroupOp.Irreducible and u.vmin == 0 for u in X.split_uop(Ops.ADD)):
       testidx = functools.reduce(lambda nowidx,u: nowidx.substitute({u:u.const_like(0)}), X.split_uop(Ops.ADD), idx)
-      testidx = testidx.simplify()
       if testidx.gep(0).vmax < 0 or testidx.gep(1).vmax < 0:
         drop_stmt.append(stmt)
         continue
@@ -36,13 +35,13 @@ def simplify_valid_load(buf:UOp, start_idx:UOp, valid:UOp) -> UOp|None:
     test_value = c + 1 if is_upper_bound else c - 1
     for i,b in zip(idx.src, (buf.dtype.shape[1], buf.dtype.shape[0])):
       if i.is_increasing():
-        rw = i.substitute({X:X.const_like(test_value)}).simplify()
+        rw = i.substitute({X:X.const_like(test_value)})
         if rw.vmin >= b or rw.vmax < 0:
           drop_stmt.append(stmt)
           break
 
   if not drop_stmt and idx is start_idx: return None
-  new_valid = functools.reduce(operator.and_, ss) if (ss:=[s for s in valid.split_uop(Ops.AND) if s not in drop_stmt]) else None
+  new_valid = UOp.prod(*ss) if (ss:=[s for s in valid.split_uop(Ops.AND) if s not in drop_stmt]) else None
   return buf.index(idx.valid(new_valid) if new_valid is not None else idx, ptr=True)
 
 
@@ -60,11 +59,16 @@ load_store_indexing = PatternMatcher([
 def expand_index(buf:UOp, vec:UOp):
   if getenv("UNSAFE_DISABLE_MASK", 0): vec = vec.get_idx()
   # generate the individual indexes
-  midx = graph_rewrite(UOp.sink(*[buf.index(vec.gep(i), ptr=True) for i in range(vec.dtype.count)]),
-                       symbolic+load_store_indexing, name=f"index_buf_{buf.arg}")
+  return UOp(Ops.VECTORIZE, buf.dtype, tuple(buf.index(vec.gep(i), ptr=True) for i in range(vec.dtype.count)))
+
+def fold_expanded_index(midx:UOp):
+  buf = midx.src[0].src[0]
+  if not all(s.src[0] is buf for s in midx.src): return None
+  if not all(isinstance(s.dtype, PtrDType) for s in midx.src): return None
+
   # extract all the relevant offsets
   offsets_rootsrc: defaultdict[Any, dict[int, list[int]]] = defaultdict(dict)
-  for i in range(vec.dtype.count):
+  for i in range(len(midx.src)):
     idx: Any = midx.src[i].src[1].get_idx()
     if idx.op is Ops.ADD and idx.src[1].op is Ops.CONST: root_src, arg = idx.src[0], idx.src[1].arg
     elif idx.op is Ops.ADD and idx.src[0].op is Ops.CONST: root_src, arg = idx.src[1], idx.src[0].arg
@@ -76,7 +80,7 @@ def expand_index(buf:UOp, vec:UOp):
 
   # then rewrite everything we can into groups
   ret = []
-  idxs: list[int|None] = [None]*vec.dtype.count
+  idxs: list[int|None] = [None]*len(midx.src)
   global_offset = 0
   for offsets in offsets_rootsrc.values():
     grouped_offsets = [[x for _,x in group] for _,group in itertools.groupby(enumerate(sorted(offsets.keys())), lambda x: x[1]-x[0])]
@@ -114,16 +118,17 @@ def gep_on_store(gep:UOp, st:UOp, sto:UOp):
 
 load_store_folding = PatternMatcher([
   (UPat(Ops.INDEX, src=(UPat(Ops.VECTORIZE, src=UPat(GroupOp.Defines).or_after(name="buf")), UPat.var("vec"))), expand_index),
+  (UPat(Ops.VECTORIZE, src=UPat(Ops.INDEX), name="midx"), fold_expanded_index),
   # GEP after LOAD
   (UPat(Ops.LOAD, src=(UPat(Ops.GEP, name="gep"),), name="ld", allow_any_len=True),
    lambda gep, ld: ld.replace(dtype=ld.dtype.scalar().vec(gep.dtype.count), src=(gep.src[0],)+ld.src[1:]).gep(gep.arg)),
   # GEP on data of STORE
-  (UPat(Ops.STORE, src=(UPat(Ops.GEP, name="gep"), UPat.var("st")), allow_any_len=True, name="sto"), gep_on_store),
+  (UPat(Ops.STORE, src=(UPat(Ops.GEP, name="gep"), UPat.var("st")), name="sto"), gep_on_store),
   # put PTRCAT after LOAD
   (UPat(Ops.LOAD, src=(UPat(Ops.PTRCAT, name="cat"),), name="ld", allow_any_len=True),
    lambda cat,ld: UOp(Ops.CAT, cat.dtype.base.vec(cat.dtype.vcount), tuple(ld.replace(dtype=x.dtype.base, src=(x,)+ld.src[1:]) for x in cat.src))),
   # put PTRCAT after STORE
-  (UPat(Ops.STORE, src=(UPat(Ops.PTRCAT, name="cat"), UPat(name="data")), allow_any_len=True, name="sto"), cat_after_store),
+  (UPat(Ops.STORE, src=(UPat(Ops.PTRCAT, name="cat"), UPat(name="data")), name="sto"), cat_after_store),
 ])
 
 # *** correct load/store ***
@@ -192,7 +197,12 @@ def image_fixup(ls:UOp):
     oidx = UOp(Ops.VECTORIZE, dtypes.index.vec(2), ((x // 4) % image_dtype.shape[1], (x // (4*image_dtype.shape[1]))))
     idx = idx.replace(src=(idx.src[0], oidx.valid(valid)))
     vec_load = ls.replace(dtype=ls.dtype.vec(4), src=(idx,)+ls.src[1:])
-    return functools.reduce(lambda ret, i: (x % 4).ne(i).where(ret, vec_load.gep(i)), range(4), ls.const_like(float('nan')))
+    # image pixels have 4 channels (.xyzw), select channel based on x % 4
+    x_mod_4 = x % 4
+    def sel(ret, i): return x_mod_4.ne(i).where(ret, vec_load.gep(i))
+    # if x is non-negative, x % 4 is in [0, 3] and we can skip NAN fallback
+    if x_mod_4.vmin >= 0: return functools.reduce(sel, range(int(x_mod_4.vmin)+1, int(x_mod_4.vmax)+1), vec_load.gep(int(x_mod_4.vmin)))
+    return functools.reduce(sel, range(4), ls.const_like(float('nan')))
 
   return None
 
@@ -233,11 +243,17 @@ def no_vectorized_index(buf:UOp, cast:UOp, idx:UOp):
 
 def no_vectorized_index_broadcast(buf:UOp, cast:UOp, bcast:UOp, idx:UOp):
   cnt = cast.dtype.count
+  vcnt = cast.dtype.vcount
   precnt = bcast.dtype.vcount
-  input_gep = bcast.arg if bcast.op is Ops.GEP else ([0]*precnt)
-  gep_arg = tuple(flatten([range(precnt) for _ in range(cnt)]))
-  sum_arg = tuple(flatten([[i+y for y in input_gep] for i in range(cnt)]))
-  return buf.broadcast(cnt*precnt).index(idx.gep(gep_arg)*cnt+UOp.const(dtypes.index.vec(cnt*precnt), sum_arg), ptr=True)
+  # TODO: I have no idea *why* this is. I just change things until the tests pass. No AI, old school.
+  if bcast.op is Ops.GEP:
+    gep_arg = tuple(flatten([range(precnt) for _ in range(vcnt)]))
+    sum_arg = tuple(flatten([[i+y for y in bcast.arg] for i in range(vcnt)]))
+  else:
+    gep_arg = tuple(flatten([range(precnt) for _ in range(cnt)]))
+    sum_arg = tuple(flatten([[i]*precnt for i in range(cnt)]))
+  new_idx = idx.gep(gep_arg)*cnt + UOp.const(dtypes.index.vec(len(sum_arg)), sum_arg)
+  return buf.broadcast(cnt*precnt).index(new_idx, ptr=True)
 
 devectorize_buf_and_index = PatternMatcher([
   (UPat((Ops.DEFINE_LOCAL, Ops.DEFINE_REG), name="buf"), no_vectorized_buf),
@@ -269,10 +285,13 @@ pm_render = PatternMatcher([
     lambda x: x.replace(src=(x.src[0], x.const_like(0))+x.src[1:])
       if len(x.src) == 1 or x.src[1].op in (Ops.CUSTOM, Ops.STORE, Ops.BARRIER) else None),
   # Where after gated load becomes alt value
+  # NOTE: if a is CAST and a.src[0].dtype == l.dtype, use a.src[0] to avoid roundtrip cast (e.g. uint->float->uint)
   (UPat.var("c").where(UPat(Ops.LOAD, src=(UPat().index(UPat.var("idx"), UPat.var("c")).or_casted(),), allow_any_len=True, name="l").or_casted(),
-    UPat.var("a")), lambda c,idx,l,a: l.replace(src=(l.src[0], a.cast(l.dtype))+l.src[2:]).cast(a.dtype)),
+    UPat.var("a")), lambda c,idx,l,a: l.replace(src=(l.src[0], a.src[0] if a.op is Ops.CAST and a.src[0].dtype == l.dtype else a.cast(l.dtype))+
+                                                l.src[2:]).cast(a.dtype)),
   (UPat.var("c").where(UPat.var("a"), UPat(Ops.LOAD, src=(UPat().index(UPat.var("idx"), UPat.var("c").logical_not()).or_casted(),),
-    allow_any_len=True, name="l").or_casted()), lambda c,idx,l,a: l.replace(src=(l.src[0], a.cast(l.dtype))+l.src[2:]).cast(a.dtype)),
+    allow_any_len=True, name="l").or_casted()), lambda c,idx,l,a: l.replace(src=(l.src[0], a.src[0] if a.op is Ops.CAST and a.src[0].dtype == l.dtype
+                                                                                 else a.cast(l.dtype))+l.src[2:]).cast(a.dtype)),
 ])
 
 # *** Ops.REDUCE -> Ops.DEFINE_ACC ***
@@ -280,6 +299,8 @@ pm_render = PatternMatcher([
 @dataclass
 class ReduceContext:
   acc_num: int = 0
+  # track ENDs by range for merging parallel reduces
+  range_to_ends: dict[tuple[UOp, ...], list[UOp]] = field(default_factory=dict)
 
 def horizontal_reduce(inp:UOp, out_dtype:DType) -> list[UOp]:
   # if this has a horizontal reduction component, do that first
@@ -300,21 +321,28 @@ def reduce_to_acc(ctx:ReduceContext, red:UOp):
     input_ranges = tuple([x for x in topo if x.op is Ops.RANGE and x not in reduce_range and x not in ended_ranges])
     identity = red.const(red.dtype, identity_element(red.arg, red.dtype.scalar()))
     acc = UOp(Ops.DEFINE_REG, red.dtype.ptr(size=1, addrspace=AddrSpace.REG), arg=ctx.acc_num)
-    acc_init = acc.after(*input_ranges).index(UOp.const(dtypes.int, 0)).store(identity) if len(input_ranges) else \
-               acc.index(UOp.const(dtypes.int, 0)).store(identity)
+    acc_init = acc.after(*input_ranges).index(UOp.const(dtypes.int, 0)).store(identity)
     lst = [acc.after(acc_init, *reduce_range).index(UOp.const(dtypes.int, 0))] + lst  # put acc as the first element
     ctx.acc_num += 1
   ret = functools.reduce(lambda x,y: x.alu(red.arg, y), lst)
   if len(reduce_range) == 0: return ret
-  return acc.after(acc.index(UOp.const(dtypes.int, 0)).store(ret).end(*reduce_range)).index(UOp.const(dtypes.int, 0))
+  end = acc.index(UOp.const(dtypes.int, 0)).store(ret).end(*reduce_range)
+  ctx.range_to_ends.setdefault(reduce_range, []).append(end)
+  return acc.after(end).index(UOp.const(dtypes.int, 0))
+
+def merge_reduce_ends(ctx:ReduceContext, sink:UOp):
+  # merge ENDs that share the same range
+  subs = {e: UOp.group(*(e.src[0] for e in ends)).end(*r) for r, ends in ctx.range_to_ends.items() if len(ends) > 1 for e in ends}
+  return sink.substitute(subs) if subs else None
 
 pm_reduce = PatternMatcher([
-  # REDUCE -> DEFINE_ACC+ASSIGN
+  # REDUCE -> DEFINE_ACC+ASSIGN, then merge ENDs with same range
   (UPat(Ops.REDUCE, name="red"), reduce_to_acc),
+  (UPat(Ops.SINK, name="sink"), merge_reduce_ends),
   # tensor core built in accumulate
   (UPat(Ops.WMMA, name="wmma") + UPat.var("add"),
     lambda add, wmma: UOp(wmma.op, wmma.dtype, (wmma.src[0], wmma.src[1], wmma.src[2]+add), wmma.arg)),
-])+sym
+])
 
 # add loads
 
@@ -323,6 +351,6 @@ pm_add_loads = PatternMatcher([
   (UPat(Ops.INDEX, name="idx"), lambda idx: None if isinstance(idx.dtype, (PtrDType, ImageDType)) else
     idx.replace(dtype=idx.src[0].dtype).load(dtype=idx.dtype.base)),
   # remove loads from stores
-  (UPat(Ops.STORE, src=(UPat(Ops.LOAD),), allow_any_len=True, name="s"), lambda s: s.replace(src=(s.src[0].src[0],)+s.src[1:])),
+  (UPat(Ops.STORE, src=(UPat(Ops.LOAD), UPat(name="val")), name="s"), lambda s,val: s.replace(src=(s.src[0].src[0], val))),
 ])
 

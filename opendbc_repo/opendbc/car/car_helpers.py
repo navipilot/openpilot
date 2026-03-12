@@ -46,6 +46,61 @@ def _get_interface_names() -> dict[str, list[str]]:
 interface_names = _get_interface_names()
 interfaces = load_interfaces(interface_names)
 
+# Legacy StarPilot Bolt rename migration. Keep here to prevent force-fingerprint
+# params from selecting a removed platform name and crashing detection.
+LEGACY_FORCED_CANDIDATE_MAP = {
+  "CHEVROLET_BOLT_CC_2019_2021": "CHEVROLET_BOLT_CC_2018_2021",
+}
+
+
+def _normalize_forced_candidate(candidate: str | None) -> str | None:
+  if candidate is None:
+    return None
+  return LEGACY_FORCED_CANDIDATE_MAP.get(candidate, candidate)
+
+
+def _normalize_gm_bolt_candidate(candidate: str | None, fingerprints: dict[int, dict]) -> str | None:
+  """
+  Normalize ambiguous/mismatched Bolt candidates using robust PT message signatures.
+  This guards against occasional wrong variant selection causing persistent canError.
+  """
+  pt = fingerprints.get(0, {})
+  if not pt:
+    return candidate
+
+  msg_211_len = pt.get(211)  # 2 on Gen1 Bolt, 3 on 2022+ Bolt
+  msg_304_len = pt.get(304)  # 8 on 2017 Gen1, 1 on 2018-2021 Gen1
+  has_pedal = 513 in pt
+
+  # If detection failed entirely but the signature is clearly Bolt, recover to a sane default.
+  if candidate is None and 170 in pt and 188 in pt and msg_211_len in (2, 3):
+    if msg_211_len == 3:
+      return "CHEVROLET_BOLT_ACC_2022_2023_PEDAL" if has_pedal else "CHEVROLET_BOLT_ACC_2022_2023"
+    if msg_304_len == 8:
+      return "CHEVROLET_BOLT_CC_2017"
+    return "CHEVROLET_BOLT_CC_2018_2021"
+
+  if not isinstance(candidate, str) or not candidate.startswith("CHEVROLET_BOLT_"):
+    return candidate
+
+  # Gen split based on stable message lengths.
+  if msg_211_len == 2:
+    # Gen1 Bolt. Keep 2017 distinct by 0x130 length when available.
+    if msg_304_len == 8:
+      return "CHEVROLET_BOLT_CC_2017"
+    return "CHEVROLET_BOLT_CC_2018_2021"
+
+  if msg_211_len == 3:
+    # 2022+ Bolt family. Preserve pedal path when seen on bus.
+    if has_pedal:
+      return "CHEVROLET_BOLT_ACC_2022_2023_PEDAL"
+    # Preserve CC-specific 2022 path if already selected; otherwise default ACC variant.
+    if candidate == "CHEVROLET_BOLT_CC_2022_2023":
+      return candidate
+    return "CHEVROLET_BOLT_ACC_2022_2023"
+
+  return candidate
+
 
 def can_fingerprint(can_recv: CanRecvCallable) -> tuple[str | None, dict[int, dict]]:
   finger = gen_empty_fingerprint()
@@ -159,10 +214,21 @@ def fingerprint(can_recv: CanRecvCallable, can_send: CanSendCallable, set_obd_mu
 def get_car(can_recv: CanRecvCallable, can_send: CanSendCallable, set_obd_multiplexing: ObdCallback, alpha_long_allowed: bool,
             is_release: bool, params: Params, num_pandas: int = 1, cached_params: CarParamsT | None = None, frogpilot_toggles: SimpleNamespace = None):
   candidate, fingerprints, vin, car_fw, source, exact_match = fingerprint(can_recv, can_send, set_obd_multiplexing, num_pandas, cached_params)
+  candidate = _normalize_gm_bolt_candidate(candidate, fingerprints)
+  candidate = _normalize_forced_candidate(candidate)
+  fingerprinted_candidate = candidate
 
   if candidate is None or frogpilot_toggles.force_fingerprint:
     if frogpilot_toggles.force_fingerprint:
-      candidate = frogpilot_toggles.car_model
+      forced_candidate = _normalize_forced_candidate(frogpilot_toggles.car_model)
+      candidate = forced_candidate
+      if candidate not in interfaces and fingerprinted_candidate in interfaces:
+        carlog.error({
+          "event": "forced fingerprint unavailable; using live candidate",
+          "forced_candidate": candidate,
+          "live_candidate": fingerprinted_candidate,
+        })
+        candidate = fingerprinted_candidate
     else:
       carlog.error({"event": "car doesn't match any fingerprints", "fingerprints": repr(fingerprints)})
       candidate = "MOCK"
@@ -172,6 +238,17 @@ def get_car(can_recv: CanRecvCallable, can_send: CanSendCallable, set_obd_multip
 
   if frogpilot_toggles.block_user:
     candidate = "MOCK"
+
+  # Legacy branch migration guard: normalize stale platform names from any source
+  # (forced params, cached CarParams, fixed fingerprint env) before interface lookup.
+  candidate = _normalize_forced_candidate(candidate)
+  if candidate not in interfaces and fingerprinted_candidate in interfaces:
+    carlog.error({
+      "event": "normalized candidate unavailable; using live candidate",
+      "candidate": candidate,
+      "live_candidate": fingerprinted_candidate,
+    })
+    candidate = fingerprinted_candidate
 
   CarInterface = interfaces[candidate]
   CP: CarParams = CarInterface.get_params(candidate, fingerprints, car_fw, alpha_long_allowed, is_release, docs=False, frogpilot_toggles=frogpilot_toggles)

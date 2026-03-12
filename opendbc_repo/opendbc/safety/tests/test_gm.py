@@ -5,7 +5,7 @@ from opendbc.car.gm.values import GMSafetyFlags
 from opendbc.car.structs import CarParams
 from opendbc.safety.tests.libsafety import libsafety_py
 import opendbc.safety.tests.common as common
-from opendbc.safety.tests.common import CANPackerSafety
+from opendbc.safety.tests.common import CANPackerSafety, CANPackerPanda
 
 
 class Buttons:
@@ -149,7 +149,7 @@ class TestGmEVSafetyBase(TestGmSafetyBase):
 
 
 class TestGmAscmSafety(GmLongitudinalBase, TestGmSafetyBase):
-  TX_MSGS = [[0x180, 0], [0x409, 0], [0x40A, 0], [0x2CB, 0], [0x370, 0],  # pt bus
+  TX_MSGS = [[0x180, 0], [0x409, 0], [0x40A, 0], [0x2CB, 0], [0x370, 0], [0x200, 0], [0x1E1, 0], [0xBD, 0], [0x1F5, 0],  # pt bus
              [0xA1, 1], [0x306, 1], [0x308, 1], [0x310, 1],  # obs bus
              [0x315, 2]]  # ch bus
   FWD_BLACKLISTED_ADDRS: dict[int, list[int]] = {}
@@ -180,8 +180,8 @@ class TestGmCameraSafetyBase(TestGmSafetyBase):
 
 
 class TestGmCameraSafety(TestGmCameraSafetyBase):
-  TX_MSGS = [[0x180, 0],  # pt bus
-             [0x184, 2]]  # camera bus
+  TX_MSGS = [[0x180, 0], [0x370, 0], [0x200, 0], [0x1E1, 0], [0x3D1, 0], [0xBD, 0], [0x1F5, 0],  # pt bus
+             [0x1E1, 2], [0x184, 2]]  # camera bus
   FWD_BLACKLISTED_ADDRS = {2: [0x180], 0: [0x184]}  # block LKAS message and PSCMStatus
   BUTTONS_BUS = 2  # tx only
 
@@ -212,7 +212,7 @@ class TestGmCameraEVSafety(TestGmCameraSafety, TestGmEVSafetyBase):
 
 
 class TestGmCameraLongitudinalSafety(GmLongitudinalBase, TestGmCameraSafetyBase):
-  TX_MSGS = [[0x180, 0], [0x315, 0], [0x2CB, 0], [0x370, 0],  # pt bus
+  TX_MSGS = [[0x180, 0], [0x315, 0], [0x2CB, 0], [0x370, 0], [0x200, 0], [0x1E1, 0], [0x3D1, 0], [0xBD, 0], [0x1F5, 0],  # pt bus
              [0x184, 2]]  # camera bus
   FWD_BLACKLISTED_ADDRS = {2: [0x180, 0x2CB, 0x370, 0x315], 0: [0x184]}  # block LKAS, ACC messages and PSCMStatus
   RELAY_MALFUNCTION_ADDRS = {0: (0x180, 0x2CB, 0x370, 0x315), 2: (0x184,)}
@@ -313,7 +313,7 @@ class TestGmInterceptorSafety(common.GasInterceptorSafetyTest, TestGmCameraSafet
 
 
 class TestGmCcLongitudinalSafety(TestGmCameraSafety):
-  TX_MSGS = [[0x180, 0], [0x1E1, 0], [0x184, 2]]
+  TX_MSGS = [[0x180, 0], [0x370, 0], [0x1E1, 0], [0x3D1, 0], [0xBD, 0], [0x1F5, 0], [0x184, 2], [0x1E1, 2]]
   FWD_BLACKLISTED_ADDRS = {2: [0x180], 0: [0x184]}  # block LKAS message and PSCMStatus
   BUTTONS_BUS = 0  # tx only
 

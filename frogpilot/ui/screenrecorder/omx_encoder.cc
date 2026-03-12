@@ -1,5 +1,7 @@
 #include "frogpilot/ui/screenrecorder/omx_encoder.h"
 
+#if defined(QCOM2) && !defined(__APPLE__)
+
 #include <algorithm>
 #include <cassert>
 #include <cstdio>
@@ -426,3 +428,5 @@ OmxEncoder::~OmxEncoder() {
   OMX_FreeHandle(handle);
   OMX_Deinit();
 }
+
+#endif

@@ -177,6 +177,8 @@ class Car:
 
     if self.frogpilot_toggles.always_on_lateral:
       self.FPCP.alternativeExperience |= ALTERNATIVE_EXPERIENCE.ALWAYS_ON_LATERAL
+    if getattr(self.frogpilot_toggles, "remap_cancel_to_distance", False):
+      self.FPCP.alternativeExperience |= ALTERNATIVE_EXPERIENCE.GM_REMAP_CANCEL_TO_DISTANCE
 
     fpcp_bytes = self.FPCP.to_bytes()
     self.params.put("FrogPilotCarParams", fpcp_bytes)

@@ -31,16 +31,47 @@ from openpilot.selfdrive.modeld.constants import ModelConstants, Plan
 from openpilot.selfdrive.modeld.models.commonmodel_pyx import DrivingModelFrame, CLContext
 from openpilot.selfdrive.modeld.runners.tinygrad_helpers import qcom_tensor_from_opencl_address
 
-from openpilot.frogpilot.common.frogpilot_variables import get_frogpilot_toggles
+from openpilot.frogpilot.common.frogpilot_variables import MODELS_PATH, get_frogpilot_toggles
 
 
 PROCESS_NAME = "selfdrive.modeld.modeld"
 SEND_RAW_PRED = os.getenv('SEND_RAW_PRED')
 
-VISION_PKL_PATH = Path(__file__).parent / 'models/driving_vision_tinygrad.pkl'
-POLICY_PKL_PATH = Path(__file__).parent / 'models/driving_policy_tinygrad.pkl'
-VISION_METADATA_PATH = Path(__file__).parent / 'models/driving_vision_metadata.pkl'
-POLICY_METADATA_PATH = Path(__file__).parent / 'models/driving_policy_metadata.pkl'
+BUILTIN_MODEL_DIR = Path(__file__).parent / "models"
+BUILTIN_VISION_PKL_PATH = BUILTIN_MODEL_DIR / "driving_vision_tinygrad.pkl"
+BUILTIN_POLICY_PKL_PATH = BUILTIN_MODEL_DIR / "driving_policy_tinygrad.pkl"
+BUILTIN_VISION_METADATA_PATH = BUILTIN_MODEL_DIR / "driving_vision_metadata.pkl"
+BUILTIN_POLICY_METADATA_PATH = BUILTIN_MODEL_DIR / "driving_policy_metadata.pkl"
+
+
+def _decode_param(value) -> str:
+  if isinstance(value, bytes):
+    return value.decode("utf-8")
+  return str(value or "")
+
+
+def _resolve_model_paths(params: Params) -> tuple[str, dict[str, Path]]:
+  model_key = _decode_param(params.get("DrivingModel")).strip()
+  candidates = [model_key] if model_key else []
+  if model_key.endswith("_default"):
+    candidates.append(model_key[:-8])
+
+  for candidate in candidates:
+    files = {
+      "vision_pkl": MODELS_PATH / f"{candidate}_driving_vision_tinygrad.pkl",
+      "policy_pkl": MODELS_PATH / f"{candidate}_driving_policy_tinygrad.pkl",
+      "vision_meta": MODELS_PATH / f"{candidate}_driving_vision_metadata.pkl",
+      "policy_meta": MODELS_PATH / f"{candidate}_driving_policy_metadata.pkl",
+    }
+    if all(path.is_file() for path in files.values()):
+      return candidate, files
+
+  return "builtin", {
+    "vision_pkl": BUILTIN_VISION_PKL_PATH,
+    "policy_pkl": BUILTIN_POLICY_PKL_PATH,
+    "vision_meta": BUILTIN_VISION_METADATA_PATH,
+    "policy_meta": BUILTIN_POLICY_METADATA_PATH,
+  }
 
 LAT_SMOOTH_SECONDS = 0.0
 LONG_SMOOTH_SECONDS = 0.3
@@ -143,15 +174,15 @@ class ModelState:
   output: np.ndarray
   prev_desire: np.ndarray  # for tracking the rising edge of the pulse
 
-  def __init__(self, context: CLContext):
-    with open(VISION_METADATA_PATH, 'rb') as f:
+  def __init__(self, context: CLContext, model_paths: dict[str, Path]):
+    with open(model_paths["vision_meta"], 'rb') as f:
       vision_metadata = pickle.load(f)
       self.vision_input_shapes =  vision_metadata['input_shapes']
       self.vision_input_names = list(self.vision_input_shapes.keys())
       self.vision_output_slices = vision_metadata['output_slices']
       vision_output_size = vision_metadata['output_shapes']['outputs'][1]
 
-    with open(POLICY_METADATA_PATH, 'rb') as f:
+    with open(model_paths["policy_meta"], 'rb') as f:
       policy_metadata = pickle.load(f)
       self.policy_input_shapes =  policy_metadata['input_shapes']
       self.policy_output_slices = policy_metadata['output_slices']
@@ -174,10 +205,10 @@ class ModelState:
     self.policy_output = np.zeros(policy_output_size, dtype=np.float32)
     self.parser = Parser()
 
-    with open(VISION_PKL_PATH, "rb") as f:
+    with open(model_paths["vision_pkl"], "rb") as f:
       self.vision_run = pickle.load(f)
 
-    with open(POLICY_PKL_PATH, "rb") as f:
+    with open(model_paths["policy_pkl"], "rb") as f:
       self.policy_run = pickle.load(f)
 
   def slice_outputs(self, model_outputs: np.ndarray, output_slices: dict[str, slice]) -> dict[str, np.ndarray]:
@@ -238,8 +269,11 @@ def main(demo=False):
   st = time.monotonic()
   cloudlog.warning("setting up CL context")
   cl_context = CLContext()
+  params = Params()
+  selected_model_key, model_paths = _resolve_model_paths(params)
   cloudlog.warning("CL context ready; loading model")
-  model = ModelState(cl_context)
+  model = ModelState(cl_context, model_paths)
+  cloudlog.warning(f"selected model source: {selected_model_key}")
   cloudlog.warning(f"models loaded in {time.monotonic() - st:.1f}s, modeld starting")
 
   # visionipc clients
@@ -270,7 +304,6 @@ def main(demo=False):
   sm = SubMaster(["deviceState", "carState", "roadCameraState", "liveCalibration", "driverMonitoringState", "carControl", "liveDelay"])
 
   publish_state = PublishState()
-  params = Params()
 
   # setup filter to track dropped frames
   frame_dropped_filter = FirstOrderFilter(0., 10., 1. / ModelConstants.MODEL_RUN_FREQ)

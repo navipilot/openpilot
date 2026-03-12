@@ -5,6 +5,7 @@ import math
 import numpy as np
 import os
 import requests
+import shutil
 import subprocess
 import threading
 import time
@@ -13,8 +14,6 @@ import zipfile
 from functools import cache
 from pathlib import Path
 
-import openpilot.system.sentry as sentry
-
 from cereal import log, messaging
 from opendbc.can.parser import CANParser
 from opendbc.car.toyota.carcontroller import LOCK_CMD
@@ -22,9 +21,18 @@ from openpilot.common.params import Params
 from openpilot.common.realtime import DT_DMON, DT_HW
 from openpilot.system.hardware import HARDWARE
 from openpilot.system.version import get_build_metadata
-from panda import Panda
+from panda import Panda, FW_PATH
 
 from openpilot.frogpilot.common.frogpilot_variables import EARTH_RADIUS, FROGPILOT_API, FROGS_GO_MOO_PATH, KONIK_PATH
+
+
+def capture_exception(exception):
+  try:
+    import openpilot.system.sentry as sentry
+    sentry.capture_exception(exception)
+  except Exception:
+    pass
+
 
 class ThreadManager:
   def __init__(self):
@@ -52,7 +60,7 @@ class ThreadManager:
         except Exception as exception:
           print(f"Error in thread '{name}': {exception}")
           if report:
-            sentry.capture_exception(exception)
+            capture_exception(exception)
 
       thread = threading.Thread(args=args, daemon=True, target=wrapped_target)
       thread.start()
@@ -141,9 +149,17 @@ def contains_event_type(events, frogpilot_events, *event_types):
 def delete_file(path, print_error=True, report=True):
   path = Path(path)
   if path.is_file() or path.is_symlink():
-    run_cmd(["sudo", "rm", "-f", str(path)], f"Deleted file: {path}", f"Failed to delete file: {path}", report=report)
+    try:
+      path.unlink(missing_ok=True)
+      print(f"Deleted file: {path}")
+    except Exception:
+      run_cmd(["sudo", "rm", "-f", str(path)], f"Deleted file: {path}", f"Failed to delete file: {path}", report=report)
   elif path.is_dir():
-    run_cmd(["sudo", "rm", "-rf", str(path)], f"Deleted directory: {path}", f"Failed to delete directory: {path}", report=report)
+    try:
+      shutil.rmtree(path)
+      print(f"Deleted directory: {path}")
+    except Exception:
+      run_cmd(["sudo", "rm", "-rf", str(path)], f"Deleted directory: {path}", f"Failed to delete directory: {path}", report=report)
   elif print_error:
     print(f"File not found: {path}")
 
@@ -158,14 +174,29 @@ def extract_zip(zip_file, extract_path):
 
 
 def flash_panda(params_memory):
+  params = Params()
+  try:
+    remote_start = params.get_bool("RemoteStartBootsComma")
+  except Exception:
+    remote_start = False
+
   for serial in Panda.list():
     try:
       with Panda(serial=serial) as panda:
         print(f"Flashing Panda {serial}")
-        panda.flash()
+        flash_fn = None
+        if remote_start:
+          app_fn = panda.get_mcu_type().config.app_fn
+          remote_fn = "panda_h7_remote.bin.signed" if app_fn == "panda_h7.bin.signed" else "panda_remote.bin.signed"
+          candidate = os.path.join(FW_PATH, remote_fn)
+          if os.path.isfile(candidate):
+            flash_fn = candidate
+          else:
+            print(f"Remote-start panda firmware missing: {candidate}. Falling back to default firmware.")
+        panda.flash(fn=flash_fn)
     except Exception as exception:
       print(f"Failed to flash Panda {serial}: {exception}")
-      sentry.capture_exception(exception)
+      capture_exception(exception)
 
   params_memory.remove("FlashPanda")
 
@@ -287,13 +318,13 @@ def run_cmd(cmd, success_message, fail_message, env=None, report=True):
     print(f"Command failed with error: {exception.stderr}")
     print(fail_message)
     if report:
-      sentry.capture_exception(exception.stderr)
+      capture_exception(exception.stderr)
     return None
   except Exception as exception:
     print(f"Unexpected error occurred: {exception}")
     print(fail_message)
     if report:
-      sentry.capture_exception(exception)
+      capture_exception(exception)
     return None
 
 
@@ -314,7 +345,8 @@ def update_json_file(path, data):
 
 @cache
 def use_konik_server():
-  return KONIK_PATH.is_file()
+  # Prefer the persistent toggle over volatile cache files.
+  return Params().get_bool("UseKonikServer")
 
 
 def wait_for_no_driver(params, sm, door_checks=False, time_threshold=60):

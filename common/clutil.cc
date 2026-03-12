@@ -53,6 +53,37 @@ void cl_print_build_errors(cl_program program, cl_device_id device) {
   LOGE("build failed; status=%d, log: %s", status, log.c_str());
 }
 
+std::string resolve_program_path(const char *path) {
+  std::string resolved_path(path);
+  if (util::file_exists(resolved_path)) {
+    return resolved_path;
+  }
+
+  const std::string basedir = util::getenv("BASEDIR", "");
+  if (!basedir.empty()) {
+    // Handle repository-relative paths, e.g. "selfdrive/modeld/transforms/transform.cl".
+    if (!resolved_path.empty() && resolved_path.front() != '/') {
+      const std::string candidate = basedir + "/" + resolved_path;
+      if (util::file_exists(candidate)) {
+        return candidate;
+      }
+    }
+
+    // Recover from build-path-embedded absolute paths like "/work/selfdrive/...".
+    for (const char *marker : {"/selfdrive/", "/frogpilot/", "/common/"}) {
+      if (const size_t idx = resolved_path.find(marker); idx != std::string::npos) {
+        const std::string candidate = basedir + "/" + resolved_path.substr(idx + 1);
+        if (util::file_exists(candidate)) {
+          LOGW("OpenCL source path remapped: %s -> %s", resolved_path.c_str(), candidate.c_str());
+          return candidate;
+        }
+      }
+    }
+  }
+
+  return resolved_path;
+}
+
 }  // namespace
 
 cl_device_id cl_get_device_id(cl_device_type device_type) {
@@ -84,7 +115,7 @@ void cl_release_context(cl_context context) {
 }
 
 cl_program cl_program_from_file(cl_context ctx, cl_device_id device_id, const char* path, const char* args) {
-  return cl_program_from_source(ctx, device_id, util::read_file(path), args);
+  return cl_program_from_source(ctx, device_id, util::read_file(resolve_program_path(path)), args);
 }
 
 cl_program cl_program_from_source(cl_context ctx, cl_device_id device_id, const std::string& src, const char* args) {

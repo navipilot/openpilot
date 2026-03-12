@@ -51,7 +51,9 @@ if platform.system() == "Darwin":
   """
 
 BURN_IN_MODE = "BURN_IN" in os.environ
-BURN_IN_VERTEX_SHADER = GL_VERSION + """
+BURN_IN_VERTEX_SHADER = (
+  GL_VERSION
+  + """
 in vec3 vertexPosition;
 in vec2 vertexTexCoord;
 uniform mat4 mvp;
@@ -61,7 +63,10 @@ void main() {
   gl_Position = mvp * vec4(vertexPosition, 1.0);
 }
 """
-BURN_IN_FRAGMENT_SHADER = GL_VERSION + """
+)
+BURN_IN_FRAGMENT_SHADER = (
+  GL_VERSION
+  + """
 in vec2 fragTexCoord;
 uniform sampler2D texture0;
 out vec4 fragColor;
@@ -77,6 +82,7 @@ void main() {
   fragColor = vec4(gradient, sampled.a);
 }
 """
+)
 
 DEFAULT_TEXT_SIZE = 60
 DEFAULT_TEXT_COLOR = rl.Color(255, 255, 255, int(255 * 0.9))
@@ -254,9 +260,11 @@ class GuiApplication:
 
   def init_window(self, title: str, fps: int = _DEFAULT_FPS):
     with self._startup_profile_context():
+
       def _close(sig, frame):
         self.close()
         sys.exit(0)
+
       signal.signal(signal.SIGINT, _close)
       atexit.register(self.close)
 
@@ -280,19 +288,29 @@ class GuiApplication:
       if RECORD:
         ffmpeg_args = [
           'ffmpeg',
-          '-v', 'warning',          # Reduce ffmpeg log spam
-          '-stats',                 # Show encoding progress
-          '-f', 'rawvideo',         # Input format
-          '-pix_fmt', 'rgba',       # Input pixel format
-          '-s', f'{self._width}x{self._height}',  # Input resolution
-          '-r', str(fps),           # Input frame rate
-          '-i', 'pipe:0',           # Input from stdin
-          '-vf', 'vflip,format=yuv420p',  # Flip vertically and convert rgba to yuv420p
-          '-c:v', 'libx264',        # Video codec
-          '-preset', 'ultrafast',   # Encoding speed
-          '-y',                     # Overwrite existing file
-          '-f', 'mp4',              # Output format
-          RECORD_OUTPUT,            # Output file path
+          '-v',
+          'warning',  # Reduce ffmpeg log spam
+          '-stats',  # Show encoding progress
+          '-f',
+          'rawvideo',  # Input format
+          '-pix_fmt',
+          'rgba',  # Input pixel format
+          '-s',
+          f'{self._width}x{self._height}',  # Input resolution
+          '-r',
+          str(fps),  # Input frame rate
+          '-i',
+          'pipe:0',  # Input from stdin
+          '-vf',
+          'vflip,format=yuv420p',  # Flip vertically and convert rgba to yuv420p
+          '-c:v',
+          'libx264',  # Video codec
+          '-preset',
+          'ultrafast',  # Encoding speed
+          '-y',  # Overwrite existing file
+          '-f',
+          'mp4',  # Output format
+          RECORD_OUTPUT,  # Output file path
         ]
         self._ffmpeg_proc = subprocess.Popen(ffmpeg_args, stdin=subprocess.PIPE)
 
@@ -354,8 +372,7 @@ class GuiApplication:
   def set_should_render(self, should_render: bool):
     self._should_render = should_render
 
-  def texture(self, asset_path: str, width: int | None = None, height: int | None = None,
-              alpha_premultiply=False, keep_aspect_ratio=True):
+  def texture(self, asset_path: str, width: int | None = None, height: int | None = None, alpha_premultiply=False, keep_aspect_ratio=True):
     cache_key = f"{asset_path}_{width}_{height}_{alpha_premultiply}{keep_aspect_ratio}"
     if cache_key in self._textures:
       return self._textures[cache_key]
@@ -366,10 +383,27 @@ class GuiApplication:
     self._textures[cache_key] = texture_obj
     return texture_obj
 
-  def _load_image_from_path(self, image_path: str, width: int | None = None, height: int | None = None,
-                            alpha_premultiply: bool = False, keep_aspect_ratio: bool = True) -> rl.Image:
+  def starpilot_texture(self, asset_path: str, width: int | None = None, height: int | None = None, alpha_premultiply=False, keep_aspect_ratio=True):
+    """Load a texture from the FrogPilot assets folder."""
+    cache_key = f"starpilot_{asset_path}_{width}_{height}_{alpha_premultiply}{keep_aspect_ratio}"
+    if cache_key in self._textures:
+      return self._textures[cache_key]
+
+    frogpilot_assets = files("openpilot.frogpilot").joinpath("assets")
+    with as_file(frogpilot_assets.joinpath(asset_path)) as fspath:
+      image_obj = self._load_image_from_path(fspath.as_posix(), width, height, alpha_premultiply, keep_aspect_ratio)
+      texture_obj = self._load_texture_from_image(image_obj)
+    self._textures[cache_key] = texture_obj
+    return texture_obj
+
+  def _load_image_from_path(
+    self, image_path: str, width: int | None = None, height: int | None = None, alpha_premultiply: bool = False, keep_aspect_ratio: bool = True
+  ) -> rl.Image:
     """Load and resize an image, storing it for later automatic unloading."""
     image = rl.load_image(image_path)
+
+    if image.width == 0 or image.height == 0:
+      return image
 
     if alpha_premultiply:
       rl.image_alpha_premultiply(image)
@@ -458,6 +492,7 @@ class GuiApplication:
     try:
       if self._profile_render_frames > 0:
         import cProfile
+
         self._render_profiler = cProfile.Profile()
         self._render_profile_start_time = time.monotonic()
         self._render_profiler.enable()
@@ -577,14 +612,33 @@ class GuiApplication:
       return False
 
   def _load_fonts(self):
-    for font_weight_file in FontWeight:
-      with as_file(FONT_DIR) as fspath:
+    self._ensure_font_atlases()
+    with as_file(FONT_DIR) as fspath:
+      for font_weight_file in FontWeight:
         fnt_path = fspath / font_weight_file
         font = rl.load_font(fnt_path.as_posix())
         if font_weight_file != FontWeight.UNIFONT:
           rl.set_texture_filter(font.texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
         self._fonts[font_weight_file] = font
     rl.gui_set_font(self._fonts[FontWeight.NORMAL])
+
+  def _ensure_font_atlases(self):
+    with as_file(FONT_DIR) as fspath:
+      required_fonts = [fspath / fw.value for fw in FontWeight]
+      missing_fonts = [font_path.name for font_path in required_fonts if not font_path.exists()]
+      if not missing_fonts:
+        return
+
+      process_script = fspath / "process.py"
+      if not process_script.exists():
+        cloudlog.warning(f"Missing font atlases {missing_fonts}, but no generator found at {process_script}")
+        return
+
+      cloudlog.warning(f"Generating missing font atlases: {missing_fonts}")
+      try:
+        subprocess.run([sys.executable, process_script.as_posix()], check=True, cwd=fspath.as_posix())
+      except Exception:
+        cloudlog.exception("Failed to generate font atlases")
 
   def _set_styles(self):
     rl.gui_set_style(rl.GuiControl.DEFAULT, rl.GuiControlProperty.BORDER_WIDTH, 0)
@@ -709,11 +763,11 @@ class GuiApplication:
     green = "\033[92m"
     reset = "\033[0m"
     print(f"\n{green}Rendered {self._frame} frames in {elapsed_ms:.1f} ms{reset}")
-    print(f"{green}Average frame time: {avg_frame_time:.2f} ms ({1000/avg_frame_time:.1f} FPS){reset}")
+    print(f"{green}Average frame time: {avg_frame_time:.2f} ms ({1000 / avg_frame_time:.1f} FPS){reset}")
     sys.exit(0)
 
   def _calculate_auto_scale(self) -> float:
-     # Create temporary window to query monitor info
+    # Create temporary window to query monitor info
     rl.init_window(1, 1, "")
     w, h = rl.get_monitor_width(0), rl.get_monitor_height(0)
     rl.close_window()

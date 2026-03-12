@@ -32,6 +32,7 @@ class UIState:
 
   def _initialize(self):
     self.params = Params()
+    self.params_memory = Params(memory=True)
     self.sm = messaging.SubMaster(
       [
         "modelV2",
@@ -55,6 +56,7 @@ class UIState:
         "carControl",
         "liveParameters",
         "rawAudioData",
+        "frogpilotCarState",
       ]
     )
 
@@ -80,6 +82,9 @@ class UIState:
     self.CP: car.CarParams | None = None
     self.light_sensor: float = -1.0
     self._param_update_time: float = 0.0
+    self.always_on_lateral_active: bool = False
+    self.traffic_mode_enabled: bool = False
+    self.conditional_status: int = 0
 
     # Callbacks
     self._offroad_transition_callbacks: list[Callable[[], None]] = []
@@ -133,14 +138,26 @@ class UIState:
     elif not self.sm.alive["wideRoadCameraState"] or not self.sm.valid["wideRoadCameraState"]:
       self.light_sensor = -1
 
-    # Update started state
-    self.started = self.sm["deviceState"].started and self.ignition
+    started = self.sm["deviceState"].started and self.ignition
+    started |= self.params.get_bool("ForceOnroad")
+    started &= not self.params.get_bool("ForceOffroad")
+    self.started = started
 
     # Update recording audio state
     self.recording_audio = self.params.get_bool("RecordAudio") and self.started
 
     self.is_metric = self.params.get_bool("IsMetric")
     self.always_on_dm = self.params.get_bool("AlwaysOnDM")
+    if self.sm.valid.get("frogpilotCarState", False):
+      frogpilot_car_state = self.sm["frogpilotCarState"]
+      self.always_on_lateral_active = (not self.sm["selfdriveState"].enabled and
+                                       frogpilot_car_state.alwaysOnLateralEnabled)
+      self.traffic_mode_enabled = frogpilot_car_state.trafficModeEnabled
+    else:
+      self.always_on_lateral_active = False
+      self.traffic_mode_enabled = False
+
+    self.conditional_status = self.params_memory.get_int("CEStatus", default=0) if self.started else 0
 
   def _update_status(self) -> None:
     if self.started and self.sm.updated["selfdriveState"]:

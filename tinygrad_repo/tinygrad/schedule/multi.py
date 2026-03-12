@@ -1,7 +1,8 @@
 from typing import cast
-import functools, itertools, operator
-from tinygrad.helpers import all_same, all_int, prod, DEBUG, RING, getenv
-from tinygrad.uop.ops import Ops, UOp, sint, PatternMatcher, UPat, GroupOp, track_rewrites, graph_rewrite_map, graph_rewrite
+import functools, itertools
+from tinygrad.helpers import all_same, all_int, prod, DEBUG, RING, ALL2ALL, VIZ, getenv
+from tinygrad.uop.ops import Ops, UOp, sint, PatternMatcher, UPat, GroupOp, graph_rewrite_map, graph_rewrite
+from tinygrad.dtype import dtypes
 from tinygrad.device import Device
 
 # *** allreduce implementation ***
@@ -35,49 +36,53 @@ def handle_allreduce(buf:UOp, red:UOp) -> UOp|None:
   if not isinstance(buf.device, tuple): return None
   assert all_int(buf.shape), f"does not support symbolic shape {buf.shape}"
   n_lbs, shape, numel = len(buf.device), buf.shape, prod(buf.shape)
+
   # ring allreduce doesn't provide a benefit with only 2 nodes or where number of elements is less than 256k (empirically)
   # fallback to naive allreduce to save on kernel dispatch, chunking and reassembling chunks.
-  use_ring = (RING >= 2 or (n_lbs > 2 and numel > getenv("RING_ALLREDUCE_THRESHOLD", 256_000) and RING >= 1))
-  if DEBUG >= 2: print(f"{'RING ALLREDUCE' if use_ring else 'NAIVE ALLREDUCE'} {n_lbs}x{numel} | {buf.dtype}")
+  use_all2all = (ALL2ALL >= 2 or (n_lbs > 2 and numel > getenv("RING_ALLREDUCE_THRESHOLD", 256_000) and ALL2ALL >= 1))
+  use_ring = not use_all2all and (RING >= 2 or (n_lbs > 2 and numel > getenv("RING_ALLREDUCE_THRESHOLD", 256_000) and RING >= 1))
+  if DEBUG >= 2: print(f"{'ALL2ALL' if use_all2all else 'RING' if use_ring else 'NAIVE'} ALLREDUCE {n_lbs}x{numel} | {buf.dtype}")
 
   # contiguous before we copy it
   buf = buf.contiguous()
 
-  # copy to all devices. if you shrink later, that'll be handled
-  if not use_ring: return functools.reduce(lambda x,y: x.alu(red.arg, y),
-                                           [UOp(Ops.COPY, buf.dtype, (buf.mselect(i), red.src[1])) for i in range(len(buf.device))])
+  # naive: copy to all devices. if you shrink later, that'll be handled
+  if not use_ring and not use_all2all:
+    return functools.reduce(lambda x,y: x.alu(red.arg, y), [UOp(Ops.COPY, buf.dtype, (buf.mselect(i), red.src[1])) for i in range(n_lbs)])
 
-  # new ring reduce
+  # chunk data into n_lbs pieces
   factor = next((f for f in [32, 16, 8, 4, 2] if numel % f == 0), 1)
   base, left = (numel // factor) // n_lbs, (numel // factor) % n_lbs
-  chunk_sizes = [(base + 1) * factor] * left + [base * factor] * (n_lbs - left)
-  chunks = list(itertools.pairwise(itertools.accumulate(chunk_sizes, initial=0)))
+  chunks = list(itertools.pairwise(itertools.accumulate([(base + 1) * factor] * left + [base * factor] * (n_lbs - left), initial=0)))
 
-  # extract chunks and scatter-reduce
+  # reduce-scatter
   reduced_chunks = []
   for i,(s,e) in enumerate(chunks):
-    chunk = buf.reshape((numel,)).shrink(((s,e),))
-    reduced_chunk = chunk
-    for step in range(n_lbs-1):
-      src, dest = (i+step)%n_lbs, (i+step+1)%n_lbs
-      # copy the chunk from the src device to the dest (operating device), and select the chunk on the dest device
-      reduced_chunk = reduced_chunk.copy_to_device(buf.device[dest], src if isinstance(reduced_chunk.device, tuple) else None) \
-        .alu(red.arg, chunk.copy_to_device(buf.device[dest], dest))
-    reduced_chunks.append(reduced_chunk)
+    if use_all2all:
+      chunks_on_i = [buf.mselect(j).reshape((numel,)).shrink(((s,e),)).copy_to_device(buf.device[i]) for j in range(n_lbs)]
+      reduced_chunks.append(functools.reduce(lambda x,y: x.alu(red.arg, y), chunks_on_i))
+    else:
+      chunk, reduced = buf.reshape((numel,)).shrink(((s,e),)), buf.reshape((numel,)).shrink(((s,e),))
+      for step in range(n_lbs-1):
+        src, dest = (i+step)%n_lbs, (i+step+1)%n_lbs
+        cp = reduced.copy_to_device(buf.device[dest], src if isinstance(reduced.device, tuple) else None)
+        reduced = cp.alu(red.arg, chunk.copy_to_device(buf.device[dest], dest))
+      reduced_chunks.append(reduced)
 
   # allgather
   copied_chunks = []
-  for i,c in enumerate(reduced_chunks):
-    this_chunk: list[UOp|None] = [None] * len(buf.device)
-    this_chunk[(i+len(buf.device)-1)%n_lbs] = c
-    for step in range(n_lbs-1):
-      dest = (i+step)%n_lbs
-      this_chunk[dest] = c = c.copy_to_device(buf.device[dest])
-    copied_chunks.append(UOp(Ops.MSTACK, buf.dtype, tuple(cast(list[UOp], this_chunk))))
+  for i,rc in enumerate(reduced_chunks):
+    if isinstance(red.src[1].arg, str): copied_chunks.append(rc.copy_to_device(red.src[1].arg))
+    elif use_all2all: copied_chunks.append(UOp(Ops.MSTACK, buf.dtype, tuple(rc.copy_to_device(buf.device[j]) for j in range(n_lbs))))
+    else:
+      this_chunk: list[UOp|None] = [None] * n_lbs
+      this_chunk[(i+n_lbs-1)%n_lbs] = rc
+      for step in range(n_lbs-1):
+        this_chunk[(i+step)%n_lbs] = rc = rc.copy_to_device(buf.device[(i+step)%n_lbs])
+      copied_chunks.append(UOp(Ops.MSTACK, buf.dtype, tuple(cast(list[UOp], this_chunk))))
 
   # reassemble
-  pads = [((s,numel-e),) for s,e in chunks]
-  return functools.reduce(operator.add, [c.pad(pad) for pad,c in zip(pads, copied_chunks)]).reshape(shape)
+  return UOp.sum(*[c.pad(((s,numel-e),)) for (s,e),c in zip(chunks, copied_chunks)]).reshape(shape)
 
 # ***** multi rewrite MSELECT/MSTACK *****
 
@@ -89,12 +94,7 @@ def mstack_early_shrink(ms:UOp, shrink:UOp):
     return s.shrink(tuple(new_arg))
   for i, x in enumerate(ms.src):
     if x.op is Ops.COPY:
-      # if src device doesn't have a renderer, we have to view after the copy
-      # TODO: a way to understand this
-      if x.src[0].device in {"DISK", "NPY"}:
-        ret.append(apply_shrink(x, i))
-      else:
-        ret.append(apply_shrink(x.src[0], i).copy_to_device(x.device))
+      ret.append(apply_shrink(x.src[0], i).copy_to_device(x.device))
     else:
       ret.append(apply_shrink(x, i).contiguous())
   return ms.replace(src=tuple(ret))
@@ -198,7 +198,7 @@ def assign_multi(dest:UOp, src:UOp):
   return dest.src[0].assign(src.src[0]).multi(src.axis)
 
 def passthrough_multi(root:UOp, multi:UOp):
-  return UOp(root.op, root.dtype, (multi.src[0],), root.arg).multi(multi.axis)
+  return UOp(root.op, root.dtype, (multi.src[0],)+tuple(x.src[0] if x.op is Ops.MULTI else x for x in root.src[1:]), root.arg).multi(multi.axis)
 
 # NOTE: this is the same pattern as Ops.UNROLL
 multi_pm = PatternMatcher([
@@ -214,13 +214,19 @@ multi_pm = PatternMatcher([
   (UPat(Ops.COPY, src=(UPat(Ops.MULTI, name="multi"), UPat(Ops.DEVICE, name="device"))), copy_multi),
   (UPat(Ops.ALLREDUCE, src=(UPat(Ops.MULTI, name="multi"), UPat(Ops.DEVICE, name="device")), name="red"),
     lambda multi,device,red: multi.src[0].allreduce(red.arg, device).multi(axis=multi.axis)),
+  (UPat(Ops.CALL, src=(UPat(Ops.MULTI, name="multi"), ), name="root", allow_any_len=True), passthrough_multi),
+  # we just remove the MULTI from CALLs with dtypes.void and assume they are handled by the user for custom kernels
+  (UPat(Ops.CALL, dtype=dtypes.void, name="root", custom_early_reject=set([Ops.MULTI])), lambda root:
+    UOp(root.op, root.dtype, tuple(x.src[0] if x.op is Ops.MULTI else x for x in root.src), root.arg)),
   (UPat((Ops.CAST, Ops.BITCAST, Ops.CONTIGUOUS, Ops.DETACH, Ops.CONTIGUOUS_BACKWARD),
         src=(UPat(Ops.MULTI, name="multi"), ), name="root"), passthrough_multi),
+  # after CALL
+  (UPat(Ops.AFTER, src=(UPat(Ops.MULTI, name="multi"), UPat(Ops.CALL)), name="a"),
+    lambda multi,a: a.replace(src=(multi.src[0],)+a.src[1:]).multi(multi.axis)),
 ])+replace_allreduce
 
-@track_rewrites()
 def get_multi_map(big_sink:UOp) -> dict[UOp, UOp]:
-  if getenv("VIZ"): graph_rewrite(big_sink, PatternMatcher([]), name="View Multi AST")
+  if VIZ: graph_rewrite(big_sink, PatternMatcher([]), name="View Multi AST")
   ret = graph_rewrite_map(big_sink, multi_pm, name="multi_pm")
-  if getenv("VIZ"): graph_rewrite(ret[big_sink], PatternMatcher([]), name="View Post Multi AST")
+  if VIZ: graph_rewrite(ret[big_sink], PatternMatcher([]), name="View Post Multi AST")
   return ret

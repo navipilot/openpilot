@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import sys
+import os
 import numpy as np
 
 from openpilot.selfdrive.locationd.models.constants import ObservationKind
@@ -102,7 +103,13 @@ class PoseKalman(KalmanFilter):
 
   def __init__(self, generated_dir, max_rewind_age):
     dim_state, dim_state_err = PoseKalman.initial_x.shape[0], PoseKalman.initial_P.shape[0]
-    self.filter = EKF_sym_pyx(generated_dir, self.name, PoseKalman.Q, PoseKalman.initial_x, PoseKalman.initial_P,
+    ekf_name = self.name
+    # Compatibility fallback for installs that still carry the older `live` EKF artifacts.
+    if not os.path.exists(os.path.join(generated_dir, f"lib{ekf_name}.so")):
+      live_fallback = os.path.join(generated_dir, "liblive.so")
+      if os.path.exists(live_fallback):
+        ekf_name = "live"
+    self.filter = EKF_sym_pyx(generated_dir, ekf_name, PoseKalman.Q, PoseKalman.initial_x, PoseKalman.initial_P,
                               dim_state, dim_state_err, max_rewind_age=max_rewind_age)
 
 

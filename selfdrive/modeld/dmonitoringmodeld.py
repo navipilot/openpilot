@@ -3,7 +3,6 @@ import os
 from openpilot.system.hardware import TICI
 os.environ['DEV'] = 'QCOM' if TICI else 'CPU'
 from tinygrad.tensor import Tensor
-from tinygrad.dtype import dtypes
 import time
 import pickle
 import numpy as np
@@ -16,50 +15,109 @@ from openpilot.common.swaglog import cloudlog
 from openpilot.common.realtime import config_realtime_process
 from openpilot.common.transformations.model import dmonitoringmodel_intrinsics
 from openpilot.common.transformations.camera import _ar_ox_fisheye, _os_fisheye
-from openpilot.selfdrive.modeld.models.commonmodel_pyx import CLContext, MonitoringModelFrame
+from openpilot.system.camerad.cameras.nv12_info import get_nv12_info
+from openpilot.common.file_chunker import read_file_chunked
 from openpilot.selfdrive.modeld.parse_model_outputs import sigmoid, safe_exp
-from openpilot.selfdrive.modeld.runners.tinygrad_helpers import qcom_tensor_from_opencl_address
 
 PROCESS_NAME = "selfdrive.modeld.dmonitoringmodeld"
 SEND_RAW_PRED = os.getenv('SEND_RAW_PRED')
 MODEL_PKL_PATH = Path(__file__).parent / 'models/dmonitoring_model_tinygrad.pkl'
 METADATA_PATH = Path(__file__).parent / 'models/dmonitoring_model_metadata.pkl'
+MODELS_DIR = Path(__file__).parent / 'models'
 
 
 class ModelState:
   inputs: dict[str, np.ndarray]
   output: np.ndarray
 
-  def __init__(self, cl_ctx):
+  def __init__(self):
     with open(METADATA_PATH, 'rb') as f:
       model_metadata = pickle.load(f)
       self.input_shapes = model_metadata['input_shapes']
       self.output_slices = model_metadata['output_slices']
 
-    self.frame = MonitoringModelFrame(cl_ctx)
     self.numpy_inputs = {
       'calib': np.zeros(self.input_shapes['calib'], dtype=np.float32),
     }
 
+    self.warp_inputs_np = {'transform': np.zeros((3,3), dtype=np.float32)}
+    self.warp_inputs = {k: Tensor(v, device='NPY') for k,v in self.warp_inputs_np.items()}
+    self.frame_buf_params = None
     self.tensor_inputs = {k: Tensor(v, device='NPY').realize() for k,v in self.numpy_inputs.items()}
-    with open(MODEL_PKL_PATH, "rb") as f:
-      self.model_run = pickle.load(f)
+    self._blob_cache : dict[int, Tensor] = {}
+    self.image_warp = None
+    self._warp_rebuild_attempted: set[tuple[int, int]] = set()
+    self._warp_backend_rebuild_attempted: set[tuple[int, int]] = set()
+    self.model_run = pickle.loads(read_file_chunked(str(MODEL_PKL_PATH)))
+
+  def _load_or_rebuild_dm_warp(self, width: int, height: int):
+    warp_path = MODELS_DIR / f'dm_warp_{width}x{height}_tinygrad.pkl'
+    resolution_key = (width, height)
+
+    def load_warp():
+      with open(warp_path, "rb") as f:
+        return pickle.load(f)
+
+    try:
+      return load_warp()
+    except Exception as error:
+      if resolution_key in self._warp_rebuild_attempted:
+        raise
+
+      self._warp_rebuild_attempted.add(resolution_key)
+      cloudlog.exception(f"Failed to load DM warp artifact {warp_path}: {error}")
+      cloudlog.warning(f"Rebuilding DM warp artifact for {width}x{height}")
+
+      try:
+        warp_path.unlink(missing_ok=True)
+      except Exception:
+        pass
+
+      from openpilot.selfdrive.modeld.compile_warp import compile_dm_warp
+      compile_dm_warp(width, height)
+
+      try:
+        return load_warp()
+      except Exception as retry_error:
+        cloudlog.exception(f"Reload failed after rebuilding {warp_path}: {retry_error}")
+        raise
 
   def run(self, buf: VisionBuf, calib: np.ndarray, transform: np.ndarray) -> tuple[np.ndarray, float]:
     self.numpy_inputs['calib'][0,:] = calib
 
     t1 = time.perf_counter()
 
-    input_img_cl = self.frame.prepare(buf, transform.flatten())
-    if TICI:
-      # The imgs tensors are backed by opencl memory, only need init once
-      if 'input_img' not in self.tensor_inputs:
-        self.tensor_inputs['input_img'] = qcom_tensor_from_opencl_address(input_img_cl.mem_address, self.input_shapes['input_img'], dtype=dtypes.uint8)
-    else:
-      self.tensor_inputs['input_img'] = Tensor(self.frame.buffer_from_cl(input_img_cl).reshape(self.input_shapes['input_img']), dtype=dtypes.uint8).realize()
+    if self.image_warp is None:
+      self.frame_buf_params = get_nv12_info(buf.width, buf.height)
+      self.image_warp = self._load_or_rebuild_dm_warp(buf.width, buf.height)
+    ptr = buf.data.ctypes.data
+    # There is a ringbuffer of imgs, just cache tensors pointing to all of them
+    if ptr not in self._blob_cache:
+      self._blob_cache[ptr] = Tensor.from_blob(ptr, (self.frame_buf_params[3],), dtype='uint8')
 
+    self.warp_inputs_np['transform'][:] = transform[:]
+    resolution_key = (buf.width, buf.height)
+    try:
+      self.tensor_inputs['input_img'] = self.image_warp(self._blob_cache[ptr], self.warp_inputs['transform']).realize()
+    except AssertionError as error:
+      # Handle runtime backend mismatch (e.g. CPU-captured warp artifact on QCOM device).
+      if "args mismatch in JIT" not in str(error) or resolution_key in self._warp_backend_rebuild_attempted:
+        raise
 
-    output = self.model_run(**self.tensor_inputs).contiguous().realize().uop.base.buffer.numpy()
+      self._warp_backend_rebuild_attempted.add(resolution_key)
+      cloudlog.warning(f"DM warp JIT backend mismatch for {buf.width}x{buf.height}; rebuilding artifact for active backend")
+      warp_path = MODELS_DIR / f'dm_warp_{buf.width}x{buf.height}_tinygrad.pkl'
+      try:
+        warp_path.unlink(missing_ok=True)
+      except Exception:
+        pass
+
+      from openpilot.selfdrive.modeld.compile_warp import compile_dm_warp
+      compile_dm_warp(buf.width, buf.height)
+      self.image_warp = self._load_or_rebuild_dm_warp(buf.width, buf.height)
+      self.tensor_inputs['input_img'] = self.image_warp(self._blob_cache[ptr], self.warp_inputs['transform']).realize()
+
+    output = self.model_run(**self.tensor_inputs).contiguous().realize().uop.base.buffer.numpy().flatten()
 
     t2 = time.perf_counter()
     return output, t2 - t1
@@ -107,12 +165,11 @@ def get_driverstate_packet(model_output, frame_id: int, location_ts: int, exec_t
 def main():
   config_realtime_process(7, 5)
 
-  cl_context = CLContext()
-  model = ModelState(cl_context)
+  model = ModelState()
   cloudlog.warning("models loaded, dmonitoringmodeld starting")
 
   cloudlog.warning("connecting to driver stream")
-  vipc_client = VisionIpcClient("camerad", VisionStreamType.VISION_STREAM_DRIVER, True, cl_context)
+  vipc_client = VisionIpcClient("camerad", VisionStreamType.VISION_STREAM_DRIVER, True)
   while not vipc_client.connect(False):
     time.sleep(0.1)
   assert vipc_client.is_connected()

@@ -68,7 +68,7 @@ def allow_logging(started: bool, params: Params, CP: car.CarParams, frogpilot_to
   return not frogpilot_toggles.no_logging
 
 def allow_uploads(started: bool, params: Params, CP: car.CarParams, frogpilot_toggles: SimpleNamespace) -> bool:
-  return not frogpilot_toggles.no_uploads or frogpilot_toggles.no_onroad_uploads
+  return params.get_bool("AlwaysAllowUploads") or not frogpilot_toggles.no_uploads or frogpilot_toggles.no_onroad_uploads
 
 def run_speed_limit_filler(started: bool, params: Params, CP: car.CarParams, frogpilot_toggles: SimpleNamespace) -> bool:
   return frogpilot_toggles.speed_limit_filler
@@ -88,8 +88,8 @@ procs = [
   PythonProcess("micd", "system.micd", iscar),
   PythonProcess("timed", "system.timed", always_run, enabled=not PC),
 
-  PythonProcess("modeld", "selfdrive.modeld.modeld", only_onroad),
-  PythonProcess("dmonitoringmodeld", "selfdrive.modeld.dmonitoringmodeld", driverview, enabled=(WEBCAM or not PC)),
+  PythonProcess("modeld", "frogpilot.tinygrad_modeld.tinygrad_modeld", only_onroad),
+  PythonProcess("dmonitoringmodeld", "frogpilot.tinygrad_modeld.dmonitoringmodeld", driverview, enabled=(WEBCAM or not PC)),
 
   PythonProcess("sensord", "system.sensord.sensord", only_onroad, enabled=not PC),
   PythonProcess("soundd", "selfdrive.ui.soundd", driverview),
@@ -127,14 +127,18 @@ procs = [
 ]
 
 # FrogPilot variables
-if HARDWARE.get_device_type() == "mici":
-  procs.append(PythonProcess("ui", "selfdrive.ui.ui", always_run))
-elif TICI:
-  procs.append(NativeProcess("ui", "selfdrive/ui", ["./ui"], always_run, watchdog_max_dt=5)),
+device_type = HARDWARE.get_device_type()
+if device_type in ("tici", "tizi"):
+  procs.append(NativeProcess("ui", "selfdrive/ui", ["./ui"], always_run, watchdog_max_dt=5))
+else:
+  # C4 (mici) runs the Python raylib UI path; keep watchdog parity with C3/C3X.
+  procs.append(PythonProcess("ui", "selfdrive.ui.ui", always_run, watchdog_max_dt=5))
 procs += [
   PythonProcess("device_syncd", "frogpilot.system.device_syncd", always_run),
   PythonProcess("frogpilot_process", "frogpilot.frogpilot_process", always_run),
   NativeProcess("mapd", "frogpilot/navigation", ["./mapd"], always_run),
+  PythonProcess("the_pond", "frogpilot.system.the_pond.the_pond", always_run, nice=19),
+  PythonProcess("galaxy", "frogpilot.system.galaxy.galaxy", always_run, nice=19),
   PythonProcess("speed_limit_filler", "frogpilot.system.speed_limit_filler", run_speed_limit_filler),
 ]
 

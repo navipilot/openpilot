@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 import datetime
+import json
 import os
+from pathlib import Path
 import signal
 import sys
 import time
 import traceback
 
-from cereal import log
+from cereal import car, log
 import cereal.messaging as messaging
 import openpilot.system.sentry as sentry
 from openpilot.common.utils import atomic_write
-from openpilot.common.params import Params, ParamKeyFlag
+from openpilot.common.params import Params, ParamKeyFlag, ParamKeyType
 from openpilot.common.text_window import TextWindow
 from openpilot.system.hardware import HARDWARE
 from openpilot.system.manager.helpers import unblock_stdout, write_onroad_params, save_bootlog
@@ -23,6 +25,229 @@ from openpilot.system.hardware.hw import Paths
 
 from openpilot.frogpilot.common.frogpilot_functions import frogpilot_boot_functions, install_frogpilot, uninstall_frogpilot
 from openpilot.frogpilot.common.frogpilot_variables import get_frogpilot_toggles
+
+
+LEGACY_BOLT_FP_MIGRATION_FLAG = Path("/data") / "legacy_bolt_fp_migration_v1"
+STARPILOT_DEFAULTS_PARITY_MIGRATION_FLAG = Path("/data") / "starpilot_defaults_parity_v1"
+STARPILOT_PARAM_CANONICALIZATION_MIGRATION_FLAG = Path("/data") / "starpilot_param_canonicalization_v1"
+LEGACY_CARMODEL_MIGRATIONS = {
+  "CHEVROLET_BOLT_CC_2019_2021": "CHEVROLET_BOLT_CC_2018_2021",
+}
+
+
+def _to_text(value):
+  if value is None:
+    return None
+  if isinstance(value, bytes):
+    return value.decode("utf-8", errors="ignore")
+  return str(value)
+
+
+def migrate_legacy_bolt_fingerprint(params: Params) -> None:
+  old_fp, new_fp = next(iter(LEGACY_CARMODEL_MIGRATIONS.items()))
+  carparams_keys = ("CarParams", "CarParamsCache", "CarParamsPersistent", "CarParamsPrevRoute")
+  keys_to_clear = (
+    "CarParams",
+    "CarParamsCache",
+    "CarParamsPersistent",
+    "CarParamsPrevRoute",
+    "FrogPilotCarParams",
+    "FrogPilotCarParamsPersistent",
+  )
+
+  car_model = _to_text(params.get("CarModel"))
+  legacy_detected = car_model == old_fp
+  if not legacy_detected:
+    old_fp_bytes = old_fp.encode()
+    for key in carparams_keys:
+      raw = params.get(key)
+      if raw is None:
+        continue
+
+      raw_bytes = raw if isinstance(raw, bytes) else str(raw).encode()
+      # Fast path for payloads that still embed the legacy fingerprint string.
+      if old_fp_bytes in raw_bytes:
+        legacy_detected = True
+        break
+
+      # Fallback decode for payloads that don't expose the raw string directly.
+      try:
+        with car.CarParams.from_bytes(raw_bytes) as cp:
+          if cp.carFingerprint == old_fp:
+            legacy_detected = True
+            break
+      except Exception:
+        continue
+
+  if not legacy_detected:
+    return
+
+  cleared_keys: list[str] = []
+  for key in keys_to_clear:
+    if params.get(key) is None:
+      continue
+    params.remove(key)
+    cleared_keys.append(key)
+
+  if car_model == old_fp:
+    params.put("CarModel", new_fp)
+  car_model_name = _to_text(params.get("CarModelName")) or ""
+  if "2019-21" in car_model_name:
+    params.put("CarModelName", car_model_name.replace("2019-21", "2018-21"))
+
+  cloudlog.warning(
+    f"Detected legacy Bolt fingerprint {old_fp}; cleared={cleared_keys}, remapped CarModel to {new_fp}"
+  )
+
+  try:
+    LEGACY_BOLT_FP_MIGRATION_FLAG.parent.mkdir(parents=True, exist_ok=True)
+    LEGACY_BOLT_FP_MIGRATION_FLAG.write_text(f"{datetime.datetime.now(datetime.UTC).isoformat()}\n")
+  except Exception:
+    cloudlog.exception(f"Failed to write migration flag: {LEGACY_BOLT_FP_MIGRATION_FLAG}")
+
+
+def migrate_starpilot_default_parity(params: Params, params_cache: Params) -> None:
+  if STARPILOT_DEFAULTS_PARITY_MIGRATION_FLAG.exists():
+    return
+
+  desired_bool_values = {
+    "AdvancedLateralTune": True,
+    "ForceAutoTuneOff": True,
+    "HumanAcceleration": False,
+    "HumanFollowing": False,
+    "NNFF": False,
+    "NNFFLite": False,
+  }
+
+  for key, value in desired_bool_values.items():
+    params.put_bool(key, value)
+    params_cache.put_bool(key, value)
+
+  params.put_float("CEModelStopTime", 7.0)
+  params_cache.put_float("CEModelStopTime", 7.0)
+
+  cloudlog.warning("Applied one-time StarPilot default parity migration for lateral/longitudinal toggles")
+
+  try:
+    STARPILOT_DEFAULTS_PARITY_MIGRATION_FLAG.parent.mkdir(parents=True, exist_ok=True)
+    STARPILOT_DEFAULTS_PARITY_MIGRATION_FLAG.write_text(f"{datetime.datetime.now(datetime.UTC).isoformat()}\n")
+  except Exception:
+    cloudlog.exception(f"Failed to write migration flag: {STARPILOT_DEFAULTS_PARITY_MIGRATION_FLAG}")
+
+
+def _read_raw_param_bytes(params: Params, key: str | bytes):
+  try:
+    path = params.get_param_path(key)
+  except Exception:
+    return None
+
+  if not path or not os.path.isfile(path):
+    return None
+
+  try:
+    with open(path, "rb") as f:
+      return f.read()
+  except Exception:
+    return None
+
+
+def _parse_legacy_time(raw_text: str):
+  text = raw_text.strip()
+  if not text:
+    return None
+
+  try:
+    return datetime.datetime.fromisoformat(text)
+  except ValueError:
+    pass
+
+  for fmt in ("%B %d, %Y - %I:%M%p", "%B %d, %Y - %I:%M %p"):
+    try:
+      return datetime.datetime.strptime(text, fmt)
+    except ValueError:
+      continue
+
+  return None
+
+
+def migrate_param_type_canonicalization(params: Params) -> None:
+  if STARPILOT_PARAM_CANONICALIZATION_MIGRATION_FLAG.exists():
+    return
+
+  normalized_keys: list[str] = []
+
+  for raw_key in params.all_keys():
+    key = raw_key.decode() if isinstance(raw_key, bytes) else str(raw_key)
+    raw_value = _read_raw_param_bytes(params, raw_key)
+    if not raw_value:
+      continue
+
+    try:
+      text_value = raw_value.decode("utf-8", errors="strict").strip()
+    except UnicodeDecodeError:
+      continue
+
+    if not text_value:
+      continue
+
+    try:
+      expected_type = params.get_type(raw_key)
+    except Exception:
+      continue
+
+    try:
+      if expected_type == ParamKeyType.INT:
+        parsed = float(text_value)
+        # Canonicalize decimal/exponent forms into integer storage.
+        canonical = str(int(parsed))
+        if canonical != text_value:
+          params.put_int(raw_key, int(parsed))
+          normalized_keys.append(key)
+
+      elif expected_type == ParamKeyType.FLOAT:
+        parsed = float(text_value)
+        canonical = str(parsed)
+        if canonical != text_value:
+          params.put_float(raw_key, parsed)
+          normalized_keys.append(key)
+
+      elif expected_type == ParamKeyType.BOOL:
+        lowered = text_value.lower()
+        if lowered in ("1", "true", "yes", "on"):
+          if text_value != "1":
+            params.put_bool(raw_key, True)
+            normalized_keys.append(key)
+        elif lowered in ("0", "false", "no", "off"):
+          if text_value != "0":
+            params.put_bool(raw_key, False)
+            normalized_keys.append(key)
+
+      elif expected_type == ParamKeyType.TIME:
+        dt = _parse_legacy_time(text_value)
+        if dt is not None:
+          if dt.tzinfo is not None:
+            dt = dt.astimezone(datetime.UTC).replace(tzinfo=None)
+          if text_value != dt.isoformat():
+            params.put(raw_key, dt)
+            normalized_keys.append(key)
+
+      elif expected_type == ParamKeyType.JSON:
+        parsed = json.loads(text_value)
+        canonical = json.dumps(parsed, separators=(",", ":"))
+        if canonical != text_value:
+          params.put(raw_key, parsed)
+          normalized_keys.append(key)
+    except Exception:
+      continue
+
+  if normalized_keys:
+    cloudlog.warning(f"Canonicalized legacy param values for {len(normalized_keys)} keys")
+
+  try:
+    STARPILOT_PARAM_CANONICALIZATION_MIGRATION_FLAG.parent.mkdir(parents=True, exist_ok=True)
+    STARPILOT_PARAM_CANONICALIZATION_MIGRATION_FLAG.write_text(f"{datetime.datetime.now(datetime.UTC).isoformat()}\n")
+  except Exception:
+    cloudlog.exception(f"Failed to write migration flag: {STARPILOT_PARAM_CANONICALIZATION_MIGRATION_FLAG}")
 
 
 def manager_init() -> None:
@@ -42,7 +267,14 @@ def manager_init() -> None:
     params.put_bool("RecordFront", True)
 
   # FrogPilot variables
-  params_cache = Params("/cache/params", return_defaults=True)
+  cache_params_path = "/cache/params"
+  if HARDWARE.get_device_type() == "pc":
+    cache_params_path = os.path.join(Paths.comma_home(), "cache", "params")
+  params_cache = Params(cache_params_path, return_defaults=True)
+
+  # Canonicalize legacy string encodings (e.g. INT params stored as "26.000000")
+  # before bulk reads below to avoid repeated cast warnings and UI-side churn.
+  migrate_param_type_canonicalization(params)
 
   # set unset params to their default value
   for k in params.all_keys():
@@ -74,6 +306,10 @@ def manager_init() -> None:
   params.put_bool("IsTestedBranch", build_metadata.tested_channel)
   params.put_bool("IsReleaseBranch", build_metadata.release_channel)
   params.put("HardwareSerial", serial)
+
+  # Branch migration: rename legacy Bolt fingerprint persisted in CarParams.
+  migrate_legacy_bolt_fingerprint(params)
+  migrate_starpilot_default_parity(params, params_cache)
 
   # set dongle id
   reg_res = register(show_spinner=True)

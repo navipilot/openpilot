@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import math
+import os
 import random
 import tomllib
 
@@ -13,8 +14,8 @@ import cereal.messaging as messaging
 from cereal import car, custom, log
 from opendbc.car import gen_empty_fingerprint
 from opendbc.car.car_helpers import interfaces
-from opendbc.car.gm.values import GMFlags
-from opendbc.car.hyundai.values import HyundaiFlags
+from opendbc.car.gm.values import CAR as GM_CAR, EV_CAR as GM_EV_CAR, GMFlags
+from opendbc.car.hyundai.values import EV_CAR as HYUNDAI_EV_CAR, HyundaiFlags
 from opendbc.car.interfaces import TORQUE_SUBSTITUTE_PATH, CarInterfaceBase, GearShifter
 from opendbc.car.mock.values import CAR as MOCK
 from opendbc.car.subaru.values import SubaruFlags
@@ -25,6 +26,7 @@ from openpilot.common.params import Params
 from openpilot.selfdrive.controls.lib.latcontrol_torque import KP
 from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.system.hardware import HARDWARE
+from openpilot.system.hardware.hw import Paths
 from openpilot.system.hardware.power_monitoring import VBATT_PAUSE_CHARGING
 from openpilot.system.version import get_build_metadata
 
@@ -43,33 +45,47 @@ NON_DRIVING_GEARS = [GearShifter.neutral, GearShifter.park, GearShifter.reverse,
 
 FROGPILOT_API = "https://frogpilot.com/api"
 
-RESOURCES_REPO = "FrogAi/FrogPilot-Resources"
+LEGACY_CARMODEL_MIGRATIONS = {
+  "CHEVROLET_BOLT_CC_2019_2021": "CHEVROLET_BOLT_CC_2018_2021",
+}
+
+RESOURCES_REPO = os.getenv("STARPILOT_RESOURCES_REPO", "firestar5683/StarPilot-Resources")
 
 ACTIVE_THEME_PATH = Path(BASEDIR) / "frogpilot/assets/active_theme"
 METADATAS_PATH = Path(BASEDIR) / "frogpilot/assets/model_metadata"
-MODELS_PATH = Path("/data/models")
 RANDOM_EVENTS_PATH = Path(BASEDIR) / "frogpilot/assets/random_events"
 STOCK_THEME_PATH = Path(BASEDIR) / "frogpilot/assets/stock_theme"
 THEME_COLORS_PATH = (ACTIVE_THEME_PATH / "colors/colors.json")
-THEME_SAVE_PATH = Path("/data/themes")
+if HARDWARE.get_device_type() == "pc":
+  _FP_PC_ROOT = Path(Paths.comma_home()) / "frogpilot"
+  _FP_DATA_ROOT = _FP_PC_ROOT / "data"
+  _FP_CACHE_ROOT = _FP_PC_ROOT / "cache"
+  _FP_PERSIST_ROOT = Path(Paths.persist_root())
+else:
+  _FP_DATA_ROOT = Path("/data")
+  _FP_CACHE_ROOT = Path("/cache")
+  _FP_PERSIST_ROOT = Path("/persist")
 
-ERROR_LOGS_PATH = Path("/data/error_logs")
-SCREEN_RECORDINGS_PATH = Path("/data/media/screen_recordings")
-VIDEO_CACHE_PATH = Path("/data/video_cache")
+MODELS_PATH = _FP_DATA_ROOT / "models"
+THEME_SAVE_PATH = _FP_DATA_ROOT / "themes"
 
-BACKUP_PATH = Path("/cache/on_backup")
-FROGPILOT_BACKUPS = Path("/data/backups")
-TOGGLE_BACKUPS = Path("/data/toggle_backups")
+ERROR_LOGS_PATH = _FP_DATA_ROOT / "error_logs"
+SCREEN_RECORDINGS_PATH = _FP_DATA_ROOT / "media/screen_recordings"
+VIDEO_CACHE_PATH = _FP_DATA_ROOT / "video_cache"
 
-FROGS_GO_MOO_PATH = Path("/persist/frogsgomoo.py")
+BACKUP_PATH = _FP_CACHE_ROOT / "on_backup"
+FROGPILOT_BACKUPS = _FP_DATA_ROOT / "backups"
+TOGGLE_BACKUPS = _FP_DATA_ROOT / "toggle_backups"
 
-HD_LOGS_PATH = Path("/data/media/0/realdata_HD")
-HD_PATH = Path("/cache/use_HD")
+FROGS_GO_MOO_PATH = _FP_PERSIST_ROOT / "frogsgomoo.py"
 
-KONIK_LOGS_PATH = Path("/data/media/0/realdata_konik")
-KONIK_PATH = Path("/cache/use_konik")
+HD_LOGS_PATH = _FP_DATA_ROOT / "media/0/realdata_HD"
+HD_PATH = _FP_CACHE_ROOT / "use_HD"
 
-MAPS_PATH = Path("/data/media/0/osm/offline")
+KONIK_LOGS_PATH = _FP_DATA_ROOT / "media/0/realdata_konik"
+KONIK_PATH = _FP_CACHE_ROOT / "use_konik"
+
+MAPS_PATH = _FP_DATA_ROOT / "media/0/osm/offline"
 
 NNFF_MODELS_PATH = Path(BASEDIR) / "frogpilot/assets/nnff_models"
 
@@ -140,12 +156,14 @@ DEVICE_SHUTDOWN_TIMES = {
 }
 
 EXCLUDED_KEYS = {
+  "AvailableModelSeries",
   "AvailableModelNames",
   "AvailableModels",
   "CalibratedLateralAcceleration",
   "CalibrationProgress",
   "CarBatteryCapacity",
   "CarParamsPersistent",
+  "CommunityFavorites",
   "CurvatureData",
   "ExperimentalLongitudinalEnabled",
   "FrogPilotCarParamsPersistent",
@@ -153,6 +171,9 @@ EXCLUDED_KEYS = {
   "LastUpdateTime",
   "MapBoxRequests",
   "ModelDrivesAndScores",
+  "ModelReleasedDates",
+  "ModelSortMode",
+  "ModelVersions",
   "openpilotMinutes",
   "OverpassRequests",
   "PandaSignatures",
@@ -164,6 +185,7 @@ EXCLUDED_KEYS = {
   "UpdaterCurrentReleaseNotes",
   "UpdaterFetchAvailable",
   "UpdaterTargetBranch",
+  "UserFavorites",
   "UptimeOffroad"
 }
 
@@ -173,6 +195,10 @@ TUNING_LEVELS = {
   "ADVANCED": 2,
   "DEVELOPER": 3
 }
+
+# Shared params handles for modules that import these from frogpilot_variables.
+params = Params(return_defaults=True)
+params_memory = Params(memory=True)
 
 @cache
 def get_nnff_model_files():
@@ -200,8 +226,27 @@ def nnff_supported(car_fingerprint):
 
   return False
 
+
+def normalize_legacy_car_model(car_model):
+  if car_model is None:
+    return None
+  if isinstance(car_model, bytes):
+    car_model = car_model.decode("utf-8", errors="ignore")
+  car_model = str(car_model)
+  normalized = LEGACY_CARMODEL_MIGRATIONS.get(car_model, car_model)
+  return normalized
+
 def get_frogpilot_toggles(sm=messaging.SubMaster(["frogpilotPlan"])):
-  return process_frogpilot_toggles(sm["frogpilotPlan"].frogpilotToggles)
+  toggles = process_frogpilot_toggles(sm["frogpilotPlan"].frogpilotToggles)
+
+  # Force drive-state controls must be authoritative from params so they
+  # apply immediately even if frogpilotPlan publication is temporarily stale.
+  if not hasattr(get_frogpilot_toggles, "_params"):
+    get_frogpilot_toggles._params = Params(return_defaults=True)
+
+  toggles.force_offroad = get_frogpilot_toggles._params.get_bool("ForceOffroad")
+  toggles.force_onroad = get_frogpilot_toggles._params.get_bool("ForceOnroad")
+  return toggles
 
 @cache
 def process_frogpilot_toggles(toggles):
@@ -247,6 +292,7 @@ class FrogPilotVariables:
     toggle.use_higher_bitrate &= not self.vetting_branch
     toggle.use_higher_bitrate |= self.development_branch
 
+    HD_PATH.parent.mkdir(parents=True, exist_ok=True)
     if not HD_PATH.is_file() and toggle.use_higher_bitrate:
       HD_PATH.touch()
       HARDWARE.reboot()
@@ -256,8 +302,8 @@ class FrogPilotVariables:
 
     toggle.use_konik_server = device_management
     toggle.use_konik_server &= self.get_value("UseKonikServer")
-    toggle.use_konik_server |= Path("/data/openpilot/not_vetted").is_file()
 
+    KONIK_PATH.parent.mkdir(parents=True, exist_ok=True)
     if not KONIK_PATH.is_file() and toggle.use_konik_server:
       KONIK_PATH.touch()
       HARDWARE.reboot()
@@ -307,27 +353,50 @@ class FrogPilotVariables:
 
     return value
 
+  def _sync_stock_param(self, key, stock_key, live_value):
+    try:
+      live_value = float(live_value)
+    except (TypeError, ValueError):
+      return
+
+    if math.isclose(live_value, 0.0, abs_tol=1e-6):
+      return
+
+    current_stock = self.params.get_float(stock_key)
+    if math.isclose(current_stock, live_value, abs_tol=1e-6):
+      return
+
+    current_value = self.params.get_float(key)
+    if math.isclose(current_value, current_stock, abs_tol=1e-6) or math.isclose(current_stock, 0.0, abs_tol=1e-6):
+      self.params.put_float(key, live_value)
+
+    self.params.put_float(stock_key, live_value)
+
   def update(self, holiday_theme="stock", started=False):
     toggle = self.frogpilot_toggles
     toggle.tuning_level = self.params.get("TuningLevel") if self.params.get_bool("TuningLevelConfirmed") else TUNING_LEVELS["ADVANCED"]
 
+    fallback_platform = GM_CAR.CHEVROLET_BOLT_ACC_2022_2023 if HARDWARE.get_device_type() == "pc" else MOCK.MOCK
+
     msg_bytes = self.params.get("CarParams" if started else "CarParamsPersistent", block=started)
     if msg_bytes:
       CP = messaging.log_from_bytes(msg_bytes, car.CarParams)
+      car_platform = CP.carFingerprint if CP.carFingerprint in interfaces else fallback_platform
     else:
-      CP = interfaces[MOCK.MOCK].get_params(MOCK.MOCK, gen_empty_fingerprint(), [], False, False, False, toggle).as_reader()
+      car_platform = fallback_platform
+      CP = interfaces[car_platform].get_params(car_platform, gen_empty_fingerprint(), [], False, False, False, toggle).as_reader()
 
     is_torque_car = CP.lateralTuning.which() == "torque"
     if not is_torque_car:
       CP_builder = CP.as_builder()
-      CarInterfaceBase.configure_torque_tune(MOCK.MOCK, CP_builder.lateralTuning)
+      CarInterfaceBase.configure_torque_tune(car_platform, CP_builder.lateralTuning)
       CP = CP_builder.as_reader()
 
     fpmsg_bytes = self.params.get("FrogPilotCarParams" if started else "FrogPilotCarParamsPersistent", block=started)
     if fpmsg_bytes:
       FPCP = messaging.log_from_bytes(fpmsg_bytes, custom.FrogPilotCarParams)
     else:
-      FPCP = interfaces[MOCK.MOCK].get_frogpilot_params(MOCK.MOCK, gen_empty_fingerprint(), [], CP, toggle)
+      FPCP = interfaces[car_platform].get_frogpilot_params(car_platform, gen_empty_fingerprint(), [], CP, toggle)
 
     alpha_longitudinal = CP.alphaLongitudinalAvailable
     toggle.car_make = CP.brand
@@ -357,6 +426,20 @@ class FrogPilotVariables:
     toggle.stoppingDecelRate = CP.stoppingDecelRate
     toggle.vEgoStarting = CP.vEgoStarting
     toggle.vEgoStopping = CP.vEgoStopping
+
+    # Keep stock tuning params synchronized for all device UIs (Qt + raylib).
+    # Historically this only ran in Qt settings, which left C4 defaults at 0.
+    self._sync_stock_param("SteerDelay", "SteerDelayStock", steerActuatorDelay)
+    self._sync_stock_param("SteerFriction", "SteerFrictionStock", friction)
+    self._sync_stock_param("SteerKP", "SteerKPStock", steerKp)
+    self._sync_stock_param("SteerLatAccel", "SteerLatAccelStock", latAccelFactor)
+    self._sync_stock_param("LongitudinalActuatorDelay", "LongitudinalActuatorDelayStock", longitudinalActuatorDelay)
+    self._sync_stock_param("StartAccel", "StartAccelStock", startAccel)
+    self._sync_stock_param("SteerRatio", "SteerRatioStock", steerRatio)
+    self._sync_stock_param("StopAccel", "StopAccelStock", stopAccel)
+    self._sync_stock_param("StoppingDecelRate", "StoppingDecelRateStock", toggle.stoppingDecelRate)
+    self._sync_stock_param("VEgoStarting", "VEgoStartingStock", toggle.vEgoStarting)
+    self._sync_stock_param("VEgoStopping", "VEgoStoppingStock", toggle.vEgoStopping)
 
     msg_bytes = self.params.get("LiveTorqueParameters")
     if msg_bytes:
@@ -398,6 +481,28 @@ class FrogPilotVariables:
     toggle.use_custom_steerRatio = bool(round(toggle.steerRatio, 2) != round(steerRatio, 2)) and not toggle.force_auto_tune or toggle.force_auto_tune_off
 
     advanced_longitudinal_tuning = toggle.openpilot_longitudinal and self.get_value("AdvancedLongitudinalTune")
+    gm_ev_vehicle = toggle.car_make == "gm" and CP.carFingerprint in GM_EV_CAR
+    gm_ev_vehicle &= not (toggle.car_model.startswith("CHEVROLET_VOLT") and not toggle.car_model.endswith("_CC"))
+    gm_ev_vehicle &= toggle.car_model != "CHEVROLET_MALIBU_HYBRID_CC"
+    ev_vehicle = gm_ev_vehicle or (toggle.car_make == "hyundai" and CP.carFingerprint in HYUNDAI_EV_CAR)
+    ev_vehicle |= CP.transmissionType == car.CarParams.TransmissionType.direct
+
+    if self.params.get("EVTuning") == b"":
+      self.params.put_bool("EVTuning", ev_vehicle)
+
+    if self.params.get("TruckTuning") == b"":
+      self.params.put_bool("TruckTuning", False)
+
+    ev_tuning_param = self.params.get_bool("EVTuning")
+    truck_tuning_param = self.params.get_bool("TruckTuning")
+
+    # EV and truck tuning are mutually exclusive.
+    if truck_tuning_param and ev_tuning_param:
+      ev_tuning_param = False
+      self.params.put_bool("EVTuning", False)
+
+    toggle.ev_tuning = ev_tuning_param if advanced_longitudinal_tuning else ev_vehicle
+    toggle.truck_tuning = truck_tuning_param if advanced_longitudinal_tuning else False
     toggle.longitudinalActuatorDelay = self.get_value("LongitudinalActuatorDelay", cast=float, condition=advanced_longitudinal_tuning, default=longitudinalActuatorDelay, min=0, max=1)
     toggle.max_desired_acceleration = self.get_value("MaxDesiredAcceleration", cast=float, condition=advanced_longitudinal_tuning, min=0.1, max=MAX_ACCELERATION)
     toggle.startAccel = self.get_value("StartAccel", cast=float, condition=advanced_longitudinal_tuning, default=startAccel, min=0, max=MAX_ACCELERATION)
@@ -422,7 +527,12 @@ class FrogPilotVariables:
 
     toggle.automatic_updates = self.get_value("AutomaticUpdates", condition=(self.release_branch or self.vetting_branch or self.frogs_go_moo), default=True) and not BACKUP_PATH.is_file()
 
-    car_model = self.params.get("CarModel")
+    car_model = normalize_legacy_car_model(self.params.get("CarModel"))
+    if car_model != self.params.get("CarModel"):
+      self.params.put("CarModel", car_model)
+      car_model_name = self.params.get("CarModelName")
+      if car_model_name and "2019-21" in car_model_name:
+        self.params.put("CarModelName", car_model_name.replace("2019-21", "2018-21"))
     toggle.force_fingerprint = self.get_value("ForceFingerprint", condition=car_model != self.default_values["CarModel"])
     if toggle.force_fingerprint:
       toggle.car_model = car_model
@@ -458,27 +568,34 @@ class FrogPilotVariables:
     toggle.aggressive_jerk_danger = self.get_value("AggressiveJerkDanger", cast=float, condition=toggle.custom_personalities, conversion=0.01, min=0.25, max=2.0)
     toggle.aggressive_jerk_speed = self.get_value("AggressiveJerkSpeed", cast=float, condition=toggle.custom_personalities, conversion=0.01, min=0.25, max=2.0)
     toggle.aggressive_jerk_speed_decrease = self.get_value("AggressiveJerkSpeedDecrease", cast=float, condition=toggle.custom_personalities, conversion=0.01, min=0.25, max=2.0)
-    toggle.aggressive_follow = self.get_value("AggressiveFollow", cast=float, condition=toggle.custom_personalities, min=1, max=MAX_T_FOLLOW)
+    aggressive_follow_low = float(self.get_value("AggressiveFollow", cast=float, condition=toggle.custom_personalities, min=1, max=MAX_T_FOLLOW))
+    aggressive_follow_high = float(self.get_value("AggressiveFollowHigh", cast=float, condition=toggle.custom_personalities, min=1, max=MAX_T_FOLLOW))
+    toggle.aggressive_follow = [aggressive_follow_low, aggressive_follow_high]
     toggle.standard_jerk_acceleration = self.get_value("StandardJerkAcceleration", cast=float, condition=toggle.custom_personalities, conversion=0.01, min=0.25, max=2.0)
     toggle.standard_jerk_deceleration = self.get_value("StandardJerkDeceleration", cast=float, condition=toggle.custom_personalities, conversion=0.01, min=0.25, max=2.0)
     toggle.standard_jerk_danger = self.get_value("StandardJerkDanger", cast=float, condition=toggle.custom_personalities, conversion=0.01, min=0.25, max=2.0)
     toggle.standard_jerk_speed = self.get_value("StandardJerkSpeed", cast=float, condition=toggle.custom_personalities, conversion=0.01, min=0.25, max=2.0)
     toggle.standard_jerk_speed_decrease = self.get_value("StandardJerkSpeedDecrease", cast=float, condition=toggle.custom_personalities, conversion=0.01, min=0.25, max=2.0)
-    toggle.standard_follow = self.get_value("StandardFollow", cast=float, condition=toggle.custom_personalities, min=1, max=MAX_T_FOLLOW)
+    standard_follow_low = float(self.get_value("StandardFollow", cast=float, condition=toggle.custom_personalities, min=1, max=MAX_T_FOLLOW))
+    standard_follow_high = float(self.get_value("StandardFollowHigh", cast=float, condition=toggle.custom_personalities, min=1, max=MAX_T_FOLLOW))
+    toggle.standard_follow = [standard_follow_low, standard_follow_high]
     toggle.relaxed_jerk_acceleration = self.get_value("RelaxedJerkAcceleration", cast=float, condition=toggle.custom_personalities, conversion=0.01, min=0.25, max=2.0)
     toggle.relaxed_jerk_deceleration = self.get_value("RelaxedJerkDeceleration", cast=float, condition=toggle.custom_personalities, conversion=0.01, min=0.25, max=2.0)
     toggle.relaxed_jerk_danger = self.get_value("RelaxedJerkDanger", cast=float, condition=toggle.custom_personalities, conversion=0.01, min=0.25, max=2.0)
     toggle.relaxed_jerk_speed = self.get_value("RelaxedJerkSpeed", cast=float, condition=toggle.custom_personalities, conversion=0.01, min=0.25, max=2.0)
     toggle.relaxed_jerk_speed_decrease = self.get_value("RelaxedJerkSpeedDecrease", cast=float, condition=toggle.custom_personalities, conversion=0.01, min=0.25, max=2.0)
-    toggle.relaxed_follow = self.get_value("RelaxedFollow", cast=float, condition=toggle.custom_personalities, min=1, max=MAX_T_FOLLOW)
+    relaxed_follow_low = float(self.get_value("RelaxedFollow", cast=float, condition=toggle.custom_personalities, min=1, max=MAX_T_FOLLOW))
+    relaxed_follow_high = float(self.get_value("RelaxedFollowHigh", cast=float, condition=toggle.custom_personalities, min=1, max=MAX_T_FOLLOW))
+    toggle.relaxed_follow = [relaxed_follow_low, relaxed_follow_high]
     toggle.traffic_mode_jerk_acceleration = [self.get_value("TrafficJerkAcceleration", cast=float, condition=toggle.custom_personalities, conversion=0.01, min=0.25, max=2.0), toggle.aggressive_jerk_acceleration]
     toggle.traffic_mode_jerk_deceleration = [self.get_value("TrafficJerkDeceleration", cast=float, condition=toggle.custom_personalities, conversion=0.01, min=0.25, max=2.0), toggle.aggressive_jerk_deceleration]
     toggle.traffic_mode_jerk_danger = [self.get_value("TrafficJerkDanger", cast=float, condition=toggle.custom_personalities, conversion=0.01, min=0.25, max=2.0), toggle.aggressive_jerk_danger]
     toggle.traffic_mode_jerk_speed = [self.get_value("TrafficJerkSpeed", cast=float, condition=toggle.custom_personalities, conversion=0.01, min=0.25, max=2.0), toggle.aggressive_jerk_speed]
     toggle.traffic_mode_jerk_speed_decrease = [self.get_value("TrafficJerkSpeedDecrease", cast=float, condition=toggle.custom_personalities, conversion=0.01, min=0.25, max=2.0), toggle.aggressive_jerk_speed_decrease]
-    toggle.traffic_mode_follow = [self.get_value("TrafficFollow", cast=float, condition=toggle.custom_personalities, min=0.5, max=MAX_T_FOLLOW), toggle.aggressive_follow]
+    toggle.traffic_mode_follow = [float(self.get_value("TrafficFollow", cast=float, condition=toggle.custom_personalities, min=0.5, max=MAX_T_FOLLOW)), toggle.aggressive_follow[0]]
 
     custom_themes = self.get_value("CustomThemes")
+    toggle.boot_logo = self.get_value("BootLogo", cast=None, default="starpilot")
     toggle.color_scheme = self.get_value("ColorScheme", cast=None, condition=custom_themes, default="stock")
     theme_colors = json.loads(THEME_COLORS_PATH.read_text()) if THEME_COLORS_PATH.is_file() else {}
     toggle.lane_lines_color = self.get_color("LaneLines", theme_colors)
@@ -545,7 +662,9 @@ class FrogPilotVariables:
     toggle.device_shutdown_time = DEVICE_SHUTDOWN_TIMES.get(self.get_value("DeviceShutdown", cast=int, condition=device_management))
     toggle.increase_thermal_limits = self.get_value("IncreaseThermalLimits", condition=device_management)
     toggle.low_voltage_shutdown = self.get_value("LowVoltageShutdown", cast=float, condition=device_management, min=VBATT_PAUSE_CHARGING, max=12.5)
-    toggle.no_logging = self.get_value("NoLogging", condition=device_management and not self.vetting_branch) or toggle.force_onroad
+    # Keep force-onroad desktop simulations from polluting logs, but never disable
+    # loggerd/encoderd on real devices because that breaks route continuity/uploads.
+    toggle.no_logging = self.get_value("NoLogging", condition=device_management and not self.vetting_branch) or (toggle.force_onroad and HARDWARE.get_device_type() == "pc")
     toggle.no_uploads = self.get_value("NoUploads", condition=device_management and not self.vetting_branch)
     toggle.no_onroad_uploads = self.get_value("DisableOnroadUploads", condition=toggle.no_uploads)
 
@@ -622,11 +741,26 @@ class FrogPilotVariables:
     toggle.human_following = self.get_value("HumanFollowing", condition=longitudinal_tuning)
     toggle.human_lane_changes = has_radar and self.get_value("HumanLaneChanges", condition=longitudinal_tuning)
     toggle.lead_detection_probability = self.get_value("LeadDetectionThreshold", cast=float, condition=longitudinal_tuning, conversion=0.01, min=0.25, max=0.5)
+    toggle.recovery_power = self.get_value("RecoveryPower", cast=float, condition=longitudinal_tuning, default=1.0, min=0.5, max=2.0)
+    toggle.stop_distance = self.get_value("StopDistance", cast=float, condition=longitudinal_tuning, default=6.0)
     toggle.taco_tune = self.get_value("TacoTune", condition=longitudinal_tuning)
 
-    toggle.model = self.default_values["DrivingModel"]
-    toggle.model_name = self.default_values["DrivingModelName"]
-    toggle.model_version = self.default_values["DrivingModelVersion"]
+    toggle.model = self.get_value("Model", cast=None, default="sc")
+    if not toggle.model:
+      toggle.model = self.get_value("DrivingModel", cast=None, default="sc")
+    toggle.model_name = self.get_value("DrivingModelName", cast=None, default="South Carolina")
+    toggle.model_version = self.get_value("ModelVersion", cast=None, default="v11")
+    if not toggle.model_version:
+      toggle.model_version = self.get_value("DrivingModelVersion", cast=None, default="v11")
+    if isinstance(toggle.model, bytes):
+      toggle.model = toggle.model.decode("utf-8", "ignore")
+    if isinstance(toggle.model_name, bytes):
+      toggle.model_name = toggle.model_name.decode("utf-8", "ignore")
+    if isinstance(toggle.model_version, bytes):
+      toggle.model_version = toggle.model_version.decode("utf-8", "ignore")
+    toggle.classic_model = toggle.model_version in {"v1", "v2", "v3", "v4"}
+    toggle.tinygrad_model = toggle.model_version in {"v8", "v9", "v10", "v11", "v12"}
+    toggle.tomb_raider = toggle.model == "space-lab"
 
     toggle.model_ui = self.get_value("ModelUI")
     toggle.dynamic_path_width = self.get_value("DynamicPathWidth", condition=toggle.model_ui and not toggle.debug_mode)
@@ -733,6 +867,16 @@ class FrogPilotVariables:
     toyota_doors = self.get_value("ToyotaDoors", condition=toggle.car_make == "toyota")
     toggle.lock_doors = self.get_value("LockDoors", condition=toyota_doors)
     toggle.unlock_doors = self.get_value("UnlockDoors", condition=toyota_doors)
+
+    toggle.gm_pedal_longitudinal = self.get_value(
+      "GMPedalLongitudinal",
+      condition=toggle.car_make == "gm" and toggle.has_pedal,
+    )
+    toggle.remote_start_boots_comma = self.get_value("RemoteStartBootsComma", condition=toggle.car_make == "gm")
+    toggle.remap_cancel_to_distance = self.get_value(
+      "RemapCancelToDistance",
+      condition=toggle.car_make == "gm" and toggle.has_pedal and "BOLT" in toggle.car_model,
+    )
 
     toggle.volt_sng = self.get_value("VoltSNG", condition=toggle.car_model == "CHEVROLET_VOLT")
 

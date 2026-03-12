@@ -1,6 +1,7 @@
 #include <QRegularExpression>
 
 #include "frogpilot/ui/qt/offroad/vehicle_settings.h"
+#include "system/hardware/hw.h"
 
 QStringList getCarNames(const QString &carMake, QMap<QString, QString> &carModels) {
   static const QHash<QString, QString> makeToFolder = {
@@ -173,6 +174,9 @@ FrogPilotVehiclesPanel::FrogPilotVehiclesPanel(FrogPilotSettingsWindow *parent, 
 
   std::vector<std::tuple<QString, QString, QString, QString>> vehicleToggles {
     {"GMToggles", tr("General Motors Settings"), tr("<b>FrogPilot features for General Motors vehicles.</b>"), ""},
+    {"GMPedalLongitudinal", tr("Use Pedal For Longitudinal"), tr("<b>Use the pedal interceptor for full longitudinal control</b> on supported GM vehicles."), ""},
+    {"RemoteStartBootsComma", tr("Remote Start Boots comma"), tr("<b>Use the remote-start GM panda firmware at boot.</b><br><br>Required for GM remote-start startup signal behavior."), ""},
+    {"RemapCancelToDistance", tr("Remap Cancel To Distance"), tr("<b>On pedal-interceptor Bolts, remap the steering-wheel CANCEL button to distance/personality input.</b>"), ""},
     {"VoltSNG", tr("Stop-and-Go Hack"), tr("<b>Force stop-and-go</b> on the 2017 Chevy Volt."), ""},
 
     {"HKGToggles", tr("Hyundai/Kia/Genesis Settings"), tr("<b>FrogPilot features for Genesis, Hyundai, and Kia vehicles.</b>"), ""},
@@ -297,7 +301,7 @@ FrogPilotVehiclesPanel::FrogPilotVehiclesPanel(FrogPilotSettingsWindow *parent, 
 
   static_cast<FrogPilotParamValueControl*>(toggles["LockDoorsTimer"])->setWarning("<b>Warning:</b> openpilot can't detect if keys are still inside the car, so ensure you have a spare key to prevent accidental lockouts!");
 
-  QSet<QString> rebootKeys = {"TacoTuneHacks"};
+  QSet<QString> rebootKeys = {"RemapCancelToDistance", "TacoTuneHacks"};
   for (const QString &key : rebootKeys) {
     QObject::connect(static_cast<ToggleControl*>(toggles[key]), &ToggleControl::toggleFlipped, [key, this](bool state) {
       if (started) {
@@ -313,6 +317,25 @@ FrogPilotVehiclesPanel::FrogPilotVehiclesPanel(FrogPilotSettingsWindow *parent, 
       }
     });
   }
+
+  ParamControl *remoteStartToggle = static_cast<ParamControl*>(toggles["RemoteStartBootsComma"]);
+  QObject::connect(remoteStartToggle, &ToggleControl::toggleFlipped, [parent, remoteStartToggle, this](bool state) {
+    const QString prompt = tr("Remote Start requires a Panda firmware update. Flash the Panda now?");
+    if (!FrogPilotConfirmationDialog::yesorno(prompt, this)) {
+      params.putBool("RemoteStartBootsComma", !state);
+      remoteStartToggle->refresh();
+      return;
+    }
+
+    std::thread([parent, this]() {
+      parent->keepScreenOn = true;
+      params_memory.putBool("FlashPanda", true);
+      while (params_memory.getBool("FlashPanda")) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      }
+      Hardware::reboot();
+    }).detach();
+  });
 
   openDescriptions(forceOpenDescriptions, toggles);
 
@@ -396,6 +419,14 @@ void FrogPilotVehiclesPanel::updateToggles() {
 
     if (key == "SNGHack") {
       setVisible &= !parent->hasSNG;
+    }
+
+    else if (key == "GMPedalLongitudinal") {
+      setVisible &= parent->hasPedal || (Hardware::PC() && parent->canUsePedal);
+    }
+
+    else if (key == "RemapCancelToDistance") {
+      setVisible &= parent->isBolt && (parent->hasPedal || (Hardware::PC() && parent->canUsePedal));
     }
 
     else if (key == "SubaruSNG") {

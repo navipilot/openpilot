@@ -1,9 +1,9 @@
 from __future__ import annotations
 import ctypes, time, functools, re, gzip, struct
 from tinygrad.helpers import getenv, DEBUG, fetch, getbits
-from tinygrad.runtime.support.memory import TLSFAllocator, MemoryManager
+from tinygrad.runtime.support.memory import TLSFAllocator, MemoryManager, AddrSpace
 from tinygrad.runtime.support.nv.ip import NV_FLCN, NV_FLCN_COT, NV_GSP
-from tinygrad.runtime.support.system import System, PCIDevice, PCIDevImplBase
+from tinygrad.runtime.support.system import PCIDevice, PCIDevImplBase, MMIOInterface
 
 NV_DEBUG = getenv("NV_DEBUG", 0)
 
@@ -33,9 +33,9 @@ class NVPageTableEntry:
 
   def _is_dual_pde(self) -> bool: return self.lv == self.nvdev.mm.level_cnt - 2
 
-  def set_entry(self, entry_id:int, paddr:int, table=False, uncached=False, system=False, snooped=False, frag=0, valid=True):
+  def set_entry(self, entry_id:int, paddr:int, table=False, uncached=False, aspace=AddrSpace.PHYS, snooped=False, frag=0, valid=True):
     if not table:
-      x = self.nvdev.pte_t.encode(valid=valid, address_sys=paddr >> 12, aperture=2 if system else 0, kind=6,
+      x = self.nvdev.pte_t.encode(valid=valid, address_sys=paddr >> 12, aperture=2 if aspace is AddrSpace.SYS else 0, kind=6,
         **({'pcf': int(uncached)} if self.nvdev.mmu_ver == 3 else {'vol': uncached}))
     else:
       pde = self.nvdev.dual_pde_t if self._is_dual_pde() else self.nvdev.pde_t
@@ -73,21 +73,9 @@ class NVDev(PCIDevImplBase):
   def __init__(self, pci_dev:PCIDevice):
     self.pci_dev, self.devfmt, self.mmio = pci_dev, pci_dev.pcibus, pci_dev.map_bar(0, fmt='I')
 
-    self.smi_dev, self.is_booting = False, True
-    self._early_init()
-
-    # UVM depth   HW level                            VA bits
-    # 0           PDE4                                56:56 (hopper+)
-    # 1           PDE3                                55:47
-    # 2           PDE2                                46:38
-    # 3           PDE1 (or 512M PTE)                  37:29
-    # 4           PDE0 (dual 64k/4k PDE, or 2M PTE)   28:21
-    # 5           PTE_64K / PTE_4K                    20:16 / 20:12
-    bits, shifts = (56, [12, 21, 29, 38, 47, 56]) if self.mmu_ver == 3 else (48, [12, 21, 29, 38, 47])
-    self.mm = NVMemoryManager(self, self.vram_size, boot_size=(2 << 20), pt_t=NVPageTableEntry, va_bits=bits, va_shifts=shifts, va_base=0,
-      palloc_ranges=[(x, x) for x in [512 << 20, 2 << 20, 4 << 10]], reserve_ptable=not self.large_bar)
-    self.flcn:NV_FLCN|NV_FLCN_COT = NV_FLCN_COT(self) if self.fmc_boot else NV_FLCN(self)
-    self.gsp:NV_GSP = NV_GSP(self)
+    self.smi_dev, self.is_booting, self.is_err_state = False, True, False
+    self._early_ip_init()
+    self._early_mmu_init()
 
     # Turn the booting early, gsp client is loaded from the clean.
     self.is_booting = False
@@ -104,7 +92,7 @@ class NVDev(PCIDevImplBase):
     if NV_DEBUG >= 4: print(f"wreg: {hex(addr)} = {hex(value)}")
   def rreg(self, addr:int) -> int: return self.mmio[addr // 4]
 
-  def _early_init(self):
+  def _early_ip_init(self):
     self.reg_names:set[str] = set()
     self.reg_offsets:dict[str, tuple[int, int]] = {}
 
@@ -115,15 +103,20 @@ class NVDev(PCIDevImplBase):
     self.fw_name = {"GB2": "GB202", "AD1": "AD102", "GA1": "GA102"}[self.chip_name[:3]]
     self.mmu_ver, self.fmc_boot = (3, True) if self.chip_details['architecture'] >= 0x1a else (2, False)
 
+    self.flcn:NV_FLCN|NV_FLCN_COT = NV_FLCN_COT(self) if self.fmc_boot else NV_FLCN(self)
+    self.gsp:NV_GSP = NV_GSP(self)
+
     self.include("src/common/inc/swref/published/turing/tu102/dev_fb.h")
+    self.include("src/common/inc/swref/published/ampere/ga102/dev_gc6_island.h")
+    self.include("src/common/inc/swref/published/ampere/ga102/dev_gc6_island_addendum.h")
     if self.reg("NV_PFB_PRI_MMU_WPR2_ADDR_HI").read() != 0:
       if DEBUG >= 2: print(f"nv {self.devfmt}: WPR2 is up. Issuing a full reset.", flush=True)
       self.pci_dev.reset()
-      time.sleep(0.5)
+      time.sleep(0.1) # wait until device can respond again
+      self.flcn.wait_for_reset()
 
+  def _early_mmu_init(self):
     self.include("src/common/inc/swref/published/turing/tu102/dev_vm.h")
-    self.include("src/common/inc/swref/published/ampere/ga102/dev_gc6_island.h")
-    self.include("src/common/inc/swref/published/ampere/ga102/dev_gc6_island_addendum.h")
 
     # MMU Init
     self.reg_names.update(mmu_pd_names:=[f'NV_MMU_VER{self.mmu_ver}_PTE', f'NV_MMU_VER{self.mmu_ver}_PDE', f'NV_MMU_VER{self.mmu_ver}_DUAL_PDE'])
@@ -136,8 +129,26 @@ class NVDev(PCIDevImplBase):
     self.vram, self.mmio = self.pci_dev.map_bar(1), self.pci_dev.map_bar(0, fmt='I')
     self.large_bar = self.vram.nbytes >= self.vram_size
 
+    # UVM depth   HW level                            VA bits
+    # 0           PDE4                                56:56 (hopper+)
+    # 1           PDE3                                55:47
+    # 2           PDE2                                46:38
+    # 3           PDE1 (or 512M PTE)                  37:29
+    # 4           PDE0 (dual 64k/4k PDE, or 2M PTE)   28:21
+    # 5           PTE_64K / PTE_4K                    20:16 / 20:12
+    bits, shifts = (56, [12, 21, 29, 38, 47, 56]) if self.mmu_ver == 3 else (48, [12, 21, 29, 38, 47])
+
+    # tail vram reserved for falcon structs
+    self.mm = NVMemoryManager(self, self.vram_size - (64 << 20), boot_size=(2 << 20), pt_t=NVPageTableEntry, va_bits=bits, va_shifts=shifts,
+      va_base=0, palloc_ranges=[(x, x) for x in [512 << 20, 2 << 20, 4 << 10]], reserve_ptable=not self.large_bar)
+
+  def _alloc_sysmem(self, size:int, vaddr:int=0, contiguous:bool=False, data:bytes|None=None) -> tuple[MMIOInterface, list[int]]:
+    view, paddrs = self.pci_dev.alloc_sysmem(size, vaddr, contiguous=contiguous)
+    if data is not None: view[:size] = data
+    return view, paddrs
+
   def _alloc_boot_struct(self, struct:ctypes.Structure) -> tuple[ctypes.Structure, int]:
-    view, paddrs = System.alloc_sysmem(sz:=ctypes.sizeof(type(struct)), contiguous=True)
+    view, paddrs = self._alloc_sysmem(sz:=ctypes.sizeof(type(struct)), contiguous=True)
     view[:sz] = bytes(struct)
     return type(struct).from_address(view.addr), paddrs[0]
 
@@ -158,7 +169,7 @@ class NVDev(PCIDevImplBase):
 
     regs_off = {'NV_PFALCON_FALCON': 0x0, 'NV_PGSP_FALCON': 0x0, 'NV_PSEC_FALCON': 0x0, 'NV_PRISCV_RISCV': 0x1000, 'NV_PGC6_AON': 0x0, 'NV_PFSP': 0x0,
       'NV_PGC6_BSI': 0x0, 'NV_PFALCON_FBIF': 0x600, 'NV_PFALCON2_FALCON': 0x1000, 'NV_PBUS': 0x0, 'NV_PFB': 0x0, 'NV_PMC': 0x0, 'NV_PGSP_QUEUE': 0x0,
-      'NV_VIRTUAL_FUNCTION':0xb80000}
+      'NV_VIRTUAL_FUNCTION':0xb80000, "NV_THERM": 0x0}
 
     for raw in self._download(file).splitlines():
       if not raw.startswith("#define "): continue

@@ -3,6 +3,7 @@
 #include "system/loggerd/video_writer.h"
 #include "common/swaglog.h"
 #include "common/util.h"
+#include <libavutil/version.h>
 
 VideoWriter::VideoWriter(const char *path, const char *filename, bool remuxing, int width, int height, int fps, cereal::EncodeIndex::Type codec)
   : remuxing(remuxing) {
@@ -57,10 +58,11 @@ void VideoWriter::initialize_audio(int sample_rate) {
   assert(this->audio_codec_ctx);
   this->audio_codec_ctx->sample_fmt = AV_SAMPLE_FMT_FLTP;
   this->audio_codec_ctx->sample_rate = sample_rate;
-  #if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(57, 28, 100)  // FFmpeg 5.1+
-  av_channel_layout_default(&this->audio_codec_ctx->ch_layout, 1);
+  #if defined(AV_CHANNEL_LAYOUT_MONO)
+  this->audio_codec_ctx->ch_layout = AV_CHANNEL_LAYOUT_MONO;
   #else
   this->audio_codec_ctx->channel_layout = AV_CH_LAYOUT_MONO;
+  this->audio_codec_ctx->channels = 1;
   #endif
   this->audio_codec_ctx->bit_rate = 32000;
   this->audio_codec_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
@@ -77,10 +79,12 @@ void VideoWriter::initialize_audio(int sample_rate) {
   this->audio_frame = av_frame_alloc();
   assert(this->audio_frame);
   this->audio_frame->format = this->audio_codec_ctx->sample_fmt;
-  #if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(57, 28, 100)  // FFmpeg 5.1+
-  av_channel_layout_copy(&this->audio_frame->ch_layout, &this->audio_codec_ctx->ch_layout);
+  #if defined(AV_CHANNEL_LAYOUT_MONO)
+  // Keep this symbol-free for older libavutil on-device: assign mono layout directly.
+  this->audio_frame->ch_layout = AV_CHANNEL_LAYOUT_MONO;
   #else
   this->audio_frame->channel_layout = this->audio_codec_ctx->channel_layout;
+  this->audio_frame->channels = this->audio_codec_ctx->channels;
   #endif
   this->audio_frame->sample_rate = this->audio_codec_ctx->sample_rate;
   this->audio_frame->nb_samples = this->audio_codec_ctx->frame_size;

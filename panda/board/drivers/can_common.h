@@ -165,11 +165,27 @@ void ignition_can_hook(CANPacket_t *msg) {
     int len = GET_LEN(msg);
 
     // GM exception
-    if ((msg->addr == 0x1F1U) && (len == 8)) {
-      // SystemPowerMode (2=Run, 3=Crank Request)
-      ignition_can = (msg->data[0] & 0x2U) != 0U;
+    // Remote-start mode uses 0xC9 bit 4 (SystemPowerMode=Run) for ignition detection.
+    // Stock mode uses 0x1F1 bit 1 (SystemPowerMode=Run/Crank Request).
+    #ifdef PANDA_GM_REMOTE_START_C9
+    if ((msg->addr == 0xC9U) && (len == 8)) {
+      ignition_can = (msg->data[6] & 0x10U) != 0U;
       ignition_can_cnt = 0U;
     }
+    #else
+    if (gm_remote_start_boots_comma) {
+      if ((msg->addr == 0xC9U) && (len == 8)) {
+        ignition_can = (msg->data[6] & 0x10U) != 0U;
+        ignition_can_cnt = 0U;
+      }
+    } else {
+      if ((msg->addr == 0x1F1U) && (len == 8)) {
+        // SystemPowerMode (2=Run, 3=Crank Request)
+        ignition_can = (msg->data[0] & 0x2U) != 0U;
+        ignition_can_cnt = 0U;
+      }
+    }
+    #endif
 
     // Rivian R1S/T GEN1 exception
     if ((msg->addr == 0x152U) && (len == 8)) {

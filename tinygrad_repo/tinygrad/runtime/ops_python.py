@@ -2,11 +2,11 @@
 # a python uops emulator
 # works to test the tensor cores, and all the uops in general
 # this is the (living) definition of uops
-from typing import Any, TYPE_CHECKING, cast
+from typing import Any, TYPE_CHECKING
 import pickle, base64, itertools, time, struct, sys, functools
-from tinygrad.dtype import DType, dtypes, ImageDType, PtrDType, truncate, float_to_bf16, float_to_fp8, fp8_to_float
+from tinygrad.dtype import DType, dtypes, ImageDType, PtrDType, truncate, float_to_fp16, float_to_bf16, float_to_fp8, fp8_to_float
 from tinygrad.helpers import all_same, getenv, flatten, get_single_element, EMULATE
-from tinygrad.device import Compiled, Compiler, Allocator
+from tinygrad.device import Compiled, Compiler, Allocator, CompilerSet
 from tinygrad.codegen.opt import tc
 from tinygrad.uop.ops import exec_alu, python_alu, Ops, UOp, GroupOp
 from tinygrad.renderer import Renderer
@@ -14,6 +14,7 @@ from tinygrad.renderer import Renderer
 def storage_fmt_for_dtype(dtype: DType): return 'H' if dtype == dtypes.bfloat16 else 'B' if dtype in dtypes.fp8s else dtype.fmt
 
 def to_storage_scalar(x, dtype: DType):
+  if dtype == dtypes.half: return float_to_fp16(x)
   if dtype == dtypes.bfloat16: return (struct.unpack('I', struct.pack('f', float_to_bf16(x)))[0] >> 16) & 0xFFFF
   if dtype in dtypes.fp8s: return float_to_fp8(float(x), dtype)
   return x
@@ -51,7 +52,7 @@ def generic_wmma_helper(inp, warp_size, WARP_THREADS, K, NUM_A, NUM_B, NUM_C, a_
   return out
 
 class PythonProgram:
-  def __init__(self, name:str, lib:bytes):
+  def __init__(self, name:str, lib:bytes, **kwargs):
     self.uops: list[tuple[Ops, DType, list[int], Any]] = pickle.loads(lib)
   def __call__(self, *bufs, global_size:tuple[int,int,int]=(1,1,1), local_size:tuple[int,int,int]=(1,1,1), vals:tuple[int, ...]=(), wait=False):
     st = time.perf_counter()
@@ -84,7 +85,7 @@ class PythonProgram:
           i += 1
           continue
         if uop is Ops.AFTER: values[i] = src_values[0]
-        elif uop in {Ops.DEFINE_GLOBAL, Ops.DEFINE_LOCAL, Ops.DEFINE_REG}:
+        elif uop in {Ops.PARAM, Ops.DEFINE_LOCAL, Ops.DEFINE_REG}:
           assert isinstance(dtype, PtrDType), dtype
           storage_fmt = storage_fmt_for_dtype(dtype.base.scalar())
           if storage_fmt is None: raise RuntimeError(f"{dtype=} is not supported")
@@ -93,7 +94,7 @@ class PythonProgram:
             # REGs are per thread
             values[i] = [memoryview(bytearray(dtype.size*dtype.itemsize)).cast(storage_fmt) for _ in range(warp_size)]
           else:
-            buf = memoryview(bytearray(dtype.size*dtype.itemsize)) if uop is not Ops.DEFINE_GLOBAL else pbufs.pop(0)
+            buf = memoryview(bytearray(dtype.size*dtype.itemsize)) if uop is not Ops.PARAM else pbufs.pop(0)
             values[i] = [buf.cast(storage_fmt)] * warp_size
         elif uop is Ops.DEFINE_VAR:
           values[i] = [pvals.pop(0)] * warp_size
@@ -141,7 +142,7 @@ class PythonProgram:
           assert isinstance(first_src_dtype, DType) # mypy
           dims, dtype_in, device, threads = arg[1], first_src_dtype.scalar(), arg[4], arg[5]
           wmma_helper = functools.partial(generic_wmma_helper, src_values, warp_size)
-          # TODO: refactor these to a shared TensorCoreLayout in kernel.py
+          # TODO: refactor these to a shared TensorCoreLayout
           if device == "METAL":
             # A (2 elements on 32 threads): row major
             def a_b_elem(x, i, j, goff): return x[(i%2)][goff+(i//2)%2+(j%4)*2+(i//4)*8+(j//4)*16]
@@ -213,11 +214,16 @@ class PythonProgram:
         i += 1
     return time.perf_counter() - st
 
+class PythonCompiler(Compiler):
+  def compile(self, src:str) -> bytes: return base64.b64decode(src)
+
 class PythonRenderer(Renderer):
   device = "PYTHON"
   code_for_op = python_alu
+  compiler = PythonCompiler()
+
   def __init__(self):
-    match cast(str, EMULATE.value):
+    match EMULATE.value:
       case "METAL": self.device, self.tensor_cores = "METAL", tc.metal
       case "AMD": self.device, self.tensor_cores = "AMD", tc.amd_rdna3
       case "AMD_MFMA": self.device, self.tensor_cores = "AMD", tc.amd_cdna4
@@ -235,13 +241,11 @@ class PythonRenderer(Renderer):
     lops = [(u.op, u.dtype, [uops.index(v) for v in u.src if u.op is not Ops.SPECIAL], u.arg) for u in uops]
     return base64.b64encode(pickle.dumps(lops)).decode()
 
-class PythonCompiler(Compiler):
-  def compile(self, src:str) -> bytes: return base64.b64decode(src)
-
 class PythonAllocator(Allocator['PythonDevice']):
   def _alloc(self, size, options): return memoryview(bytearray(size))
   def _copyin(self, dest, src:memoryview): dest[:] = src
   def _copyout(self, dest:memoryview, src): dest[:] = src
 
 class PythonDevice(Compiled):
-  def __init__(self, device:str): super().__init__(device, PythonAllocator(self), [(PythonRenderer, PythonCompiler)], PythonProgram)
+  def __init__(self, device:str):
+    super().__init__(device, PythonAllocator(self), CompilerSet([(PythonRenderer, None)]), PythonProgram)

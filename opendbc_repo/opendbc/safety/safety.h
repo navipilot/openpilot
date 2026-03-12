@@ -99,6 +99,8 @@ safety_config current_safety_config;
 
 // OPGM variables
 bool enable_gas_interceptor = false;
+int gas_interceptor_prev = 0;
+bool gm_remote_start_boots_comma = false;
 
 static void generic_rx_checks(void);
 static void stock_ecu_check(bool stock_ecu_detected);
@@ -497,6 +499,7 @@ int set_safety_hooks(uint16_t mode, uint16_t param) {
 
   // OPGM variables
   enable_gas_interceptor = false;
+  gas_interceptor_prev = 0;
 
   // FrogPilot variables
   aol_allowed = false;

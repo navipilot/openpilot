@@ -8,7 +8,7 @@ from openpilot.system.hardware import TICI
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.lib.egl import init_egl, create_egl_image, destroy_egl_image, bind_egl_image_to_texture, EGLImage
 from openpilot.system.ui.widgets import Widget
-from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
+from openpilot.selfdrive.ui.ui_state import ui_state
 
 CONNECTION_RETRY_INTERVAL = 0.2  # seconds between connection attempts
 
@@ -324,7 +324,7 @@ class CameraView(Widget):
     rl.end_shader_mode()
 
   def _update_texture_color_filtering(self):
-    self._engaged_val[0] = 1 if ui_state.status != UIStatus.DISENGAGED else 0
+    self._engaged_val[0] = 1 if ui_state.started else 0
     rl.set_shader_value(self.shader, self._engaged_loc, self._engaged_val, rl.ShaderUniformDataType.SHADER_UNIFORM_INT)
     rl.set_shader_value(self.shader, self._enhance_driver_loc, self._enhance_driver_val, rl.ShaderUniformDataType.SHADER_UNIFORM_INT)
 

@@ -12,6 +12,16 @@ uint32_t microsecond_timer_get(void) {
 #include "opendbc/safety/can.h"
 #include "opendbc/safety/safety.h"
 
+void can_send(CANPacket_t *to_send, uint8_t bus_number, bool skip_tx_hook) {
+  (void)to_send;
+  (void)bus_number;
+  (void)skip_tx_hook;
+}
+
+void can_set_checksum(CANPacket_t *packet) {
+  (void)packet;
+}
+
 void safety_tick_current_safety_config() {
   safety_tick(&current_safety_config);
 }

@@ -1,0 +1,124 @@
+.troubleshootPage {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.troubleshootCard {
+  background: var(--sidebar-bg);
+  border: 1px solid var(--sidebar-border-color);
+  border-radius: var(--border-radius-lg);
+  padding: 16px;
+}
+
+.troubleshootIntro {
+  margin: 0 0 12px;
+  opacity: 0.9;
+}
+
+.troubleshootActionRow {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.troubleshootButton {
+  background: linear-gradient(135deg, #7a62b8, #8b6cc5);
+  color: #fff;
+  border: none;
+  border-radius: var(--border-radius-md);
+  padding: 10px 14px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.troubleshootButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.troubleshootDanger {
+  background: linear-gradient(135deg, #b14a6b, #d95a7b);
+}
+
+.troubleshootError {
+  color: #ff6b6b;
+}
+
+.troubleshootStatusLine {
+  margin: 6px 0 0;
+}
+
+.troubleshootSectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.troubleshootSectionHeader h3,
+.troubleshootCard h3 {
+  margin: 0;
+}
+
+.troubleshootHeaderRow,
+.troubleshootItemRow,
+.troubleshootSnapshotRow {
+  display: grid;
+  gap: 10px;
+  align-items: center;
+  border-top: 1px solid var(--sidebar-border-color);
+  padding: 8px 0;
+}
+
+.troubleshootHeaderRow {
+  font-weight: 700;
+  opacity: 0.9;
+}
+
+.troubleshootHeaderRow {
+  grid-template-columns: 2fr 1fr 1fr;
+}
+
+.troubleshootHeaderRowSnapshot {
+  grid-template-columns: 2fr 2fr;
+}
+
+.troubleshootSnapshotRow {
+  grid-template-columns: 2fr 2fr;
+}
+
+.troubleshootItemRow {
+  grid-template-columns: 2fr 1fr 1fr;
+}
+
+.troubleshootItemLabel {
+  font-weight: 600;
+}
+
+.troubleshootItemValue,
+.troubleshootItemDefault {
+  font-family: "Open Sans", sans-serif;
+  word-break: break-word;
+}
+
+@media (max-width: 720px) {
+  .troubleshootHeaderRow,
+  .troubleshootItemRow {
+    grid-template-columns: 1.3fr 1fr 1fr;
+    font-size: 0.9rem;
+  }
+
+  .troubleshootSnapshotRow {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .troubleshootSectionHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

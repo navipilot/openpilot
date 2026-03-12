@@ -1,5 +1,8 @@
 #include "selfdrive/ui/qt/sidebar.h"
 
+#include <cstdlib>
+#include <string>
+
 #include <QMouseEvent>
 
 #include "selfdrive/ui/qt/util.h"
@@ -128,13 +131,20 @@ void Sidebar::updateState(const UIState &s, const FrogPilotUIState &fs) {
   networking = networking ? networking : window()->findChild<Networking *>("");
   bool tethering_on = networking && networking->wifi->tethering_on;
   auto deviceState = sm["deviceState"].getDeviceState();
-  setProperty("netType", tethering_on ? "Hotspot": network_type[deviceState.getNetworkType()]);
-  int strength = tethering_on ? 4 : (int)deviceState.getNetworkStrength();
+
+  const char *desktop_fake_wifi_env = std::getenv("SP_ALLOW_DESKTOP_FAKE_WIFI");
+  const bool desktop_force_online = Hardware::PC() && desktop_fake_wifi_env != nullptr && std::string(desktop_fake_wifi_env) != "0";
+
+  auto net_type_value = desktop_force_online ? cereal::DeviceState::NetworkType::WIFI : deviceState.getNetworkType();
+  setProperty("netType", tethering_on ? "Hotspot" : network_type[net_type_value]);
+  int strength = tethering_on ? 4 : (desktop_force_online ? 4 : (int)deviceState.getNetworkStrength());
   setProperty("netStrength", strength > 0 ? strength + 1 : 0);
 
   ItemStatus connectStatus;
   auto last_ping = deviceState.getLastAthenaPingTime();
-  if (last_ping == 0) {
+  if (desktop_force_online) {
+    connectStatus = ItemStatus{{tr("CONNECT"), tr("ONLINE")}, QColor(frogpilot_toggles.value("sidebar_color3").toString())};
+  } else if (last_ping == 0) {
     connectStatus = ItemStatus{{tr("CONNECT"), tr("OFFLINE")}, warning_color};
   } else {
     connectStatus = nanos_since_boot() - last_ping < 80e9
@@ -288,4 +298,15 @@ void Sidebar::updateTheme() {
   loadImage("../../frogpilot/assets/active_theme/icons/button_home", home_img, home_gif, home_btn.size(), this);
   loadImage("../../frogpilot/assets/active_theme/icons/button_flag", flag_img, flag_gif, home_btn.size(), this);
   loadImage("../../frogpilot/assets/active_theme/icons/button_settings", settings_img, settings_gif, settings_btn.size(), this);
+
+  // Keep stock icons visible when a theme is partial or missing an icon.
+  if (!home_gif && home_img.isNull()) {
+    home_img = loadPixmap("../assets/images/button_home.png", home_btn.size());
+  }
+  if (!flag_gif && flag_img.isNull()) {
+    flag_img = loadPixmap("../assets/images/button_flag.png", home_btn.size());
+  }
+  if (!settings_gif && settings_img.isNull()) {
+    settings_img = loadPixmap("../assets/images/button_settings.png", settings_btn.size(), Qt::IgnoreAspectRatio);
+  }
 }

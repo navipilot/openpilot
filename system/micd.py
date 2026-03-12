@@ -2,6 +2,7 @@
 import numpy as np
 from functools import cache
 import threading
+import time
 
 from cereal import messaging
 from openpilot.common.realtime import Ratekeeper
@@ -95,20 +96,59 @@ class Mic:
         self.measurements = self.measurements[FFT_SAMPLES:]
 
   @retry(attempts=10, delay=3)
-  def get_stream(self, sd):
+  def get_stream(self, sd, device=None):
     # reload sounddevice to reinitialize portaudio
     sd._terminate()
     sd._initialize()
-    return sd.InputStream(channels=1, samplerate=SAMPLE_RATE, callback=self.callback, blocksize=SAMPLE_BUFFER)
+    kwargs = {
+      "channels": 1,
+      "samplerate": SAMPLE_RATE,
+      "callback": self.callback,
+      "blocksize": SAMPLE_BUFFER,
+    }
+    if device is not None:
+      kwargs["device"] = device
+    return sd.InputStream(**kwargs)
+
+  def get_input_devices(self, sd):
+    # Try default first, then explicit input-capable devices as fallback.
+    devices = [None]
+    try:
+      for i, dev in enumerate(sd.query_devices()):
+        if dev.get("max_input_channels", 0) > 0:
+          devices.append(i)
+    except Exception:
+      cloudlog.exception("micd: failed to enumerate audio devices")
+
+    # Preserve order while deduplicating.
+    return list(dict.fromkeys(devices))
 
   def micd_thread(self):
     # sounddevice must be imported after forking processes
     import sounddevice as sd
 
-    with self.get_stream(sd) as stream:
-      cloudlog.info(f"micd stream started: {stream.samplerate=} {stream.channels=} {stream.dtype=} {stream.device=}, {stream.blocksize=}")
-      while True:
-        self.update()
+    while True:
+      stream = None
+      for device in self.get_input_devices(sd):
+        try:
+          stream = self.get_stream(sd, device=device)
+          break
+        except Exception:
+          cloudlog.exception(f"micd: failed to open input stream (device={device})")
+
+      if stream is None:
+        cloudlog.error("micd: no valid input device, retrying")
+        time.sleep(5)
+        continue
+
+      try:
+        with stream:
+          cloudlog.info(f"micd stream started: {stream.samplerate=} {stream.channels=} {stream.dtype=} {stream.device=}, {stream.blocksize=}")
+          while True:
+            self.update()
+      except Exception:
+        cloudlog.exception("micd: stream failed, restarting")
+        time.sleep(1)
 
 
 def main():

@@ -7,7 +7,6 @@ from enum import IntEnum
 
 import pyray as rl
 
-from openpilot.system.hardware import PC
 from openpilot.system.ui.lib.application import gui_app, FontWeight, FONT_SCALE
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.button import Button, ButtonStyle
@@ -16,6 +15,7 @@ from openpilot.system.ui.widgets.label import gui_label, gui_text_box
 NVME = "/dev/nvme0n1"
 USERDATA = "/dev/disk/by-partlabel/userdata"
 TIMEOUT = 3*60
+PC = not (os.path.isfile("/TICI") or os.path.isfile("/EON"))
 
 
 class ResetMode(IntEnum):
@@ -45,9 +45,22 @@ class Reset(Widget):
   def _cancel_callback(self):
     self._render_status = False
 
+  def _backup_ssh_params(self):
+    if PC:
+      return
+
+    backup_dir = "/cache/reset_backup"
+    os.system(f"sudo rm -rf {backup_dir}")
+    os.system(f"sudo mkdir -p {backup_dir}")
+    for key in ("GithubSshKeys", "SshEnabled"):
+      os.system(f"sudo cp /data/params/d/{key} {backup_dir}/{key} 2>/dev/null || true")
+    os.system(f"sudo chmod 600 {backup_dir}/* 2>/dev/null || true")
+
   def _do_erase(self):
     if PC:
       return
+
+    self._backup_ssh_params()
 
     # Best effort to wipe NVME
     os.system(f"sudo umount {NVME}")
@@ -118,6 +131,13 @@ class Reset(Widget):
 
 
 def main():
+  # Safety fallback: if this module is launched on a small-UI device,
+  # hand off to the mici reset implementation to avoid off-screen layout.
+  if not gui_app.big_ui():
+    import openpilot.system.ui.mici_reset as mici_reset
+    mici_reset.main()
+    return
+
   mode = ResetMode.USER_RESET
   if len(sys.argv) > 1:
     if sys.argv[1] == '--recover':

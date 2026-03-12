@@ -67,12 +67,24 @@ def get_torque_params():
   with open(TORQUE_OVERRIDE_PATH, 'rb') as f:
     override = tomllib.load(f)
 
+  def resolve_sub_candidate(candidate: str) -> str:
+    chain: list[str] = []
+    seen: set[str] = set()
+    out = candidate
+    while out in sub:
+      if out in seen:
+        raise RuntimeError(f"Found cycle in torque substitute config: {' -> '.join(chain + [out])}")
+      chain.append(out)
+      seen.add(out)
+      out = sub[out]
+    return out
+
   torque_params = {}
   for candidate in (sub.keys() | params.keys() | override.keys()) - {'legend'}:
     if sum([candidate in x for x in [sub, params, override]]) > 1:
       raise RuntimeError(f'{candidate} is defined twice in torque config')
 
-    sub_candidate = sub.get(candidate, candidate)
+    sub_candidate = resolve_sub_candidate(candidate)
 
     if sub_candidate in override:
       out = override[sub_candidate]
@@ -337,7 +349,9 @@ class CarInterfaceBase(ABC):
     if self.distance_button != prev_distance_button:
       ret.buttonEvents = create_button_events(self.distance_button, prev_distance_button, {1: ButtonType.gapAdjustCruise})
 
-    fp_ret.distancePressed = self.distance_button or bool(self.CS.distance_button)
+    # Preserve brand-specific injections (e.g. GM cancel->distance remap hold) while
+    # still honoring the onroad virtual distance button and native distance button.
+    fp_ret.distancePressed = bool(fp_ret.distancePressed) or self.distance_button or bool(self.CS.distance_button)
     fp_ret.ecoGear |= ret.gearShifter == GearShifter.eco
     fp_ret.sportGear |= ret.gearShifter == GearShifter.sport
 

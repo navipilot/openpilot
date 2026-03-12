@@ -98,6 +98,8 @@ class AlertRenderer(Widget):
     self._prev_alert: Alert | None = None
     self._text_gen_time = 0
     self._alert_text2_gen = ''
+    self._last_started_frame = -1
+    self._below_steer_speed_shown_this_drive = False
 
     # animation filters
     # TODO: use 0.1 but with proper alert height calculation
@@ -119,6 +121,14 @@ class AlertRenderer(Widget):
   def get_alert(self, sm: messaging.SubMaster) -> Alert | None:
     """Generate the current alert based on selfdrive state."""
     ss = sm['selfdriveState']
+
+    # Reset per-drive one-shot alert state on each new onroad session.
+    if ui_state.started and ui_state.started_frame != self._last_started_frame:
+      self._last_started_frame = ui_state.started_frame
+      self._below_steer_speed_shown_this_drive = False
+    elif not ui_state.started:
+      self._last_started_frame = -1
+      self._below_steer_speed_shown_this_drive = False
 
     # Check if selfdriveState messages have stopped arriving
     if not sm.updated['selfdriveState']:
@@ -145,6 +155,13 @@ class AlertRenderer(Widget):
     # Return current alert
     ret = Alert(text1=ss.alertText1, text2=ss.alertText2, size=ss.alertSize.raw, status=ss.alertStatus.raw,
                 visual_alert=ss.alertHudVisual, alert_type=ss.alertType)
+
+    # Stock-like once-per-drive minimum lateral warning behavior.
+    if ret.alert_type.startswith("belowSteerSpeed/"):
+      if self._below_steer_speed_shown_this_drive:
+        return None
+      self._below_steer_speed_shown_this_drive = True
+
     self._prev_alert = ret
     return ret
 

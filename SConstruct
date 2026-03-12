@@ -1,4 +1,5 @@
 import os
+import shutil
 import subprocess
 import sys
 import sysconfig
@@ -12,7 +13,8 @@ SCons.Warnings.warningAsException(True)
 # pending upstream fix - https://github.com/SCons/scons/issues/4461
 #SetOption('warn', 'all')
 
-TICI = os.path.isfile('/TICI')
+force_tici = os.environ.get("SP_FORCE_TICI", "").lower() in {"1", "true", "yes", "on"}
+TICI = os.path.isfile('/TICI') or force_tici
 AGNOS = TICI
 
 Decider('MD5-timestamp')
@@ -61,47 +63,135 @@ AddOption('--minimal',
           default=os.path.exists(File('#.lfsconfig').abspath), # minimal by default on release branch (where there's no LFS)
           help='the minimum build to run openpilot. no tests, tools, etc.')
 
+def maybe_delegate_to_laptop_device_builder() -> None:
+  if platform.system() != "Darwin":
+    return
+  if os.environ.get("SP_FORCE_ARCH"):
+    return
+  if os.environ.get("SP_SKIP_CONTAINER_REEXEC"):
+    return
+  if os.environ.get("SP_DISABLE_AUTO_DEVICE_SCONS", "").lower() in {"1", "true", "yes", "on"}:
+    return
+
+  basedir = Dir("#").abspath
+  sysroot_dir = os.environ.get("COMMA_SYSROOT_DIR", os.path.join(basedir, ".comma_sysroot"))
+  required_sysroot_dirs = (
+    "usr/local/lib",
+    "lib/aarch64-linux-gnu",
+    "usr/lib/aarch64-linux-gnu",
+    "system/vendor/lib64",
+  )
+  if not all(os.path.isdir(os.path.join(sysroot_dir, p)) for p in required_sysroot_dirs):
+    return
+
+  docker_bin = shutil.which("docker")
+  if docker_bin is None:
+    mac_docker = "/Applications/Docker.app/Contents/Resources/bin/docker"
+    if os.path.isfile(mac_docker):
+      docker_bin = mac_docker
+
+  if docker_bin is None and shutil.which("podman") is None:
+    return
+
+  builder = os.path.join(basedir, "scripts", "laptop_device_build.sh")
+  if not os.path.isfile(builder):
+    return
+
+  print(f"Auto-routing scons to laptop device build (sysroot: {sysroot_dir})", flush=True)
+  env = os.environ.copy()
+  env["SP_SKIP_CONTAINER_REEXEC"] = "1"
+  env.setdefault("COMMA_SYSROOT_DIR", sysroot_dir)
+  if docker_bin is not None and shutil.which("docker") is None:
+    docker_dir = os.path.dirname(docker_bin)
+    env["PATH"] = f"{docker_dir}:{env.get('PATH', '')}"
+
+  cmd = [builder, "build", *sys.argv[1:]]
+  raise SystemExit(subprocess.call(cmd, cwd=basedir, env=env))
+
+maybe_delegate_to_laptop_device_builder()
+
 ## Architecture name breakdown (arch)
 ## - larch64: linux tici aarch64
 ## - aarch64: linux pc aarch64
 ## - x86_64:  linux pc x64
 ## - Darwin:  mac x64 or arm64
 real_arch = arch = subprocess.check_output(["uname", "-m"], encoding='utf8').rstrip()
-if platform.system() == "Darwin":
+forced_arch = os.environ.get("SP_FORCE_ARCH")
+if forced_arch:
+  arch = forced_arch
+elif platform.system() == "Darwin":
   arch = "Darwin"
   brew_prefix = subprocess.check_output(['brew', '--prefix'], encoding='utf8').strip()
 elif arch == "aarch64" and AGNOS:
   arch = "larch64"
 assert arch in ["larch64", "aarch64", "x86_64", "Darwin"]
 
+# Homebrew llvm can shadow Apple clang and break macOS SDK header resolution.
+# Use the system toolchain explicitly on macOS for reliable local builds.
+cc = '/usr/bin/clang' if arch == "Darwin" else 'clang'
+cxx = '/usr/bin/clang++' if arch == "Darwin" else 'clang++'
+
 lenv = {
   "PATH": os.environ['PATH'],
-  "PYTHONPATH": Dir("#").abspath + ':' + Dir(f"#third_party/acados").abspath,
+  "PYTHONPATH": ":".join([
+    Dir("#").abspath,
+    Dir("#third_party/acados").abspath,
+    Dir("#opendbc_repo").abspath,
+  ]),
 
   "ACADOS_SOURCE_DIR": Dir("#third_party/acados").abspath,
   "ACADOS_PYTHON_INTERFACE_PATH": Dir("#third_party/acados/acados_template").abspath,
   "TERA_PATH": Dir("#").abspath + f"/third_party/acados/{arch}/t_renderer"
 }
 
+# Allow callers to override cache/temp dirs used by subprocesses (e.g. tinygrad model compilation).
+for key in ("HOME", "TMPDIR", "XDG_CACHE_HOME", "CACHEDB"):
+  if key in os.environ:
+    lenv[key] = os.environ[key]
+
 rpath = []
+arch_ldflags = []
+
+def tici_libpath(path: str) -> str:
+  tici_sysroot = os.environ.get("SP_TICI_SYSROOT", "").strip().rstrip("/")
+  if arch != "larch64" or not tici_sysroot or not path.startswith("/"):
+    return path
+  return os.path.join(tici_sysroot, path.lstrip("/"))
 
 if arch == "larch64":
   cpppath = [
     "#third_party/opencl/include",
+    tici_libpath("/usr/local/include"),
+    tici_libpath("/usr/include"),
+    tici_libpath("/usr/include/aarch64-linux-gnu"),
   ]
 
   libpath = [
-    "/usr/local/lib",
-    "/system/vendor/lib64",
+    tici_libpath("/usr/local/lib"),
+    tici_libpath("/system/vendor/lib64"),
     f"#third_party/acados/{arch}/lib",
   ]
 
   libpath += [
     "#third_party/libyuv/larch64/lib",
-    "/usr/lib/aarch64-linux-gnu"
+    tici_libpath("/lib/aarch64-linux-gnu"),
+    tici_libpath("/usr/lib/aarch64-linux-gnu")
   ]
-  cflags = ["-DQCOM2", "-mcpu=cortex-a57"]
-  cxxflags = ["-DQCOM2", "-mcpu=cortex-a57"]
+  cflags = ["-D__TICI__", "-DQCOM2", "-mcpu=cortex-a57"]
+  cxxflags = ["-D__TICI__", "-DQCOM2", "-mcpu=cortex-a57"]
+  arch_ldflags += [
+    f"-Wl,-rpath-link,{tici_libpath('/usr/local/lib')}",
+    f"-Wl,-rpath-link,{tici_libpath('/lib/aarch64-linux-gnu')}",
+    f"-Wl,-rpath-link,{tici_libpath('/usr/lib/aarch64-linux-gnu')}",
+    f"-Wl,-rpath-link,{tici_libpath('/system/vendor/lib64')}",
+    f"-Wl,-rpath-link,{tici_libpath('/vendor/lib64')}",
+  ]
+  # On non-aarch64 hosts (e.g. Docker on macOS), force clang cross-targeting.
+  if platform.machine() not in ("aarch64", "arm64"):
+    cross_target = os.environ.get("SP_CROSS_TARGET", "aarch64-linux-gnu")
+    cflags += [f"--target={cross_target}"]
+    cxxflags += [f"--target={cross_target}"]
+    arch_ldflags += [f"--target={cross_target}"]
   rpath += ["/usr/local/lib"]
 else:
   cflags = []
@@ -119,8 +209,12 @@ else:
       "/System/Library/Frameworks/OpenGL.framework/Libraries",
     ]
 
-    cflags += ["-DGL_SILENCE_DEPRECATION"]
-    cxxflags += ["-DGL_SILENCE_DEPRECATION"]
+    # cereal headers in this tree were generated with capnp 1.0.1, while
+    # Homebrew currently ships newer capnp headers (1.3.x). For mac host
+    # tooling builds (desktop UI/runtime .so), force the expected version
+    # macro so generated headers remain buildable.
+    cflags += ["-DGL_SILENCE_DEPRECATION", "-DCAPNP_VERSION=1000001"]
+    cxxflags += ["-DGL_SILENCE_DEPRECATION", "-DCAPNP_VERSION=1000001"]
     cpppath += [
       f"{brew_prefix}/include",
       f"{brew_prefix}/opt/openssl@3.0/include",
@@ -143,6 +237,13 @@ elif GetOption('ubsan'):
 else:
   ccflags = []
   ldflags = []
+ldflags += arch_ldflags
+
+# AGNOS devices are memory-constrained during on-device C++ compiles.
+# Building without debug symbols dramatically reduces peak clang memory and
+# prevents lowmemorykiller SIGKILLs (Error -9) on large translation units.
+use_debug_symbols = os.environ.get("SP_FORCE_DEBUG_SYMBOLS", "").lower() in {"1", "true", "yes", "on"}
+debug_flag = "-g" if (not AGNOS or use_debug_symbols) else "-g0"
 
 # no --as-needed on mac linker
 if arch != "Darwin":
@@ -155,7 +256,7 @@ if ccflags_option:
 env = Environment(
   ENV=lenv,
   CCFLAGS=[
-    "-g",
+    debug_flag,
     "-fPIC",
     "-O2",
     "-Wunused",
@@ -181,8 +282,8 @@ env = Environment(
     "#msgq",
   ],
 
-  CC='clang',
-  CXX='clang++',
+  CC=cc,
+  CXX=cxx,
   LINKFLAGS=ldflags,
 
   RPATH=rpath,
@@ -227,6 +328,10 @@ if os.environ.get('SCONS_PROGRESS'):
 
 # Cython build environment
 py_include = sysconfig.get_paths()['include']
+if arch == "larch64" and platform.machine() not in ("aarch64", "arm64"):
+  tici_py_include = tici_libpath(f"/usr/include/python{sys.version_info.major}.{sys.version_info.minor}")
+  if os.path.isdir(tici_py_include):
+    py_include = tici_py_include
 envCython = env.Clone()
 envCython["CPPPATH"] += [py_include, np.get_include()]
 envCython["CCFLAGS"] += ["-Wno-#warnings", "-Wno-shadow", "-Wno-deprecated-declarations"]
@@ -236,7 +341,7 @@ envCython["LIBS"] = []
 if arch == "Darwin":
   envCython["LINKFLAGS"] = ["-bundle", "-undefined", "dynamic_lookup"] + darwin_rpath_link_flags
 else:
-  envCython["LINKFLAGS"] = ["-pthread", "-shared"]
+  envCython["LINKFLAGS"] = arch_ldflags + ["-pthread", "-shared"]
 
 np_version = SCons.Script.Value(np.__version__)
 Export('envCython', 'np_version')
@@ -256,8 +361,17 @@ if arch == "Darwin":
   qt_env["FRAMEWORKS"] += [f"Qt{m}" for m in qt_modules] + ["OpenGL"]
   qt_env.AppendENVPath('PATH', os.path.join(qt_env['QTDIR'], "bin"))
 else:
-  qt_install_prefix = subprocess.check_output(['qmake', '-query', 'QT_INSTALL_PREFIX'], encoding='utf8').strip()
-  qt_install_headers = subprocess.check_output(['qmake', '-query', 'QT_INSTALL_HEADERS'], encoding='utf8').strip()
+  if arch == "larch64":
+    qt_env.PrependENVPath('PATH', Dir("#third_party/qt5/larch64/bin/").abspath)
+  # For laptop/device builds that mount an AGNOS sysroot, always prefer Qt
+  # headers from that sysroot to keep headers/libs ABI-matched (Qt 5.12.x).
+  if arch == "larch64" and os.environ.get("SP_TICI_SYSROOT"):
+    qt_install_prefix = tici_libpath("/usr")
+    qt_install_headers = tici_libpath("/usr/include/aarch64-linux-gnu/qt5")
+  else:
+    qmake = os.environ.get("SP_QMAKE", "qmake")
+    qt_install_prefix = subprocess.check_output([qmake, '-query', 'QT_INSTALL_PREFIX'], encoding='utf8').strip()
+    qt_install_headers = subprocess.check_output([qmake, '-query', 'QT_INSTALL_HEADERS'], encoding='utf8').strip()
 
   qt_env['QTDIR'] = qt_install_prefix
   qt_dirs = [
@@ -272,11 +386,42 @@ else:
   qt_libs = [f"Qt5{m}" for m in qt_modules]
   if arch == "larch64":
     qt_libs += ["GLESv2", "wayland-client"]
-    qt_env.PrependENVPath('PATH', Dir("#third_party/qt5/larch64/bin/").abspath)
   elif arch != "Darwin":
     qt_libs += ["GL"]
 qt_env['QT3DIR'] = qt_env['QTDIR']
 qt_env.Tool('qt3')
+if arch == "larch64" and os.environ.get("SP_TICI_SYSROOT"):
+  qt_tool_bin = tici_libpath("/usr/lib/qt5/bin")
+  qt_tool_root = tici_libpath("/")
+  qt_arm_moc = os.path.join(qt_tool_bin, "moc")
+  qt_arm_uic = os.path.join(qt_tool_bin, "uic")
+  qt_arm_rcc = os.path.join(qt_tool_bin, "rcc")
+  if platform.machine() in ("aarch64", "arm64"):
+    if os.path.isfile(qt_arm_moc):
+      qt_env['QT3_MOC'] = qt_arm_moc
+    if os.path.isfile(qt_arm_uic):
+      qt_env['QT3_UIC'] = qt_arm_uic
+    if os.path.isfile(qt_arm_rcc):
+      qt_env['SP_QT_RCC'] = qt_arm_rcc
+  else:
+    qt_qemu = shutil.which("qemu-aarch64-static") or shutil.which("qemu-aarch64")
+
+    if qt_qemu and os.path.isfile(qt_arm_moc):
+      qt_env['QT3_MOC'] = f"{qt_qemu} -L {qt_tool_root} {qt_arm_moc}"
+    else:
+      qt_host_bin = os.environ.get("SP_QT_HOST_BIN", "/usr/lib/qt5/bin")
+      qt_env['QT3_MOC'] = os.environ.get("SP_QT_HOST_MOC", os.path.join(qt_host_bin, "moc"))
+
+    if qt_qemu and os.path.isfile(qt_arm_uic):
+      qt_env['QT3_UIC'] = f"{qt_qemu} -L {qt_tool_root} {qt_arm_uic}"
+    else:
+      qt_host_bin = os.environ.get("SP_QT_HOST_BIN", "/usr/lib/qt5/bin")
+      qt_env['QT3_UIC'] = os.environ.get("SP_QT_HOST_UIC", os.path.join(qt_host_bin, "uic"))
+
+    if qt_qemu and os.path.isfile(qt_arm_rcc):
+      qt_env['SP_QT_RCC'] = f"{qt_qemu} -L {qt_tool_root} {qt_arm_rcc}"
+    else:
+      qt_env['SP_QT_RCC'] = os.environ.get("SP_QT_HOST_RCC", "rcc")
 
 qt_env['CPPPATH'] += qt_dirs + ["#third_party/qrcode"]
 qt_flags = [

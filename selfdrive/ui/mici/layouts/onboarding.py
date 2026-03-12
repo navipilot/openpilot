@@ -2,6 +2,7 @@ from enum import IntEnum
 
 import weakref
 import math
+import time
 import numpy as np
 import pyray as rl
 from openpilot.common.filter_simple import FirstOrderFilter
@@ -137,6 +138,7 @@ class TrainingGuideDMTutorial(Widget):
     self._good_button.set_enabled(False)
 
     self._progress = FirstOrderFilter(0.0, 0.5, 1 / gui_app.target_fps)
+    self._step_start_time = time.monotonic()
     self._dialog = DriverCameraSetupDialog()
     self._bad_face_page = DMBadFaceDetected(HARDWARE.shutdown, self._hide_bad_face_page)
     self._should_show_bad_face_page = False
@@ -161,6 +163,7 @@ class TrainingGuideDMTutorial(Widget):
     super().show_event()
     self._dialog.show_event()
     self._progress.x = 0.0
+    self._step_start_time = time.monotonic()
 
     device.set_offroad_brightness(100)
 
@@ -171,6 +174,10 @@ class TrainingGuideDMTutorial(Widget):
 
     sm = ui_state.sm
     if sm.recv_frame.get("driverMonitoringState", 0) == 0:
+      # Fallback for devices where DM model isn't publishing during onboarding:
+      # allow manual continue once camera is active so setup isn't hard-blocked.
+      if self._dialog._camera_view.frame and (time.monotonic() - self._step_start_time) > 2.5:
+        self._good_button.set_enabled(True)
       return
 
     dm_state = sm["driverMonitoringState"]

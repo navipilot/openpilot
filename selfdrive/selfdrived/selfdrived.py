@@ -228,7 +228,7 @@ class SelfdriveD:
           # body always wants to enable
           self.events.add(EventName.pcmEnable)
 
-      # Disable on rising edge of accelerator or brake. Also disable on brake when speed > 0
+      # Disable on rising edge of accelerator or brake. Also disable on brake when speed > 0.
       if (CS.gasPressed and not self.CS_prev.gasPressed and self.disengage_on_accelerator) or \
         (CS.brakePressed and (not self.CS_prev.brakePressed or not CS.standstill)) or \
         (CS.regenBraking and (not self.CS_prev.regenBraking or not CS.standstill)):
@@ -299,15 +299,16 @@ class SelfdriveD:
         else:
           self.events.add(EventName.laneChangeBlocked)
       else:
+        # Keep pre-lane-change prompts visible even when lane-width gate blocks the maneuver.
+        # This preserves the onroad "Changing lanes" guidance while still surfacing
+        # "No Lane Available" when the configured width threshold is not met.
         if direction == LaneChangeDirection.left:
-          if self.sm['frogpilotPlan'].laneWidthLeft >= self.frogpilot_toggles.lane_detection_width:
-            self.events.add(EventName.preLaneChangeLeft)
-          else:
+          self.events.add(EventName.preLaneChangeLeft)
+          if self.sm['frogpilotPlan'].laneWidthLeft < self.frogpilot_toggles.lane_detection_width:
             self.frogpilot_events.add(FrogPilotEventName.noLaneAvailable)
-        else:
-          if self.sm['frogpilotPlan'].laneWidthRight >= self.frogpilot_toggles.lane_detection_width:
-            self.events.add(EventName.preLaneChangeRight)
-          else:
+        elif direction == LaneChangeDirection.right:
+          self.events.add(EventName.preLaneChangeRight)
+          if self.sm['frogpilotPlan'].laneWidthRight < self.frogpilot_toggles.lane_detection_width:
             self.frogpilot_events.add(FrogPilotEventName.noLaneAvailable)
     elif self.sm['modelV2'].meta.laneChangeState in (LaneChangeState.laneChangeStarting,
                                                     LaneChangeState.laneChangeFinishing):

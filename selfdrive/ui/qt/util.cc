@@ -27,7 +27,7 @@ QString getVersion() {
 }
 
 QString getBrand() {
-  return QObject::tr("FrogPilot");
+  return QObject::tr("StarPilot");
 }
 
 QString getUserAgent() {

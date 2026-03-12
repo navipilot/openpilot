@@ -10,8 +10,43 @@ if [[ ! -f "$AGNOS_PY" || ! -f "$MANIFEST" ]]; then
   exit 1
 fi
 
-if systemctl is-active --quiet weston-ready; then
+PYTHON_BIN="python3"
+if [[ -x /usr/local/venv/bin/python3 ]]; then
+  PYTHON_BIN="/usr/local/venv/bin/python3"
+fi
+
+# Ensure AGNOS python can import openpilot modules when called directly.
+REPO_ROOT="$(cd "$DIR/../../.." >/dev/null 2>&1 && pwd)"
+if [[ -d "$REPO_ROOT" ]]; then
+  export PYTHONPATH="$REPO_ROOT/frogpilot/third_party:$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}"
+fi
+
+run_headless_swap() {
+  echo "jeepney unavailable; falling back to headless AGNOS updater (--swap)"
+  exec "$PYTHON_BIN" "$AGNOS_PY" --swap "$MANIFEST"
+}
+
+run_magic_with_fallback() {
+  "$DIR/updater_magic" "$AGNOS_PY" "$MANIFEST"
+  local rc=$?
+  if [[ $rc -ne 0 ]]; then
+    echo "updater_magic failed (rc=$rc); falling back to headless AGNOS updater"
+    run_headless_swap
+  fi
+}
+
+DEVICE_TYPE=""
+if [[ -f /sys/firmware/devicetree/base/model ]]; then
+  MODEL="$(tr -d '\000' </sys/firmware/devicetree/base/model 2>/dev/null)"
+  DEVICE_TYPE="${MODEL##*comma }"
+fi
+
+# non-tici/tizi devices (comma four variants) use the small raylib UI stack.
+# Route through updater_magic so setup/reset/update screens stay on the small UI.
+if [[ "$DEVICE_TYPE" != "tici" && "$DEVICE_TYPE" != "tizi" ]]; then
+  run_magic_with_fallback
+elif systemctl is-active --quiet weston-ready; then
   $DIR/updater_weston $AGNOS_PY $MANIFEST
 else
-  $DIR/updater_magic $AGNOS_PY $MANIFEST
+  run_magic_with_fallback
 fi

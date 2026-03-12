@@ -6,6 +6,7 @@
 #include <QButtonGroup>
 #include <QFrame>
 #include <QLabel>
+#include <QMouseEvent>
 #include <QPushButton>
 #include <QStackedWidget>
 #include <QWidget>
@@ -60,6 +61,19 @@ private:
   Params params;
 };
 
+class GalaxyQRPopup : public DialogBase {
+  Q_OBJECT
+
+public:
+  explicit GalaxyQRPopup(const QString &url, QWidget *parent = nullptr);
+
+protected:
+  void mousePressEvent(QMouseEvent *event) override {
+    reject();
+    DialogBase::mousePressEvent(event);
+  }
+};
+
 class DevicePanel : public ListWidget {
   Q_OBJECT
 public:
@@ -77,6 +91,8 @@ private slots:
 private:
   Params params;
   ButtonControl *pair_device;
+  ButtonControl *pair_galaxy;
+  QPushButton *galaxy_qr_btn;
   ButtonControl *resetCalibBtn;
 };
 

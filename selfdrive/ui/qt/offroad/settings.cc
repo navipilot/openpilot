@@ -1,16 +1,22 @@
 #include <cassert>
 #include <cmath>
+#include <cstdio>
 #include <string>
 #include <tuple>
 #include <vector>
 
+#include <QCryptographicHash>
 #include <QDebug>
+#include <QRandomGenerator>
+#include <QrCode.hpp>
 
 #include "common/watchdog.h"
 #include "common/util.h"
+#include "system/hardware/hw.h"
 #include "selfdrive/ui/qt/network/networking.h"
 #include "selfdrive/ui/qt/offroad/settings.h"
 #include "selfdrive/ui/qt/qt_window.h"
+#include "selfdrive/ui/qt/widgets/input.h"
 #include "selfdrive/ui/qt/widgets/prime.h"
 #include "selfdrive/ui/qt/widgets/scrollview.h"
 #include "selfdrive/ui/qt/offroad/developer_panel.h"
@@ -223,6 +229,43 @@ void TogglesPanel::updateToggles() {
   record_audio_toggle->setVisible(!frogpilot_toggles.value("no_logging").toBool());
 }
 
+GalaxyQRPopup::GalaxyQRPopup(const QString &url, QWidget *parent) : DialogBase(parent) {
+  setStyleSheet("GalaxyQRPopup { background-color: #1a1a30; }");
+  QVBoxLayout *layout = new QVBoxLayout(this);
+  layout->setAlignment(Qt::AlignCenter);
+  layout->setSpacing(30);
+  layout->setContentsMargins(60, 40, 60, 40);
+
+  auto qr = qrcodegen::QrCode::encodeText(url.toUtf8().constData(), qrcodegen::QrCode::Ecc::LOW);
+  const int qr_size = qr.getSize();
+  QImage image(qr_size, qr_size, QImage::Format_RGB32);
+  for (int y = 0; y < qr_size; ++y) {
+    for (int x = 0; x < qr_size; ++x) {
+      image.setPixel(x, y, qr.getModule(x, y) ? qRgb(0, 0, 0) : qRgb(255, 255, 255));
+    }
+  }
+
+  QLabel *title = new QLabel(tr("Scan to open Galaxy"), this);
+  title->setStyleSheet("font-size: 52px; font-weight: bold; color: white;");
+  title->setAlignment(Qt::AlignCenter);
+  layout->addWidget(title);
+
+  QLabel *qr_label = new QLabel(this);
+  qr_label->setPixmap(QPixmap::fromImage(image.scaled(400, 400, Qt::KeepAspectRatio), Qt::MonoOnly));
+  qr_label->setAlignment(Qt::AlignCenter);
+  layout->addWidget(qr_label);
+
+  QLabel *url_label = new QLabel(url, this);
+  url_label->setStyleSheet("font-size: 36px; color: #8b6cc5;");
+  url_label->setAlignment(Qt::AlignCenter);
+  layout->addWidget(url_label);
+
+  QLabel *hint = new QLabel(tr("Tap anywhere to dismiss"), this);
+  hint->setStyleSheet("font-size: 28px; color: #7e7e98;");
+  hint->setAlignment(Qt::AlignCenter);
+  layout->addWidget(hint);
+}
+
 DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
   setSpacing(50);
   addItem(new LabelControl(tr("Dongle ID"), getDongleId().value_or(tr("N/A"))));
@@ -235,6 +278,83 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
     popup.exec();
   });
   addItem(pair_device);
+
+  const std::string galaxy_dir = Hardware::PC() ? (Path::comma_home() + "/frogpilot/data/galaxy") : "/data/galaxy";
+  const std::string galaxy_auth_path = galaxy_dir + "/glxyauth";
+  const std::string galaxy_session_path = galaxy_dir + "/glxysession";
+  const std::string galaxy_slug_path = galaxy_dir + "/glxyslug";
+
+  auto showGalaxyQR = [=]() {
+    std::string slug = util::read_file(galaxy_slug_path);
+    if (slug.empty()) {
+      ConfirmationDialog::alert(tr("Galaxy is not paired yet."), this);
+      return;
+    }
+
+    GalaxyQRPopup popup("https://galaxy.firestar.link/" + QString::fromStdString(slug), this);
+    popup.exec();
+  };
+
+  pair_galaxy = new ButtonControl(tr("Galaxy"), tr("PAIR"), tr("Pair your device with Galaxy for remote access to The Pond."));
+  connect(pair_galaxy, &ButtonControl::clicked, [=]() {
+    const std::string current_password = util::read_file(galaxy_auth_path);
+    if (current_password.empty()) {
+      QString new_password = InputDialog::getText(
+        tr("Enter Password"), this,
+        tr("Please enter a password to secure your Galaxy access. (Min 6 characters)"),
+        false, 6);
+      if (new_password.isEmpty()) {
+        return;
+      }
+
+      std::string hash = QCryptographicHash::hash(new_password.toUtf8(), QCryptographicHash::Sha256).toHex().toStdString();
+      util::create_directories(galaxy_dir, 0775);
+      util::write_file(galaxy_auth_path.c_str(), hash.data(), hash.size(), O_WRONLY | O_CREAT | O_TRUNC);
+
+      QByteArray session_bytes(32, 0);
+      QRandomGenerator::securelySeeded().fillRange(reinterpret_cast<quint32 *>(session_bytes.data()), 8);
+      std::string session_token = session_bytes.toHex().toStdString();
+      util::write_file(galaxy_session_path.c_str(), session_token.data(), session_token.size(), O_WRONLY | O_CREAT | O_TRUNC);
+
+      static constexpr char charset[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+      std::string slug(16, '\0');
+      auto *rng = QRandomGenerator::global();
+      for (int i = 0; i < 16; ++i) {
+        slug[i] = charset[rng->bounded(62)];
+      }
+      util::write_file(galaxy_slug_path.c_str(), slug.data(), slug.size(), O_WRONLY | O_CREAT | O_TRUNC);
+
+      pair_galaxy->setText(tr("UNPAIR"));
+      galaxy_qr_btn->setVisible(true);
+      showGalaxyQR();
+      return;
+    }
+
+    if (ConfirmationDialog::confirm(tr("Are you sure you want to unpair from Galaxy?"), tr("Unpair"), this)) {
+      std::remove(galaxy_auth_path.c_str());
+      std::remove(galaxy_session_path.c_str());
+      std::remove(galaxy_slug_path.c_str());
+      pair_galaxy->setText(tr("PAIR"));
+      galaxy_qr_btn->setVisible(false);
+    }
+  });
+
+  galaxy_qr_btn = new QPushButton(tr("QR"));
+  galaxy_qr_btn->setFixedSize(250, 100);
+  galaxy_qr_btn->setStyleSheet(R"(
+    QPushButton { background-color: #393939; color: #E4E4E4; border-radius: 50px; font-size: 35px; font-weight: 500; }
+    QPushButton:pressed { background-color: #4a4a4a; }
+  )");
+  galaxy_qr_btn->setVisible(false);
+  connect(galaxy_qr_btn, &QPushButton::clicked, showGalaxyQR);
+  if (QHBoxLayout *hlayout = pair_galaxy->findChild<QHBoxLayout *>()) {
+    hlayout->insertWidget(3, galaxy_qr_btn);
+  }
+
+  const bool galaxy_paired = !util::read_file(galaxy_auth_path).empty();
+  pair_galaxy->setText(galaxy_paired ? tr("UNPAIR") : tr("PAIR"));
+  galaxy_qr_btn->setVisible(galaxy_paired);
+  addItem(pair_galaxy);
 
   // offroad-only buttons
 
@@ -537,7 +657,7 @@ SettingsWindow::SettingsWindow(QWidget *parent) : QFrame(parent) {
     {tr("Toggles"), toggles},
     {tr("Software"), new SoftwarePanel(this)},
     {tr("Developer"), developerPanel},
-    {tr("FrogPilot"), frogpilotSettingsWindow},
+    {tr("StarPilot"), frogpilotSettingsWindow},
   };
 
   nav_btns = new QButtonGroup(this);

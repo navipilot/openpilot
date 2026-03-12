@@ -18,6 +18,7 @@ __pycache__/
 *.a
 *.o
 *.so
+!rednose/helpers/ekf_sym_pyx.so
 
 # Distribution / packaging
 .Python

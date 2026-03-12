@@ -296,6 +296,8 @@ extern struct sample_t angle_meas;         // last 6 steer angles/curvatures
 
 // OPGM variables
 extern bool enable_gas_interceptor;
+extern int gas_interceptor_prev;
+extern bool gm_remote_start_boots_comma;
 
 // Alt experiences can be set with a USB command
 // It enables features that allow alternative experiences, like not disengaging on gas press
@@ -317,6 +319,7 @@ extern bool enable_gas_interceptor;
 
 // FrogPilot variables
 #define ALT_EXP_ALWAYS_ON_LATERAL 32
+#define ALT_EXP_GM_REMAP_CANCEL_TO_DISTANCE 64
 
 extern int alternative_experience;
 

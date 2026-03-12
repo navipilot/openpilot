@@ -1,12 +1,13 @@
+import numpy as np
 from tinygrad import Tensor, Device, Context, GlobalCounters, dtypes
 from tinygrad.uop.ops import UOp, KernelInfo, sint, AxisType
 from tinygrad.engine.realize import ExecItem, get_runner
 from tinygrad.dtype import AddrSpace
 from tinygrad.helpers import getenv
 
-N = 4096
+N = getenv("N", 4096)
 M = K = N
-run_count = 5
+run_count = getenv("CNT", 5)
 
 # ---------------------------
 # launch/config constants
@@ -139,30 +140,30 @@ def hand_spec_kernel3():
 
   return sink.sink(arg=KernelInfo(opts_to_apply=())).simplify()
 
-def test_matmul(sink:UOp, N=N):
-  with Context(DEBUG=0):
-    a = Tensor.randn(N, N)
-    b = Tensor.randn(N, N)
-    hc = Tensor.empty(N, N)
-    Tensor.realize(a, b, hc)
+def test_matmul(sink:UOp, dtype=dtypes.float32, N=N):
+  rng = np.random.default_rng()
+  a = Tensor(rng.random((N, N), dtype=np.float32)-0.5, dtype=dtype)
+  b = Tensor(rng.random((N, N), dtype=np.float32)-0.5, dtype=dtype)
+  hc = Tensor.empty(N, N, dtype=dtype)
+  Tensor.realize(a, b, hc)
 
-  ei = ExecItem(get_runner(Device.DEFAULT, sink), [t.uop.buffer for t in [hc, a, b]])
+  ei = ExecItem(sink, [t.uop.buffer for t in [hc, a, b]], prg=get_runner(Device.DEFAULT, sink))
 
-  GlobalCounters.reset()
   ets = []
   with Context(DEBUG=2):
     for _ in range(run_count):
       ets.append(ei.run(wait=True))
   print(f"REAL TFLOPS {N * N * N * 2 / min(ets) * 1e-12:.2f}")
 
-  GlobalCounters.reset()
-  with Context(DEBUG=2):
-    tc = (a @ b).realize()
-  with Context(DEBUG=0):
-    err = (hc - tc).square().mean().item()
-  print(f"mean squared error {err}")
-  if err > 1e-06:
-    raise RuntimeError("matmul is wrong!")
+  if getenv("VERIFY", 1):
+    GlobalCounters.reset()
+    with Context(DEBUG=2):
+      tc = (a @ b).realize()
+    with Context(DEBUG=0):
+      err = (hc - tc).square().mean().item()
+    print(f"mean squared error {err}")
+    if err > 1e-06:
+      raise RuntimeError("matmul is wrong!")
 
 if __name__ == "__main__":
   test_matmul(hand_spec_kernel3(), N=N)

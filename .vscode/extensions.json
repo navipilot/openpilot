@@ -4,5 +4,6 @@
     "ms-vscode.cpptools",
     "elagil.pre-commit-helper",
     "charliermarsh.ruff",
+    "openai.chatgpt",
   ]
 }

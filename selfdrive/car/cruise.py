@@ -141,12 +141,12 @@ class VCruiseHelper:
     if self.CP.pcmCruise and not self.gm_cc_only:
       return
 
-    initial = V_CRUISE_INITIAL_EXPERIMENTAL_MODE if experimental_mode and not frogpilot_toggles.conditional_experimental_mode else V_CRUISE_INITIAL
+    engage_floor_kph = max(V_CRUISE_MIN, 7.0 * CV.MPH_TO_KPH)
 
     if (any(b.type in (ButtonType.accelCruise, ButtonType.resumeCruise) for b in CS.buttonEvents)
       and self.v_cruise_initialized or (self.gm_cc_only and resume_prev_button)):
       self.v_cruise_kph = self.v_cruise_kph_last
     else:
-      self.v_cruise_kph = int(round(np.clip(CS.vEgo * CV.MS_TO_KPH, initial, V_CRUISE_MAX)))
+      self.v_cruise_kph = int(round(np.clip(CS.vEgo * CV.MS_TO_KPH, engage_floor_kph, V_CRUISE_MAX)))
 
     self.v_cruise_cluster_kph = self.v_cruise_kph

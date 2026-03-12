@@ -1,3 +1,5 @@
+#include <QPainterPath>
+
 #include "frogpilot/ui/qt/onroad/frogpilot_annotated_camera.h"
 
 FrogPilotAnnotatedCameraWidget::FrogPilotAnnotatedCameraWidget(QWidget *parent) : QWidget(parent) {

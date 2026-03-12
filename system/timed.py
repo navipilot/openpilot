@@ -3,7 +3,6 @@ import datetime
 import os
 import subprocess
 import time
-from timezonefinder import TimezoneFinder
 from typing import NoReturn
 
 import cereal.messaging as messaging
@@ -12,6 +11,11 @@ from openpilot.common.swaglog import cloudlog
 from openpilot.common.params import Params
 from openpilot.common.gps import get_gps_location_service
 from openpilot.system.hardware import AGNOS
+
+try:
+  from timezonefinder import TimezoneFinder
+except Exception:
+  TimezoneFinder = None
 
 
 def set_time(new_time):
@@ -62,7 +66,8 @@ def main() -> NoReturn:
   sm = messaging.SubMaster([gps_location_service])
 
   # FrogPilot variables
-  tf = TimezoneFinder()
+  tf = TimezoneFinder() if TimezoneFinder is not None else None
+  timezonefinder_logged = False
 
   last_timezone = params.get("Timezone")
   if last_timezone is not None:
@@ -88,11 +93,15 @@ def main() -> NoReturn:
     set_time(gps_time)
 
     # FrogPilot variables
-    timezone = tf.timezone_at(lng=gps.longitude, lat=gps.latitude)
-    if timezone is not None and timezone != last_timezone:
-      set_timezone(timezone)
-      params.put_nonblocking("Timezone", timezone)
-      last_timezone = timezone
+    if tf is not None:
+      timezone = tf.timezone_at(lng=gps.longitude, lat=gps.latitude)
+      if timezone is not None and timezone != last_timezone:
+        set_timezone(timezone)
+        params.put_nonblocking("Timezone", timezone)
+        last_timezone = timezone
+    elif not timezonefinder_logged:
+      cloudlog.warning("TimezoneFinder unavailable, skipping automatic timezone updates")
+      timezonefinder_logged = True
 
     time.sleep(10)
 

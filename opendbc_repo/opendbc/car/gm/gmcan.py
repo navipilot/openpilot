@@ -1,9 +1,68 @@
-from typing import Literal
-
 from opendbc.car import DT_CTRL
 from opendbc.car.can_definitions import CanData
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.gm.values import CAR, CanBus, CruiseButtons
+
+MALIBU_BUTTON_TABLE = {
+  0: [0x10FF, 0x15EE, 0x1ADD, 0x1FCC],
+  1: [0x55AE, 0x5F8C, 0x6F7C, 0x659E],
+  4: [0x2ACD, 0x20EF, 0x1ADD, 0x10FF],
+  5: [0x60AF, 0x659E, 0x6A8D, 0x6F7C],
+}
+
+MALIBU_BUTTON_MAP = {
+  CruiseButtons.UNPRESS: 0,
+  CruiseButtons.RES_ACCEL: 1,
+  CruiseButtons.MAIN: 4,
+  CruiseButtons.CANCEL: 5,
+}
+
+
+def malibu_phase_map_for_button(button):
+  key = MALIBU_BUTTON_MAP.get(button)
+  if key is None or key not in MALIBU_BUTTON_TABLE:
+    return None
+  return {v: i for i, v in enumerate(MALIBU_BUTTON_TABLE[key])}
+
+
+def malibu_phase_map_for_acc(acc_value):
+  seq = MALIBU_BUTTON_TABLE.get(acc_value)
+  if not seq:
+    return None
+  return {v: i for i, v in enumerate(seq)}
+
+
+def create_buttons_malibu(packer, bus, button, phase, prefix=0x41):
+  key = MALIBU_BUTTON_MAP.get(button)
+  if key is None or key not in MALIBU_BUTTON_TABLE:
+    return create_buttons(packer, bus, 0, button)
+
+  values = {
+    "ACCButtons": button,
+    "RollingCounter": 0,
+    "ACCAlwaysOne": 1,
+    "DistanceButton": 0,
+  }
+  dat = packer.make_can_msg("ASCMSteeringButton", bus, values)[1]
+  data = bytearray(dat)
+  data[3] = prefix & 0xFF
+
+  seq = MALIBU_BUTTON_TABLE[key]
+  val = seq[phase % len(seq)]
+  data[5] = (val >> 8) & 0xFF
+  data[6] = val & 0xFF
+  return CanData(0x1e1, bytes(data), bus)
+
+
+def create_buttons_malibu_cancel(bus, phase, prefix=0x41):
+  data = bytearray(7)
+  data[3] = prefix & 0xFF
+  data[4] = 0x00
+  cancel_seq = MALIBU_BUTTON_TABLE[5]
+  val = cancel_seq[phase % len(cancel_seq)]
+  data[5] = (val >> 8) & 0xFF
+  data[6] = val & 0xFF
+  return CanData(0x1e1, bytes(data), bus)
 
 
 def create_buttons(packer, bus, idx, button):
@@ -56,7 +115,9 @@ def create_adas_keepalive(bus):
   return [CanData(0x409, dat, bus), CanData(0x40a, dat, bus)]
 
 
-def create_gas_regen_command(packer, bus, throttle, idx, enabled, at_full_stop):
+def create_gas_regen_command(packer, bus, throttle, idx, enabled, at_full_stop, include_always_one3=False):
+  # Legacy callsites may still pass include_always_one3; this DBC encodes ACC type explicitly instead.
+  _ = include_always_one3
   values = {
     "GasRegenCmdActive": enabled,
     "RollingCounter": idx,
@@ -66,7 +127,7 @@ def create_gas_regen_command(packer, bus, throttle, idx, enabled, at_full_stop):
   }
 
   dat = packer.make_can_msg("ASCMGasRegenCmd", bus, values)[1]
-  values["GasRegenChecksum"] = ((1 - enabled) << 24) | \
+  values["GasRegenChecksum"] = ((1 - int(enabled)) << 24) | \
                                (((0xff - dat[1]) & 0xff) << 16) | \
                                (((0xff - dat[2]) & 0xff) << 8) | \
                                ((0x100 - dat[3] - idx) & 0xff)
@@ -74,11 +135,26 @@ def create_gas_regen_command(packer, bus, throttle, idx, enabled, at_full_stop):
   return packer.make_can_msg("ASCMGasRegenCmd", bus, values)
 
 
+def create_ecm_cruise_control_command(packer, bus, enabled, target_speed_kph):
+  dat = bytearray(8)
+  dat[0] = 0x01
+  dat[4] = 0x00
+
+  set_speed_raw = 0
+  if enabled:
+    set_speed_raw = int(round(max(0., target_speed_kph) / 0.0625))
+    set_speed_raw = max(0, min(set_speed_raw, 0x0FFF))
+
+  dat[2] = (set_speed_raw >> 8) & 0xFF
+  dat[3] = set_speed_raw & 0xFF
+  return CanData(0x3D1, bytes(dat), bus)
+
+
 def create_friction_brake_command(packer, bus, apply_brake, idx, enabled, near_stop, at_full_stop, CP):
   mode = 0x1
 
   # TODO: Understand this better. Volts and ICE Camera ACC cars are 0x1 when enabled with no brake
-  if enabled and CP.carFingerprint in (CAR.CHEVROLET_BOLT_EUV,):
+  if enabled and CP.carFingerprint in (CAR.CHEVROLET_BOLT_ACC_2022_2023,):
     mode = 0x9
 
   if apply_brake > 0:
@@ -175,78 +251,79 @@ def create_lka_icon_command(bus, active, critical, steer):
   return CanData(0x104c006c, dat, bus)
 
 
-# OPGM variables
-def _create_gm_cc_spam_command_accel(controller, CS, actuators):
-  # if controller.params_.get_bool("IsMetric"):
-  #   _CV = CV.MS_TO_KPH
-  #   RATE_UP_MAX = 0.04
-  #   RATE_DOWN_MAX = 0.04
-  # else:
-  _CV = CV.MS_TO_MPH
-  RATE_UP_MAX = 0.2
-  RATE_DOWN_MAX = 0.2
+def create_gm_cc_spam_command(packer, controller, CS, actuators, frogpilot_toggles):
+  accel = actuators.accel
+  v_ego = CS.out.vEgo
+  cruise_btn = CruiseButtons.INIT
+  rate = 1 if abs(accel) <= 0.15 else 0.2
+  ms_convert = CV.MS_TO_KPH if getattr(frogpilot_toggles, "is_metric", False) else CV.MS_TO_MPH
+  speed_setpoint = int(round(CS.out.cruiseState.speed * ms_convert))
+  desired_setpoint = int(round((v_ego * 1.01 + 3 * accel) * ms_convert))
 
-  accel = actuators.accel * _CV  # m/s/s to mph/s
-  speed_setpoint = int(round(CS.out.cruiseState.speed * _CV))
-
-  button = CruiseButtons.INIT
-  if speed_setpoint == CS.CP.minEnableSpeed and accel < -1:
-    button = CruiseButtons.CANCEL
+  if CS.CP.minEnableSpeed - (desired_setpoint / ms_convert) > 3.25:
+    cruise_btn = CruiseButtons.CANCEL
     controller.apply_speed = 0
-    rate = 0.04
-  elif accel < 0:
-    button = CruiseButtons.DECEL_SET
-    if speed_setpoint > (CS.out.vEgo * _CV) + 3.0:  # If accel is changing directions, bring set speed to current speed as fast as possible
-      rate = RATE_DOWN_MAX
-    else:
-      rate = max(-1 / accel, RATE_DOWN_MAX)
-    controller.apply_speed = (speed_setpoint - 1) / _CV
-  elif accel > 0:
-    button = CruiseButtons.RES_ACCEL
-    if speed_setpoint < (CS.out.vEgo * _CV) - 3.0:
-      rate = RATE_UP_MAX
-    else:
-      rate = max(1 / accel, RATE_UP_MAX)
-    controller.apply_speed = (speed_setpoint + 1) / _CV
+  elif desired_setpoint < speed_setpoint and speed_setpoint > CS.CP.minEnableSpeed * ms_convert + 1:
+    cruise_btn = CruiseButtons.DECEL_SET
+    controller.apply_speed = speed_setpoint - 1
+  elif desired_setpoint > speed_setpoint:
+    cruise_btn = CruiseButtons.RES_ACCEL
+    controller.apply_speed = speed_setpoint + 1
   else:
-    controller.apply_speed = speed_setpoint / _CV
-    rate = float('inf')
-
-  return button, rate
-
-
-def _create_gm_cc_spam_command_velocity(controller, CS, actuators):
-  _CV = CV.MS_TO_MPH
-  speed_desired = int(round(actuators.speed * _CV))
-  speed_setpoint = int(round(CS.out.cruiseState.speed * _CV))
-
-  if speed_desired > speed_setpoint:
-    button = CruiseButtons.RES_ACCEL
-    controller.apply_speed = (speed_setpoint + 1) / _CV
-  elif speed_desired < speed_setpoint:
-    button = CruiseButtons.DECEL_SET
-    controller.apply_speed = (speed_setpoint - 1) / _CV
-  else:
-    button = CruiseButtons.INIT
-    controller.apply_speed = speed_setpoint / _CV
-
-  return button
-
-
-def create_gm_cc_spam_command(packer, controller, CS, actuators, mode: Literal["velocity", "accel"] = "accel"):
-  if mode == "velocity":
-    button = _create_gm_cc_spam_command_velocity(controller, CS, actuators)
-    rate = 0.04
-  elif mode == "accel":
-    button, rate = _create_gm_cc_spam_command_accel(controller, CS, actuators)
-  else:
-    raise ValueError("Invalid mode. Use 'velocity' or 'accel'.")
+    cruise_btn = CruiseButtons.INIT
+    controller.apply_speed = speed_setpoint
 
   # Check rlogs closely - our message shouldn't show up on the pt bus for us
   # Or bus 2, since we're forwarding... but I think it does
-  if (button != CruiseButtons.INIT) and ((controller.frame - controller.last_button_frame) * DT_CTRL > rate):
+  if (cruise_btn != CruiseButtons.INIT) and ((controller.frame - controller.last_button_frame) * DT_CTRL > rate):
     controller.last_button_frame = controller.frame
+    if CS.CP.carFingerprint == CAR.CHEVROLET_MALIBU_HYBRID_CC:
+      phase_map = malibu_phase_map_for_button(cruise_btn)
+      if phase_map:
+        msgs = [create_buttons_malibu(packer, CanBus.POWERTRAIN, cruise_btn, controller.malibu_button_phase,
+                                      CS.steering_button_prefix)]
+        controller.malibu_button_phase = (controller.malibu_button_phase + 1) % 4
+        return msgs
     idx = (CS.buttons_counter + 1) % 4  # Need to predict the next idx for '22-23 EUV
-    return [create_buttons(packer, CanBus.POWERTRAIN, idx, button)]
+    return [create_buttons(packer, CanBus.POWERTRAIN, idx, cruise_btn)]
   else:
     return []
+
+
+def create_prndl2_command(packer, bus, press_regen_paddle, CP):
+  # Gen2 Bolt uses PRNDL2=5 during regen paddle spoof, Gen1 uses 7.
+  gen2_bolts = {
+    CAR.CHEVROLET_BOLT_ACC_2022_2023,
+    CAR.CHEVROLET_BOLT_ACC_2022_2023_PEDAL,
+    CAR.CHEVROLET_BOLT_CC_2022_2023,
+  }
+
+  if CP.carFingerprint in gen2_bolts:
+    prndl2_value = 5 if press_regen_paddle else 6
+  else:
+    prndl2_value = 7 if press_regen_paddle else 6
+  manual_mode = 1 if press_regen_paddle else 0
+  values = {
+    "Byte0": 0x0C,
+    "Byte1": 0x0C,
+    "Byte2": 0x00,
+    "PRNDL2": prndl2_value,
+    "Byte4": 0x00,
+    "ManualMode": manual_mode,
+    "TransmissionState": 1,
+    "Byte7": 0x00,
+  }
+  return packer.make_can_msg("ECMPRDNL2", bus, values)
+
+
+def create_regen_paddle_command(packer, bus, press_regen_paddle):
+  values = {
+    "RegenPaddle": 2 if press_regen_paddle else 0,
+    "Byte1": 0,
+    "Byte2": 0,
+    "Byte3": 0,
+    "Byte4": 0,
+    "Byte5": 0,
+    "Byte6": 0,
+  }
+  return packer.make_can_msg("EBCMRegenPaddle", bus, values)

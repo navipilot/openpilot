@@ -11,6 +11,20 @@ function agnos_init {
   # set success flag for current boot slot
   sudo abctl --set_success
 
+  # Restore SSH access after a user-triggered reset if keys were backed up to /cache.
+  SSH_BACKUP_DIR="/cache/reset_backup"
+  if [ -d "$SSH_BACKUP_DIR" ]; then
+    sudo mkdir -p /data/params/d
+    for key in GithubSshKeys SshEnabled; do
+      if [ -f "$SSH_BACKUP_DIR/$key" ]; then
+        sudo cp "$SSH_BACKUP_DIR/$key" "/data/params/d/$key"
+      fi
+    done
+    sudo chown comma:comma /data/params/d/GithubSshKeys /data/params/d/SshEnabled 2>/dev/null || true
+    sudo chmod 600 /data/params/d/GithubSshKeys /data/params/d/SshEnabled 2>/dev/null || true
+    sudo rm -rf "$SSH_BACKUP_DIR"
+  fi
+
   # TODO: do this without udev in AGNOS
   # udev does this, but sometimes we startup faster
   sudo chgrp gpu /dev/adsprpc-smd /dev/ion /dev/kgsl-3d0
@@ -70,6 +84,7 @@ function launch {
 
   # handle pythonpath
   ln -sfn $(pwd) /data/pythonpath
+  export BASEDIR="$DIR"
   export PYTHONPATH="$DIR/frogpilot/third_party:$PWD"
 
   # hardware specific init
@@ -82,7 +97,71 @@ function launch {
 
   # start manager
   cd system/manager
-  if [ ! -f $DIR/prebuilt ]; then
+
+  # Bootstrap runtime (e.g. /usr/comma after reset/uninstall) must go straight
+  # to manager/setup flow. Do not run StarPilot prebuilt checks/builds here.
+  if [ "$DIR" = "/usr/comma" ] || [ ! -d "$DIR/.git" ]; then
+    ./manager.py
+    while true; do sleep 1; done
+  fi
+
+  function prebuilt_runtime_compatible {
+    python3 - <<'PY'
+import importlib
+from pathlib import Path
+import sys
+
+mods = [
+  "openpilot.common.params_pyx",
+  "msgq.ipc_pyx",
+  "msgq.visionipc.visionipc_pyx",
+  "openpilot.common.transformations.transformations",
+  "openpilot.selfdrive.modeld.models.commonmodel_pyx",
+  "openpilot.selfdrive.pandad.pandad_api_impl",
+  "openpilot.selfdrive.controls.lib.lateral_mpc_lib.c_generated_code.acados_ocp_solver_pyx",
+  "openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.c_generated_code.acados_ocp_solver_pyx",
+]
+
+for mod in mods:
+  try:
+    importlib.import_module(mod)
+  except Exception as e:
+    print(f"Prebuilt compatibility failure in {mod}: {e}", file=sys.stderr)
+    raise
+
+repo_root = Path.cwd().parents[1]
+required_files = [
+  repo_root / "selfdrive/modeld/models/driving_vision_metadata.pkl",
+  repo_root / "selfdrive/modeld/models/driving_policy_metadata.pkl",
+  repo_root / "selfdrive/modeld/models/driving_vision_tinygrad.pkl",
+  repo_root / "selfdrive/modeld/models/driving_policy_tinygrad.pkl",
+  repo_root / "selfdrive/modeld/models/dmonitoring_model_metadata.pkl",
+  repo_root / "selfdrive/modeld/models/dmonitoring_model_tinygrad.pkl",
+  repo_root / "selfdrive/pandad/pandad_api_impl.so",
+  repo_root / "selfdrive/controls/lib/lateral_mpc_lib/c_generated_code/acados_ocp_solver_pyx.so",
+  repo_root / "selfdrive/controls/lib/lateral_mpc_lib/c_generated_code/libacados_ocp_solver_lat.so",
+  repo_root / "selfdrive/controls/lib/longitudinal_mpc_lib/c_generated_code/acados_ocp_solver_pyx.so",
+  repo_root / "selfdrive/controls/lib/longitudinal_mpc_lib/c_generated_code/libacados_ocp_solver_long.so",
+  repo_root / "opendbc_repo/opendbc/dbc/gm_global_a_powertrain_generated.dbc",
+]
+
+for path in required_files:
+  if not path.is_file():
+    raise FileNotFoundError(f"Missing prebuilt runtime artifact: {path}")
+PY
+  }
+
+  USE_PREBUILT=1
+  if [ -f /data/params/d/UsePrebuilt ]; then
+    USE_PREBUILT=$(tr -d '\n' < /data/params/d/UsePrebuilt)
+  fi
+
+  if [ "$USE_PREBUILT" = "1" ] && [ -f $DIR/prebuilt ] && ! prebuilt_runtime_compatible; then
+    echo "Prebuilt runtime artifacts are incompatible on this device; rebuilding locally."
+    USE_PREBUILT=0
+  fi
+
+  if [ "$USE_PREBUILT" != "1" ] || [ ! -f $DIR/prebuilt ]; then
     ./build.py
   fi
   ./manager.py

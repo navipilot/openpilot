@@ -1,4 +1,5 @@
 from parameterized import parameterized
+from types import SimpleNamespace
 
 from cereal import car, log
 from opendbc.car.car_helpers import interfaces
@@ -16,7 +17,7 @@ from openpilot.selfdrive.controls.lib.latcontrol_angle import LatControlAngle
 class TestLatControl:
 
   @parameterized.expand([(HONDA.HONDA_CIVIC, LatControlPID), (TOYOTA.TOYOTA_RAV4, LatControlTorque),
-                         (NISSAN.NISSAN_LEAF, LatControlAngle), (GM.CHEVROLET_BOLT_EUV, LatControlTorque)])
+                         (NISSAN.NISSAN_LEAF, LatControlAngle), (GM.CHEVROLET_BOLT_ACC_2022_2023, LatControlTorque)])
   def test_saturation(self, car_name, controller):
     CarInterface = interfaces[car_name]
     CP = CarInterface.get_non_essential_params(car_name)
@@ -30,16 +31,17 @@ class TestLatControl:
     CS.steeringPressed = False
 
     params = log.LiveParametersData.new_message()
+    frogpilot_toggles = SimpleNamespace()
 
     # Saturate for curvature limited and controller limited
     for _ in range(1000):
-      _, _, lac_log = controller.update(True, CS, VM, params, False, 0, True, 0.2)
+      _, _, lac_log = controller.update(True, CS, VM, params, False, 0, True, 0.2, None, None, frogpilot_toggles)
     assert lac_log.saturated
 
     for _ in range(1000):
-      _, _, lac_log = controller.update(True, CS, VM, params, False, 0, False, 0.2)
+      _, _, lac_log = controller.update(True, CS, VM, params, False, 0, False, 0.2, None, None, frogpilot_toggles)
     assert not lac_log.saturated
 
     for _ in range(1000):
-      _, _, lac_log = controller.update(True, CS, VM, params, False, 1, False, 0.2)
+      _, _, lac_log = controller.update(True, CS, VM, params, False, 1, False, 0.2, None, None, frogpilot_toggles)
     assert lac_log.saturated

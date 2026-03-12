@@ -2,6 +2,18 @@
 
 #include "frogpilot/ui/qt/offroad/data_settings.h"
 
+namespace {
+bool isPathPreserved(const char *path) {
+  char preserveValue[10] = {0};
+#ifdef __APPLE__
+  const ssize_t attr_size = getxattr(path, "user.preserve", preserveValue, sizeof(preserveValue), 0, 0);
+#else
+  const ssize_t attr_size = getxattr(path, "user.preserve", preserveValue, sizeof(preserveValue));
+#endif
+  return attr_size > 0 && strcmp(preserveValue, "1") == 0;
+}
+}  // namespace
+
 FrogPilotDataPanel::FrogPilotDataPanel(FrogPilotSettingsWindow *parent, bool forceOpen) : FrogPilotListWidget(parent), parent(parent) {
   forceOpenDescriptions = forceOpen;
 
@@ -33,9 +45,7 @@ FrogPilotDataPanel::FrogPilotDataPanel(FrogPilotSettingsWindow *parent, bool for
           }
 
           for (const QFileInfo &entry : dir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot)) {
-            char preserveValue[10] = {0};
-            bool isPreserved = (getxattr(entry.absoluteFilePath().toUtf8().constData(), "user.preserve", preserveValue, sizeof(preserveValue)) > 0 && strcmp(preserveValue, "1") == 0);
-            if (!isPreserved) {
+            if (!isPathPreserved(entry.absoluteFilePath().toUtf8().constData())) {
               QDir(entry.absoluteFilePath()).removeRecursively();
             }
           }

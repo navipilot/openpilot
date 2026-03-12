@@ -1,25 +1,41 @@
 #!/usr/bin/env python3
 import datetime
 import json
+import requests
 import time
 
 from cereal import messaging
+from openpilot.common.api import Api, api_get
 from openpilot.common.params import Params
 from openpilot.common.realtime import DT_MDL, Priority, Ratekeeper, config_realtime_process
 from openpilot.common.time_helpers import system_time_valid
+from openpilot.system.athena.registration import UNREGISTERED_DONGLE_ID
 
+from openpilot.frogpilot.assets.model_manager import MODEL_DOWNLOAD_ALL_PARAM, MODEL_DOWNLOAD_PARAM, ModelManager
 from openpilot.frogpilot.assets.theme_manager import THEME_COMPONENT_PARAMS, ThemeManager
 from openpilot.frogpilot.common.frogpilot_backups import backup_toggles
 from openpilot.frogpilot.common.frogpilot_functions import capture_report, update_maps, update_openpilot
-from openpilot.frogpilot.common.frogpilot_utilities import ThreadManager, flash_panda, is_url_pingable, lock_doors
+from openpilot.frogpilot.common.frogpilot_utilities import ThreadManager, flash_panda, is_url_pingable, lock_doors, use_konik_server
 from openpilot.frogpilot.common.frogpilot_variables import ERROR_LOGS_PATH, FrogPilotVariables
 from openpilot.frogpilot.controls.frogpilot_planner import FrogPilotPlanner
 from openpilot.frogpilot.system.frogpilot_stats import send_stats
 from openpilot.frogpilot.system.frogpilot_tracking import FrogPilotTracking
 
 ASSET_CHECK_RATE = (1 / DT_MDL)
+DRIVE_STATS_SYNC_RATE = 30
 
-def check_assets(now, theme_manager, thread_manager, params, params_memory, frogpilot_toggles):
+def check_assets(now, model_manager, theme_manager, thread_manager, params, params_memory, frogpilot_toggles):
+  if params_memory.get_bool(MODEL_DOWNLOAD_ALL_PARAM):
+    thread_manager.run_with_lock(model_manager.download_all_models)
+  elif params_memory.get_bool("UpdateTinygrad"):
+    thread_manager.run_with_lock(model_manager.update_tinygrad)
+  else:
+    model_to_download = params_memory.get(MODEL_DOWNLOAD_PARAM)
+    if isinstance(model_to_download, bytes):
+      model_to_download = model_to_download.decode("utf-8", errors="replace")
+    if model_to_download:
+      thread_manager.run_with_lock(model_manager.download_model, (model_to_download,))
+
   for asset_type, asset_param in THEME_COMPONENT_PARAMS.items():
     asset_to_download = params_memory.get(asset_param)
     if asset_to_download:
@@ -36,6 +52,40 @@ def check_assets(now, theme_manager, thread_manager, params, params_memory, frog
   if params_memory.get_bool("DownloadMaps"):
     thread_manager.run_with_lock(update_maps, (now, params, params_memory, True))
 
+def sync_drive_stats(params, session):
+  try:
+    dongle_id = params.get("DongleId")
+    if isinstance(dongle_id, bytes):
+      dongle_id = dongle_id.decode("utf-8", errors="replace")
+    if not dongle_id or dongle_id == UNREGISTERED_DONGLE_ID:
+      return
+
+    token = Api(dongle_id).get_token(expiry_hours=2)
+    if not token:
+      return
+
+    response = api_get(f"v1.1/devices/{dongle_id}/stats", timeout=15, access_token=token, session=session)
+    if response.status_code != 200:
+      print(f"Failed to sync drive stats (HTTP {response.status_code})")
+      return
+
+    stats = response.json()
+    if not isinstance(stats, dict):
+      return
+
+    all_stats = stats.get("all")
+    week_stats = stats.get("week")
+    if not isinstance(all_stats, dict) or not isinstance(week_stats, dict):
+      return
+
+    params.put("ApiCache_DriveStats", stats)
+
+    all_minutes = all_stats.get("minutes")
+    if isinstance(all_minutes, (int, float)):
+      params.put_int("KonikMinutes" if use_konik_server() else "openpilotMinutes", int(all_minutes))
+  except Exception as exception:
+    print(f"Failed to sync drive stats: {exception}")
+
 def transition_offroad(frogpilot_planner, theme_manager, thread_manager, time_validated, sm, params, frogpilot_toggles):
   params.put("LastGPSPosition", json.dumps(frogpilot_planner.gps_position))
 
@@ -46,16 +96,17 @@ def transition_offroad(frogpilot_planner, theme_manager, thread_manager, time_va
     theme_manager.update_active_theme(time_validated, frogpilot_toggles, randomize_theme=True)
 
   if time_validated:
-    thread_manager.run_with_lock(send_stats, (params, frogpilot_toggles))
+    thread_manager.run_with_lock(send_stats)
 
 def transition_onroad(error_log):
   if error_log.is_file():
     error_log.unlink()
 
-def update_checks(now, theme_manager, thread_manager, params, params_memory, frogpilot_toggles, boot_run=False):
+def update_checks(now, model_manager, theme_manager, thread_manager, params, params_memory, frogpilot_toggles, boot_run=False):
   while not (is_url_pingable("https://github.com") or is_url_pingable("https://gitlab.com")):
     time.sleep(60)
 
+  model_manager.update_models(boot_run)
   theme_manager.update_themes(frogpilot_toggles, boot_run)
 
   thread_manager.run_with_lock(update_maps, (now, params, params_memory))
@@ -99,10 +150,14 @@ def frogpilot_thread():
   params_memory = Params(memory=True)
 
   frogpilot_variables = FrogPilotVariables()
+  model_manager = ModelManager(params, params_memory)
   theme_manager = ThemeManager(params, params_memory)
   thread_manager = ThreadManager()
 
   frogpilot_toggles = frogpilot_variables.frogpilot_toggles
+
+  drive_stats_session = requests.Session()
+  next_drive_stats_sync = 0.0
 
   run_update_checks = False
   started_previously = False
@@ -145,8 +200,16 @@ def frogpilot_thread():
 
     started_previously = started
 
+    if not started and time_validated and sm["deviceState"].screenBrightnessPercent > 0:
+      monotonic_now = time.monotonic()
+      if monotonic_now >= next_drive_stats_sync:
+        thread_manager.run_with_lock(sync_drive_stats, (params, drive_stats_session), report=False)
+        next_drive_stats_sync = monotonic_now + DRIVE_STATS_SYNC_RATE
+    elif started:
+      next_drive_stats_sync = 0.0
+
     if rate_keeper.frame % ASSET_CHECK_RATE == 0:
-      check_assets(now, theme_manager, thread_manager, params, params_memory, frogpilot_toggles)
+      check_assets(now, model_manager, theme_manager, thread_manager, params, params_memory, frogpilot_toggles)
 
     if params_memory.get_bool("FrogPilotTogglesUpdated") or theme_manager.theme_updated:
       frogpilot_toggles = update_toggles(frogpilot_variables, started, theme_manager, thread_manager, time_validated, params, frogpilot_toggles)
@@ -157,7 +220,7 @@ def frogpilot_thread():
 
     if run_update_checks:
       theme_manager.update_active_theme(time_validated, frogpilot_toggles)
-      thread_manager.run_with_lock(update_checks, (now, theme_manager, thread_manager, params, params_memory, frogpilot_toggles))
+      thread_manager.run_with_lock(update_checks, (now, model_manager, theme_manager, thread_manager, params, params_memory, frogpilot_toggles))
 
       run_update_checks = False
     elif not time_validated:
@@ -168,8 +231,8 @@ def frogpilot_thread():
       theme_manager.update_active_theme(time_validated, frogpilot_toggles)
 
       thread_manager.run_with_lock(backup_toggles, (params, True))
-      thread_manager.run_with_lock(send_stats, (params, frogpilot_toggles))
-      thread_manager.run_with_lock(update_checks, (now, theme_manager, thread_manager, params, params_memory, frogpilot_toggles, True))
+      thread_manager.run_with_lock(send_stats)
+      thread_manager.run_with_lock(update_checks, (now, model_manager, theme_manager, thread_manager, params, params_memory, frogpilot_toggles, True))
 
     rate_keeper.keep_time()
 

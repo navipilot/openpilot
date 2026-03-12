@@ -8,6 +8,13 @@ arch = subprocess.check_output(["uname", "-m"], encoding='utf8').rstrip()
 if platform.system() == "Darwin":
   arch = "Darwin"
 
+cc = 'clang'
+cxx = 'clang++'
+if arch == "Darwin":
+  # Keep mac builds on Apple toolchain; Homebrew llvm can break SDK header resolution.
+  cc = '/usr/bin/clang'
+  cxx = '/usr/bin/clang++'
+
 common = ''
 
 cpppath = [
@@ -51,8 +58,8 @@ elif GetOption('asan'):
 
 env = Environment(
   ENV=os.environ,
-  CC='clang',
-  CXX='clang++',
+  CC=cc,
+  CXX=cxx,
   CCFLAGS=[
     "-g",
     "-fPIC",

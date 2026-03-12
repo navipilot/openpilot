@@ -29,13 +29,22 @@ def build(spinner: Spinner, dirty: bool = False, minimal: bool = False) -> None:
   if AGNOS:
     HARDWARE.set_power_save(False)
     os.sched_setaffinity(0, range(8))  # ensure we can use the isolcpus cores
+    # Extremely conservative on-device compile to avoid lowmemorykiller SIGKILLs.
+    attempts = [1]
+  else:
+    attempts = [nproc, max(1, nproc // 2), 1]
 
-  # building with all cores can result in using too
-  # much memory, so retry with less parallelism
+  # Preserve order while de-duplicating.
+  attempts = list(dict.fromkeys(max(1, int(n)) for n in attempts))
+
+  # building with all cores can result in using too much memory,
+  # so retry with less parallelism.
   compile_output: list[bytes] = []
-  for n in (nproc, nproc/2, 1):
-    compile_output.clear()
-    scons: subprocess.Popen = subprocess.Popen(["scons", f"-j{int(n)}", "--cache-populate", *extra_args], cwd=BASEDIR, env=env, stderr=subprocess.PIPE)
+  last_returncode = 0
+
+  def run_scons(n: int, cache_args: list[str]) -> int:
+    nonlocal compile_output, spinner, env
+    scons: subprocess.Popen = subprocess.Popen(["scons", f"-j{int(n)}", *cache_args, *extra_args], cwd=BASEDIR, env=env, stderr=subprocess.PIPE)
     assert scons.stderr is not None
 
     # Read progress from stderr and update spinner
@@ -56,14 +65,27 @@ def build(spinner: Spinner, dirty: bool = False, minimal: bool = False) -> None:
       except Exception:
         pass
 
-    if scons.returncode == 0:
+    if scons.returncode != 0 and scons.stderr is not None:
+      compile_output += scons.stderr.read().split(b'\n')
+    return scons.returncode
+
+  for n in attempts:
+    compile_output.clear()
+    last_returncode = run_scons(n, ["--cache-populate"])
+    if last_returncode == 0:
       break
 
-  if scons.returncode != 0:
-    # Read remaining output
-    if scons.stderr is not None:
-      compile_output += scons.stderr.read().split(b'\n')
+  if last_returncode != 0:
+    # OOM-ish builds often fail with "Error -9" when clang gets SIGKILL.
+    # Do one final conservative retry before surfacing a hard failure.
+    output_blob = b"\n".join(compile_output)
+    if AGNOS and b"Error -9" in output_blob:
+      cloudlog.warning("scons likely OOM-killed (Error -9), retrying with -j1 --cache-disable")
+      print("Build retry: detected Error -9, retrying with -j1 --cache-disable")
+      compile_output.clear()
+      last_returncode = run_scons(1, ["--cache-disable"])
 
+  if last_returncode != 0:
     # Build failed log errors
     error_s = b"\n".join(compile_output).decode('utf8', 'replace')
     add_file_handler(cloudlog)

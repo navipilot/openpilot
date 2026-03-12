@@ -18,6 +18,10 @@ DeveloperPanel::DeveloperPanel(SettingsWindow *parent) : QFrame(parent) {
             tr("ADB (Android Debug Bridge) allows connecting to your device over USB or over the network. See https://docs.comma.ai/how-to/connect-to-comma for more info."), "");
   mainList->addItem(adbToggle);
 
+  auto *usePrebuiltToggle = new ParamControl("UsePrebuilt", tr("Use Prebuilt Binaries"),
+            tr("When enabled (default), the device skips source compilation on boot if a prebuilt artifact exists. Disable this if you plan to edit code and rebuild on-device."), "");
+  mainList->addItem(usePrebuiltToggle);
+
   // SSH keys
   mainList->addItem(new SshToggle());
   mainList->addItem(new SshControl());

@@ -1,6 +1,7 @@
 import pyray as rl
 from enum import IntEnum
 import cereal.messaging as messaging
+from openpilot.system.hardware import PC
 from openpilot.selfdrive.ui.mici.layouts.home import MiciHomeLayout
 from openpilot.selfdrive.ui.mici.layouts.settings.settings import SettingsLayout
 from openpilot.selfdrive.ui.mici.layouts.offroad_alerts import MiciOffroadAlerts
@@ -61,10 +62,12 @@ class MiciMainLayout(Widget):
     # Set callbacks
     self._setup_callbacks()
 
-    # Start onboarding if terms or training not completed
-    self._onboarding_window = OnboardingWindow()
-    if not self._onboarding_window.completed:
-      gui_app.set_modal_overlay(self._onboarding_window)
+    # Skip onboarding on desktop; keep normal flow on device.
+    self._onboarding_window = None
+    if not PC:
+      self._onboarding_window = OnboardingWindow()
+      if not self._onboarding_window.completed:
+        gui_app.set_modal_overlay(self._onboarding_window)
 
   def _setup_callbacks(self):
     self._home_layout.set_callbacks(on_settings=self._on_settings_clicked)

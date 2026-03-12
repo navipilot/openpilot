@@ -5,6 +5,7 @@ from collections.abc import Callable
 from openpilot.selfdrive.ui.layouts.settings.developer import DeveloperLayout
 from openpilot.selfdrive.ui.layouts.settings.device import DeviceLayout
 from openpilot.selfdrive.ui.layouts.settings.firehose import FirehoseLayout
+from openpilot.selfdrive.ui.layouts.settings.starpilot.main_panel import StarPilotLayout
 from openpilot.selfdrive.ui.layouts.settings.software import SoftwareLayout
 from openpilot.selfdrive.ui.layouts.settings.toggles import TogglesLayout
 from openpilot.system.ui.lib.application import gui_app, FontWeight, MousePos
@@ -13,6 +14,7 @@ from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.lib.wifi_manager import WifiManager
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.network import NetworkUI
+from openpilot.common.params import Params
 
 # Constants
 SIDEBAR_WIDTH = 500
@@ -37,6 +39,7 @@ class PanelType(IntEnum):
   SOFTWARE = 3
   FIREHOSE = 4
   DEVELOPER = 5
+  STARPILOT = 6
 
 
 @dataclass
@@ -49,7 +52,12 @@ class PanelInfo:
 class SettingsLayout(Widget):
   def __init__(self):
     super().__init__()
+    self._params = Params()
     self._current_panel = PanelType.DEVICE
+
+    # Panel depth tracking for hierarchical back navigation
+    # 0 = top level (settings main), 1+ = sub-panels (FrogPilot categories)
+    self._panel_depth = 0
 
     # Panel configuration
     wifi_manager = WifiManager()
@@ -62,16 +70,39 @@ class SettingsLayout(Widget):
       PanelType.SOFTWARE: PanelInfo(tr_noop("Software"), SoftwareLayout()),
       PanelType.FIREHOSE: PanelInfo(tr_noop("Firehose"), FirehoseLayout()),
       PanelType.DEVELOPER: PanelInfo(tr_noop("Developer"), DeveloperLayout()),
+      PanelType.STARPILOT: PanelInfo(tr_noop("StarPilot"), StarPilotLayout()),
     }
 
+    # Connect StarPilot depth callback for hierarchical back navigation
+    self._panels[PanelType.STARPILOT].instance.set_depth_callback(self.set_panel_depth)
+    self._panels[PanelType.STARPILOT].instance.set_settings_layout(self)
+
     self._font_medium = gui_app.font(FontWeight.MEDIUM)
-    self._close_icon = gui_app.texture("icons/close2.png", CLOSE_ICON_SIZE, CLOSE_ICON_SIZE)
+    self._close_icon = gui_app.texture("icons/backspace.png", CLOSE_ICON_SIZE, CLOSE_ICON_SIZE)
 
     # Callbacks
     self._close_callback: Callable | None = None
 
   def set_callbacks(self, on_close: Callable):
     self._close_callback = on_close
+
+  def set_panel_depth(self, depth: int):
+    self._panel_depth = depth
+
+  def refresh_developer_visibility(self):
+    pass
+
+  def get_panel_depth(self) -> int:
+    return self._panel_depth
+
+  def _handle_back_navigation(self):
+    if self._panel_depth > 0:
+      self._panel_depth -= 1
+      if hasattr(self._panels[PanelType.STARPILOT].instance, 'navigate_back'):
+        self._panels[PanelType.STARPILOT].instance.navigate_back()
+    else:
+      if self._close_callback:
+        self._close_callback()
 
   def _render(self, rect: rl.Rectangle):
     # Calculate layout
@@ -85,20 +116,17 @@ class SettingsLayout(Widget):
   def _draw_sidebar(self, rect: rl.Rectangle):
     rl.draw_rectangle_rec(rect, SIDEBAR_COLOR)
 
-    # Close button
-    close_btn_rect = rl.Rectangle(
-      rect.x + (rect.width - CLOSE_BTN_SIZE) / 2, rect.y + 60, CLOSE_BTN_SIZE, CLOSE_BTN_SIZE
-    )
+    # Back/Close button - hierarchical navigation
+    back_btn_rect = rl.Rectangle(rect.x + (rect.width - CLOSE_BTN_SIZE) / 2, rect.y + 60, CLOSE_BTN_SIZE, CLOSE_BTN_SIZE)
 
-    pressed = (rl.is_mouse_button_down(rl.MouseButton.MOUSE_BUTTON_LEFT) and
-               rl.check_collision_point_rec(rl.get_mouse_position(), close_btn_rect))
+    pressed = rl.is_mouse_button_down(rl.MouseButton.MOUSE_BUTTON_LEFT) and rl.check_collision_point_rec(rl.get_mouse_position(), back_btn_rect)
     close_color = CLOSE_BTN_PRESSED if pressed else CLOSE_BTN_COLOR
-    rl.draw_rectangle_rounded(close_btn_rect, 1.0, 20, close_color)
+    rl.draw_rectangle_rounded(back_btn_rect, 1.0, 20, close_color)
 
     icon_color = rl.Color(255, 255, 255, 255) if not pressed else rl.Color(220, 220, 220, 255)
     icon_dest = rl.Rectangle(
-      close_btn_rect.x + (close_btn_rect.width - self._close_icon.width) / 2,
-      close_btn_rect.y + (close_btn_rect.height - self._close_icon.height) / 2,
+      back_btn_rect.x + (back_btn_rect.width - self._close_icon.width) / 2,
+      back_btn_rect.y + (back_btn_rect.height - self._close_icon.height) / 2,
       self._close_icon.width,
       self._close_icon.height,
     )
@@ -111,12 +139,20 @@ class SettingsLayout(Widget):
       icon_color,
     )
 
-    # Store close button rect for click detection
-    self._close_btn_rect = close_btn_rect
+    # Store back button rect for click detection
+    self._back_btn_rect = back_btn_rect
+
+    # Get tuning level to control Developer panel visibility
+    tuning_level_str = self._params.get("TuningLevel", return_default=True, default="1")
+    tuning_level = int(tuning_level_str) if tuning_level_str else 1
 
     # Navigation buttons
     y = rect.y + 300
     for panel_type, panel_info in self._panels.items():
+      # Hide Developer panel unless tuning level >= 3
+      if panel_type == PanelType.DEVELOPER and tuning_level < 3:
+        continue
+
       button_rect = rl.Rectangle(rect.x + 50, y, rect.width - 150, NAV_BTN_HEIGHT)
 
       # Button styling
@@ -125,9 +161,7 @@ class SettingsLayout(Widget):
       # Draw button text (right-aligned)
       panel_name = tr(panel_info.name)
       text_size = measure_text_cached(self._font_medium, panel_name, 65)
-      text_pos = rl.Vector2(
-        button_rect.x + button_rect.width - text_size.x, button_rect.y + (button_rect.height - text_size.y) / 2
-      )
+      text_pos = rl.Vector2(button_rect.x + button_rect.width - text_size.x, button_rect.y + (button_rect.height - text_size.y) / 2)
       rl.draw_text_ex(self._font_medium, panel_name, text_pos, 65, 0, text_color)
 
       # Store button rect for click detection
@@ -136,9 +170,7 @@ class SettingsLayout(Widget):
       y += NAV_BTN_HEIGHT
 
   def _draw_current_panel(self, rect: rl.Rectangle):
-    rl.draw_rectangle_rounded(
-      rl.Rectangle(rect.x + 10, rect.y + 10, rect.width - 20, rect.height - 20), 0.04, 30, PANEL_COLOR
-    )
+    rl.draw_rectangle_rounded(rl.Rectangle(rect.x + 10, rect.y + 10, rect.width - 20, rect.height - 20), 0.04, 30, PANEL_COLOR)
     content_rect = rl.Rectangle(rect.x + PANEL_MARGIN, rect.y + 25, rect.width - (PANEL_MARGIN * 2), rect.height - 50)
     # rl.draw_rectangle_rounded(content_rect, 0.03, 30, PANEL_COLOR)
     panel = self._panels[self._current_panel]
@@ -146,10 +178,9 @@ class SettingsLayout(Widget):
       panel.instance.render(content_rect)
 
   def _handle_mouse_release(self, mouse_pos: MousePos) -> None:
-    # Check close button
-    if rl.check_collision_point_rec(mouse_pos, self._close_btn_rect):
-      if self._close_callback:
-        self._close_callback()
+    # Check back/close button - hierarchical navigation
+    if rl.check_collision_point_rec(mouse_pos, self._back_btn_rect):
+      self._handle_back_navigation()
       return
 
     # Check navigation buttons

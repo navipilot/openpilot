@@ -108,7 +108,7 @@ def install_frogpilot(build_metadata, params):
 
   register_device(build_metadata, params)
 
-  update_boot_logo(frogpilot=True)
+  update_boot_logo(frogpilot=True, selected_logo=params.get("BootLogo"))
 
   if build_metadata.channel == "FrogPilot-Development" and is_FrogsGoMoo():
     mount_options = run_cmd(["findmnt", "-n", "-o", "OPTIONS", "/persist"], "Successfully retrieved mount options", "Failed to retrieve mount options")
@@ -119,6 +119,18 @@ def install_frogpilot(build_metadata, params):
 
 def register_device(build_metadata, params):
   def register_thread():
+    dongle_id = params.get("DongleId")
+    if isinstance(dongle_id, bytes):
+      dongle_id = dongle_id.decode("utf-8", errors="ignore")
+    frogpilot_dongle_id = params.get("FrogPilotDongleId")
+    if isinstance(frogpilot_dongle_id, bytes):
+      frogpilot_dongle_id = frogpilot_dongle_id.decode("utf-8", errors="ignore")
+
+    # Keep a stable local identifier even if the remote registration endpoint
+    # is unavailable or slow to respond.
+    if dongle_id and not frogpilot_dongle_id:
+      params.put("FrogPilotDongleId", dongle_id)
+
     while not is_url_pingable(FROGPILOT_API):
       time.sleep(60)
 
@@ -126,7 +138,7 @@ def register_device(build_metadata, params):
       "api_token": params.get("FrogPilotApiToken"),
       "build_metadata": dataclasses.asdict(build_metadata),
       "device": HARDWARE.get_device_type(),
-      "dongle_id": params.get("DongleId"),
+      "dongle_id": dongle_id,
       "frogpilot_dongle_id": params.get("FrogPilotDongleId"),
     }
 
@@ -149,11 +161,21 @@ def uninstall_frogpilot():
   HARDWARE.uninstall()
 
 
-def update_boot_logo(frogpilot=False, stock=False):
+def update_boot_logo(frogpilot=False, stock=False, selected_logo=None):
+  if HARDWARE.get_device_type() == "pc":
+    return
+
   boot_logo_location = Path("/usr/comma/bg.jpg")
 
   if frogpilot:
     target_logo = Path(BASEDIR) / "frogpilot/assets/other_images/frogpilot_boot_logo.jpg"
+    if selected_logo:
+      selected = selected_logo.decode("utf-8", "ignore") if isinstance(selected_logo, (bytes, bytearray)) else str(selected_logo)
+      selected = selected.strip().lower().replace(" ", "_")
+      if selected and selected not in {"stock", "default"}:
+        candidates = list((THEME_SAVE_PATH / "bootlogos").glob(f"{selected}.*"))
+        if candidates:
+          target_logo = candidates[0]
   elif stock:
     target_logo = Path(BASEDIR) / "frogpilot/assets/other_images/stock_bg.jpg"
   else:
@@ -164,10 +186,29 @@ def update_boot_logo(frogpilot=False, stock=False):
     print(f"Error: Target logo file not found at {target_logo}")
     return
 
-  if boot_logo_location.read_bytes() != target_logo.read_bytes():
+  source_logo = target_logo
+  staged_logo = Path("/tmp/frogpilot_boot_logo.jpg")
+  try:
+    from PIL import Image
+
+    with Image.open(target_logo) as img:
+      # weston.service always writes a JPEG copy of /usr/comma/bg.jpg; make sure
+      # the source image is already RGB JPEG to avoid startup failure on RGBA assets.
+      if img.format != "JPEG" or img.mode != "RGB":
+        img.convert("RGB").save(staged_logo, format="JPEG", quality=95)
+        source_logo = staged_logo
+  except Exception as error:
+    print(f"Error normalizing boot logo {target_logo}: {error}")
+    if target_logo.suffix.lower() not in {".jpg", ".jpeg"}:
+      print("Skipping boot logo update to keep weston startup stable.")
+      return
+
+  current_logo = boot_logo_location.read_bytes() if boot_logo_location.is_file() else b""
+  desired_logo = source_logo.read_bytes()
+  if current_logo != desired_logo:
     mount_options = run_cmd(["findmnt", "-n", "-o", "OPTIONS", "/"], "Successfully retrieved mount options", "Failed to retrieve mount options")
     run_cmd(["sudo", "mount", "-o", "remount,rw", "/"], "Successfully remounted / as read-write", "Failed to remount /")
-    run_cmd(["sudo", "cp", target_logo, boot_logo_location], "Successfully replaced boot logo", "Failed to replace boot logo")
+    run_cmd(["sudo", "cp", source_logo, boot_logo_location], "Successfully replaced boot logo", "Failed to replace boot logo")
     run_cmd(["sudo", "mount", "-o", f"remount,{mount_options}", "/"], "Successfully restored / mount options", "Failed to restore / mount options")
 
 

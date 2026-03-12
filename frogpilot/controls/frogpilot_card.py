@@ -48,14 +48,14 @@ class FrogPilotCard:
 
   def handle_experimental_mode(self, sm, frogpilot_toggles):
     if frogpilot_toggles.conditional_experimental_mode:
-      if self.params_memory.get("CEStatus") in (CEStatus["USER_DISABLED"], CEStatus["USER_OVERRIDDEN"]):
+      if self.params_memory.get_int("CEStatus") in (CEStatus["USER_DISABLED"], CEStatus["USER_OVERRIDDEN"]):
         override_value = CEStatus["OFF"]
       elif sm["selfdriveState"].experimentalMode:
         override_value = CEStatus["USER_DISABLED"]
       else:
         override_value = CEStatus["USER_OVERRIDDEN"]
 
-      self.params_memory.put("CEStatus", override_value)
+      self.params_memory.put_int("CEStatus", override_value)
     else:
       self.params.put_bool_nonblocking("ExperimentalMode", not sm["selfdriveState"].experimentalMode)
 

@@ -1,12 +1,33 @@
 #pragma once
 
 #include <atomic>
-#include <condition_variable>
 #include <cstdint>
+#include <string>
+
+#if defined(__APPLE__) || !defined(QCOM2)
+// Qualcomm OpenMAX is unavailable on macOS. Keep a no-op encoder so UI builds.
+class OmxEncoder {
+public:
+  OmxEncoder(const char* path, int width, int height, int fps, int bitrate) { (void)path; (void)width; (void)height; (void)fps; (void)bitrate; }
+  ~OmxEncoder() = default;
+
+  int encode_frame_rgba(const uint8_t *ptr, int in_width, int in_height, uint64_t ts) {
+    (void)ptr;
+    (void)in_width;
+    (void)in_height;
+    (void)ts;
+    return -1;
+  }
+  void encoder_open(const char* filename) { (void)filename; is_open = false; }
+  void encoder_close() {}
+
+  std::atomic<bool> is_open{false};
+};
+#else
+#include <condition_variable>
 #include <cstdio>
 #include <memory>
 #include <mutex>
-#include <string>
 #include <thread>
 #include <vector>
 
@@ -68,3 +89,4 @@ private:
   std::unique_ptr<BlockingQueue<OMX_BUFFERHEADERTYPE *>> free_in;
   std::unique_ptr<BlockingQueue<OMX_BUFFERHEADERTYPE *>> done_out;
 };
+#endif

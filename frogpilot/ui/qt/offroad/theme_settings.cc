@@ -66,6 +66,11 @@ void deleteThemeAsset(QDir &directory, const QString &subFolder, const QString &
 }
 
 void downloadThemeAsset(const QString &input, const std::string &paramKey, const QString &assetParam, Params &params, Params &params_memory) {
+  if (paramKey == "BootLogoToDownload") {
+    params_memory.put(paramKey, input.trimmed().toStdString());
+    return;
+  }
+
   QString output = input;
   output.replace(" - by: ", "~");
   int tilde = output.indexOf("~");
@@ -222,6 +227,7 @@ FrogPilotThemesPanel::FrogPilotThemesPanel(FrogPilotSettingsWindow *parent, bool
 
   const std::vector<std::tuple<QString, QString, QString, QString>> themeToggles {
     {"CustomThemes", tr("Custom Themes"), tr("<b>The overall look and feel of openpilot.</b> Use the \"Theme Maker\" in \"The Pond\" to create and share your own themes!"), "../../frogpilot/assets/toggle_icons/icon_frog.png"},
+    {"BootLogo", tr("Boot Logo"), tr("<b>The boot logo shown while the device starts.</b>"), ""},
     {"ColorScheme", tr("Color Scheme"), tr("<b>The color scheme used throughout openpilot.</b> Use the \"Theme Maker\" in \"The Pond\" to create and share your own themes!"), ""},
     {"DistanceIconPack", tr("Distance Button"), tr("<b>The distance button icons shown on the driving screen.</b> Use the \"Theme Maker\" in \"The Pond\" to create and share your own themes!"), ""},
     {"IconPack", tr("Icon Pack"), tr("<b>The icon style used across openpilot.</b> Use the \"Theme Maker\" in \"The Pond\" to create and share your own themes!"), ""},
@@ -246,6 +252,57 @@ FrogPilotThemesPanel::FrogPilotThemesPanel(FrogPilotSettingsWindow *parent, bool
         themesLayout->setCurrentWidget(customThemesPanel);
       });
       themeToggle = personalizeOpenpilotToggle;
+    } else if (param == "BootLogo") {
+      manageBootLogosButton = new FrogPilotButtonsControl(title, desc, icon, {tr("DELETE"), tr("DOWNLOAD"), tr("SELECT")});
+      QObject::connect(manageBootLogosButton, &FrogPilotButtonsControl::buttonClicked, [this](int id) {
+        // Show all downloaded boot logos, including the currently selected one.
+        QStringList bootLogos = getThemeList(true, QDir(bootLogosDirectory.path()), "", "BootLogo", params);
+
+        if (id == 0) {
+          QString bootLogoToDelete = MultiOptionDialog::getSelection(tr("Select a boot logo to delete"), bootLogos, "", this);
+          if (!bootLogoToDelete.isEmpty() && ConfirmationDialog::confirm(tr("Delete the \"%1\" boot logo?").arg(bootLogoToDelete), tr("Delete"), this)) {
+            bootLogosDownloaded = false;
+
+            deleteThemeAsset(bootLogosDirectory, "", "DownloadableBootLogos", bootLogoToDelete, params);
+          }
+        } else if (id == 1) {
+          if (bootLogoDownloading) {
+            cancellingDownload = true;
+
+            params_memory.putBool("CancelThemeDownload", true);
+
+            QTimer::singleShot(2500, [this]() {
+              bootLogoDownloading = false;
+              cancellingDownload = false;
+              themeDownloading = false;
+
+              params_memory.putBool("CancelThemeDownload", false);
+            });
+          } else {
+            QStringList downloadableBootLogos = QString::fromStdString(params.get("DownloadableBootLogos")).split(",");
+            bootLogoToDownload = MultiOptionDialog::getSelection(tr("Select a boot logo to download"), downloadableBootLogos, "", this);
+            if (!bootLogoToDownload.isEmpty()) {
+              manageBootLogosButton->setValue(storeThemeName(bootLogoToDownload, "BootLogo", params));
+
+              bootLogoDownloading = true;
+              themeDownloading = true;
+
+              params_memory.put("ThemeDownloadProgress", "Downloading...");
+
+              downloadThemeAsset(bootLogoToDownload, "BootLogoToDownload", "DownloadableBootLogos", params, params_memory);
+
+              downloadStatusLabel->setText(tr("Downloading..."));
+            }
+          }
+        } else if (id == 2) {
+          QString bootLogoToSelect = MultiOptionDialog::getSelection(tr("Select a boot logo"), bootLogos, getThemeName("BootLogo", params), this);
+          if (!bootLogoToSelect.isEmpty()) {
+            manageBootLogosButton->setValue(storeThemeName(bootLogoToSelect, "BootLogo", params));
+          }
+        }
+      });
+      manageBootLogosButton->setValue(getThemeName(param.toStdString(), params));
+      themeToggle = manageBootLogosButton;
     } else if (param == "ColorScheme") {
       manageColorSchemeButton = new FrogPilotButtonsControl(title, desc, icon, {tr("DELETE"), tr("DOWNLOAD"), tr("SELECT")});
       QObject::connect(manageColorSchemeButton, &FrogPilotButtonsControl::buttonClicked, [this](int id) {
@@ -707,6 +764,7 @@ FrogPilotThemesPanel::FrogPilotThemesPanel(FrogPilotSettingsWindow *parent, bool
 }
 
 void FrogPilotThemesPanel::showEvent(QShowEvent *event) {
+  bootLogosDownloaded = params.get("DownloadableBootLogos").empty();
   colorsDownloaded = params.get("DownloadableColors").empty();
   distanceIconsDownloaded = params.get("DownloadableDistanceIcons").empty();
   iconsDownloaded = params.get("DownloadableIcons").empty();
@@ -774,6 +832,7 @@ void FrogPilotThemesPanel::updateState(const UIState &s, const FrogPilotUIState 
       finalizingDownload = true;
 
       QTimer::singleShot(2500, [this]() {
+        bootLogoDownloading = false;
         colorDownloading = false;
         distanceIconDownloading = false;
         finalizingDownload = false;
@@ -783,6 +842,7 @@ void FrogPilotThemesPanel::updateState(const UIState &s, const FrogPilotUIState 
         themeDownloading = false;
         wheelDownloading = false;
 
+        bootLogosDownloaded = params.get("DownloadableBootLogos").empty();
         colorsDownloaded = params.get("DownloadableColors").empty();
         distanceIconsDownloaded = params.get("DownloadableDistanceIcons").empty();
         iconsDownloaded = params.get("DownloadableIcons").empty();
@@ -799,6 +859,11 @@ void FrogPilotThemesPanel::updateState(const UIState &s, const FrogPilotUIState 
   }
 
   bool parked = !s.scene.started || frogpilot_scene.parked || parent->isFrogsGoMoo;
+
+  manageBootLogosButton->setText(1, bootLogoDownloading ? tr("CANCEL") : tr("DOWNLOAD"));
+  manageBootLogosButton->setEnabledButtons(0, !themeDownloading);
+  manageBootLogosButton->setEnabledButtons(1, frogpilot_scene.online && (!themeDownloading || bootLogoDownloading) && !cancellingDownload && !finalizingDownload && !bootLogosDownloaded && parked);
+  manageBootLogosButton->setEnabledButtons(2, !themeDownloading);
 
   manageColorSchemeButton->setText(1, colorDownloading ? tr("CANCEL") : tr("DOWNLOAD"));
   manageColorSchemeButton->setEnabledButtons(0, !themeDownloading);

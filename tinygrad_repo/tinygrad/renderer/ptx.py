@@ -64,7 +64,7 @@ def mem_type(x:UOp) -> str:
   match x.op:
     case Ops.AFTER: return mem_type(x.src[0])
     case Ops.DEFINE_LOCAL: return 'shared'
-    case Ops.DEFINE_GLOBAL: return 'global'
+    case Ops.PARAM: return 'global'
     case _: raise RuntimeError(f"{x.op} needs to be memory")
 
 def render_wmma(ctx: "PTXRenderer", wmma: UOp):
@@ -91,7 +91,7 @@ string_rewrite = PatternMatcher([
   (UPat.cvar("x", dtypes.bool), lambda ctx, x: f"setp.ne.s16 {ctx.r[x]}, {render_val(x.arg, x.dtype)}, 0;"),
   (UPat.cvar("x"), lambda ctx, x: f"mov.b{ctx.types[x.dtype][1:]} {ctx.r[x]}, {render_val(x.arg, x.dtype)};"),
   (UPat(Ops.SPECIAL, name="x"), lambda ctx,x: f"mov.u32 %{x.arg}, %{'ctaid' if x.arg[0] == 'g' else 'tid'}.{chr(120+int(x.arg[-1]))};"),
-  (UPat(Ops.DEFINE_GLOBAL, name="x"), lambda ctx, x: f"ld.param.{ctx.types[dtypes.ulong]} {ctx.r[x]}, [data{x.arg}+0];"),
+  (UPat(Ops.PARAM, name="x"), lambda ctx, x: f"ld.param.{ctx.types[dtypes.ulong]} {ctx.r[x]}, [data{x.arg}+0];"),
   (UPat((Ops.CMPLT, Ops.CMPNE, Ops.CMPEQ), name="x", allow_any_len=True, src=(UPat.var("src0"),)),
     lambda ctx, x, src0: ctx.code_for_op[x.op](ctx.r[x], *[ctx.r[v] for v in x.src], src0.dtype, ctx.types[src0.dtype])),
   (UPat(GroupOp.ALU, name="x"), lambda ctx, x: ctx.code_for_op[x.op](ctx.r[x], *[ctx.r[v] for v in x.src], x.dtype, ctx.types[x.dtype])),
@@ -133,7 +133,7 @@ string_rewrite = PatternMatcher([
   (UPat(Ops.IF, name="x"), lambda ctx, x: f"@!{ctx.r[x.src[0]]} bra IF_{ctx.r[x.src[0]][1:]}_{ctx.uops.index(x)};"),
   (UPat(Ops.ENDIF, name="x"), lambda ctx, x: f"IF_{ctx.r[x.src[0].src[0]][1:]}_{ctx.uops.index(x.src[0])}:"),
   (UPat(Ops.WMMA, name="x"), lambda ctx, x: list(render_wmma(ctx, x))),
-  (UPat(Ops.BARRIER, name="x"), lambda ctx, x: ctx.barrier),
+  (UPat(Ops.BARRIER), lambda ctx: ctx.barrier),
   (UPat(Ops.DEFINE_VAR, name="x"), lambda ctx, x: f"ld.param.{ctx.mem_types[x.dtype]} {ctx.r[x]}, [{x.arg[0]}+0];"),
 ])
 
@@ -144,9 +144,11 @@ class PTXRenderer(Renderer):
   tc_sm80 = [x for x in tc.cuda_sm80 if x.dtype_in in [dtypes.half, dtypes.float]]
   code_for_op = asm_for_op
   extra_matcher = ptx_matcher
-  def __init__(self, arch:str, device="CUDA"):
-    self.device, self.arch = device, arch
-    self.tensor_cores = PTXRenderer.tc_sm80 if int(arch[3:]) >= 80 else tc.cuda_sm75 if int(arch[3:]) >= 75 else []
+  def __init__(self, arch:str, device="NV"):
+    from tinygrad.runtime.support.compiler_cuda import NVPTXCompiler, PTXCompiler
+    from tinygrad.runtime.support.hcq import MOCKGPU
+    self.compiler, self.device, self.arch = (PTXCompiler if bool(MOCKGPU) or device == "CUDA" else NVPTXCompiler)(arch), device, arch
+    self.tensor_cores = PTXRenderer.tc_sm80 if (ver:=int(arch[3:])) >= 80 else tc.cuda_sm75 if ver >= 75 else []
   def __reduce__(self): return self.__class__, (self.arch, self.device)
 
   # language options
@@ -180,7 +182,7 @@ class PTXRenderer(Renderer):
     self.uops = uops
 
     def ssa(prefix:str, u:UOp|None=None, dtype:str|None=None) -> str:
-      nonlocal c, r
+      nonlocal c
       prefix += f"_{dtype if dtype is not None else self.types[unwrap(u).dtype.base]}_"
       c[prefix] += 1
       return f"%{prefix}{c[prefix]-1}"
@@ -222,7 +224,7 @@ class PTXRenderer(Renderer):
       elif u.op is Ops.LOAD:
         assert u.src[0].dtype == dtypes.int64, "load isn't int64"
         r[u] = [ssa('val', dtype=self.types[u.dtype.scalar()]) for _ in range(u.dtype.count)] if u.dtype.count > 1 else ssa('val', u)
-      elif u.op is Ops.DEFINE_GLOBAL: bufs.append((f"data{u.arg}", u.dtype))
+      elif u.op is Ops.PARAM: bufs.append((f"data{u.arg}", u.dtype))
       elif u.op is Ops.WMMA:
         # registers for packing/unpacking input and acc
         self.wmma_r = [[ssa("wmma_in", dtype="b32") for _ in range(0, len(r[u.src[0]]), 4 // u.src[0].dtype.scalar().itemsize)],
@@ -230,8 +232,8 @@ class PTXRenderer(Renderer):
                        [ssa("wmma_acc", dtype="b32") for _ in range(0, len(r[u.src[2]]), 4 // u.dtype.scalar().itemsize)]]
         r[u] = [ssa("wmma", dtype=self.types[u.dtype.scalar()]) for _ in range(u.dtype.count)]
       prefix, dtype = {Ops.CAST: ("cast", None), Ops.BITCAST: ("cast", None), Ops.END: ("pred", "pred"), Ops.RANGE: ("ridx", None),
-        Ops.DEFINE_VAR: ("dat", None), Ops.CONST: ("const", None), Ops.DEFINE_LOCAL: ("local",self.types[dtypes.ulong]),
-        Ops.DEFINE_GLOBAL: ("dat", self.types[dtypes.ulong]), **{op: ("alu", None) for op in GroupOp.ALU}}.get(u.op, (None, None))
+        Ops.DEFINE_VAR: ("dat", None), Ops.CONST: ("const", None), Ops.DEFINE_LOCAL: ("local", self.types[dtypes.ulong]),
+        Ops.PARAM: ("dat", self.types[dtypes.ulong]), **{op: ("alu", None) for op in GroupOp.ALU}}.get(u.op, (None, None))
       if prefix: r[u] = ssa(prefix, u, dtype)
 
       if (l:=cast(str|list[str], string_rewrite.rewrite(u, ctx=self))) is None:

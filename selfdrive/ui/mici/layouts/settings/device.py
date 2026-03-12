@@ -1,17 +1,22 @@
 import os
 import threading
 import json
+import hashlib
+import secrets
+import string
 import pyray as rl
 from enum import IntEnum
 from collections.abc import Callable
+from pathlib import Path
 
 from openpilot.common.basedir import BASEDIR
 from openpilot.common.params import Params
+from openpilot.common.swaglog import cloudlog
 from openpilot.common.time_helpers import system_time_valid
 from openpilot.system.ui.widgets.scroller import Scroller
 from openpilot.system.ui.lib.scroll_panel2 import GuiScrollPanel2
-from openpilot.selfdrive.ui.mici.widgets.button import BigButton, BigCircleButton
-from openpilot.selfdrive.ui.mici.widgets.dialog import BigMultiOptionDialog, BigDialog, BigConfirmationDialogV2
+from openpilot.selfdrive.ui.mici.widgets.button import BigButton, BigCircleButton, BigParamControl
+from openpilot.selfdrive.ui.mici.widgets.dialog import BigMultiOptionDialog, BigDialog, BigConfirmationDialogV2, BigInputDialog
 from openpilot.selfdrive.ui.mici.widgets.pairing_dialog import PairingDialog
 from openpilot.selfdrive.ui.mici.onroad.driver_camera_dialog import DriverCameraDialog
 from openpilot.selfdrive.ui.mici.layouts.onboarding import TrainingGuide
@@ -22,6 +27,11 @@ from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.widgets.label import MiciLabel
 from openpilot.system.ui.widgets.html_render import HtmlModal, HtmlRenderer
 from openpilot.system.athena.registration import UNREGISTERED_DONGLE_ID
+from openpilot.system.hardware import PC
+from openpilot.system.hardware.hw import Paths
+
+import qrcode
+import numpy as np
 
 
 class MiciFccModal(NavWidget):
@@ -146,6 +156,167 @@ class PairBigButton(BigButton):
     else:
       dlg = PairingDialog()
     gui_app.set_modal_overlay(dlg)
+
+
+class GalaxyQRDialog(NavWidget):
+  def __init__(self, url: str):
+    super().__init__()
+    self._url = url
+    self._qr_texture: rl.Texture | None = None
+
+    self.set_back_callback(lambda: gui_app.set_modal_overlay(None))
+
+    self._title = MiciLabel("pair with galaxy", 48, font_weight=FontWeight.BOLD,
+                            color=rl.Color(255, 255, 255, int(255 * 0.9)), line_height=40, wrap_text=True)
+    self._generate_qr_code()
+
+  def _generate_qr_code(self) -> None:
+    try:
+      qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=0)
+      qr.add_data(self._url)
+      qr.make(fit=True)
+
+      pil_img = qr.make_image(fill_color="white", back_color="black").convert("RGBA")
+      img_array = np.array(pil_img, dtype=np.uint8)
+
+      if self._qr_texture and self._qr_texture.id != 0:
+        rl.unload_texture(self._qr_texture)
+
+      rl_image = rl.Image()
+      rl_image.data = rl.ffi.cast("void *", img_array.ctypes.data)
+      rl_image.width = pil_img.width
+      rl_image.height = pil_img.height
+      rl_image.mipmaps = 1
+      rl_image.format = rl.PixelFormat.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8
+      self._qr_texture = rl.load_texture_from_image(rl_image)
+    except Exception as e:
+      cloudlog.warning(f"Galaxy QR generation failed: {e}")
+      self._qr_texture = None
+
+  def _render(self, rect: rl.Rectangle):
+    if self._qr_texture is not None:
+      scale = rect.height / self._qr_texture.height
+      pos = rl.Vector2(rect.x + 8, rect.y)
+      rl.draw_texture_ex(self._qr_texture, pos, 0.0, scale, rl.WHITE)
+    else:
+      rl.draw_text_ex(
+        gui_app.font(FontWeight.BOLD),
+        "QR Code Error",
+        rl.Vector2(rect.x + 20, rect.y + rect.height // 2 - 15),
+        30,
+        0.0,
+        rl.RED,
+      )
+
+    label_x = rect.x + 8 + rect.height + 24
+    self._title.set_width(int(rect.width - label_x))
+    self._title.set_position(label_x, rect.y + 28)
+    self._title.render()
+
+    return -1
+
+  def __del__(self):
+    if self._qr_texture and self._qr_texture.id != 0:
+      rl.unload_texture(self._qr_texture)
+
+
+class GalaxyBigButton(BigButton):
+  _SLUG_CHARS = string.ascii_letters + string.digits
+
+  def __init__(self):
+    super().__init__("galaxy", "", gui_app.starpilot_texture("../system/the_pond/assets/images/main_logo.png", 64, 64))
+    self._galaxy_dir = Path(Paths.comma_home()) / "frogpilot" / "data" / "galaxy" if PC else Path("/data/galaxy")
+    self._auth_path = self._galaxy_dir / "glxyauth"
+    self._session_path = self._galaxy_dir / "glxysession"
+    self._slug_path = self._galaxy_dir / "glxyslug"
+
+  def _is_paired(self) -> bool:
+    try:
+      return len(self._auth_path.read_text(encoding="utf-8").strip()) == 64
+    except Exception:
+      return False
+
+  def _get_slug(self) -> str:
+    try:
+      return self._slug_path.read_text(encoding="utf-8").strip()
+    except Exception:
+      return ""
+
+  def _show_qr(self):
+    slug = self._get_slug()
+    if not slug:
+      gui_app.set_modal_overlay(BigDialog("Galaxy is not paired yet.", ""))
+      return
+    gui_app.set_modal_overlay(GalaxyQRDialog(f"https://galaxy.firestar.link/{slug}"))
+
+  def _pair_with_pin(self, pin: str):
+    clean_pin = str(pin or "").strip()
+    if len(clean_pin) < 6:
+      gui_app.set_modal_overlay(BigDialog("PIN must be at least 6 characters.", ""))
+      return
+
+    try:
+      self._galaxy_dir.mkdir(parents=True, exist_ok=True)
+      self._auth_path.write_text(hashlib.sha256(clean_pin.encode("utf-8")).hexdigest(), encoding="utf-8")
+      self._session_path.write_text(secrets.token_hex(32), encoding="utf-8")
+      slug = "".join(secrets.choice(self._SLUG_CHARS) for _ in range(16))
+      self._slug_path.write_text(slug, encoding="utf-8")
+    except Exception as e:
+      cloudlog.warning(f"Galaxy pairing write failed: {e}")
+      gui_app.set_modal_overlay(BigDialog("Failed to pair with Galaxy.", ""))
+      return
+
+    self._show_qr()
+
+  def _unpair(self):
+    for path in (self._auth_path, self._session_path, self._slug_path):
+      try:
+        path.unlink(missing_ok=True)
+      except TypeError:
+        # Python < 3.8 fallback
+        if path.exists():
+          path.unlink()
+      except Exception as e:
+        cloudlog.warning(f"Galaxy unpair cleanup failed for {path}: {e}")
+
+  def _handle_mouse_release(self, mouse_pos: MousePos):
+    super()._handle_mouse_release(mouse_pos)
+
+    if self._is_paired():
+      show_qr_option = "show qr"
+      unpair_option = "unpair"
+
+      def on_option_selected():
+        selected = option_dialog.get_selected_option()
+        if selected == show_qr_option:
+          self._show_qr()
+        elif selected == unpair_option:
+          confirm = BigConfirmationDialogV2(
+            "slide to\nunpair galaxy",
+            "icons_mici/settings/device/uninstall.png",
+            red=True,
+            confirm_callback=self._unpair,
+          )
+          gui_app.set_modal_overlay(confirm)
+
+      option_dialog = BigMultiOptionDialog(
+        options=[show_qr_option, unpair_option],
+        default=show_qr_option,
+        right_btn_callback=on_option_selected,
+      )
+      gui_app.set_modal_overlay(option_dialog)
+      return
+
+    pin_dialog = BigInputDialog(
+      hint="enter galaxy pin...",
+      default_text="",
+      minimum_length=6,
+      confirm_callback=self._pair_with_pin,
+    )
+    gui_app.set_modal_overlay(pin_dialog)
+
+  def _update_state(self):
+    self.set_value("paired" if self._is_paired() else "pair")
 
 
 UPDATER_TIMEOUT = 10.0  # seconds to wait for updater to respond
@@ -333,6 +504,7 @@ class DeviceLayoutMici(NavWidget):
     self._scroller = Scroller([
       DeviceInfoLayoutMici(),
       UpdateOpenpilotBigButton(),
+      BigParamControl("automatically update starpilot", "AutomaticUpdates"),
       PairBigButton(),
       review_training_guide_btn,
       driver_cam_btn,

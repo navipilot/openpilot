@@ -18,30 +18,33 @@ private:
   void updateState(const UIState &s, const FrogPilotUIState &fs);
   void updateToggles();
 
-  bool cancellingDownload;
-  bool colorDownloading;
-  bool colorsDownloaded;
-  bool distanceIconDownloading;
-  bool distanceIconsDownloaded;
-  bool finalizingDownload;
-  bool forceOpenDescriptions;
-  bool iconDownloading;
-  bool iconsDownloaded;
-  bool randomThemes;
-  bool signalDownloading;
-  bool signalsDownloaded;
-  bool soundDownloading;
-  bool soundsDownloaded;
-  bool themeDownloading;
-  bool wheelDownloading;
-  bool wheelsDownloaded;
+  bool bootLogoDownloading = false;
+  bool bootLogosDownloaded = false;
+  bool cancellingDownload = false;
+  bool colorDownloading = false;
+  bool colorsDownloaded = false;
+  bool distanceIconDownloading = false;
+  bool distanceIconsDownloaded = false;
+  bool finalizingDownload = false;
+  bool forceOpenDescriptions = false;
+  bool iconDownloading = false;
+  bool iconsDownloaded = false;
+  bool randomThemes = false;
+  bool signalDownloading = false;
+  bool signalsDownloaded = false;
+  bool soundDownloading = false;
+  bool soundsDownloaded = false;
+  bool themeDownloading = false;
+  bool wheelDownloading = false;
+  bool wheelsDownloaded = false;
 
   std::map<QString, AbstractControl*> toggles;
 
-  QSet<QString> customThemeKeys = {"ColorScheme", "DistanceIconPack", "DownloadStatusLabel", "IconPack", "SignalAnimation", "SoundPack", "WheelIcon"};
+  QSet<QString> customThemeKeys = {"BootLogo", "ColorScheme", "DistanceIconPack", "DownloadStatusLabel", "IconPack", "SignalAnimation", "SoundPack", "WheelIcon"};
 
   QSet<QString> parentKeys;
 
+  FrogPilotButtonsControl *manageBootLogosButton;
   FrogPilotButtonsControl *manageColorSchemeButton;
   FrogPilotButtonsControl *manageDistanceIconPackButton;
   FrogPilotButtonsControl *manageIconPackButton;
@@ -53,9 +56,11 @@ private:
 
   LabelControl *downloadStatusLabel;
 
+  QDir bootLogosDirectory{"/data/themes/bootlogos/"};
   QDir themePacksDirectory{"/data/themes/theme_packs/"};
   QDir wheelsDirectory{"/data/themes/steering_wheels/"};
 
+  QString bootLogoToDownload;
   QString colorSchemeToDownload;
   QString distanceIconPackToDownload;
   QString iconPackToDownload;

@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
+import os
 import pyray as rl
 import select
+import subprocess
 import sys
+import time
+from collections import deque
+from pathlib import Path
 
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.lib.text_measure import measure_text_cached
@@ -26,6 +31,8 @@ MARGIN_H = 100
 FONT_SIZE = 96
 LINE_HEIGHT = 104
 DARKGRAY = (55, 55, 55, 255)
+RESET_TAP_COUNT = 8
+RESET_TAP_WINDOW_S = 4.0
 
 # FrogPilot variables
 GREEN = (23, 134, 68, 242)
@@ -33,6 +40,17 @@ GREEN = (23, 134, 68, 242)
 
 def clamp(value, min_value, max_value):
   return max(min(value, max_value), min_value)
+
+
+def get_device_type() -> str:
+  model_path = Path("/sys/firmware/devicetree/base/model")
+  if model_path.is_file():
+    try:
+      model = model_path.read_text().strip("\x00")
+      return model.split("comma ")[-1].strip().lower()
+    except Exception:
+      pass
+  return ""
 
 
 class Spinner(Widget):
@@ -43,6 +61,10 @@ class Spinner(Widget):
     self._rotation = 0.0
     self._progress: int | None = None
     self._wrapped_lines: list[str] = []
+    self._logo_rect = rl.Rectangle(0, 0, 0, 0)
+    self._tap_times = deque(maxlen=RESET_TAP_COUNT)
+    self._launch_reset = False
+    self._allow_reset_gesture = os.path.isfile("/TICI") and get_device_type() not in ("tici", "tizi")
 
   def set_text(self, text: str) -> None:
     if text.isdigit():
@@ -67,6 +89,7 @@ class Spinner(Widget):
     center = rl.Vector2(rect.width / 2.0, center_y)
     spinner_origin = rl.Vector2(TEXTURE_SIZE / 2.0, TEXTURE_SIZE / 2.0)
     comma_position = rl.Vector2(center.x - TEXTURE_SIZE / 2.0, center.y - TEXTURE_SIZE / 2.0)
+    self._logo_rect = rl.Rectangle(comma_position.x, comma_position.y, TEXTURE_SIZE, TEXTURE_SIZE)
 
     delta_time = rl.get_frame_time()
     self._rotation = (self._rotation + DEGREES_PER_SECOND * delta_time) % 360.0
@@ -89,6 +112,23 @@ class Spinner(Widget):
         text_size = measure_text_cached(gui_app.font(), line, FONT_SIZE)
         rl.draw_text_ex(gui_app.font(), line, rl.Vector2(center.x - text_size.x / 2, y_pos + i * LINE_HEIGHT),
                         FONT_SIZE, 0.0, rl.WHITE)
+
+  def _handle_mouse_release(self, mouse_pos):
+    if not self._allow_reset_gesture:
+      return
+
+    if not rl.check_collision_point_rec(mouse_pos, self._logo_rect):
+      return
+
+    now = time.monotonic()
+    self._tap_times.append(now)
+    if len(self._tap_times) == RESET_TAP_COUNT and (now - self._tap_times[0]) <= RESET_TAP_WINDOW_S:
+      self._tap_times.clear()
+      self._launch_reset = True
+
+  @property
+  def should_launch_reset(self) -> bool:
+    return self._launch_reset
 
 
 def _read_stdin():
@@ -114,6 +154,28 @@ def main():
       spinner.set_text(text_list[-1])
 
     spinner.render(rl.Rectangle(0, 0, gui_app.width, gui_app.height))
+    if spinner.should_launch_reset:
+      reset_script = Path(__file__).with_name("reset.py")
+      try:
+        proc = subprocess.Popen(
+          [sys.executable, str(reset_script)],
+          cwd=str(reset_script.parent),
+          close_fds=True,
+          stdout=subprocess.DEVNULL,
+          stderr=subprocess.DEVNULL,
+        )
+      except OSError:
+        spinner.set_text("Failed to launch reset UI")
+        continue
+
+      # Keep spinner alive if reset process exits immediately (prevents blank screen).
+      time.sleep(0.2)
+      if proc.poll() is not None:
+        spinner.set_text("Reset UI failed to start")
+        continue
+
+      gui_app.request_close()
+      break
 
 
 if __name__ == "__main__":

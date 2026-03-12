@@ -7,10 +7,27 @@ from openpilot.common.basedir import BASEDIR
 
 class TextWindow:
   def __init__(self, text):
+    self.text_proc = None
+
+    # Prefer the legacy compiled text window on device.
+    legacy_text = os.path.join(BASEDIR, "selfdrive", "ui", "text")
+    if os.path.isfile("/TICI") and os.path.isfile(legacy_text) and os.access(legacy_text, os.X_OK):
+      try:
+        self.text_proc = subprocess.Popen([legacy_text, text],
+                                          stdin=subprocess.PIPE,
+                                          cwd=os.path.join(BASEDIR, "selfdrive", "ui"),
+                                          close_fds=True)
+        return
+      except OSError:
+        self.text_proc = None
+
+    text_cwd = os.path.join(BASEDIR, "system", "ui")
+    venv_python = os.path.join(BASEDIR, ".venv", "bin", "python")
+    python_exec = venv_python if os.path.isfile(venv_python) else "python3"
     try:
-      self.text_proc = subprocess.Popen(["./text.py", text],
+      self.text_proc = subprocess.Popen([python_exec, "./text.py", text],
                                         stdin=subprocess.PIPE,
-                                        cwd=os.path.join(BASEDIR, "system", "ui"),
+                                        cwd=text_cwd,
                                         close_fds=True)
     except OSError:
       self.text_proc = None

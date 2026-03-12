@@ -10,13 +10,13 @@ from openpilot.common.basedir import BASEDIR
 from openpilot.frogpilot.common.frogpilot_download_utilities import download_file, verify_download
 from openpilot.frogpilot.assets.model_manager import CANCEL_DOWNLOAD_PARAM, DOWNLOAD_PROGRESS_PARAM, MODEL_DOWNLOAD_PARAM
 from openpilot.frogpilot.common.frogpilot_utilities import delete_file, run_cmd
-from openpilot.frogpilot.common.frogpilot_variables import MODELS_PATH
+from openpilot.frogpilot.common.frogpilot_variables import MODELS_PATH, RESOURCES_REPO
 
 METADATA_SCRIPT = Path(BASEDIR) / "frogpilot/tinygrad_modeld/get_model_metadata.py"
 TINYGRAD_REPO_PATH = Path(BASEDIR) / "tinygrad_repo"
 
-MODELS_SOURCE = "https://api.github.com/repos/FrogAi/FrogPilot-Resources/contents/uncompiled?ref=Models"
-MODELS_SOURCE_RAW = "https://raw.githubusercontent.com/FrogAi/FrogPilot-Resources/Models/uncompiled"
+MODELS_SOURCE = f"https://api.github.com/repos/{RESOURCES_REPO}/contents/uncompiled?ref=Models"
+MODELS_SOURCE_RAW = f"https://raw.githubusercontent.com/{RESOURCES_REPO}/Models/uncompiled"
 
 COMPILED_DIR = Path(MODELS_PATH) / "compiled"
 UNCOMPILED_DIR = Path(MODELS_PATH) / "uncompiled_downloads"
@@ -27,6 +27,17 @@ def compile_model(onnx_path):
 
   env = os.environ.copy()
   env["PYTHONPATH"] = f"{env.get('PYTHONPATH','')}:{TINYGRAD_REPO_PATH}"
+  dev = env.get("DEV")
+  if dev in {"AMD", "CPU", "CUDA", "GPU", "HIP", "LLVM", "METAL", "NV", "QCOM", "WEBGPU"}:
+    env.setdefault(dev, "1")
+  if sys.platform == "darwin":
+    env["CPU"] = env.get("CPU", "1")
+    env["IMAGE"] = env.get("IMAGE", "0")
+    env["NOLOCALS"] = env.get("NOLOCALS", "1")
+  try:
+    int(env.get("DEBUG", "0"))
+  except ValueError:
+    env["DEBUG"] = "0"
 
   run_cmd([sys.executable, str(TINYGRAD_REPO_PATH / "examples/openpilot/compile3.py"), str(onnx_path), str(compiled_path)], f"{onnx_path.name} compiled successfully!", "Failed to compile the model...", env=env)
   run_cmd([sys.executable, str(METADATA_SCRIPT), str(onnx_path)], f"Successfully extracted metadata from {onnx_path.name}!", f"Failed to extract metadata from {onnx_path.name}...")

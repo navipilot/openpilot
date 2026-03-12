@@ -19,8 +19,6 @@ from openpilot.system.hardware.hw import Paths
 from openpilot.system.loggerd.xattr_cache import getxattr, setxattr
 from openpilot.common.swaglog import cloudlog
 
-from openpilot.frogpilot.common.frogpilot_variables import get_frogpilot_toggles
-
 NetworkType = log.DeviceState.NetworkType
 UPLOAD_ATTR_NAME = 'user.upload'
 UPLOAD_ATTR_VALUE = b'1'
@@ -106,6 +104,7 @@ class Uploader:
       for name in sorted(names, key=lambda n: self.immediate_priority.get(n, 1000)):
         key = os.path.join(logdir, name)
         fn = os.path.join(path, name)
+
         # skip files already uploaded
         try:
           ctime = os.path.getctime(fn)
@@ -228,7 +227,7 @@ class Uploader:
     return self.upload(name, key, fn, network_type, metered)
 
 
-def main(exit_event: threading.Event = None) -> None:
+def main(exit_event: threading.Event | None = None) -> None:
   if exit_event is None:
     exit_event = threading.Event()
 
@@ -250,18 +249,11 @@ def main(exit_event: threading.Event = None) -> None:
   uploader = Uploader(dongle_id, Paths.log_root())
 
   backoff = 0.1
-
-  # FrogPilot variables
-  sm = sm.extend(['frogpilotPlan'])
-
-  frogpilot_toggles = get_frogpilot_toggles()
-
   while not exit_event.is_set():
     sm.update(0)
     offroad = params.get_bool("IsOffroad")
     network_type = sm['deviceState'].networkType if not force_wifi else NetworkType.wifi
-    at_home = offroad and network_type in (NetworkType.ethernet, NetworkType.wifi)
-    if network_type == NetworkType.none or not at_home and frogpilot_toggles.no_onroad_uploads:
+    if network_type == NetworkType.none:
       if allow_sleep:
         time.sleep(60 if offroad else 5)
       continue
@@ -276,10 +268,6 @@ def main(exit_event: threading.Event = None) -> None:
       backoff = min(backoff*2, 120)
     if allow_sleep:
       time.sleep(backoff + random.uniform(0, backoff))
-
-    # FrogPilot variables
-    frogpilot_toggles = get_frogpilot_toggles(sm)
-
 
 if __name__ == "__main__":
   main()

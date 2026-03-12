@@ -7,7 +7,7 @@ from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.lib.multilang import tr, trn
 from openpilot.system.ui.widgets import Widget, DialogResult
 from openpilot.system.ui.widgets.confirm_dialog import ConfirmDialog
-from openpilot.system.ui.widgets.list_view import button_item, text_item, ListItem
+from openpilot.system.ui.widgets.list_view import button_item, text_item, toggle_item, ListItem
 from openpilot.system.ui.widgets.option_dialog import MultiOptionDialog
 from openpilot.system.ui.widgets.scroller_tici import Scroller
 
@@ -54,6 +54,12 @@ class SoftwareLayout(Widget):
 
     self._onroad_label = ListItem(lambda: tr("Updates are only downloaded while the car is off."))
     self._version_item = text_item(lambda: tr("Current Version"), ui_state.params.get("UpdaterCurrentDescription") or "")
+    self._auto_updates_toggle = toggle_item(
+      lambda: tr("Automatically Install Updates"),
+      lambda: tr("Automatically install updates when parked with an active internet connection."),
+      initial_state=ui_state.params.get_bool("AutomaticUpdates"),
+      callback=self._on_auto_updates_toggle,
+    )
     self._download_btn = button_item(lambda: tr("Download"), lambda: tr("CHECK"), callback=self._on_download_update)
 
     # Install button is initially hidden
@@ -73,6 +79,7 @@ class SoftwareLayout(Widget):
     self._scroller = Scroller([
       self._onroad_label,
       self._version_item,
+      self._auto_updates_toggle,
       self._download_btn,
       self._install_btn,
       self._branch_btn,
@@ -94,6 +101,7 @@ class SoftwareLayout(Widget):
     current_release_notes = (ui_state.params.get("UpdaterCurrentReleaseNotes") or b"").decode("utf-8", "replace")
     self._version_item.action_item.set_text(current_desc)
     self._version_item.set_description(current_release_notes)
+    self._auto_updates_toggle.action_item.set_state(ui_state.params.get_bool("AutomaticUpdates"))
 
     # Update download button visibility and state
     self._download_btn.set_visible(ui_state.is_offroad())
@@ -163,6 +171,9 @@ class SoftwareLayout(Widget):
       self._waiting_for_updater = True
       self._waiting_start_ts = time.monotonic()
       os.system("pkill -SIGHUP -f system.updated.updated")
+
+  def _on_auto_updates_toggle(self, enabled: bool):
+    ui_state.params.put_bool("AutomaticUpdates", enabled)
 
   def _on_uninstall(self):
     def handle_uninstall_confirmation(result):

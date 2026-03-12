@@ -1,4 +1,6 @@
-"""Install exception handler for process crash."""
+import glob
+import os
+import re
 import sentry_sdk
 import traceback
 from datetime import datetime
@@ -6,20 +8,18 @@ from enum import Enum
 from sentry_sdk.integrations.threading import ThreadingIntegration
 
 from openpilot.common.params import Params
-from openpilot.system.athena.registration import is_registered_device
 from openpilot.system.hardware import HARDWARE, PC
 from openpilot.common.swaglog import cloudlog
+from openpilot.system.hardware.hw import Paths
 from openpilot.system.version import get_build_metadata, get_version
 
-from openpilot.frogpilot.common.frogpilot_utilities import get_sentry_dsn
-from openpilot.frogpilot.common.frogpilot_variables import ERROR_LOGS_PATH
-
+from openpilot.frogpilot.common.frogpilot_variables import ERROR_LOGS_PATH, params
 
 class SentryProject(Enum):
   # python project
-  SELFDRIVE = "https://6f3c7076c1e14b2aa10f5dde6dda0cc4@o33823.ingest.sentry.io/77924"
+  SELFDRIVE = "https://7305139359a548fcb348ec09497dc389@bugsink.firestar.link/1"
   # native project
-  SELFDRIVE_NATIVE = "https://3e4b586ed21a4479ad5d85083b639bc6@o33823.ingest.sentry.io/157615"
+  SELFDRIVE_NATIVE = "https://7305139359a548fcb348ec09497dc389@bugsink.firestar.link/1"
 
 
 def report_tombstone(fn: str, message: str, contents: str) -> None:
@@ -28,33 +28,61 @@ def report_tombstone(fn: str, message: str, contents: str) -> None:
   with sentry_sdk.configure_scope() as scope:
     scope.set_extra("tombstone_fn", fn)
     scope.set_extra("tombstone", contents)
+
+    # Attach qlog for debugging context
+    qlogs = glob.glob(f"{Paths.log_root()}/*/qlog")
+    if qlogs:
+      scope.add_attachment(path=max(qlogs, key=os.path.getmtime), filename="qlog")
+
     sentry_sdk.capture_message(message=message)
     sentry_sdk.flush()
 
 
-def capture_block() -> None:
+def capture_block():
   with sentry_sdk.push_scope() as scope:
-    sentry_sdk.capture_message("Blocked user from using the development branch", level="info")
+    sentry_sdk.capture_message("Blocked user from using the development branch", level='info')
     sentry_sdk.flush()
 
 
 def capture_exception(*args, crash_log=True, **kwargs) -> None:
   exc_text = traceback.format_exc()
 
-  errors_to_ignore = [
+  phrases_to_check = [
+    "already exists. To overwrite it, set 'overwrite' to True",
+    "failed after retry",
   ]
 
-  if any(error in exc_text for error in errors_to_ignore):
+  if any(phrase in exc_text for phrase in phrases_to_check):
     return
 
   save_exception(exc_text, crash_log)
   cloudlog.error("crash", exc_info=kwargs.get('exc_info', 1))
 
   try:
-    sentry_sdk.capture_exception(*args, **kwargs)
-    sentry_sdk.flush()  # https://github.com/getsentry/sentry-python/issues/291
+    with sentry_sdk.push_scope() as scope:
+      # Attach qlog for debugging context
+      qlogs = glob.glob(f"{Paths.log_root()}/*/qlog")
+      if qlogs:
+        scope.add_attachment(path=max(qlogs, key=os.path.getmtime), filename="qlog")
+
+      sentry_sdk.capture_exception(*args, **kwargs)
+      sentry_sdk.flush()  # https://github.com/getsentry/sentry-python/issues/291
   except Exception:
     cloudlog.exception("sentry exception")
+
+
+def capture_report(discord_user, report, frogpilot_toggles):
+  error_file_path = ERROR_LOGS_PATH / "error.txt"
+  error_content = "No error log found."
+
+  if error_file_path.exists():
+    error_content = error_file_path.read_text()
+
+  with sentry_sdk.push_scope() as scope:
+    scope.set_context("Error Log", {"content": error_content})
+    scope.set_context("Toggle Values", frogpilot_toggles)
+    sentry_sdk.capture_message(f"{discord_user} submitted report: {report}", level="fatal")
+    sentry_sdk.flush()
 
 
 def set_tag(key: str, value: str) -> None:
@@ -76,32 +104,25 @@ def save_exception(exc_text: str, crash_log) -> None:
 
 
 def init(project: SentryProject) -> bool:
-  build_metadata = get_build_metadata()
-  # forks like to mess with this, so double check
-  FrogPilot = "frogai" in build_metadata.openpilot.git_origin.lower()
-  if not FrogPilot or PC:
+  if PC:
     return False
 
+  build_metadata = get_build_metadata()
   short_branch = build_metadata.channel
 
-  if short_branch in ["COMMA", "HEAD"]:
-    return False
-  elif short_branch == "FrogPilot-Development":
-    env = "Development"
-  elif build_metadata.release_channel:
-    env = "Release"
-  elif short_branch == "FrogPilot-Testing":
+  env = short_branch
+  if re.search("test", short_branch, re.IGNORECASE):
     env = "Testing"
-  elif build_metadata.tested_channel:
-    env = "Staging"
-  else:
-    env = short_branch
+
+  dongle_id = params.get("DongleId", encoding="utf-8")
+  installed = params.get("InstallDate", encoding="utf-8")
+  updated = params.get("Updated", encoding="utf-8")
 
   integrations = []
   if project == SentryProject.SELFDRIVE:
     integrations.append(ThreadingIntegration(propagate_hub=True))
 
-  sentry_sdk.init(get_sentry_dsn(),
+  sentry_sdk.init(project.value,
                   default_integrations=False,
                   release=get_version(),
                   integrations=integrations,
@@ -109,12 +130,14 @@ def init(project: SentryProject) -> bool:
                   max_value_length=8192,
                   environment=env)
 
-  params = Params()
-
-  sentry_sdk.set_user({"id": params.get("DongleId")})
+  sentry_sdk.set_user({"id": dongle_id})
   sentry_sdk.set_tag("origin", build_metadata.openpilot.git_origin)
   sentry_sdk.set_tag("branch", short_branch)
   sentry_sdk.set_tag("commit", build_metadata.openpilot.git_commit)
-  sentry_sdk.set_tag("updated", params.get("Updated"))
+  sentry_sdk.set_tag("updated", updated)
+  sentry_sdk.set_tag("installed", installed)
+
+  if project == SentryProject.SELFDRIVE:
+    sentry_sdk.Hub.current.start_session()
 
   return True

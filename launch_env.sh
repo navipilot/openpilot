@@ -6,6 +6,11 @@ export NUMEXPR_NUM_THREADS=1
 export OPENBLAS_NUM_THREADS=1
 export VECLIB_MAXIMUM_THREADS=1
 
+# On AGNOS, prefer the managed venv runtime (has required Python deps like pyzmq).
+if [ -x /usr/local/venv/bin/python3 ]; then
+  export PATH="/usr/local/venv/bin:${PATH}"
+fi
+
 # models get lower priority than ui
 # - ui is ~5ms
 # - modeld is 20ms
@@ -16,10 +21,12 @@ export VECLIB_MAXIMUM_THREADS=1
 export QCOM_PRIORITY=12
 
 if [ -z "$AGNOS_VERSION" ]; then
-  export AGNOS_VERSION="12.8"
+  export AGNOS_VERSION="12.8.7"
 fi
 
 export STAGING_ROOT="/data/safe_staging"
 
-# FrogPilot variables
-eval "$(/data/openpilot/frogpilot/system/environment_variables)"
+# FrogPilot variables (only available after StarPilot is installed to /data/openpilot)
+if [ -x /data/openpilot/frogpilot/system/environment_variables ]; then
+  eval "$(/data/openpilot/frogpilot/system/environment_variables)"
+fi

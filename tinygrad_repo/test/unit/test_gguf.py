@@ -1,12 +1,9 @@
 import os, unittest, ctypes
 from tinygrad import dtypes, Tensor, fetch, Device
-import numpy as np
 from tinygrad.nn.state import ggml_data_to_tensor, gguf_load
 from tinygrad.device import is_dtype_supported
-try:
-  import ggml
-except ModuleNotFoundError:
-  raise unittest.SkipTest("ggml not installed, skipping gguf test")
+import numpy as np
+import ggml
 
 ggml_test_block_count = 4
 ggml_type_to_np_dtype = {
@@ -58,6 +55,7 @@ class TestGGUF(unittest.TestCase):
   def test_dequantization_q4_0(self): self._test_dequantization(ggml.GGML_TYPE_Q4_0)
   def test_dequantization_q4_1(self): self._test_dequantization(ggml.GGML_TYPE_Q4_1)
   def test_dequantization_q8_0(self): self._test_dequantization(ggml.GGML_TYPE_Q8_0)
+  def test_dequantization_q4_k(self): self._test_dequantization(ggml.GGML_TYPE_Q4_K)
   def test_dequantization_q6_k(self): self._test_dequantization(ggml.GGML_TYPE_Q6_K)
   def test_dequantization_mxfp4(self):
     MXFP4 = 39

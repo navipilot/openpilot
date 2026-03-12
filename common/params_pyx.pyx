@@ -65,12 +65,35 @@ PYTHON_2_CPP = {
   (list, JSON): json.dumps,
   (bytes, BYTES): lambda v: v,
 }
+
+
+def _decode_int(v):
+  decoded = v.decode("utf-8")
+  try:
+    return int(decoded)
+  except ValueError:
+    return int(float(decoded))
+
+
+def _decode_time(v):
+  decoded = v.decode("utf-8")
+  try:
+    return datetime.datetime.fromisoformat(decoded)
+  except ValueError:
+    for fmt in ("%B %d, %Y - %I:%M%p", "%B %d, %Y - %I:%M %p"):
+      try:
+        return datetime.datetime.strptime(decoded, fmt)
+      except ValueError:
+        pass
+    raise
+
+
 CPP_2_PYTHON = {
   STRING: lambda v: v.decode("utf-8"),
   BOOL: lambda v: v == b"1",
-  INT: int,
+  INT: _decode_int,
   FLOAT: float,
-  TIME: lambda v: datetime.datetime.fromisoformat(v.decode("utf-8")),
+  TIME: _decode_time,
   JSON: json.loads,
   BYTES: lambda v: v,
 }

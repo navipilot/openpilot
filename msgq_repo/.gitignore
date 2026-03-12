@@ -6,6 +6,7 @@ __pycache__
 .*.swo
 *.os
 *.so
+!msgq/ipc_pyx.so
 *.o
 *.a
 uv.lock

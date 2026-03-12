@@ -236,7 +236,7 @@ FrogPilotUtilitiesPanel::FrogPilotUtilitiesPanel(FrogPilotSettingsWindow *parent
     pondButton->showDescription();
   }
   addItem(pondButton);
-  pondButton->setVisible(QString::fromStdString(params.get("GitRemote")).toLower() == "https://github.com/frogai/openpilot.git");
+  pondButton->setVisible(true);
 
   ButtonControl *reportIssueButton = new ButtonControl(tr("Report a Bug or an Issue"), tr("REPORT"), tr("<b>Send a bug report</b> so we can help fix the problem!"));
   QObject::connect(reportIssueButton, &ButtonControl::clicked, [this]() {
@@ -288,7 +288,7 @@ FrogPilotUtilitiesPanel::FrogPilotUtilitiesPanel(FrogPilotSettingsWindow *parent
     reportIssueButton->showDescription();
   }
   addItem(reportIssueButton);
-  reportIssueButton->setVisible(QString::fromStdString(params.get("GitRemote")).toLower() == "https://github.com/frogai/openpilot.git");
+  reportIssueButton->setVisible(true);
 
   ButtonControl *resetTogglesButton = new ButtonControl(tr("Reset Toggles to Default"), tr("RESET"), tr("<b>Reset all toggles to their default values.</b>"));
   QObject::connect(resetTogglesButton, &ButtonControl::clicked, [parent, resetTogglesButton, this]() {

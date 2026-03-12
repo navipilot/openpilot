@@ -22,8 +22,11 @@ from openpilot.common.watchdog import WATCHDOG_FN
 ENABLE_WATCHDOG = os.getenv("NO_WATCHDOG") is None
 
 
-def launcher(proc: str, name: str) -> None:
+def launcher(proc: str, name: str, nice: int | None = None) -> None:
   try:
+    if nice is not None:
+      os.nice(nice)
+
     # import the process
     mod = importlib.import_module(proc)
 
@@ -48,7 +51,10 @@ def launcher(proc: str, name: str) -> None:
     raise
 
 
-def nativelauncher(pargs: list[str], cwd: str, name: str) -> None:
+def nativelauncher(pargs: list[str], cwd: str, name: str, nice: int | None = None) -> None:
+  if nice is not None:
+    os.nice(nice)
+
   os.environ['MANAGER_DAEMON'] = name
 
   # exec the process
@@ -168,7 +174,7 @@ class ManagerProcess(ABC):
 
 
 class NativeProcess(ManagerProcess):
-  def __init__(self, name, cwd, cmdline, should_run, enabled=True, sigkill=False, watchdog_max_dt=None):
+  def __init__(self, name, cwd, cmdline, should_run, enabled=True, sigkill=False, watchdog_max_dt=None, nice=None):
     self.name = name
     self.cwd = cwd
     self.cmdline = cmdline
@@ -176,6 +182,7 @@ class NativeProcess(ManagerProcess):
     self.enabled = enabled
     self.sigkill = sigkill
     self.watchdog_max_dt = watchdog_max_dt
+    self.nice = nice
     self.launcher = nativelauncher
 
   def prepare(self) -> None:
@@ -191,20 +198,21 @@ class NativeProcess(ManagerProcess):
 
     cwd = os.path.join(BASEDIR, self.cwd)
     cloudlog.info(f"starting process {self.name}")
-    self.proc = Process(name=self.name, target=self.launcher, args=(self.cmdline, cwd, self.name))
+    self.proc = Process(name=self.name, target=self.launcher, args=(self.cmdline, cwd, self.name, self.nice))
     self.proc.start()
     self.watchdog_seen = False
     self.shutting_down = False
 
 
 class PythonProcess(ManagerProcess):
-  def __init__(self, name, module, should_run, enabled=True, sigkill=False, watchdog_max_dt=None):
+  def __init__(self, name, module, should_run, enabled=True, sigkill=False, watchdog_max_dt=None, nice=None):
     self.name = name
     self.module = module
     self.should_run = should_run
     self.enabled = enabled
     self.sigkill = sigkill
     self.watchdog_max_dt = watchdog_max_dt
+    self.nice = nice
     self.launcher = launcher
 
   def prepare(self) -> None:
@@ -225,7 +233,7 @@ class PythonProcess(ManagerProcess):
     name = self.name if "modeld" not in self.name else "MainProcess"
 
     cloudlog.info(f"starting python {self.module}")
-    self.proc = Process(name=name, target=self.launcher, args=(self.module, self.name))
+    self.proc = Process(name=name, target=self.launcher, args=(self.module, self.name, self.nice))
     self.proc.start()
     self.watchdog_seen = False
     self.shutting_down = False
@@ -284,6 +292,11 @@ def ensure_running(procs: ValuesView[ManagerProcess], started: bool, params=None
 
   running = []
   for p in procs:
+    # Reap crashed processes so they can be cleanly restarted below.
+    if p.proc is not None and p.proc.exitcode is not None and not p.shutting_down:
+      cloudlog.error(f"Process {p.name} crashed with exitcode {p.proc.exitcode}, restarting")
+      p.stop(retry=False)
+
     if p.enabled and p.name not in not_run and p.should_run(started, params, CP, frogpilot_toggles):
       running.append(p)
     else:

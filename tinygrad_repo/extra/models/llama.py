@@ -55,11 +55,14 @@ class Attention:
       xqkv = x @ self.wqkv.T
       xq, xk, xv = xqkv.split([self.wq.weight.shape[0], self.wk.weight.shape[0], self.wv.weight.shape[0]], dim=2)
     else:
-      xq, xk, xv = self.wq(x), self.wk(x), self.wv(x)
+      xq, xk, xv = self.wq(x), self.wk(x.contiguous_backward()), self.wv(x)
 
     if self.q_norm is not None and self.k_norm is not None:
       xq = self.q_norm(xq)
       xk = self.k_norm(xk)
+
+    # cast_float_to_bf16 is expensive in reduction loops, break it out
+    if x.dtype == dtypes.bfloat16: xq, xk = xq.contiguous_backward(), xk.contiguous_backward()
 
     xq = xq.reshape(xq.shape[0], xq.shape[1], self.n_heads, self.head_dim)
     xk = xk.reshape(xk.shape[0], xk.shape[1], self.n_kv_heads, self.head_dim)
@@ -86,20 +89,23 @@ class Attention:
       assert start_pos == 0
       keys, values = xk, xv
 
-    keys, values = repeat_kv(keys, self.n_rep), repeat_kv(values, self.n_rep)
-    xq, keys, values = xq.transpose(1, 2), keys.transpose(1, 2), values.transpose(1, 2)
-    attn = xq.scaled_dot_product_attention(keys, values, mask).transpose(1, 2)
+    if self.max_context:
+      keys, values = repeat_kv(keys, self.n_rep), repeat_kv(values, self.n_rep)
+      xq, keys, values = xq.transpose(1, 2), keys.transpose(1, 2), values.transpose(1, 2)
+      attn = xq.scaled_dot_product_attention(keys, values, mask).transpose(1, 2)
+    else:
+      xq, keys, values = xq.transpose(1, 2), keys.transpose(1, 2), values.transpose(1, 2)
+      attn = xq.scaled_dot_product_attention(keys, values, is_causal=True, enable_gqa=True).transpose(1, 2)
     if getenv("STUB_ATTENTION"):
-      # TODO: do we need mask?
       from tinygrad.uop.ops import UOp, KernelInfo
       def fa_custom_forward(attn:UOp, q:UOp, k:UOp, v:UOp) -> UOp:
         return UOp.sink(arg=KernelInfo(name="fa_custom_forward"))
       def fa_custom_backward(out_q:UOp, out_k:UOp, out_v:UOp, grad:UOp, q:UOp, k:UOp, v:UOp) -> UOp:
         return UOp.sink(arg=KernelInfo(name="fa_custom_backward"))
       def fa_backward(grad:UOp, kernel:UOp) -> tuple[None, UOp, UOp, UOp]:
-        grad_q = Tensor.empty_like(q:=Tensor(kernel.src[1]))
-        grad_k = Tensor.empty_like(k:=Tensor(kernel.src[2]))
-        grad_v = Tensor.empty_like(v:=Tensor(kernel.src[3]))
+        grad_q = Tensor.empty_like(q:=Tensor(kernel.src[2]))
+        grad_k = Tensor.empty_like(k:=Tensor(kernel.src[3]))
+        grad_v = Tensor.empty_like(v:=Tensor(kernel.src[4]))
         ck = Tensor.custom_kernel(grad_q, grad_k, grad_v, Tensor(grad), q, k, v, fxn=fa_custom_backward)[:3]
         return (None, ck[0].uop, ck[1].uop, ck[2].uop)
       attn = Tensor.empty_like(attn).custom_kernel(xq, keys, values, fxn=fa_custom_forward, grad_fxn=fa_backward)[0]
@@ -197,7 +203,9 @@ class Transformer:
     h = self.tok_embeddings(tokens)
     freqs_cis = self.freqs_cis.cast(h.dtype)[:, start_pos:start_pos+seqlen, :, :, :]
 
-    mask = Tensor.full((1, 1, seqlen, start_pos+seqlen), float("-inf"), dtype=h.dtype, device=h.device).triu(start_pos+1) if seqlen > 1 else None
+    if self.max_context != 0 and seqlen > 1:
+      mask = Tensor.full((1, 1, seqlen, start_pos+seqlen), float("-inf"), dtype=h.dtype, device=h.device).triu(start_pos+1)
+    else: mask = None
     for layer in self.layers: h = layer(h, start_pos, freqs_cis, mask)
     logits = self.output(self.norm(h))
     if math.isnan(temperature): return logits
@@ -245,6 +253,11 @@ def convert_from_huggingface(weights:dict[str, Tensor], n_layers: int, n_heads: 
       continue
     sd[keymap[k]] = v
   for k,v in experts.items(): sd[k] = Tensor.stack(*[v[i] for i in range(len(v))])
+
+  # Handle tied embeddings (e.g., Llama 3.2 1B Instruct where lm_head shares weights with embed_tokens)
+  if "output.weight" not in sd and "tok_embeddings.weight" in sd:
+    sd["output.weight"] = sd["tok_embeddings.weight"]
+
   return sd
 
 def convert_from_gguf(weights:dict[str, Tensor], n_layers:int):

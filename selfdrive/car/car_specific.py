@@ -46,6 +46,7 @@ class CarSpecificEvents:
 
     self.steering_unpressed = 0
     self.low_speed_alert = False
+    self.gm_low_speed_alert_shown = False
     self.no_steer_warning = False
     self.silent_steer_warning = True
 
@@ -111,7 +112,17 @@ class CarSpecificEvents:
             events.add(EventName.manualRestart)
 
     elif self.CP.brand == 'gm':
-      events = self.create_common_events(CS, CS_prev, extra_gears=extra_gears, pcm_enable=self.CP.pcmCruise)
+      events = self.create_common_events(CS, CS_prev, extra_gears=extra_gears, pcm_enable=self.CP.pcmCruise,
+                                         suppress_low_speed_alert=True)
+
+      # StarPilot behavior: show the low-speed steer alert once per ignition cycle.
+      if (not CS.cruiseState.available and not CS_prev.cruiseState.available and
+          CS.vEgo < 0.1 and not CC.enabled):
+        self.gm_low_speed_alert_shown = False
+
+      if CS.lowSpeedAlert and not self.gm_low_speed_alert_shown:
+        events.add(EventName.belowSteerSpeed)
+        self.gm_low_speed_alert_shown = True
 
       # Enabling at a standstill with brake is allowed
       # TODO: verify 17 Volt can enable for the first time at a stop and allow for all GMs
@@ -147,7 +158,7 @@ class CarSpecificEvents:
     return events
 
   def create_common_events(self, CS: structs.CarState, CS_prev: car.CarState, extra_gears: list | None = None, pcm_enable=True,
-                           allow_button_cancel=True):
+                           allow_button_cancel=True, suppress_low_speed_alert=False):
     events = Events()
 
     if CS.doorOpen:
@@ -191,7 +202,7 @@ class CarSpecificEvents:
       events.add(EventName.vehicleSensorsInvalid)
     if CS.invalidLkasSetting:
       events.add(EventName.invalidLkasSetting)
-    if CS.lowSpeedAlert:
+    if CS.lowSpeedAlert and not suppress_low_speed_alert:
       events.add(EventName.belowSteerSpeed)
     if CS.buttonEnable:
       events.add(EventName.buttonEnable)

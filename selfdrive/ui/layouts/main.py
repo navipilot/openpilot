@@ -1,6 +1,7 @@
 import pyray as rl
 from enum import IntEnum
 import cereal.messaging as messaging
+from openpilot.system.hardware import PC
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.selfdrive.ui.layouts.sidebar import Sidebar, SIDEBAR_WIDTH
 from openpilot.selfdrive.ui.layouts.home import HomeLayout
@@ -36,10 +37,12 @@ class MainLayout(Widget):
     # Set callbacks
     self._setup_callbacks()
 
-    # Start onboarding if terms or training not completed
-    self._onboarding_window = OnboardingWindow()
-    if not self._onboarding_window.completed:
-      gui_app.set_modal_overlay(self._onboarding_window)
+    # Skip onboarding on desktop; keep normal flow on device.
+    self._onboarding_window = None
+    if not PC:
+      self._onboarding_window = OnboardingWindow()
+      if not self._onboarding_window.completed:
+        gui_app.set_modal_overlay(self._onboarding_window)
 
   def _render(self, _):
     self._handle_onroad_transition()

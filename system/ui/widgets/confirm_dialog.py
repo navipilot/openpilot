@@ -1,3 +1,4 @@
+from collections.abc import Callable
 import pyray as rl
 from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.multilang import tr
@@ -17,7 +18,7 @@ BACKGROUND_COLOR = rl.Color(27, 27, 27, 255)
 
 
 class ConfirmDialog(Widget):
-  def __init__(self, text: str, confirm_text: str, cancel_text: str | None = None, rich: bool = False):
+  def __init__(self, text: str, confirm_text: str, cancel_text: str | None = None, rich: bool = False, on_close: Callable[[DialogResult], None] | None = None):
     super().__init__()
     if cancel_text is None:
       cancel_text = tr("Cancel")
@@ -27,6 +28,7 @@ class ConfirmDialog(Widget):
     self._confirm_button = Button(confirm_text, self._confirm_button_callback, button_style=ButtonStyle.PRIMARY)
     self._rich = rich
     self._dialog_result = DialogResult.NO_ACTION
+    self._on_close = on_close
     self._cancel_text = cancel_text
     self._scroller = Scroller([self._html_renderer], line_separator=False, spacing=0)
 
@@ -38,12 +40,15 @@ class ConfirmDialog(Widget):
 
   def reset(self):
     self._dialog_result = DialogResult.NO_ACTION
+    self._on_close = on_close
 
   def _cancel_button_callback(self):
     self._dialog_result = DialogResult.CANCEL
+    if self._on_close: self._on_close(self._dialog_result)
 
   def _confirm_button_callback(self):
     self._dialog_result = DialogResult.CONFIRM
+    if self._on_close: self._on_close(self._dialog_result)
 
   def _render(self, rect: rl.Rectangle):
     dialog_x = OUTER_MARGIN if not self._rich else RICH_OUTER_MARGIN
@@ -74,8 +79,10 @@ class ConfirmDialog(Widget):
 
     if rl.is_key_pressed(rl.KeyboardKey.KEY_ENTER):
       self._dialog_result = DialogResult.CONFIRM
+      if self._on_close: self._on_close(self._dialog_result)
     elif rl.is_key_pressed(rl.KeyboardKey.KEY_ESCAPE):
       self._dialog_result = DialogResult.CANCEL
+      if self._on_close: self._on_close(self._dialog_result)
 
     if self._cancel_text:
       self._confirm_button.render(confirm_button)

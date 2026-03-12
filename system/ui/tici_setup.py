@@ -32,7 +32,8 @@ BODY_FONT_SIZE = 80
 BUTTON_HEIGHT = 160
 BUTTON_SPACING = 50
 
-OPENPILOT_URL = "https://openpilot.comma.ai"
+NETWORK_CHECK_URL = "https://openpilot.comma.ai"
+DEFAULT_INSTALLER_URL = "https://installer.comma.ai/firestar5683/StarPilot"
 USER_AGENT = f"AGNOSSetup-{HARDWARE.get_os_version()}"
 
 CONTINUE_PATH = "/data/continue.sh"
@@ -92,7 +93,7 @@ class Setup(Widget):
     self._getting_started_body_label = Label("Before we get on the road, let's finish installation and cover some details.",
                                              BODY_FONT_SIZE, text_alignment=rl.GuiTextAlignment.TEXT_ALIGN_LEFT, text_padding=20)
 
-    self._software_selection_openpilot_button = ButtonRadio("openpilot", self.checkmark, font_size=BODY_FONT_SIZE, text_padding=80)
+    self._software_selection_openpilot_button = ButtonRadio("StarPilot", self.checkmark, font_size=BODY_FONT_SIZE, text_padding=80)
     self._software_selection_custom_software_button = ButtonRadio("Custom Software", self.checkmark, font_size=BODY_FONT_SIZE, text_padding=80)
     self._software_selection_continue_button = Button("Continue", self._software_selection_continue_button_callback,
                                                       button_style=ButtonStyle.PRIMARY)
@@ -189,7 +190,7 @@ class Setup(Widget):
   def _network_setup_continue_button_callback(self):
     self.stop_network_check_thread.set()
     if self._software_selection_openpilot_button.selected:
-      self.download(OPENPILOT_URL)
+      self.download(DEFAULT_INSTALLER_URL)
     else:
       self.state = SetupState.CUSTOM_SOFTWARE
 
@@ -218,7 +219,7 @@ class Setup(Widget):
     while not self.stop_network_check_thread.is_set():
       if self.state == SetupState.NETWORK_SETUP:
         try:
-          urllib.request.urlopen(OPENPILOT_URL, timeout=2)
+          urllib.request.urlopen(NETWORK_CHECK_URL, timeout=2)
           self.network_connected.set()
           if HARDWARE.get_network_type() == NetworkType.wifi:
             self.wifi_connected.set()
@@ -349,6 +350,8 @@ class Setup(Widget):
       run_cmd(["chmod", "+x", TMP_CONTINUE_PATH])
       shutil.move(TMP_CONTINUE_PATH, CONTINUE_PATH)
       shutil.copyfile(INSTALLER_SOURCE_PATH, INSTALLER_DESTINATION_PATH)
+      with open(INSTALLER_URL_PATH, "w") as f:
+        f.write(DEFAULT_INSTALLER_URL)
 
       # give time for installer UI to take over
       time.sleep(0.1)
@@ -414,6 +417,9 @@ class Setup(Widget):
 
       with open(INSTALLER_URL_PATH, "w") as f:
         f.write(self.download_url)
+
+      if os.path.isfile(VALID_CACHE_PATH):
+        os.remove(VALID_CACHE_PATH)
 
       # give time for installer UI to take over
       time.sleep(0.1)

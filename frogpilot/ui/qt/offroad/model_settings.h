@@ -1,12 +1,14 @@
 #pragma once
 
+#include <set>
+
 #include "frogpilot/ui/qt/offroad/frogpilot_settings.h"
 
 class FrogPilotModelPanel : public FrogPilotListWidget {
   Q_OBJECT
 
 public:
-  explicit FrogPilotModelPanel(FrogPilotSettingsWindow *parent, bool forceOpen = false);
+  explicit FrogPilotModelPanel(FrogPilotSettingsWindow *parent);
 
 signals:
   void openSubPanel();
@@ -18,6 +20,8 @@ private:
   void updateModelLabels(FrogPilotListWidget *labelsList);
   void updateState(const UIState &s, const FrogPilotUIState &fs);
   void updateToggles();
+  bool isModelInstalled(const QString &key) const;
+  QMap<QString, QString> getDeletableModelDisplayNames();
 
   bool allModelsDownloaded;
   bool allModelsDownloading;
@@ -29,6 +33,8 @@ private:
   bool started;
   bool tinygradUpdate;
   bool updatingTinygrad;
+
+  int tuningLevel;
 
   std::map<QString, AbstractControl*> toggles;
 
@@ -45,11 +51,16 @@ private:
 
   QDir modelDir{"/data/models/"};
 
+  QJsonObject frogpilotToggleLevels;
+
   QMap<QString, QString> modelFileToNameMap;
   QMap<QString, QString> modelFileToNameMapProcessed;
+  QMap<QString, QString> modelReleasedDates;
+  QMap<QString, QString> modelSeriesMap;
 
   QString currentModel;
-  QString defaultModel;
+
 
   QStringList availableModelNames;
+  QStringList availableModelSeries;
 };

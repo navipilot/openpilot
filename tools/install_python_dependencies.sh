@@ -15,6 +15,12 @@ if ! command -v "uv" > /dev/null 2>&1; then
   PATH="$UV_BIN:$PATH"
 fi
 
+# Homebrew llvm can break extension builds on macOS by masking system SDK headers.
+if [[ "$(uname)" == 'Darwin' ]]; then
+  export CC=/usr/bin/clang
+  export CXX=/usr/bin/clang++
+fi
+
 echo "updating uv..."
 # ok to fail, can also fail due to installing with brew
 uv self update || true

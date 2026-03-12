@@ -8,6 +8,7 @@ from pathlib import Path
 
 from openpilot.common.basedir import BASEDIR
 from openpilot.common.params import Params
+from openpilot.system.hardware.hw import Paths
 
 from openpilot.frogpilot.common.frogpilot_utilities import delete_file
 from openpilot.frogpilot.common.frogpilot_variables import EXCLUDED_KEYS, FROGPILOT_BACKUPS, TOGGLE_BACKUPS
@@ -32,7 +33,7 @@ def backup_frogpilot(build_metadata, params):
 
 
 def backup_toggles(params, boot_run=False):
-  params_backup = Params("/dev/shm/params_backup", return_defaults=True)
+  params_backup = Params(f"{Paths.shm_path()}/params_backup", return_defaults=True)
 
   changes_found = False
   for key in params.all_keys():

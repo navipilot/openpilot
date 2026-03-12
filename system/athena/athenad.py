@@ -472,8 +472,8 @@ def setRouteViewed(route: str) -> dict[str, int | str]:
   # maintain a list of the last 10 routes viewed in connect
   params = Params()
 
-  r = params.get("AthenadRecentlyViewedRoutes")
-  routes = [] if r is None else r.split(",")
+  r = params.get("AthenadRecentlyViewedRoutes", encoding="utf-8")
+  routes = [] if r is None else [item for item in r.split(",") if item]
   routes.append(route)
 
   # remove duplicates
@@ -494,7 +494,7 @@ def startLocalProxy(global_end_event: threading.Event, remote_ws_uri: str, local
 
     cloudlog.debug("athena.startLocalProxy.starting")
 
-    dongle_id = Params().get("DongleId")
+    dongle_id = Params().get("DongleId", encoding="utf-8")
     identity_token = Api(dongle_id).get_token()
     ws = create_connection(remote_ws_uri,
                            cookie="jwt=" + identity_token,
