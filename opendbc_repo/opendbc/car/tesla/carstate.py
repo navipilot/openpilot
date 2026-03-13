@@ -164,6 +164,13 @@ class CarState(CarStateBase):
     # FrogPilot variables
     fp_ret = custom.FrogPilotCarState.new_message()
 
+    # Tesla's fused speed limit from Autopilot ECU (available on Model 3/Y)
+    fused_speed_limit = cp_ap_party.vl["DAS_status"]["DAS_fusedSpeedLimit"]
+    if 1 <= fused_speed_limit <= 150:
+      if speed_units == "MPH":
+        fused_speed_limit *= CV.MPH_TO_KPH
+      fp_ret.dashboardSpeedLimit = fused_speed_limit * CV.KPH_TO_MS
+
     return ret, fp_ret
 
   def update_legacy(self, can_parsers) -> structs.CarState:
@@ -257,6 +264,15 @@ class CarState(CarStateBase):
 
     # FrogPilot variables
     fp_ret = custom.FrogPilotCarState.new_message()
+
+    # Tesla's fused speed limit from Autopilot ECU (not available on Model S HW3 / Raven)
+    autopilot_status = cp_ap_party.vl.get("AutopilotStatus")
+    if autopilot_status is not None:
+      fused_speed_limit = autopilot_status["DAS_fusedSpeedLimit"]
+      if 1 <= fused_speed_limit <= 150:
+        if speed_units == "MPH":
+          fused_speed_limit *= CV.MPH_TO_KPH
+        fp_ret.dashboardSpeedLimit = fused_speed_limit * CV.KPH_TO_MS
 
     return ret, fp_ret
 
