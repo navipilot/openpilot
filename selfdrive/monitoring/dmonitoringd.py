@@ -18,6 +18,8 @@ def dmonitoringd_thread():
   # FrogPilot variables
   sm = sm.extend(['frogpilotCarState'])
 
+  driver_view_enabled = params.get_bool("IsDriverViewEnabled")
+
   # 20Hz <- dmonitoringmodeld
   while True:
     sm.update()
@@ -31,9 +33,11 @@ def dmonitoringd_thread():
     elif valid:
       DM.run_step(sm, demo=demo_mode)
     # FrogPilot variables
+    elif driver_view_enabled:
+      DM.face_detected = sm['driverStateV2'].leftDriverData.faceProb > DM.settings._FACE_THRESHOLD or sm['driverStateV2'].rightDriverData.faceProb > DM.settings._FACE_THRESHOLD
 
     # publish
-    dat = DM.get_state_packet(valid=valid)
+    dat = DM.get_state_packet(valid=valid or driver_view_enabled)
     pm.send('driverMonitoringState', dat)
 
     # load live always-on toggle
