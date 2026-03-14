@@ -14,6 +14,9 @@ from openpilot.system.ui.lib.wifi_manager import WifiManager
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.network import NetworkUI
 
+from openpilot.frogpilot.system.ui.widgets.settings_back_button import SettingsBackButton
+from openpilot.frogpilot.ui.layouts.settings.frogpilot import FrogPilotLayout
+
 # Constants
 SIDEBAR_WIDTH = 500
 CLOSE_BTN_SIZE = 200
@@ -29,6 +32,9 @@ CLOSE_BTN_PRESSED = rl.Color(59, 59, 59, 255)
 TEXT_NORMAL = rl.Color(128, 128, 128, 255)
 TEXT_SELECTED = rl.WHITE
 
+# FrogPilot variables
+SIDEBAR_PADDING = 40
+
 
 class PanelType(IntEnum):
   DEVICE = 0
@@ -37,6 +43,9 @@ class PanelType(IntEnum):
   SOFTWARE = 3
   FIREHOSE = 4
   DEVELOPER = 5
+
+  # FrogPilot variables
+  FROGPILOT = 6
 
 
 @dataclass
@@ -60,7 +69,7 @@ class SettingsLayout(Widget):
       PanelType.NETWORK: PanelInfo(tr_noop("Network"), NetworkUI(wifi_manager)),
       PanelType.TOGGLES: PanelInfo(tr_noop("Toggles"), TogglesLayout()),
       PanelType.SOFTWARE: PanelInfo(tr_noop("Software"), SoftwareLayout()),
-      PanelType.FIREHOSE: PanelInfo(tr_noop("Firehose"), FirehoseLayout()),
+      #PanelType.FIREHOSE: PanelInfo(tr_noop("Firehose"), FirehoseLayout()),
       PanelType.DEVELOPER: PanelInfo(tr_noop("Developer"), DeveloperLayout()),
     }
 
@@ -69,6 +78,13 @@ class SettingsLayout(Widget):
 
     # Callbacks
     self._close_callback: Callable | None = None
+
+    # FrogPilot variables
+    self._back_button = SettingsBackButton()
+    self._close_btn_rect = rl.Rectangle(0, 0, 0, 0)
+
+    self._frogpilot_layout = FrogPilotLayout()
+    self._panels[PanelType.FROGPILOT] = PanelInfo(tr_noop("FrogPilot"), self._frogpilot_layout)
 
   def set_callbacks(self, on_close: Callable):
     self._close_callback = on_close
@@ -85,37 +101,12 @@ class SettingsLayout(Widget):
   def _draw_sidebar(self, rect: rl.Rectangle):
     rl.draw_rectangle_rec(rect, SIDEBAR_COLOR)
 
-    # Close button
-    close_btn_rect = rl.Rectangle(
-      rect.x + (rect.width - CLOSE_BTN_SIZE) / 2, rect.y + 60, CLOSE_BTN_SIZE, CLOSE_BTN_SIZE
-    )
-
-    pressed = (rl.is_mouse_button_down(rl.MouseButton.MOUSE_BUTTON_LEFT) and
-               rl.check_collision_point_rec(rl.get_mouse_position(), close_btn_rect))
-    close_color = CLOSE_BTN_PRESSED if pressed else CLOSE_BTN_COLOR
-    rl.draw_rectangle_rounded(close_btn_rect, 1.0, 20, close_color)
-
-    icon_color = rl.Color(255, 255, 255, 255) if not pressed else rl.Color(220, 220, 220, 255)
-    icon_dest = rl.Rectangle(
-      close_btn_rect.x + (close_btn_rect.width - self._close_icon.width) / 2,
-      close_btn_rect.y + (close_btn_rect.height - self._close_icon.height) / 2,
-      self._close_icon.width,
-      self._close_icon.height,
-    )
-    rl.draw_texture_pro(
-      self._close_icon,
-      rl.Rectangle(0, 0, self._close_icon.width, self._close_icon.height),
-      icon_dest,
-      rl.Vector2(0, 0),
-      0,
-      icon_color,
-    )
-
-    # Store close button rect for click detection
-    self._close_btn_rect = close_btn_rect
+    # FrogPilot variables
+    self._close_btn_rect = self._back_button.draw(rect)
 
     # Navigation buttons
-    y = rect.y + 300
+    y = self._close_btn_rect.y + self._close_btn_rect.height + SIDEBAR_PADDING
+    button_gap = max(rect.y + rect.height - SIDEBAR_PADDING - y - len(self._panels) * NAV_BTN_HEIGHT, 0) / (len(self._panels) - 1)
     for panel_type, panel_info in self._panels.items():
       button_rect = rl.Rectangle(rect.x + 50, y, rect.width - 150, NAV_BTN_HEIGHT)
 
@@ -133,7 +124,7 @@ class SettingsLayout(Widget):
       # Store button rect for click detection
       panel_info.button_rect = button_rect
 
-      y += NAV_BTN_HEIGHT
+      y += NAV_BTN_HEIGHT + button_gap
 
   def _draw_current_panel(self, rect: rl.Rectangle):
     rl.draw_rectangle_rounded(
@@ -148,6 +139,9 @@ class SettingsLayout(Widget):
   def _handle_mouse_release(self, mouse_pos: MousePos) -> None:
     # Check close button
     if rl.check_collision_point_rec(mouse_pos, self._close_btn_rect):
+      if self._current_panel == PanelType.FROGPILOT and self._frogpilot_layout.navigate_back():
+        return
+
       if self._close_callback:
         self._close_callback()
       return
