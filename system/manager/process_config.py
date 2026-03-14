@@ -120,7 +120,7 @@ procs = [
   PythonProcess("statsd", "system.statsd", always_run),
   PythonProcess("feedbackd", "selfdrive.ui.feedback.feedbackd", only_onroad),
   PythonProcess("frogpilot_process", "frogpilot.frogpilot_process", always_run),
-  PythonProcess("mapd", "frogpilot.navigation.mapd", always_run),
+  NativeProcess("mapd", "frogpilot/navigation", ["./mapd"], always_run),
   PythonProcess("speed_limit_filler", "frogpilot.system.speed_limit_filler", run_speed_limit_filler),
 
   # debug procs
