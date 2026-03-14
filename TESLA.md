@@ -117,6 +117,8 @@ This allows the driver to smoothly take over steering (e.g., obstacle avoidance,
 
 ## Credits
 
-- **[xnor-tech](https://github.com/xnor-tech/openpilot)** — Tesla Model S/X legacy platform support, harness kit design, safety mode implementation
+- **[BogGyver](https://github.com/BogGyver)** — Pioneer of openpilot on Tesla, early Tesla integration work that paved the way for community support
+- **[xnor-tech](https://github.com/xnor-tech/openpilot)** ([lukasloetkolben](https://github.com/lukasloetkolben)) — Tesla Model S/X legacy platform support, harness kit design, safety mode implementation, and dedicated ongoing work to support Tesla in upstream openpilot branches
+- **[dzfrog](https://github.com/dzfrog)** — Virtual Torque Blending (VTB) approach and steering override research
 - **[FrogAi/FrogPilot](https://github.com/FrogAi/FrogPilot)** — Base fork with AOL, SLC, CEM, and extensive customization framework
 - **[comma.ai](https://github.com/commaai/openpilot)** — openpilot core
