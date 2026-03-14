@@ -9,13 +9,13 @@ from openpilot.common.time_helpers import system_time_valid
 
 ASSET_CHECK_RATE = (1 / DT_MDL)
 
-def check_assets():
+def check_assets(params_memory):
 
 def transition_offroad(time_validated, sm, params):
 
 def transition_onroad():
 
-def update_checks(now, params, boot_run=False):
+def update_checks(now, params, params_memory, boot_run=False):
   while not (is_url_pingable("https://github.com") or is_url_pingable("https://gitlab.com")):
     time.sleep(60)
 
@@ -31,7 +31,8 @@ def frogpilot_thread():
                             "onroadEvents", "pandaStates", "radarState", "selfdriveState"],
                             poll="modelV2")
 
-  params = Params()
+  params = Params(return_defaults=True)
+  params_memory = Params(memory=True)
 
   run_update_checks = False
   started_previously = False
@@ -57,13 +58,13 @@ def frogpilot_thread():
     started_previously = started
 
     if rate_keeper.frame % ASSET_CHECK_RATE == 0:
-      check_assets()
+      check_assets(params_memory)
 
     run_update_checks |= now.second == 0 and (now.minute % 60 == 0)
     run_update_checks &= time_validated
 
     if run_update_checks:
-      thread_manager.run_with_lock(update_checks, (now, params))
+      thread_manager.run_with_lock(update_checks, (now, params, params_memory))
 
       run_update_checks = False
     elif not time_validated:
@@ -71,7 +72,7 @@ def frogpilot_thread():
       if not time_validated:
         continue
 
-      thread_manager.run_with_lock(update_checks, (now, params, True))
+      thread_manager.run_with_lock(update_checks, (now, params, params_memory, True))
 
     rate_keeper.keep_time()
 

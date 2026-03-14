@@ -37,11 +37,14 @@ struct ParamKeyAttributes {
   std::optional<std::string> default_value = std::nullopt;
 
   // FrogPilot variables
+  std::optional<std::string> stock_value = std::nullopt;
+
+  int tuning_level = 0;
 };
 
 class Params {
 public:
-  explicit Params(const std::string &path = {});
+  explicit Params(const std::string &path = {}, bool memory = false);
   ~Params();
   // Not copyable.
   Params(const Params&) = delete;
@@ -81,6 +84,9 @@ public:
   }
 
   // FrogPilot variables
+  int getTuningLevel(const std::string &key);
+
+  std::optional<std::string> getStockValue(const std::string &key);
 
 private:
   void asyncWriteThread();
@@ -93,4 +99,5 @@ private:
   SafeQueue<std::pair<std::string, std::string>> queue;
 
   // FrogPilot variables
+  std::string cache_path;
 };
