@@ -11,7 +11,7 @@ from openpilot.common.realtime import DT_MDL
 from openpilot.selfdrive.car.cruise import V_CRUISE_MAX
 from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import A_CHANGE_COST, DANGER_ZONE_COST, J_EGO_COST, STOP_DISTANCE
 
-from openpilot.frogpilot.common.frogpilot_utilities import calculate_road_curvature
+from openpilot.frogpilot.common.frogpilot_utilities import calculate_lane_width, calculate_road_curvature
 from openpilot.frogpilot.common.frogpilot_variables import CRUISING_SPEED, MINIMUM_LATERAL_ACCELERATION, PLANNER_TIME, THRESHOLD
 from openpilot.frogpilot.controls.lib.conditional_experimental_mode import ConditionalExperimentalMode
 from openpilot.frogpilot.controls.lib.frogpilot_acceleration import FrogPilotAcceleration
@@ -36,6 +36,8 @@ class FrogPilotPlanner:
     self.road_curvature_detected = False
     self.tracking_lead = False
 
+    self.lane_width_left = 0
+    self.lane_width_right = 0
     self.lateral_acceleration = 0
     self.model_length = 0
     self.road_curvature = 0
@@ -81,6 +83,13 @@ class FrogPilotPlanner:
       "bearing": gps_location.bearingDeg,
     }
     self.params_memory.put("LastGPSPosition", json.dumps(self.gps_position))
+
+    if v_ego >= frogpilot_toggles.minimum_lane_change_speed:
+      self.lane_width_left = calculate_lane_width(sm["modelV2"].laneLines[0], sm["modelV2"].laneLines[1], sm["modelV2"].roadEdges[0])
+      self.lane_width_right = calculate_lane_width(sm["modelV2"].laneLines[3], sm["modelV2"].laneLines[2], sm["modelV2"].roadEdges[1])
+    else:
+      self.lane_width_left = 0
+      self.lane_width_right = 0
 
     self.lateral_acceleration = v_ego**2 * sm["controlsState"].curvature
 
@@ -131,6 +140,9 @@ class FrogPilotPlanner:
     frogpilotPlan.frogpilotToggles = json.dumps(vars(frogpilot_toggles))
 
     frogpilotPlan.increasedStoppedDistance = frogpilot_toggles.increase_stopped_distance
+
+    frogpilotPlan.laneWidthLeft = self.lane_width_left
+    frogpilotPlan.laneWidthRight = self.lane_width_right
 
     frogpilotPlan.lateralCheck = self.lateral_check
 

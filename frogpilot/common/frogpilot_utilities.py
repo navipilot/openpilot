@@ -85,6 +85,31 @@ def calculate_distance_to_point(lat1, lon1, lat2, lon2):
   return EARTH_RADIUS * c
 
 
+def calculate_lane_width(lane_line1, lane_line2, road_edge=None):
+  lane_line1_x = np.asarray(lane_line1.x)
+  lane_line1_y = np.asarray(lane_line1.y)
+
+  lane_line2_x = np.asarray(lane_line2.x)
+  lane_line2_y = np.asarray(lane_line2.y)
+
+  lane_y_interp = np.interp(lane_line2_x, lane_line1_x, lane_line1_y)
+  distance_to_lane = np.median(np.abs(lane_line2_y - lane_y_interp))
+
+  if road_edge is None:
+    return float(distance_to_lane)
+
+  edge_line_x = np.asarray(road_edge.x)
+  edge_line_y = np.asarray(road_edge.y)
+
+  edge_y_interp = np.interp(lane_line2_x, edge_line_x, edge_line_y)
+  distance_to_road_edge = np.median(np.abs(lane_line2_y - edge_y_interp))
+
+  if distance_to_road_edge < distance_to_lane:
+    return 0.0
+
+  return float(distance_to_lane)
+
+
 # Credit goes to Pfeiferj!
 def calculate_road_curvature(modelData):
   orientation_rate = np.array(modelData.orientationRate.z)
