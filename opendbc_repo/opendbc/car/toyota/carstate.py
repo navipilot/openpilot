@@ -68,8 +68,14 @@ class CarState(CarStateBase):
     self.secoc_synchronization = None
 
     # FrogPilot variables
+    self.latActive_previous = False
+    self.needs_angle_offset_zss = False
+
+    self.angle_offset_zss = 0
+
     self.has_can_filter = self.FPCP.flags & ToyotaFrogPilotFlags.RADAR_CAN_FILTER.value
     self.has_SDSU = self.FPCP.flags & ToyotaFrogPilotFlags.SMART_DSU.value
+    self.has_ZSS = self.FPCP.flags & ToyotaFrogPilotFlags.ZSS.value
 
   def update(self, can_parsers, frogpilot_toggles) -> structs.CarState:
     cp = can_parsers[Bus.pt]
@@ -233,6 +239,22 @@ class CarState(CarStateBase):
     if not self.CP.flags & ToyotaFlags.SECOC.value:
       fp_ret.ecoGear = cp.vl["GEAR_PACKET"]["ECON_ON"] == 1
       fp_ret.sportGear = cp.vl["GEAR_PACKET"]["SPORT_ON_2" if self.CP.flags & ToyotaFlags.NO_DSU else "SPORT_ON"] == 1
+
+    # ZSS Support - Credit goes to Erich!
+    if self.has_ZSS:
+      if self.CC.latActive and not self.latActive_previous:
+        self.needs_angle_offset_zss = True
+      self.latActive_previous = self.CC.latActive
+
+      if self.needs_angle_offset_zss:
+        zorro_steer = cp.vl["SECONDARY_STEER_ANGLE"]["ZORRO_STEER"]
+        if abs(ret.steeringAngleDeg) > 1e-3 and abs(zorro_steer) > 1e-3:
+          self.needs_angle_offset_zss = False
+          self.angle_offset_zss = zorro_steer - ret.steeringAngleDeg
+      else:
+        zorro_steer_value = cp.vl["SECONDARY_STEER_ANGLE"]["ZORRO_STEER"] - self.angle_offset_zss
+        if abs(ret.steeringAngleDeg - zorro_steer_value) < 4.0:
+          ret.steeringAngleDeg = zorro_steer_value
 
     ret.buttonEvents = buttonEvents
 
