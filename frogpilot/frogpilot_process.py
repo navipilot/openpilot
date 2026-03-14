@@ -11,7 +11,7 @@ from openpilot.common.time_helpers import system_time_valid
 from openpilot.frogpilot.assets.theme_manager import THEME_COMPONENT_PARAMS, ThemeManager
 from openpilot.frogpilot.common.frogpilot_backups import backup_toggles
 from openpilot.frogpilot.common.frogpilot_functions import update_openpilot
-from openpilot.frogpilot.common.frogpilot_utilities import ThreadManager, flash_panda, is_url_pingable
+from openpilot.frogpilot.common.frogpilot_utilities import ThreadManager, flash_panda, is_url_pingable, lock_doors
 from openpilot.frogpilot.common.frogpilot_variables import ERROR_LOGS_PATH, FrogPilotVariables
 from openpilot.frogpilot.controls.frogpilot_planner import FrogPilotPlanner
 from openpilot.frogpilot.system.frogpilot_stats import send_stats
@@ -30,6 +30,9 @@ def check_assets(theme_manager, thread_manager, params_memory, frogpilot_toggles
 
 def transition_offroad(frogpilot_planner, thread_manager, time_validated, sm, params, frogpilot_toggles):
   params.put("LastGPSPosition", json.dumps(frogpilot_planner.gps_position))
+
+  if frogpilot_toggles.lock_doors_timer != 0:
+    thread_manager.run_with_lock(lock_doors, (frogpilot_toggles.lock_doors_timer, sm, params), report=False)
 
   if time_validated:
     thread_manager.run_with_lock(send_stats, (params, frogpilot_toggles))

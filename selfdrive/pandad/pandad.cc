@@ -23,6 +23,9 @@
 
 ExitHandler do_exit;
 
+// FrogPilot variables
+static uint64_t last_door_lock_command_time = 0;
+
 bool check_connected(Panda *panda) {
   if (!panda->connected()) {
     do_exit = true;
@@ -83,6 +86,17 @@ void can_send_thread(Panda *panda, bool fake_send) {
     } else {
       LOGE("sendcan too old to send: %" PRIu64 ", %" PRIu64, nanos_since_boot(), event.getLogMonoTime());
     }
+  // FrogPilot variables
+  for (const cereal::CanData::Reader &can : event.getSendcan()) {
+    if (can.getAddress() == 0x750) {
+      last_door_lock_command_time = nanos_since_boot();
+      const std::optional<health_t> state = panda->get_state();
+      if (state && state->safety_mode_pkt == (uint8_t)cereal::CarParams::SafetyModel::NO_OUTPUT) {
+        panda->set_safety_model(cereal::CarParams::SafetyModel::TOYOTA);
+      }
+      break;
+    }
+  }
   }
 }
 
@@ -200,7 +214,7 @@ std::optional<bool> send_panda_states(PubMaster *pm, Panda *panda, bool is_onroa
   }
 
   // set safety mode to NO_OUTPUT when car is off or we're not onroad. ELM327 is an alternative if we want to leverage athenad/connect
-  bool should_close_relay = !ignition_local || !is_onroad;
+  bool should_close_relay = (!ignition_local || !is_onroad) && (nanos_since_boot() - last_door_lock_command_time >= 2e9);
   if (should_close_relay && (health.safety_mode_pkt != (uint8_t)(cereal::CarParams::SafetyModel::NO_OUTPUT))) {
     panda->set_safety_model(cereal::CarParams::SafetyModel::NO_OUTPUT);
   }

@@ -15,6 +15,8 @@ from pathlib import Path
 import openpilot.system.sentry as sentry
 
 from cereal import log, messaging
+from opendbc.can.parser import CANParser
+from opendbc.car.toyota.carcontroller import LOCK_CMD
 from openpilot.common.realtime import DT_DMON, DT_HW
 from panda import Panda
 
@@ -160,6 +162,11 @@ def flash_panda(params_memory):
   params_memory.remove("FlashPanda")
 
 
+def get_lock_status(can_parser, can_sock):
+  update_can_parser(can_parser, can_sock)
+  return can_parser.vl["DOOR_LOCKS"]["LOCK_STATUS"]
+
+
 @cache
 def is_FrogsGoMoo():
   return FROGS_GO_MOO_PATH.is_file()
@@ -203,6 +210,37 @@ def load_json_file(path):
   return {}
 
 
+def lock_doors(lock_doors_timer, sm, params):
+  wait_for_no_driver(params, sm, door_checks=True, time_threshold=lock_doors_timer)
+
+  sm.update()
+  if any(ps.ignitionLine or ps.ignitionCan for ps in sm["pandaStates"] if ps.pandaType != log.PandaState.PandaType.unknown):
+    return
+
+  can_parser = CANParser("toyota_nodsu_pt_generated", [("DOOR_LOCKS", 3)], bus=0)
+  can_sock = messaging.sub_sock("can", timeout=100)
+
+  pm = messaging.PubMaster(["sendcan"])
+
+  while True:
+    sm.update()
+
+    if any(ps.ignitionLine or ps.ignitionCan for ps in sm["pandaStates"] if ps.pandaType != log.PandaState.PandaType.unknown):
+      break
+
+    sendcan_send = messaging.new_message("sendcan", 1)
+    sendcan_send.sendcan[0].address = 0x750
+    sendcan_send.sendcan[0].dat = LOCK_CMD
+    sendcan_send.sendcan[0].src = 0
+    pm.send("sendcan", sendcan_send)
+
+    time.sleep(1)
+
+    lock_status = get_lock_status(can_parser, can_sock)
+    if lock_status == 0:
+      break
+
+
 def run_cmd(cmd, success_message, fail_message, env=None, report=True):
   try:
     result = subprocess.run(cmd, capture_output=True, check=True, env=env, text=True)
@@ -242,7 +280,10 @@ def use_konik_server():
   return KONIK_PATH.is_file()
 
 
-def wait_for_no_driver(params, sm, time_threshold=60):
+def wait_for_no_driver(params, sm, door_checks=False, time_threshold=60):
+  can_parser = CANParser("toyota_nodsu_pt_generated", [("BODY_CONTROL_STATE", 3)], bus=0)
+  can_sock = messaging.sub_sock("can", timeout=100)
+
   while sm["deviceState"].screenBrightnessPercent != 0 or any(proc.name == "dmonitoringd" and proc.running for proc in sm["managerState"].processes):
     sm.update()
 
@@ -271,6 +312,14 @@ def wait_for_no_driver(params, sm, time_threshold=60):
 
     if sm["driverMonitoringState"].faceDetected or not sm.alive["driverMonitoringState"]:
       start_time = time.monotonic()
+
+    if door_checks:
+      update_can_parser(can_parser, can_sock)
+
+      door_open = any([can_parser.vl["BODY_CONTROL_STATE"]["DOOR_OPEN_FL"], can_parser.vl["BODY_CONTROL_STATE"]["DOOR_OPEN_FR"],
+                       can_parser.vl["BODY_CONTROL_STATE"]["DOOR_OPEN_RL"], can_parser.vl["BODY_CONTROL_STATE"]["DOOR_OPEN_RR"]])
+      if door_open:
+        start_time = time.monotonic()
 
     time.sleep(DT_DMON)
 
