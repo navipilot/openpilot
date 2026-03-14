@@ -188,7 +188,7 @@ class CarController(CarControllerBase):
       # don't use CC.cruiseControl.resume since it is gated on CS.cruiseState.standstill which goes false for 3s after resume press
       # whitelist hybrids as they do not have this issue and can stay stopped after resume press
       if not self.CP.flags & ToyotaFlags.HYBRID.value:
-        should_resume = actuators.accel > 0
+        should_resume = actuators.accel > 0 or frogpilot_toggles.sng_hack
         if should_resume:
           self.standstill_req = False
 
