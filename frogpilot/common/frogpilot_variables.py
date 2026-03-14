@@ -590,6 +590,10 @@ class FrogPilotVariables:
     toggle.lead_detection_probability = self.get_value("LeadDetectionThreshold", cast=float, condition=longitudinal_tuning, conversion=0.01, min=0.25, max=0.5)
     toggle.taco_tune = self.get_value("TacoTune", condition=longitudinal_tuning)
 
+    toggle.model = self.default_values["DrivingModel"]
+    toggle.model_name = self.default_values["DrivingModelName"]
+    toggle.model_version = self.default_values["DrivingModelVersion"]
+
     toggle.model_ui = self.get_value("ModelUI")
     toggle.dynamic_path_width = self.get_value("DynamicPathWidth", condition=toggle.model_ui and not toggle.debug_mode)
     toggle.lane_line_width = self.get_value("LaneLinesWidth", cast=float, condition=toggle.model_ui and not toggle.debug_mode, conversion=small_distance_conversion / 200)
