@@ -32,34 +32,48 @@ jobs:
             fi
           }
 
-          # Carrotpilot (ajouatom/openpilot) branch: c3-v9
+          # Carrotpilot
           add_or_update_remote carrotpilot https://github.com/ajouatom/openpilot.git
-          git fetch carrotpilot c3-v9 --no-tags || echo "⚠️ carrotpilot  -v9 fetch failed"
+          git fetch carrotpilot c3-v9 --no-tags || echo "⚠️ carrotpilot c3-v9 fetch failed"
 
-          # Dragonpilot (dragonpilot/dragonpilot) branch: pre-build
+          # Dragonpilot
           add_or_update_remote dragonpilot https://github.com/dragonpilot/dragonpilot.git
           git fetch dragonpilot pre-build --no-tags || echo "⚠️ dragonpilot pre-build fetch failed"
 
-          # FrogPilot (FrogAi/FrogPilot) branch: FrogPilot
+          # FrogPilot
           add_or_update_remote frogpilot https://github.com/FrogAi/FrogPilot.git
           git fetch frogpilot FrogPilot --no-tags || echo "⚠️ frogpilot FrogPilot fetch failed"
 
-      - name: Push branches to your repository (rename to fork names)
+          # drakschc openpilot-7
+          add_or_update_remote drakschc https://github.com/drakschc/openpilot-7.git
+          git fetch drakschc changan --no-tags || echo "⚠️ drakschc changan fetch failed"
+          git fetch drakschc acc --no-tags || echo "⚠️ drakschc acc fetch failed"
+
+      - name: Push branches to your repository
         run: |
           set +e
 
-          # Carrotpilot: ajouatom/carrot2-v9 -> Carrotpilot
+          # Carrotpilot
           git checkout -B Carrotpilot carrotpilot/c3-v9 \
             && git push origin Carrotpilot --force \
             || echo "⚠️ Carrotpilot push skipped"
 
-
-          # Dragonpilot: dragonpilot/pre-build -> Dragonpilot
+          # Dragonpilot
           git checkout -B Dragonpilot dragonpilot/pre-build \
             && git push origin Dragonpilot --force \
             || echo "⚠️ Dragonpilot push skipped"
 
-          # FrogPilot: FrogAi/FrogPilot -> FrogPilot
+          # FrogPilot
           git checkout -B FrogPilot frogpilot/FrogPilot \
             && git push origin FrogPilot --force \
             || echo "⚠️ FrogPilot push skipped"
+
+          # drakschc changan
+          git checkout -B changan drakschc/changan \
+            && git push origin changan --force \
+            || echo "⚠️ changan push skipped"
+
+          # drakschc acc
+          git checkout -B acc drakschc/acc \
+            && git push origin acc --force \
+            || echo "⚠️ acc push skipped"
