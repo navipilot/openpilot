@@ -51,8 +51,11 @@ def backup_toggles(params, boot_run=False):
   cleanup_backups(TOGGLE_BACKUPS, maximum_backups)
 
   if not changes_found or boot_run:
-    print("Toggles are identical to the previous backup. Aborting...")
+    if not changes_found:
+      print("Toggles are identical to the previous backup. Aborting...")
     return
+
+  params.put_bool("PondUploadPending", True)
 
   destination = TOGGLE_BACKUPS / f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_auto"
   create_backup(Path(params_backup.get_param_path()), destination, "Successfully backed up toggles!", params)

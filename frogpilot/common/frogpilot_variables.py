@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import json
 import math
-import os
 import random
 import tomllib
 
@@ -42,8 +41,8 @@ THRESHOLD = 1 - 1 / math.e                # Requires the condition to be true fo
 
 NON_DRIVING_GEARS = [GearShifter.neutral, GearShifter.park, GearShifter.reverse, GearShifter.unknown]
 
-DISCORD_WEBHOOK_URL_REPORT = os.getenv("DISCORD_WEBHOOK_URL_REPORT")
-DISCORD_WEBHOOK_URL_THEME = os.getenv("DISCORD_WEBHOOK_URL_THEME")
+FROGPILOT_API = "https://frogpilot.com/api"
+THE_POND_URL = "https://frogpilot.com/the_pond"
 
 RESOURCES_REPO = "FrogAi/FrogPilot-Resources"
 
@@ -238,7 +237,7 @@ class FrogPilotVariables:
     self.frogs_go_moo = FROGS_GO_MOO_PATH.is_file()
     toggle.block_user = (self.development_branch or branch == "MAKE-PRS-HERE" or self.vetting_branch) and not self.frogs_go_moo
 
-    self.tuning_level = self.params.get("TuningLevel") if self.params.get_bool("TuningLevelConfirmed") else TUNING_LEVELS["ADVANCED"]
+    toggle.tuning_level = self.params.get("TuningLevel") if self.params.get_bool("TuningLevelConfirmed") else TUNING_LEVELS["ADVANCED"]
 
     device_management = self.get_value("DeviceManagement")
 
@@ -280,7 +279,7 @@ class FrogPilotVariables:
     return "#FFFFFFFF"
 
   def get_value(self, key, cast=bool, condition=True, conversion=None, default=None, min=None, max=None):
-    if not condition or (self.tuning_level < self.tuning_levels.get(key, 0)):
+    if not condition or (self.frogpilot_toggles.tuning_level < self.tuning_levels.get(key, 0)):
       if default is not None:
         return default
       return False if cast is bool else self.default_values.get(key)
@@ -311,7 +310,7 @@ class FrogPilotVariables:
 
   def update(self, holiday_theme="stock", started=False):
     toggle = self.frogpilot_toggles
-    self.tuning_level = self.params.get("TuningLevel") if self.params.get_bool("TuningLevelConfirmed") else TUNING_LEVELS["ADVANCED"]
+    toggle.tuning_level = self.params.get("TuningLevel") if self.params.get_bool("TuningLevelConfirmed") else TUNING_LEVELS["ADVANCED"]
 
     msg_bytes = self.params.get("CarParams" if started else "CarParamsPersistent", block=started)
     if msg_bytes:

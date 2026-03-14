@@ -5,7 +5,7 @@ from openpilot.selfdrive.car.cruise import CRUISE_LONG_PRESS, ButtonType
 from openpilot.selfdrive.selfdrived.events import ET
 
 from openpilot.frogpilot.common.frogpilot_utilities import is_FrogsGoMoo
-from openpilot.frogpilot.common.frogpilot_variables import ERROR_LOGS_PATH, NON_DRIVING_GEARS
+from openpilot.frogpilot.common.frogpilot_variables import ERROR_LOGS_PATH, GearShifter, NON_DRIVING_GEARS
 from openpilot.frogpilot.controls.lib.conditional_experimental_mode import CEStatus
 
 class FrogPilotCard:
@@ -109,6 +109,7 @@ class FrogPilotCard:
     frogpilotCarState.distanceLongPressed = self.very_long_press_threshold > self.gap_counter >= self.long_press_threshold
     frogpilotCarState.distanceVeryLongPressed = self.gap_counter >= self.very_long_press_threshold
     frogpilotCarState.forceCoast = self.force_coast
+    frogpilotCarState.isParked = carState.gearShifter == GearShifter.park
     frogpilotCarState.pauseLateral = self.pause_lateral
     frogpilotCarState.pauseLongitudinal = self.pause_longitudinal
     frogpilotCarState.trafficModeEnabled = self.traffic_mode_enabled
