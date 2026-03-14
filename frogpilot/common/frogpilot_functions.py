@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
+import io
+import json
 import random
+import requests
 import string
 import threading
 import time
@@ -16,9 +19,48 @@ from openpilot.frogpilot.assets.theme_manager import ThemeManager
 from openpilot.frogpilot.common.frogpilot_backups import backup_frogpilot
 from openpilot.frogpilot.common.frogpilot_utilities import is_FrogsGoMoo, run_cmd, use_konik_server
 from openpilot.frogpilot.common.frogpilot_variables import (
-  ERROR_LOGS_PATH, FROGS_GO_MOO_PATH, HD_LOGS_PATH, KONIK_LOGS_PATH, MAPD_PATH, MAPS_PATH, THEME_SAVE_PATH,
+  DISCORD_WEBHOOK_URL_REPORT, ERROR_LOGS_PATH, FROGS_GO_MOO_PATH, HD_LOGS_PATH, KONIK_LOGS_PATH, MAPD_PATH, MAPS_PATH, THEME_SAVE_PATH,
   FrogPilotVariables, get_frogpilot_toggles
 )
+
+
+def capture_report(discord_user, report, frogpilot_toggles):
+  if not DISCORD_WEBHOOK_URL_REPORT:
+    return
+
+  error_file_path = ERROR_LOGS_PATH / "error.txt"
+  error_content = "No error log found."
+  if error_file_path.exists():
+    error_content = error_file_path.read_text()[:1000]
+
+  message = (
+    f"**🚨 New Error Report**\n\n"
+    f"**User:** `{discord_user}`\n\n"
+    f"**Report:**\n```{report}```\n\n"
+    f"**Error Log:**\n```{error_content}```\n\n"
+    f"**Toggle Settings:**"
+  )
+
+  try:
+    main_response = requests.post(
+      DISCORD_WEBHOOK_URL_REPORT,
+      data={"content": message},
+      files={"file": ("frogpilot_toggles.json", io.BytesIO(json.dumps(frogpilot_toggles, indent=2).encode("utf-8")), "application/json")},
+      timeout=10
+    )
+    main_response.raise_for_status()
+
+    mention_response = requests.post(
+      DISCORD_WEBHOOK_URL_REPORT,
+      json={"content": "<@&1198482895342411846>"},
+      timeout=10
+    )
+    mention_response.raise_for_status()
+
+  except requests.exceptions.RequestException as exception:
+    print(f"Error sending Discord message: {exception}")
+  except Exception as exception:
+    print(f"Unexpected error: {exception}")
 
 
 def frogpilot_boot_functions(build_metadata, params):
