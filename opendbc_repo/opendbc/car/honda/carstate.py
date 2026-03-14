@@ -52,7 +52,7 @@ class CarState(CarStateBase):
     self.is_metric = False
     self.v_cruise_factor = 1.
 
-  def update(self, can_parsers) -> structs.CarState:
+  def update(self, can_parsers, frogpilot_toggles) -> structs.CarState:
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
     if self.CP.enableBsm:

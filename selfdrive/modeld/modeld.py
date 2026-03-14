@@ -30,6 +30,8 @@ from openpilot.selfdrive.modeld.fill_model_msg import fill_model_msg, fill_pose_
 from openpilot.common.file_chunker import read_file_chunked
 from openpilot.selfdrive.modeld.constants import ModelConstants, Plan
 
+from openpilot.frogpilot.common.frogpilot_variables import get_frogpilot_toggles
+
 
 PROCESS_NAME = "selfdrive.modeld.modeld"
 SEND_RAW_PRED = os.getenv('SEND_RAW_PRED')
@@ -239,6 +241,7 @@ def main(demo=False):
   cloudlog.warning("modeld init")
 
   # FrogPilot variables
+  frogpilot_toggles = get_frogpilot_toggles()
 
   if not USBGPU:
     # USB GPU currently saturates a core so can't do this yet,
@@ -404,7 +407,7 @@ def main(demo=False):
       l_lane_change_prob = desire_state[log.Desire.laneChangeLeft]
       r_lane_change_prob = desire_state[log.Desire.laneChangeRight]
       lane_change_prob = l_lane_change_prob + r_lane_change_prob
-      DH.update(sm['carState'], sm['carControl'].latActive, lane_change_prob, sm['frogpilotPlan'])
+      DH.update(sm['carState'], sm['carControl'].latActive, lane_change_prob, sm['frogpilotPlan'], frogpilot_toggles)
       modelv2_send.modelV2.meta.laneChangeState = DH.lane_change_state
       modelv2_send.modelV2.meta.laneChangeDirection = DH.lane_change_direction
       drivingdata_send.drivingModelData.meta.laneChangeState = DH.lane_change_state
@@ -422,6 +425,7 @@ def main(demo=False):
     last_vipc_frame_id = meta_main.frame_id
 
     # FrogPilot variables
+    frogpilot_toggles = get_frogpilot_toggles(sm)
 
 
 if __name__ == "__main__":

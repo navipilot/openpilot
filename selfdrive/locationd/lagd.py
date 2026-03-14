@@ -13,6 +13,8 @@ from openpilot.common.realtime import config_realtime_process
 from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.locationd.helpers import PoseCalibrator, Pose, fft_next_good_size, parabolic_peak_interp
 
+from openpilot.frogpilot.common.frogpilot_variables import get_frogpilot_toggles
+
 BLOCK_SIZE = 100
 BLOCK_NUM = 50
 BLOCK_NUM_NEEDED = 5
@@ -379,6 +381,8 @@ def main():
   # FrogPilot variables
   sm = sm.extend(['frogpilotPlan'])
 
+  lag_learner.frogpilot_toggles = get_frogpilot_toggles()
+
   while True:
     sm.update()
     if sm.all_checks():
@@ -399,3 +403,4 @@ def main():
         params.put_nonblocking("LiveDelay", lag_msg_dat)
 
     # FrogPilot variables
+    lag_learner.frogpilot_toggles = get_frogpilot_toggles(sm)
