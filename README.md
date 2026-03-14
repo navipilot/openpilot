@@ -200,6 +200,13 @@ And lots more! From safety enhancements to personalization options, **FrogPilot*
 | FrogPilot&#8209;Development| No :)                     | Active development branch. Do not use!                 | **FrogPilot**&nbsp;Developers|
 | MAKE&#8209;PRS&#8209;HERE  | No :)                     | Workspace for pull requests. Do not use!               | Contributors             |
 
+🚗 Tesla Legacy Support
+------
+
+This fork includes support for **Tesla Model S/X legacy vehicles** (HW1/HW2/HW2.5/HW3) on comma 3 hardware, based on [xnor-tech's](https://github.com/xnor-tech/openpilot) platform work. Features include cooperative steering, Always On Lateral persistence fixes, and Speed Limit Controller integration via Tesla's CAN bus.
+
+See **[TESLA.md](TESLA.md)** for full details on the Tesla-specific changes, CAN bus architecture, and known behaviors.
+
 🧰 How to Install
 ------
 
