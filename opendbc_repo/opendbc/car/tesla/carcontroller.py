@@ -3,6 +3,7 @@ from opendbc.can import CANPacker
 from opendbc.car import Bus
 from opendbc.car.lateral import apply_steer_angle_limits_vm
 from opendbc.car.interfaces import CarControllerBase
+from opendbc.car.tesla.coopsteering import CoopSteering
 from opendbc.car.tesla.teslacan import TeslaCAN
 from opendbc.car.tesla.teslacan_legacy import TeslaCANRaven
 from opendbc.car.tesla.values import CarControllerParams, CANBUS, LEGACY_CARS, CAR
@@ -33,6 +34,7 @@ class CarController(CarControllerBase):
 
       self.packers = {CANBUS.party: CANPacker(dbc_names[Bus.party]), CANBUS.powertrain: CANPacker(dbc_names[Bus.pt])}
       self.tesla_can = TeslaCANRaven(self.packers)
+      self.coop_steering = CoopSteering()
       from opendbc.car.tesla.interface import CarInterface
       self.VM = VehicleModel(CarInterface.get_non_essential_params("TESLA_MODEL_S_HW3"))
 
@@ -43,11 +45,22 @@ class CarController(CarControllerBase):
     # Tesla EPS enforces disabling steering on heavy lateral override force.
     # When enabling in a tight curve, we wait until user reduces steering force to start steering.
     # Canceling is done on rising edge and is handled generically with CC.cruiseControl.cancel
-    lat_active = CC.latActive and CS.hands_on_level < 3
+    if self.CP.carFingerprint in LEGACY_CARS:
+      # Cooperative steering handles hands_on_level override gracefully
+      lat_active = CC.latActive
+    else:
+      lat_active = CC.latActive and CS.hands_on_level < 3
 
     if self.frame % 2 == 0:
+      # For legacy cars, cooperative steering may override desired angle with physical angle
+      if self.CP.carFingerprint in LEGACY_CARS:
+        overriding = self.coop_steering.update(CS.out.steeringTorque, CS.hands_on_level, lat_active)
+        desired = CS.out.steeringAngleDeg if overriding else actuators.steeringAngleDeg
+      else:
+        desired = actuators.steeringAngleDeg
+
       # Angular rate limit based on speed
-      self.apply_angle_last = apply_steer_angle_limits_vm(actuators.steeringAngleDeg, self.apply_angle_last, CS.out.vEgoRaw, CS.out.steeringAngleDeg,
+      self.apply_angle_last = apply_steer_angle_limits_vm(desired, self.apply_angle_last, CS.out.vEgoRaw, CS.out.steeringAngleDeg,
                                                           lat_active, CarControllerParams, self.VM)
 
       if self.CP.carFingerprint in LEGACY_CARS:
