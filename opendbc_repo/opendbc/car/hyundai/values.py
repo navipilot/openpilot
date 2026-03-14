@@ -68,6 +68,9 @@ class HyundaiSafetyFlags(IntFlag):
   ALT_LIMITS_2 = 512
 
 
+# FrogPilot variables
+
+
 class HyundaiFlags(IntFlag):
   # Dynamic Flags
 

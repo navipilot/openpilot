@@ -20,6 +20,8 @@ cdef extern from "common/params.h":
     CLEAR_ON_IGNITION_ON
     ALL
 
+    # FrogPilot variables
+
   cpdef enum ParamKeyType:
     STRING
     BOOL
@@ -44,6 +46,8 @@ cdef extern from "common/params.h":
     string getParamPath(string) nogil
     void clearAll(ParamKeyFlag)
     vector[string] allKeys()
+
+    # FrogPilot variables
 
 PYTHON_2_CPP = {
   (str, STRING): lambda v: v,
@@ -75,11 +79,18 @@ cdef class Params:
   cdef c_Params* p
   cdef str d
 
+  # FrogPilot variables
+
   def __cinit__(self, d=""):
     cdef string path = <string>d.encode()
+
+    # FrogPilot variables
+
     with nogil:
       self.p = new c_Params(path)
     self.d = d
+
+    # FrogPilot variables
 
   def __reduce__(self):
     return (type(self), (self.d,))
@@ -194,3 +205,5 @@ cdef class Params:
     cdef string k = self.check_key(key)
     cdef ParamKeyType t = self.p.getKeyType(k)
     return self._cpp2python(t, value, None, key)
+
+  # FrogPilot variables

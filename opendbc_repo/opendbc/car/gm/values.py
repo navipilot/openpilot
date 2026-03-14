@@ -245,6 +245,7 @@ class CAR(Platforms):
     [GMCarDocs("Chevrolet Trailblazer 2021-22 (NO ACC)")],
     CHEVROLET_TRAILBLAZER.specs,
   )
+  # FrogPilot variables
 
 
 class CruiseButtons:
@@ -350,3 +351,5 @@ CAMERA_ACC_CAR.update(CC_ONLY_CAR)
 EV_CAR.update(CAR.CHEVROLET_VOLT, CAR.CHEVROLET_VOLT_2019, CAR.CHEVROLET_BOLT_EUV)
 
 DBC = CAR.create_dbc_map()
+
+# FrogPilot variables
