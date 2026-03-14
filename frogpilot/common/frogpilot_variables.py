@@ -516,6 +516,7 @@ class FrogPilotVariables:
     toggle.one_lane_change = self.get_value("OneLaneChange", condition=toggle.lane_changes)
 
     lateral_tuning = self.get_value("LateralTune")
+    toggle.force_torque_controller = self.get_value("ForceTorqueController", condition=lateral_tuning and not is_torque_car and not is_angle_car)
     toggle.use_turn_desires = self.get_value("TurnDesires", condition=lateral_tuning)
 
     lkas_button_control = self.get_value("LKASButtonControl", cast=float, condition=toggle.car_make != "subaru")
