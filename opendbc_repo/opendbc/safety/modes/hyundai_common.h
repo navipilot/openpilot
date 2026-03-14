@@ -42,6 +42,9 @@ bool hyundai_fcev_gas_signal = false;
 extern bool hyundai_alt_limits_2;
 bool hyundai_alt_limits_2 = false;
 
+// FrogPilot variables
+extern bool hyundai_has_lda_button;
+bool hyundai_has_lda_button = false;
 static uint8_t hyundai_last_button_interaction;  // button messages since the user pressed an enable button
 
 void hyundai_common_init(uint16_t param) {
@@ -53,6 +56,8 @@ void hyundai_common_init(uint16_t param) {
   const uint16_t HYUNDAI_PARAM_FCEV_GAS = 256;
   const uint16_t HYUNDAI_PARAM_ALT_LIMITS_2 = 512;
 
+  // FrogPilot variables
+  const int HYUNDAI_PARAM_HAS_LDA_BUTTON = 1024;
   hyundai_ev_gas_signal = GET_FLAG(param, HYUNDAI_PARAM_EV_GAS);
   hyundai_hybrid_gas_signal = !hyundai_ev_gas_signal && GET_FLAG(param, HYUNDAI_PARAM_HYBRID_GAS);
   hyundai_camera_scc = GET_FLAG(param, HYUNDAI_PARAM_CAMERA_SCC);
@@ -61,6 +66,8 @@ void hyundai_common_init(uint16_t param) {
   hyundai_fcev_gas_signal = GET_FLAG(param, HYUNDAI_PARAM_FCEV_GAS);
   hyundai_alt_limits_2 = GET_FLAG(param, HYUNDAI_PARAM_ALT_LIMITS_2);
 
+  // FrogPilot variables
+  hyundai_has_lda_button = GET_FLAG(param, HYUNDAI_PARAM_HAS_LDA_BUTTON);
   hyundai_last_button_interaction = HYUNDAI_PREV_BUTTON_SAMPLES;
 
 #ifdef ALLOW_DEBUG
@@ -110,6 +117,11 @@ void hyundai_common_cruise_buttons_check(const int cruise_button, const bool mai
 
     cruise_button_prev = cruise_button;
   }
+  // FrogPilot variables
+  if (main_button && !main_button_prev) {
+    acc_main_on = !acc_main_on;
+  }
+  main_button_prev = main_button;
 }
 
 uint32_t hyundai_common_canfd_compute_checksum(const CANPacket_t *msg) {
@@ -135,4 +147,11 @@ uint32_t hyundai_common_canfd_compute_checksum(const CANPacket_t *msg) {
   }
 
   return crc;
+}
+// FrogPilot variables
+void hyundai_lkas_button_check(const bool lkas_button) {
+  if (lkas_button && !lkas_button_prev) {
+    lkas_on = !lkas_on;
+  }
+  lkas_button_prev = lkas_button;
 }

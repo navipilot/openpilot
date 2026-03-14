@@ -201,6 +201,9 @@ class CarInterfaceBase(ABC):
 
           fp_ret.isHDA2 = hda2
 
+        if CP.flags & HyundaiFlags.HAS_LDA_BUTTON:
+          fp_ret.safetyConfigs[-1].safetyParam |= HyundaiFrogPilotSafetyFlags.HAS_LDA_BUTTON.value
+
       elif platform in TOYOTA:
         fp_ret.canUsePedal = not CP.autoResumeSng
         fp_ret.canUseSDSU = candidate not in UNSUPPORTED_DSU_CAR and candidate not in TSS2_CAR

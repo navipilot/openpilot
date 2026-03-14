@@ -90,6 +90,7 @@ static void rivian_rx_hook(const CANPacket_t *msg) {
       pcm_cruise_check(feature_status == 1);
 
       // FrogPilot variables
+      acc_main_on = (feature_status == 0) || (feature_status == 1);
     }
   }
 }
