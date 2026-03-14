@@ -64,6 +64,9 @@ TOGGLE_BACKUPS = Path("/data/toggle_backups")
 
 FROGS_GO_MOO_PATH = Path("/persist/frogsgomoo.py")
 
+HD_LOGS_PATH = Path("/data/media/0/realdata_HD")
+HD_PATH = Path("/cache/use_HD")
+
 MAPD_PATH = Path("/data/media/0/osm/mapd")
 MAPS_PATH = Path("/data/media/0/osm/offline")
 
@@ -203,6 +206,24 @@ class FrogPilotVariables:
 
     self.frogs_go_moo = FROGS_GO_MOO_PATH.is_file()
     toggle.block_user = (self.development_branch or branch == "MAKE-PRS-HERE" or self.vetting_branch) and not self.frogs_go_moo
+
+    self.tuning_level = self.params.get("TuningLevel") if self.params.get_bool("TuningLevelConfirmed") else TUNING_LEVELS["ADVANCED"]
+
+    device_management = self.get_value("DeviceManagement")
+
+    toggle.use_higher_bitrate = device_management
+    toggle.use_higher_bitrate &= self.get_value("HigherBitrate")
+    toggle.use_higher_bitrate &= self.get_value("NoUploads")
+    toggle.use_higher_bitrate &= not self.get_value("DisableOnroadUploads")
+    toggle.use_higher_bitrate &= not self.vetting_branch
+    toggle.use_higher_bitrate |= self.development_branch
+
+    if not HD_PATH.is_file() and toggle.use_higher_bitrate:
+      HD_PATH.touch()
+      HARDWARE.reboot()
+    elif HD_PATH.is_file() and not toggle.use_higher_bitrate:
+      HD_PATH.unlink()
+      HARDWARE.reboot()
 
     stock_colors_json = (STOCK_THEME_PATH / "colors/colors.json")
     self.stock_colors = json.loads(stock_colors_json.read_text()) if stock_colors_json.is_file() else {}
