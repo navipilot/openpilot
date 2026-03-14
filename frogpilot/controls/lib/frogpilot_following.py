@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import numpy as np
 
-from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import COMFORT_BRAKE, LEAD_DANGER_FACTOR, STOP_DISTANCE, get_jerk_factor, get_T_FOLLOW
+from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import COMFORT_BRAKE, LEAD_DANGER_FACTOR, STOP_DISTANCE, desired_follow_distance, get_jerk_factor, get_T_FOLLOW
 
 class FrogPilotFollowing:
   def __init__(self, FrogPilotPlanner):
@@ -11,6 +11,7 @@ class FrogPilotFollowing:
 
     self.acceleration_jerk = 0
     self.danger_jerk = 0
+    self.desired_follow_distance = 0
     self.speed_jerk = 0
     self.t_follow = 0
 
@@ -53,6 +54,9 @@ class FrogPilotFollowing:
     if long_control_active and self.frogpilot_planner.tracking_lead:
       if frogpilot_toggles.human_following:
         self.update_follow_values(self.frogpilot_planner.lead_one.dRel, v_ego, self.frogpilot_planner.lead_one.vLead)
+      self.desired_follow_distance = desired_follow_distance(v_ego, self.frogpilot_planner.lead_one.vLead, self.t_follow)
+    else:
+      self.desired_follow_distance = 0
 
   def update_follow_values(self, lead_distance, v_ego, v_lead):
     # Offset by FrogAi for FrogPilot for a more natural approach to a faster lead
