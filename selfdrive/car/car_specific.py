@@ -1,4 +1,5 @@
-from cereal import car, log
+from cereal import car, custom, log
+import cereal.messaging as messaging
 from opendbc.car import DT_CTRL, structs
 from opendbc.car.car_helpers import interfaces
 from opendbc.car.chrysler.values import RAM_DT
@@ -13,6 +14,32 @@ GearShifter = structs.CarState.GearShifter
 EventName = log.OnroadEvent.EventName
 NetworkLocation = structs.CarParams.NetworkLocation
 
+
+# TODO: the goal is to abstract this file into the CarState struct and make events generic
+class MockCarState:
+  def __init__(self):
+    self.sm = messaging.SubMaster(['gpsLocation', 'gpsLocationExternal'])
+
+  def update(self, CS: car.CarState, FPCS: custom.FrogPilotCarState):
+    self.sm.update(0)
+    gps_sock = 'gpsLocationExternal' if self.sm.recv_frame['gpsLocationExternal'] > 1 else 'gpsLocation'
+
+    CS.vEgo = self.sm[gps_sock].speed
+    CS.vEgoRaw = self.sm[gps_sock].speed
+
+    return CS, FPCS
+
+
+BRAND_EXTRA_GEARS = {
+  'ford': [GearShifter.low, GearShifter.manumatic],
+  'nissan': [GearShifter.brake],
+  'chrysler': [GearShifter.low],
+  'honda': [GearShifter.sport],
+  'toyota': [GearShifter.sport],
+  'gm': [GearShifter.sport, GearShifter.low, GearShifter.eco, GearShifter.manumatic],
+  'volkswagen': [GearShifter.eco, GearShifter.sport, GearShifter.manumatic],
+  'hyundai': [GearShifter.sport, GearShifter.manumatic]
+}
 
 class CarSpecificEvents:
   def __init__(self, CP: structs.CarParams):

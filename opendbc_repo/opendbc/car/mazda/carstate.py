@@ -1,3 +1,4 @@
+from cereal import custom
 from opendbc.can import CANDefine, CANParser
 from opendbc.car import Bus, create_button_events, structs
 from opendbc.car.common.conversions import Conversions as CV
@@ -8,8 +9,8 @@ ButtonType = structs.CarState.ButtonEvent.Type
 
 
 class CarState(CarStateBase):
-  def __init__(self, CP):
-    super().__init__(CP)
+  def __init__(self, CP, FPCP):
+    super().__init__(CP, FPCP)
 
     can_define = CANDefine(DBC[CP.carFingerprint][Bus.pt])
     self.shifter_values = can_define.dv["GEAR"]["GEAR"]
@@ -126,8 +127,9 @@ class CarState(CarStateBase):
     ]
 
     # FrogPilot variables
+    fp_ret = custom.FrogPilotCarState.new_message()
 
-    return ret
+    return ret, fp_ret
 
   @staticmethod
   def get_can_parsers(CP):

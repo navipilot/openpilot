@@ -82,6 +82,7 @@ class ToyotaFlags(IntFlag):
 
 
 # FrogPilot variables
+class ToyotaFrogPilotFlags(IntFlag):
 
 
 def dbc_dict(pt, radar):

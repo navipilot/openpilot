@@ -60,11 +60,29 @@ void PandaSafety::setSafetyMode(const std::string &params_string) {
 
   auto safety_configs = car_params.getSafetyConfigs();
   uint16_t alternative_experience = car_params.getAlternativeExperience();
+  cereal::CarParams::SafetyModel safety_model = cereal::CarParams::SafetyModel::SILENT;
+  uint16_t safety_param = 0U;
+  if (safety_configs.size() > 0) {
+    safety_model = safety_configs[0].getSafetyModel();
+    safety_param = safety_configs[0].getSafetyParam();
+  }
 
-  cereal::CarParams::SafetyModel safety_model = safety_configs[0].getSafetyModel();
-  uint16_t safety_param = safety_configs[0].getSafetyParam();
+  // FrogPilot variables
+  std::string frogpilot_params_string = params_.get("FrogPilotCarParams");
+  if (!frogpilot_params_string.empty()) {
+    AlignedBuffer frogpilot_aligned_buf;
+    capnp::FlatArrayMessageReader frogpilot_cmsg(frogpilot_aligned_buf.align(frogpilot_params_string.data(), frogpilot_params_string.size()));
+    cereal::FrogPilotCarParams::Reader frogpilot_car_params = frogpilot_cmsg.getRoot<cereal::FrogPilotCarParams>();
 
-  LOGW("setting safety model: %d, param: %d, alternative experience: %d", (int)safety_model, safety_param, alternative_experience);
+    auto frogpilot_safety_configs = frogpilot_car_params.getSafetyConfigs();
+    alternative_experience |= frogpilot_car_params.getAlternativeExperience();
+    if (frogpilot_safety_configs.size() > 0) {
+      safety_param |= frogpilot_safety_configs[0].getSafetyParam();
+    }
+  }
+
+  LOGW("setting safety model: %d, param: %d, alternative experience: %d",
+       (int)safety_model, safety_param, alternative_experience);
   panda_->set_alternative_experience(alternative_experience);
   panda_->set_safety_model(safety_model, safety_param);
 }
