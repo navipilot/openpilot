@@ -109,6 +109,9 @@ def get_stopped_equivalence_factor(v_lead):
 def get_safe_obstacle_distance(v_ego, t_follow):
   return (v_ego**2) / (2 * COMFORT_BRAKE) + t_follow * v_ego + STOP_DISTANCE
 
+def desired_follow_distance(v_ego, v_lead, t_follow):
+  return get_safe_obstacle_distance(v_ego, t_follow) - get_stopped_equivalence_factor(v_lead)
+
 def gen_long_model():
   model = AcadosModel()
   model.name = MODEL_NAME

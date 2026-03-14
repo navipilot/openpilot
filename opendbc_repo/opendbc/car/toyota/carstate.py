@@ -6,7 +6,7 @@ from opendbc.car import Bus, DT_CTRL, create_button_events, structs
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.common.filter_simple import FirstOrderFilter
 from opendbc.car.interfaces import CarStateBase
-from opendbc.car.toyota.values import ToyotaFlags, ToyotaFrogPilotFlags, CAR, DBC, STEER_THRESHOLD, NO_STOP_TIMER_CAR, \
+from opendbc.car.toyota.values import ToyotaFlags, ToyotaFrogPilotFlags, CAR, DBC, STEER_THRESHOLD, \
                                                   TSS2_CAR, RADAR_ACC_CAR, EPS_SCALE, UNSUPPORTED_DSU_CAR, \
                                                   SECOC_CAR
 
@@ -230,8 +230,8 @@ class CarState(CarStateBase):
       buttonEvents += create_button_events(self.distance_button, prev_distance_button, {1: ButtonType.gapAdjustCruise})
 
     buttonEvents += [
-      *create_button_events(self.pcm_acc_status == 9, False, {1: ButtonType.accelCruise}),
-      *create_button_events(self.pcm_acc_status == 10, False, {1: ButtonType.decelCruise}),
+      *create_button_events(pcm_acc_status == 9, False, {1: ButtonType.accelCruise}),
+      *create_button_events(pcm_acc_status == 10, False, {1: ButtonType.decelCruise}),
     ]
 
     fp_ret.dashboardSpeedLimit = calculate_speed_limit(cp_cam)

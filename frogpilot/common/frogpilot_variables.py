@@ -277,7 +277,7 @@ class FrogPilotVariables:
     for source in (theme_colors, self.stock_colors):
       color = source.get(key)
       if isinstance(color, dict):
-        return f"#{color.get("alpha", 255):02X}{color.get("red", 255):02X}{color.get("green", 255):02X}{color.get("blue", 255):02X}"
+        return f"#{color.get('alpha', 255):02X}{color.get('red', 255):02X}{color.get('green', 255):02X}{color.get('blue', 255):02X}"
     return "#FFFFFFFF"
 
   def get_value(self, key, cast=bool, condition=True, conversion=None, default=None, min=None, max=None):
@@ -739,4 +739,5 @@ class FrogPilotVariables:
 
     toggle.volt_sng = self.get_value("VoltSNG", condition=toggle.car_model == "CHEVROLET_VOLT")
 
+    process_frogpilot_toggles.cache_clear()
     self.params_memory.remove("FrogPilotTogglesUpdated")

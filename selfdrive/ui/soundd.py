@@ -194,6 +194,9 @@ class Soundd:
           self.update_frogpilot_sounds()
 
   def update_frogpilot_sounds(self):
+    # Placeholder for FrogPilot-specific sound customization.
+    # Keep default sound behavior unless a customization pass updates `sound_list`.
+    return
 
 def main():
   s = Soundd()

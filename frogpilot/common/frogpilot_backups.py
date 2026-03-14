@@ -28,7 +28,7 @@ def backup_frogpilot(build_metadata, params):
   minimum_backup_size = params.get("MinimumBackupSize")
   if free > minimum_backup_size * maximum_backups:
     destination = FROGPILOT_BACKUPS / f"{build_metadata.openpilot.git_commit}_{build_metadata.channel}_auto"
-    create_backup(Path(BASEDIR), destination, "Successfully backed up FrogPilot!", "Failed to backup FrogPilot...", params, minimum_backup_size, compressed=True)
+    create_backup(Path(BASEDIR), destination, "Successfully backed up FrogPilot!", params, minimum_backup_size, compressed=True)
 
 
 def backup_toggles(params, boot_run=False):
@@ -54,8 +54,8 @@ def backup_toggles(params, boot_run=False):
     print("Toggles are identical to the previous backup. Aborting...")
     return
 
-  destination = TOGGLE_BACKUPS / f"{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}_auto"
-  create_backup(Path(params_backup.get_param_path()), destination, "Successfully backed up toggles!", "Failed to backup toggles...", params)
+  destination = TOGGLE_BACKUPS / f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_auto"
+  create_backup(Path(params_backup.get_param_path()), destination, "Successfully backed up toggles!", params)
 
 
 def cleanup_backups(directory, limit):
@@ -69,7 +69,7 @@ def cleanup_backups(directory, limit):
     delete_file(oldest_backup, report=False)
 
 
-def create_backup(backup, destination, success_message, fail_message, params, minimum_backup_size=0, compressed=False):
+def create_backup(backup, destination, success_message, params, minimum_backup_size=0, compressed=False):
   final_destination = destination.parent / f"{destination.name}.tar.zst" if compressed else destination
 
   if final_destination.exists():
