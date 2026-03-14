@@ -82,6 +82,23 @@ BO_ 911 IBST_private2: 8 IBST
   SG_ IBST_compatibilityIndex : 32|4@1+ (1,0) [0|15] "" ESP
   SG_ IBST_pForceBlendingPotential : 40|8@1+ (0.5,0) [0|125] "bar" ESP
 
+BO_ 921 AutopilotStatus: 8 DAS
+  SG_ autopilotStatus : 0|4@1+ (1,0) [0|0] "" Vector__XXX
+  SG_ DAS_blindSpotRearLeft : 4|2@1+ (1,0) [0|0] "" Vector__XXX
+  SG_ DAS_blindSpotRearRight : 6|2@1+ (1,0) [0|0] "" Vector__XXX
+  SG_ DAS_fusedSpeedLimit : 8|5@1+ (5,0) [0|150] "kph/mph" Vector__XXX
+  SG_ DAS_suppressSpeedWarning : 13|1@1+ (1,0) [0|0] "" Vector__XXX
+  SG_ DAS_summonObstacle : 14|1@1+ (1,0) [0|0] "" Vector__XXX
+  SG_ DAS_summonClearedGate : 15|1@1+ (1,0) [0|0] "" Vector__XXX
+  SG_ DAS_visionOnlySpeedLimit : 16|5@1+ (5,0) [0|150] "kph/mph" Vector__XXX
+  SG_ DAS_heaterState : 21|1@1+ (1,0) [0|0] "" Vector__XXX
+  SG_ DAS_forwardCollisionWarning : 22|2@1+ (1,0) [0|0] "" Vector__XXX
+  SG_ DAS_autoparkReady : 24|1@1+ (1,0) [0|1] "" Vector__XXX
+  SG_ DAS_autoParked : 25|1@1+ (1,0) [0|0] "" Vector__XXX
+  SG_ DAS_autoparkWaitingForBrake : 26|1@1+ (1,0) [0|1] "" Vector__XXX
+  SG_ DAS_summonFwdLeashReached : 28|1@1+ (1,0) [0|1] "" Vector__XXX
+  SG_ DAS_summonRvsLeashReached : 29|1@1+ (1,0) [0|1] "" Vector__XXX
+
 BO_ 1160 DAS_steeringControl: 4 DAS
   SG_ DAS_steeringAngleRequest : 6|15@0+ (0.1,-1638.35) [-1638.35|1638.35] "deg" EPAS3P,APS
   SG_ DAS_steeringHapticRequest : 7|1@0+ (1,0) [0|0] "" EPAS3P,APS
@@ -110,6 +127,7 @@ VAL_ 911 IBST_brakePedalApplied 1 "BRAKE_PEDAL_APPLIED" 0 "BRAKE_PEDAL_NOT_APPLI
 VAL_ 911 IBST_brakePedalAppliedQF 2 "BRAKE_PEDAL_APPLIED_FAULT" 1 "BRAKE_PEDAL_APPLIED_NORMAL" 0 "BRAKE_PEDAL_APPLIED_OFF" ;
 VAL_ 911 IBST_status 7 "IBOOSTER_READY" 6 "IBOOSTER_POST_RUN_REDUCED" 5 "IBOOSTER_REDUCED" 4 "IBOOSTER_STANDALONE" 3 "IBOOSTER_UNDEFINED_1" 2 "IBOOSTER_DIAGNOSTIC" 1 "IBOOSTER_FAULT" 0 "IBOOSTER_NOT_INITIALIZED" ;
 VAL_ 911 IBST_pRunoutQF 2 "RUNNOUT_FAULT" 1 "RUNNOUT_NORMAL" 0 "RUNNOUT_NOT_INITIALIZED" ;
+VAL_ 921 DAS_fusedSpeedLimit 31 "NONE" 0 "UNKNOWN_SNA" ;
 VAL_ 1160 DAS_steeringAngleRequest 16384 "ZERO_ANGLE" ;
 VAL_ 1160 DAS_steeringHapticRequest 1 "HAPTIC_ACTIVE" 0 "HAPTIC_IDLE" ;
 VAL_ 1160 DAS_steeringControlType 3 "EMERGENCY_LANE_KEEP" 2 "LANE_KEEP_ASSIST" 1 "ANGLE_CONTROL" 0 "NONE" ;
