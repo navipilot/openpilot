@@ -28,7 +28,10 @@ static int get_health_pkt(void *dat) {
   health->heartbeat_lost_pkt = heartbeat_lost;
   health->safety_rx_checks_invalid_pkt = safety_rx_checks_invalid;
 
+  health->spi_error_count_pkt = 0U;
+  #ifdef STM32H7
   health->spi_error_count_pkt = spi_error_count;
+  #endif
 
   health->fault_status_pkt = fault_status;
   health->faults_pkt = faults;
@@ -98,7 +101,7 @@ int comms_control_handler(ControlPacket_t *req, uint8_t *resp) {
       resp_len = 2;
       break;
     // **** 0xb5: request deep sleep, wakes on CAN or SBU
-    #ifdef ALLOW_DEBUG
+    #if defined(ALLOW_DEBUG) && defined(STM32H7)
     case 0xb5:
       set_safety_mode(SAFETY_SILENT, 0U);
       set_power_save_state(true);

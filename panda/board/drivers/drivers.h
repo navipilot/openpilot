@@ -6,6 +6,9 @@
 #ifdef STM32H7
 #include "board/stm32h7/lladc_declarations.h"
 #endif
+#ifdef STM32F4
+#include "board/stm32f4/lladc_declarations.h"
+#endif
 
 // ******************** bootkick ********************
 
@@ -123,6 +126,10 @@ void process_can(uint8_t can_number);
 void can_rx(uint8_t can_number);
 bool can_init(uint8_t can_number);
 
+#endif
+
+#if defined(STM32H7) || defined(STM32F4)
+
 // ******************** harness ********************
 
 #define HARNESS_STATUS_NC 0U
@@ -238,7 +245,7 @@ void spi_rx_done(void);
 void spi_tx_done(bool reset);
 
 // ******************** uart ********************
-#ifdef STM32H7
+#if defined(STM32H7) || defined(STM32F4)
 
 // ***************************** Definitions *****************************
 #define FIFO_SIZE_INT 0x400U
