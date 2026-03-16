@@ -55,7 +55,8 @@ class CarController(CarControllerBase):
     if self.frame % 2 == 0:
       # For legacy cars, cooperative steering may override desired angle with physical angle
       if self.CP.carFingerprint in LEGACY_CARS:
-        overriding = self.coop_steering.update(CS.out.steeringTorque, CS.hands_on_level, lat_active)
+        angle_diff = abs(actuators.steeringAngleDeg - CS.out.steeringAngleDeg)
+        overriding = self.coop_steering.update(CS.out.steeringTorque, CS.hands_on_level, lat_active, angle_diff)
         # During override, release EPAS (NONE) and let rate limiter track physical angle
         steer_active = lat_active and not overriding
         # Blend from physical angle to OP desired over ~1.5s after override ends
@@ -74,6 +75,14 @@ class CarController(CarControllerBase):
 
       # Angular rate limit based on speed
       self.apply_angle_last = apply_steer_angle_limits_vm(desired, self.apply_angle_last, CS.out.vEgoRaw, CS.out.steeringAngleDeg, steer_active, CarControllerParams, self.VM)
+
+      # Hard clamp: never command more than ±20° from the physical wheel position
+      # Prevents EPAS faults and violent jerks (inspired by BogGyver)
+      if self.CP.carFingerprint in LEGACY_CARS:
+        max_angle_gap = 20.0
+        self.apply_angle_last = float(np.clip(self.apply_angle_last,
+                                              CS.out.steeringAngleDeg - max_angle_gap,
+                                              CS.out.steeringAngleDeg + max_angle_gap))
 
       if self.CP.carFingerprint in LEGACY_CARS:
         cntr = (self.frame // 2) % 16
