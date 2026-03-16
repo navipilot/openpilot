@@ -1,4 +1,3 @@
-import logging
 import numpy as np
 from opendbc.can import CANPacker
 from opendbc.car import Bus
@@ -9,8 +8,7 @@ from opendbc.car.tesla.teslacan import TeslaCAN
 from opendbc.car.tesla.teslacan_legacy import TeslaCANRaven
 from opendbc.car.tesla.values import CarControllerParams, CANBUS, LEGACY_CARS, CAR
 from opendbc.car.vehicle_model import VehicleModel
-
-log = logging.getLogger("tesla.carcontroller")
+from openpilot.common.swaglog import cloudlog
 
 
 def get_safety_CP():
@@ -63,9 +61,10 @@ class CarController(CarControllerBase):
         desired = actuators.steeringAngleDeg if steer_active else CS.out.steeringAngleDeg
         # Debug: log cooperative steering state every ~2s (every 100 steering frames at 50Hz)
         if self.frame % 200 == 0:
-          log.warning("COOP lat_active=%s overriding=%s steer_active=%s hands_on=%d torque=%.2f desired=%.1f actuator=%.1f physical=%.1f",
+          cloudlog.warning("COOP lat_active=%s overriding=%s steer_active=%s hands_on=%d torque=%.2f desired=%.1f actuator=%.1f physical=%.1f steerFault=%s",
                       lat_active, overriding, steer_active, CS.hands_on_level, CS.out.steeringTorque,
-                      desired, actuators.steeringAngleDeg, CS.out.steeringAngleDeg)
+                      desired, actuators.steeringAngleDeg, CS.out.steeringAngleDeg,
+                      CS.out.steerFaultTemporary)
       else:
         steer_active = lat_active
         desired = actuators.steeringAngleDeg

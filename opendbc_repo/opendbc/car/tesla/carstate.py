@@ -1,5 +1,4 @@
 import copy
-import logging
 from cereal import custom
 from opendbc.can import CANDefine, CANParser
 from opendbc.car import Bus, structs
@@ -8,8 +7,7 @@ from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.interfaces import CarStateBase
 from opendbc.car.tesla.teslacan import get_steer_ctrl_type
 from opendbc.car.tesla.values import DBC, CANBUS, GEAR_MAP, STEER_THRESHOLD, TeslaFlags, TeslaLegacyParams, CAR, LEGACY_CARS
-
-log = logging.getLogger("tesla.carstate")
+from openpilot.common.swaglog import cloudlog
 
 ButtonType = structs.CarState.ButtonEvent.Type
 
@@ -286,7 +284,7 @@ class CarState(CarStateBase):
     # Debug: log dashboard speed limit and key states every ~2s (100 frames at 50Hz)
     self._debug_frame += 1
     if self._debug_frame % 100 == 0:
-      log.warning("DASH raw=%.0f units=%s final=%.1f m/s | cruise avail=%s enabled=%s gear=%s hands_on=%d",
+      cloudlog.warning("DASH raw=%.0f units=%s final=%.1f m/s | cruise avail=%s enabled=%s gear=%s hands_on=%d",
                   autopilot_status["DAS_fusedSpeedLimit"], speed_units, fp_ret.dashboardSpeedLimit,
                   ret.cruiseState.available, ret.cruiseState.enabled, ret.gearShifter, self.hands_on_level)
 
