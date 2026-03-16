@@ -58,11 +58,14 @@ class CarController(CarControllerBase):
         overriding = self.coop_steering.update(CS.out.steeringTorque, CS.hands_on_level, lat_active)
         # During override, release EPAS (NONE) and let rate limiter track physical angle
         steer_active = lat_active and not overriding
-        desired = actuators.steeringAngleDeg if steer_active else CS.out.steeringAngleDeg
+        # Blend from physical angle to OP desired over ~1.5s after override ends
+        # This mimics controlsd's curvature reset on engage, preventing violent angle jumps
+        blend = self.coop_steering.blend_factor
+        desired = blend * actuators.steeringAngleDeg + (1.0 - blend) * CS.out.steeringAngleDeg if steer_active else CS.out.steeringAngleDeg
         # Debug: log cooperative steering state every ~2s (every 100 steering frames at 50Hz)
         if self.frame % 200 == 0:
-          cloudlog.warning("COOP lat_active=%s overriding=%s steer_active=%s hands_on=%d torque=%.2f desired=%.1f actuator=%.1f physical=%.1f steerFault=%s",
-                      lat_active, overriding, steer_active, CS.hands_on_level, CS.out.steeringTorque,
+          cloudlog.warning("COOP lat_active=%s overriding=%s steer_active=%s blend=%.2f hands_on=%d torque=%.2f desired=%.1f actuator=%.1f physical=%.1f steerFault=%s",
+                      lat_active, overriding, steer_active, blend, CS.hands_on_level, CS.out.steeringTorque,
                       desired, actuators.steeringAngleDeg, CS.out.steeringAngleDeg,
                       CS.out.steerFaultTemporary)
       else:
