@@ -1,4 +1,5 @@
 import copy
+import logging
 from cereal import custom
 from opendbc.can import CANDefine, CANParser
 from opendbc.car import Bus, structs
@@ -8,6 +9,8 @@ from opendbc.car.interfaces import CarStateBase
 from opendbc.car.tesla.teslacan import get_steer_ctrl_type
 from opendbc.car.tesla.values import DBC, CANBUS, GEAR_MAP, STEER_THRESHOLD, TeslaFlags, TeslaLegacyParams, CAR, LEGACY_CARS
 
+log = logging.getLogger("tesla.carstate")
+
 ButtonType = structs.CarState.ButtonEvent.Type
 
 
@@ -15,6 +18,7 @@ class CarState(CarStateBase):
   def __init__(self, CP, FPCP):
     super().__init__(CP, FPCP)
     self.can_define = CANDefine(DBC[CP.carFingerprint][Bus.party])
+    self._debug_frame = 0
 
     if self.CP.carFingerprint in LEGACY_CARS:
       if self.CP.carFingerprint == CAR.TESLA_MODEL_S_HW3:
@@ -270,16 +274,21 @@ class CarState(CarStateBase):
     # On HW3-fingerprinted cars, AutopilotStatus (msg 921) is on bus 1 (vehicle), read via Bus.main
     # On other legacy cars, it's on bus 2 (autopilot_party), read via Bus.ap_party
     if self.CP.carFingerprint == CAR.TESLA_MODEL_S_HW3:
-      cp_vehicle = can_parsers[Bus.main]
-      autopilot_status = cp_vehicle.vl.get("AutopilotStatus")
+      autopilot_status = can_parsers[Bus.main].vl["AutopilotStatus"]
     else:
-      autopilot_status = cp_ap_party.vl.get("AutopilotStatus")
-    if autopilot_status is not None:
-      fused_speed_limit = autopilot_status["DAS_fusedSpeedLimit"]
-      if 1 <= fused_speed_limit <= 150:
-        if speed_units == "MPH":
-          fused_speed_limit *= CV.MPH_TO_KPH
-        fp_ret.dashboardSpeedLimit = fused_speed_limit * CV.KPH_TO_MS
+      autopilot_status = cp_ap_party.vl["AutopilotStatus"]
+    fused_speed_limit = autopilot_status["DAS_fusedSpeedLimit"]
+    if 1 <= fused_speed_limit <= 150:
+      if speed_units == "MPH":
+        fused_speed_limit *= CV.MPH_TO_KPH
+      fp_ret.dashboardSpeedLimit = fused_speed_limit * CV.KPH_TO_MS
+
+    # Debug: log dashboard speed limit and key states every ~2s (100 frames at 50Hz)
+    self._debug_frame += 1
+    if self._debug_frame % 100 == 0:
+      log.warning("DASH raw=%.0f units=%s final=%.1f m/s | cruise avail=%s enabled=%s gear=%s hands_on=%d",
+                  autopilot_status["DAS_fusedSpeedLimit"], speed_units, fp_ret.dashboardSpeedLimit,
+                  ret.cruiseState.available, ret.cruiseState.enabled, ret.gearShifter, self.hands_on_level)
 
     return ret, fp_ret
 

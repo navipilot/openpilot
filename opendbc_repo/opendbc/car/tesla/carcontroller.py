@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 from opendbc.can import CANPacker
 from opendbc.car import Bus
@@ -8,6 +9,8 @@ from opendbc.car.tesla.teslacan import TeslaCAN
 from opendbc.car.tesla.teslacan_legacy import TeslaCANRaven
 from opendbc.car.tesla.values import CarControllerParams, CANBUS, LEGACY_CARS, CAR
 from opendbc.car.vehicle_model import VehicleModel
+
+log = logging.getLogger("tesla.carcontroller")
 
 
 def get_safety_CP():
@@ -56,6 +59,11 @@ class CarController(CarControllerBase):
       if self.CP.carFingerprint in LEGACY_CARS:
         overriding = self.coop_steering.update(CS.out.steeringTorque, CS.hands_on_level, lat_active)
         desired = CS.out.steeringAngleDeg if overriding else actuators.steeringAngleDeg
+        # Debug: log cooperative steering state every ~2s (every 100 steering frames at 50Hz)
+        if self.frame % 200 == 0:
+          log.warning("COOP lat_active=%s overriding=%s hands_on=%d torque=%.2f desired=%.1f actuator=%.1f physical=%.1f",
+                      lat_active, overriding, CS.hands_on_level, CS.out.steeringTorque,
+                      desired, actuators.steeringAngleDeg, CS.out.steeringAngleDeg)
       else:
         desired = actuators.steeringAngleDeg
 

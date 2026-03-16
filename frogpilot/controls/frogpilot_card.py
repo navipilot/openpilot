@@ -66,10 +66,10 @@ class FrogPilotCard:
           self.always_on_lateral_allowed = not self.always_on_lateral_allowed
         elif be.type == ButtonType.mainCruise and be.pressed and frogpilot_toggles.always_on_lateral_main:
           self.always_on_lateral_allowed = not self.always_on_lateral_allowed
-    elif self.CP.brand == "tesla" and frogpilot_toggles.always_on_lateral_main:
+    #elif self.CP.brand == "tesla" and frogpilot_toggles.always_on_lateral_main:
       # Tesla's cruiseState.available flickers on local streets (autopilot icon flashes),
       # which would kill AOL every time. Ignore this unreliable signal entirely for Tesla.
-      self.always_on_lateral_allowed = True
+    #  self.always_on_lateral_allowed = True
     elif frogpilot_toggles.always_on_lateral_main:
       self.always_on_lateral_allowed = carState.cruiseState.available
 
