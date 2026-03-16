@@ -26,7 +26,7 @@ static void tesla_legacy_rx_hook(const CANPacket_t *msg) {
     const int angle_meas_new = (((msg->data[4] & 0x3FU) << 8) | msg->data[5]) - 8192U;
     update_sample(&angle_meas, angle_meas_new);
 
-    const int hands_on_level = msg->data[4] >> 6;  // handsOnLevel
+    // hands_on_level (msg->data[4] >> 6) handled by cooperative steering in Python
     const int eac_status = msg->data[6] >> 5;      // eacStatus
     const int eac_error_code = msg->data[2] >> 4;  // eacErrorCode
 
