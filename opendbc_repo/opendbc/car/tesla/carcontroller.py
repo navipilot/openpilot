@@ -58,22 +58,24 @@ class CarController(CarControllerBase):
       # For legacy cars, cooperative steering may override desired angle with physical angle
       if self.CP.carFingerprint in LEGACY_CARS:
         overriding = self.coop_steering.update(CS.out.steeringTorque, CS.hands_on_level, lat_active)
-        desired = CS.out.steeringAngleDeg if overriding else actuators.steeringAngleDeg
+        # During override, release EPAS (NONE) and let rate limiter track physical angle
+        steer_active = lat_active and not overriding
+        desired = actuators.steeringAngleDeg if steer_active else CS.out.steeringAngleDeg
         # Debug: log cooperative steering state every ~2s (every 100 steering frames at 50Hz)
         if self.frame % 200 == 0:
-          log.warning("COOP lat_active=%s overriding=%s hands_on=%d torque=%.2f desired=%.1f actuator=%.1f physical=%.1f",
-                      lat_active, overriding, CS.hands_on_level, CS.out.steeringTorque,
+          log.warning("COOP lat_active=%s overriding=%s steer_active=%s hands_on=%d torque=%.2f desired=%.1f actuator=%.1f physical=%.1f",
+                      lat_active, overriding, steer_active, CS.hands_on_level, CS.out.steeringTorque,
                       desired, actuators.steeringAngleDeg, CS.out.steeringAngleDeg)
       else:
+        steer_active = lat_active
         desired = actuators.steeringAngleDeg
 
       # Angular rate limit based on speed
-      self.apply_angle_last = apply_steer_angle_limits_vm(desired, self.apply_angle_last, CS.out.vEgoRaw, CS.out.steeringAngleDeg,
-                                                          lat_active, CarControllerParams, self.VM)
+      self.apply_angle_last = apply_steer_angle_limits_vm(desired, self.apply_angle_last, CS.out.vEgoRaw, CS.out.steeringAngleDeg, steer_active, CarControllerParams, self.VM)
 
       if self.CP.carFingerprint in LEGACY_CARS:
         cntr = (self.frame // 2) % 16
-        can_sends.append(self.tesla_can.create_steering_control(cntr, self.apply_angle_last, lat_active))
+        can_sends.append(self.tesla_can.create_steering_control(cntr, self.apply_angle_last, steer_active))
       else:
         can_sends.append(self.tesla_can.create_steering_control(self.apply_angle_last, lat_active))
 
