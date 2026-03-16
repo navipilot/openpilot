@@ -30,8 +30,9 @@ static void tesla_legacy_rx_hook(const CANPacket_t *msg) {
     const int eac_status = msg->data[6] >> 5;      // eacStatus
     const int eac_error_code = msg->data[2] >> 4;  // eacErrorCode
 
-    // Disengage on normal user override, or if high angle rate fault from user overriding extremely quickly
-    steering_disengage = (hands_on_level >= 3) || ((eac_status == 0) && (eac_error_code == 9));
+    // Cooperative steering handles hands_on_level in Python (carcontroller.py) —
+    // only disengage on genuine EPAS hardware fault (high angle rate safety error)
+    steering_disengage = (eac_status == 0) && (eac_error_code == 9);
   }
 
   // Vehicle speed (ESP_B: ESP_vehicleSpeed)
