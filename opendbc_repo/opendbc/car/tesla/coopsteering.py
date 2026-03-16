@@ -1,5 +1,7 @@
 class CoopSteering:
-  TORQUE_THRESHOLD = 0.5  # Nm - deadzone for driver input detection
+  # Torque threshold must be well above EPAS actuation feedback (~0.5 Nm)
+  # Real driver steering input is typically 1.5+ Nm
+  TORQUE_THRESHOLD = 1.5  # Nm - deadzone for driver input detection
   RESUME_DELAY = 0.5      # seconds before openpilot resumes after driver releases
   FRAME_RATE = 50          # Hz (steering sent every 2 frames at 100Hz main loop)
 
@@ -15,7 +17,9 @@ class CoopSteering:
       self.frames_since_override = 0
       return False
 
-    driver_input = abs(steering_torque) > self.TORQUE_THRESHOLD or hands_on_level >= 2
+    # hands_on_level >= 3 is the EPAS's own filtered driver detection (most reliable)
+    # torque threshold is a backup for quicker response on strong driver input
+    driver_input = hands_on_level >= 3 or abs(steering_torque) > self.TORQUE_THRESHOLD
 
     if driver_input:
       self.override_active = True
