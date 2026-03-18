@@ -1,7 +1,7 @@
 class CoopSteering:
   # Torque threshold must be well above EPAS actuation feedback (~0.5 Nm)
   # Real driver steering input is typically 1.5+ Nm
-  TORQUE_THRESHOLD = 1.5  # Nm - deadzone for driver input detection
+  TORQUE_THRESHOLD = 2.0  # Nm - deadzone for driver input detection
   RESUME_DELAY = 0.5      # seconds before openpilot resumes after driver releases
   RESUME_BLEND = 1.5      # seconds to blend from physical angle to OP desired after resume
   FRAME_RATE = 50          # Hz (steering sent every 2 frames at 100Hz main loop)
