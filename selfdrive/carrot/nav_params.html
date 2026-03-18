@@ -561,34 +561,34 @@
                 category: "公共参数设置"
             },
             "BsdDelayTime": {
-                chineseName: "后盲区有车延时(20x0.1s)",
+                chineseName: "原车雷达后盲区有车延时(x0.1s)",
                 defaultValue: 20,
-                description: "当后盲区有车信号消失后，经过延时的秒数后允许变道",
+                description: "当原车雷达后盲区有车信号消失后，经过延时的秒数后允许变道",
                 inputRange: [0, 100],
                 step: 1,
                 uiType: "number",
                 category: "公共参数设置"
             },
             "SideBsdDelayTime": {
-                chineseName: "侧前方有车延时(20x0.1s)",
+                chineseName: "原车雷达侧前方有车延时(x0.1s)",
                 defaultValue: 20,
-                description: "当侧前方有车信号消失后，经过延时的秒数后允许变道",
+                description: "当原车雷达侧前方有车信号消失后，经过延时的秒数后允许变道",
                 inputRange: [0, 100],
                 step: 1,
                 uiType: "number",
                 category: "公共参数设置"
             },
             "SideRelDistTime": {
-                chineseName: "侧前方有车变道相对距离",
+                chineseName: "原车雷达侧前方有车变道绝对速度时距(x0.1s)",
                 defaultValue: 10,
-                description: "当与侧前方车辆相对距离小于本车速度x时间时不允许变道，单位0.1秒",
+                description: "当与原车雷达侧前方车辆的距离大于'本车速度x时间'时允许变道，单位0.1秒",
                 inputRange: [0, 50],
                 step: 1,
                 uiType: "number",
                 category: "公共参数设置"
             },
             "SidevRelDistTime": {
-                chineseName: "侧前方有车变道等效距离",
+                chineseName: "原车雷达侧前方有车允许变道相对速度时距(x0.1s)",
                 defaultValue: 10,
                 description: "侧前方车辆速度x3+相对距离小于本车速度x(时间+3)时，不允许变道，单位0.1秒",
                 inputRange: [0, 50],
@@ -597,10 +597,55 @@
                 category: "公共参数设置"
             },
             "SideRadarMinDist": {
-                chineseName: "侧面最小雷达距离(0m)",
+                chineseName: "原车雷达侧前方最小距离过滤(0m)",
                 defaultValue: 0,
-                description: "在左右两侧的车道上，忽略小于此雷达探测距离的车辆，单位为0.1m",
+                description: "在原车雷达探测左右车道侧前方车辆时，小于设定距离的目标会被忽略，单位为0.1m",
                 inputRange: [-50, 100],
+                step: 1,
+                uiType: "number",
+                category: "公共参数设置"
+            },
+            "LidarBsdDelayTime": {
+                chineseName: "激光雷达侧面车道有车延时(x0.1s)",
+                defaultValue: 20,
+                description: "当激光雷达探测侧面车道有车信号消失后，经过延时的秒数后允许变道",
+                inputRange: [0, 100],
+                step: 1,
+                uiType: "number",
+                category: "公共参数设置"
+            },
+            "LidarFrontVDistTime": {
+                chineseName: "激光雷达侧前方有车允许变道绝对速度时距(x0.1s)",
+                defaultValue: 10,
+                description: "当与激光雷达侧前方车辆的距离大于'本车速度x时间'时允许变道，单位0.1秒",
+                inputRange: [0, 50],
+                step: 1,
+                uiType: "number",
+                category: "公共参数设置"
+            },
+            "LidarFrontvRelDistTime": {
+                chineseName: "激光雷达侧前方有车允许变道相对速度时距(x0.1s)",
+                defaultValue: 30,
+                description: "当'本车相对于侧前方车辆的速度差x时间'小于两车距离时，允许变道，单位0.1秒",
+                inputRange: [0, 200],
+                step: 1,
+                uiType: "number",
+                category: "公共参数设置"
+            },
+            "LidarBehindVDistTime": {
+                chineseName: "激光雷达侧后方有车允许变道的绝对速度时距(x0.1s)",
+                defaultValue: 10,
+                description: "当与激光雷达侧后方车辆的距离大于'对方速度x时间'时允许变道，单位0.1秒",
+                inputRange: [0, 50],
+                step: 1,
+                uiType: "number",
+                category: "公共参数设置"
+            },
+            "LidarBehindvRelDistTime": {
+                chineseName: "激光雷达侧后方有车允许变道的相对速度时距(x0.1s)",
+                defaultValue: 30,
+                description: "当'侧后方车辆的相对于本车的速度差x时间'小于两车距离时，允许变道，单位0.1秒",
+                inputRange: [0, 200],
                 step: 1,
                 uiType: "number",
                 category: "公共参数设置"

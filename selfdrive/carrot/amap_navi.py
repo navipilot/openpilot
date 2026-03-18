@@ -206,11 +206,15 @@ class AmapNaviServ:
     self.rightFrontTarget = RadarSpeedEstimator()
     self.rightBehindTarget = RadarSpeedEstimator()
 
-    self.min_drel_vego_time = 1.0
-    self.min_vrel_vego_time = 1.0
-    self.sideBsdDelayTime = 2.
-    self.sideRelDistTime = 1.
-    self.sidevRelDistTime = 1.
+    self.min_front_drel_vego_time = 3.0
+    self.min_front_vrel_vego_time = 3.0
+    self.min_behind_drel_vego_time = 3.0
+    self.min_behind_vrel_vego_time = 3.0
+    self.lidarBsdDelayTime = 1.
+    self.lidarFrontVDistTime = 3.
+    self.lidarFrontVRelDistTime = 3.
+    self.lidarBehindVDistTime = 3.
+    self.lidarBehindVRelDistTime = 3.
     self.disableBlindSpot = False
     self.dynamicBlindRange = 0
     self.dynamicBlindDistance = 0
@@ -275,12 +279,16 @@ class AmapNaviServ:
 
   def update_param(self):
     if self.frame % 100 == 0:
-      self.sideBsdDelayTime = self.params.get_int("SideBsdDelayTime") * 0.1
-      self.sideRelDistTime = self.params.get_int("SideRelDistTime") * 0.1
-      self.sidevRelDistTime = self.params.get_int("SidevRelDistTime") * 0.1
-      self.min_drel_vego_time = self.sideRelDistTime
-      self.min_vrel_vego_time = self.sidevRelDistTime
-      self.min_object_detected_count_thr = int(-1 * self.sideBsdDelayTime / DT_BROADCAST)
+      self.lidarBsdDelayTime = self.params.get_int("LidarBsdDelayTime") * 0.1
+      self.lidarFrontVDistTime = self.params.get_int("LidarFrontVDistTime") * 0.1
+      self.lidarFrontVRelDistTime = self.params.get_int("LidarFrontVRelDistTime") * 0.1
+      self.lidarBehindVDistTime = self.params.get_int("LidarBehindVDistTime") * 0.1
+      self.lidarBehindVRelDistTime = self.params.get_int("LidarBehindVRelDistTime") * 0.1
+      self.min_front_drel_vego_time = self.lidarFrontVDistTime
+      self.min_front_vrel_vego_time = self.lidarFrontVRelDistTime
+      self.min_behind_drel_vego_time = self.lidarBehindVDistTime
+      self.min_behind_vrel_vego_time = self.lidarBehindVRelDistTime
+      self.min_object_detected_count_thr = int(-1 * self.lidarBsdDelayTime / DT_BROADCAST)
       self.disableBlindSpot = self.params.get_bool("DisableBlindSpot")
       self.dynamicBlindRange = self.params.get_int("DynamicBlindRange")
       self.dynamicBlindDistance = self.params.get_int("DynamicBlindDistance")
@@ -896,9 +904,9 @@ class AmapNaviServ:
               self.shared_data.lb_vrel = self.leftFrontTarget.update(lb_dreltmp, dist_timems)
               #动态时距盲区判断
               self.lf_object_detected = self.is_side_object_risky(lf_dreltmp, self.shared_data.lf_vrel, self.shared_data.v_ego_m,
-                                                                  self.min_vrel_vego_time, self.min_drel_vego_time)
+                                                                  self.min_front_vrel_vego_time, self.min_front_drel_vego_time)
               self.lb_object_detected = self.is_side_object_risky(lb_dreltmp, self.shared_data.lb_vrel, self.shared_data.v_ego_m,
-                                                                  self.min_vrel_vego_time, self.min_drel_vego_time)
+                                                                  self.min_behind_vrel_vego_time, self.min_behind_drel_vego_time)
             if detect_side & 2:
               # 右前方
               if rf_drel is None: rf_drel = old_info.get("rf_drel", None)  # 距离数据消抖
@@ -924,13 +932,13 @@ class AmapNaviServ:
               self.shared_data.rb_vrel = self.rightBehindTarget.update(rb_dreltmp, dist_timems)
               #动态时距盲区判断
               self.rf_object_detected = self.is_side_object_risky(rf_dreltmp, self.shared_data.rf_vrel, self.shared_data.v_ego_m,
-                                                                  self.min_vrel_vego_time, self.min_drel_vego_time)
+                                                                  self.min_front_vrel_vego_time, self.min_front_drel_vego_time)
               self.rb_object_detected = self.is_side_object_risky(rb_dreltmp, self.shared_data.rb_vrel, self.shared_data.v_ego_m,
-                                                                  self.min_vrel_vego_time, self.min_drel_vego_time)
+                                                                  self.min_behind_vrel_vego_time, self.min_behind_drel_vego_time)
               #self.rb_object_detected = self.is_side_object_risky_debug(rb_drel, self.shared_data.rb_vrel,
               #                                                          self.shared_data.v_ego_m,
-              #                                                          self.min_vrel_vego_time,
-              #                                                          self.min_drel_vego_time, "RB")
+              #                                                          self.min_front_vrel_vego_time,
+              #                                                          self.min_front_drel_vego_time, "RB")
 
           # 通讯时间检查
           now = time.time()
@@ -1091,7 +1099,7 @@ class AmapNaviServ:
       danger_dist = max(v_ego_mps * min_drel_scale, 15)
 
     # 未来距离预测
-    future_dist = drel - closing_speed * time_horizon * 3
+    future_dist = drel - closing_speed * time_horizon #* 3
 
     # 判定规则：
     # 1) 未来距离过小（可调阈值 3~5m，我设成 4m)
