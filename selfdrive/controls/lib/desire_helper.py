@@ -219,7 +219,7 @@ class DesireHelper:
     self.event_test_frame = 0
     self.lane_change_audio_delay = 0
     self.atc_resume = -1
-    self.object_detected_count_new = 0
+    #self.object_detected_count_new = 0
     self.min_object_detected_count = int(-60.0 / DT_MDL)  # 最小计时
     self.min_object_detected_count_thr = int(-2.0 / DT_MDL)  # 判断是否无障碍的持续时间
     self.side_object_detected = False
@@ -596,6 +596,7 @@ class DesireHelper:
 
     car_side_blind = False #NEW
     is_car_blind = False
+    is_solid = False
     if desire_enabled:
       lane_exist_counter = self.lane_exist_left_count.counter if blinker_state == BLINKER_LEFT else self.lane_exist_right_count.counter #左侧或右侧车道存在的时间
       lane_available = self.available_left_lane if blinker_state == BLINKER_LEFT else self.available_right_lane #车道存在标志
@@ -624,19 +625,20 @@ class DesireHelper:
       else:
         object_detected = False
       #self.object_detected_count = max(1, self.object_detected_count + 1) if object_detected else min(-1, self.object_detected_count - 1)
-      if (object_detected and not self.disableBlindSpot) or is_car_blind or is_solid: #检测到
+      if object_detected and not self.disableBlindSpot: #原车雷达侧前方有车
         self.object_detected_count = 1
       else:
         self.object_detected_count -= 1
         if self.object_detected_count < self.min_object_detected_count:
           self.object_detected_count = self.min_object_detected_count
-
-      if (object_detected and not self.disableBlindSpot) or is_car_blind or is_solid:
+      '''
+      if object_detected and not self.disableBlindSpot: #原车雷达侧前方有车
         self.object_detected_count_new = 1
       else:
         self.object_detected_count_new -= 1
         if self.object_detected_count_new < self.min_object_detected_count:
           self.object_detected_count_new = self.min_object_detected_count
+      '''
     else:
       lane_exist_counter = 0
       lane_available = True
@@ -645,7 +647,7 @@ class DesireHelper:
       self.lane_appeared = False #
       self.lane_available_trigger = False #
       self.object_detected_count = 0
-      self.object_detected_count_new = 0
+      #self.object_detected_count_new = 0
       self.side_object_detected = False
       curr_lane_width_diff = 3.5
 
@@ -680,7 +682,7 @@ class DesireHelper:
       self.rightFrontBlind = 1 if side_object_block else 0
 
       if (self.showDebugLog & 16) > 0:
-        debugText += f",v_ego*4={vego4x:.1f},cnt={self.object_detected_count},{self.object_detected_count_new}"
+        debugText += f",v_ego*4={vego4x:.1f},cnt={self.object_detected_count}"
         print(debugText)
     else:
       self.leftFrontBlind = 0
@@ -862,11 +864,12 @@ class DesireHelper:
     #side_object_detected = self.object_detected_count > -0.3 / DT_MDL
     #侧面车道障碍物判断
     if self.side_object_detected:
-      if self.object_detected_count_new <= self.min_object_detected_count_thr:
+      if self.object_detected_count <= self.min_object_detected_count_thr:
         self.side_object_detected = False
-    elif self.object_detected_count_new > 0:
+    elif self.object_detected_count > 0:
       self.side_object_detected = True
-    side_object_detected = self.side_object_detected
+
+    side_object_detected = self.side_object_detected or is_car_blind or is_solid #汇总盲区状态
     self.lane_appeared = self.lane_appeared and distance_to_road_edge < 4.0 #新车道出现还要附加个距离道路边缘小于4米的条件
 
     if self.carrot_lane_change_count > 0: #些计数为carrorMan发送过来的LANECHANGE触发的变道
@@ -888,7 +891,7 @@ class DesireHelper:
         print(f"---State:{self.lane_change_state},turn: {self.atc_turn_cnt},trig:{auto_lane_change_trigger}="
               f"lane_change_enable'{self.auto_lane_change_enable}'&&!blocked'{auto_lane_change_blocked}'&&edge_available'{edge_available}'&&"
               f"(lane_available_trig'{self.lane_available_trigger}'||self.lane_appeared'{self.lane_appeared}')&!object_detected'{side_object_detected}' "
-              f"obj_cnt={self.object_detected_count:.1f},{self.object_detected_count_new},active={self.atc_active},last_lane={last_lane} time:{self.last_lane_count}")
+              f"obj_cnt={self.object_detected_count:.1f},active={self.atc_active},last_lane={last_lane} time:{self.last_lane_count}")
         print(f"---blinker_state={blinker_state},atc_blinker_state={atc_blinker_state},driver_blinker_state={driver_blinker_state},esp32 blinker={self.blinker}")
 
     if not lateral_active or self.lane_change_timer > LANE_CHANGE_TIME_MAX: #横向未激活或变道时间超过10秒时，退出变道控制
