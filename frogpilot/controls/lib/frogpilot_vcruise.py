@@ -75,6 +75,14 @@ class FrogPilotVCruise:
 
       self.slc_offset = self.slc.offset
       self.slc_target = self.slc.target
+
+      # Re-arm SLC override when driver stalks cruise speed above the SLC ceiling.
+      # On Tesla pcmCruise, v_cruise only changes via stalk or firmware — an increase
+      # above the ceiling is always an intentional driver action. Without this,
+      # stalking down below the ceiling kills the override and stalking back up
+      # gets stuck at the ceiling until gas is pressed.
+      if self.slc.overridden_speed == 0 and v_cruise > self.slc_target + self.slc_offset > 0:
+        self.slc.overridden_speed = v_cruise + v_cruise_diff
     elif frogpilot_toggles.show_speed_limits:
       self.slc.update_limits(sm["frogpilotCarState"].dashboardSpeedLimit, now, time_validated, v_cruise, v_ego, sm)
 
