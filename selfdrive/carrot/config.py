@@ -159,9 +159,10 @@ class UnifiedParams:
 
             "LidarBsdDelayTime": 10,
             "LidarFrontVDistTime": 10,
-            "LidarFrontvRelDistTime": 30,
+            "LidarFrontVRelDistTime": 30,
             "LidarBehindVDistTime": 10,
-            "LidarBehindvRelDistTime": 30,
+            "LidarBehindVRelDistTime": 30,
+            "LaneLineDelayTime": 10,
 
             "AutoTurnInNotRoadEdge": 1,
             "ContinuousLaneChange": 1,

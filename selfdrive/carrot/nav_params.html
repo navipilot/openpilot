@@ -617,13 +617,13 @@
             "LidarFrontVDistTime": {
                 chineseName: "激光雷达侧前方有车允许变道绝对速度时距(x0.1s)",
                 defaultValue: 10,
-                description: "当与激光雷达侧前方车辆的距离大于'本车速度x时间'时允许变道，单位0.1秒",
-                inputRange: [0, 50],
+                description: "当与激光雷达侧前方车辆的距离大于'本车速度x时间'时允许变道，单位0.1秒;如果设置为负值，表示绝对距离(单位为0.1m)，如-100，表示绝对距离大于10米时允许变道",
+                inputRange: [-500, 50],
                 step: 1,
                 uiType: "number",
                 category: "公共参数设置"
             },
-            "LidarFrontvRelDistTime": {
+            "LidarFrontVRelDistTime": {
                 chineseName: "激光雷达侧前方有车允许变道相对速度时距(x0.1s)",
                 defaultValue: 30,
                 description: "当'本车相对于侧前方车辆的速度差x时间'小于两车距离时，允许变道，单位0.1秒",
@@ -635,17 +635,26 @@
             "LidarBehindVDistTime": {
                 chineseName: "激光雷达侧后方有车允许变道的绝对速度时距(x0.1s)",
                 defaultValue: 10,
-                description: "当与激光雷达侧后方车辆的距离大于'对方速度x时间'时允许变道，单位0.1秒",
-                inputRange: [0, 50],
+                description: "当与激光雷达侧后方车辆的距离大于'对方速度x时间'时允许变道，单位0.1秒;如果设置为负值，表示绝对距离(单位为0.1m)，如-100，表示绝对距离大于10米时允许变道",
+                inputRange: [-500, 50],
                 step: 1,
                 uiType: "number",
                 category: "公共参数设置"
             },
-            "LidarBehindvRelDistTime": {
+            "LidarBehindVRelDistTime": {
                 chineseName: "激光雷达侧后方有车允许变道的相对速度时距(x0.1s)",
                 defaultValue: 30,
                 description: "当'侧后方车辆的相对于本车的速度差x时间'小于两车距离时，允许变道，单位0.1秒",
                 inputRange: [0, 200],
+                step: 1,
+                uiType: "number",
+                category: "公共参数设置"
+            },
+            "LaneLineDelayTime": {
+                chineseName: "实线阻止变道延时(x0.1s)",
+                defaultValue: 20,
+                description: "当实线信号消失后，经过延时的秒数后允许变道",
+                inputRange: [0, 100],
                 step: 1,
                 uiType: "number",
                 category: "公共参数设置"
