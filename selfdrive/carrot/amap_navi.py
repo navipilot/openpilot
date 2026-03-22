@@ -154,6 +154,7 @@ class SharedData:
 
     # =============共享数据（carState）=============
     self.carState = False
+    self.standstill = False
     self.v_ego_kph = None
     self.v_cruise_kph = None
     self.v_ego_m = None
@@ -358,6 +359,7 @@ class AmapNaviServ:
     meta = modelV2.meta
 
     atc_type = carrotMan.atcType
+    #限制计算动态盲区宽度的车道宽度不小于1.2米
     laneWidthLeft = max(1.2, min(3.5, round(meta.laneWidthLeft, 1)))
     laneWidthRight = max(1.2, min(3.5, round(meta.laneWidthRight, 1)))
     #distanceToRoadEdgeLeft = round(meta.distanceToRoadEdgeLeft, 1)
@@ -427,7 +429,7 @@ class AmapNaviServ:
             rb_blind_mask = True
 
     #左前方
-    if self.lf_object_detected and not lf_blind_mask:
+    if self.lf_object_detected and not lf_blind_mask and not self.shared_data.standstill:
       self.lf_object_detected_count = 1
     else:
       self.lf_object_detected_count -= 1
@@ -444,7 +446,7 @@ class AmapNaviServ:
       self.lf_side_object_detected = True
 
     #左后方
-    if self.lb_object_detected and not lb_blind_mask:
+    if self.lb_object_detected and not lb_blind_mask and not self.shared_data.standstill:
       self.lb_object_detected_count = 1
     else:
       self.lb_object_detected_count -= 1
@@ -461,7 +463,7 @@ class AmapNaviServ:
       self.lb_side_object_detected = True
 
     #右前方
-    if self.rf_object_detected and not rf_blind_mask:
+    if self.rf_object_detected and not rf_blind_mask and not self.shared_data.standstill:
       self.rf_object_detected_count = 1
     else:
       self.rf_object_detected_count -= 1
@@ -478,7 +480,7 @@ class AmapNaviServ:
       self.rf_side_object_detected = True
 
     #右后方
-    if self.rb_object_detected and not rb_blind_mask:
+    if self.rb_object_detected and not rb_blind_mask and not self.shared_data.standstill:
       self.rb_object_detected_count = 1
     else:
       self.rb_object_detected_count -= 1
@@ -498,6 +500,13 @@ class AmapNaviServ:
     if sm.alive['carState']:  # and self.sm.updated['carState']:
       self.shared_data.carState = True
       carState = sm['carState']
+      if hasattr(carState, 'standstill'):
+        self.shared_data.standstill = carState.standstill
+      else:
+        if self.shared_data.v_ego_m < 0.1:
+          self.shared_data.standstill = True
+        else:
+          self.shared_data.standstill = False
       if hasattr(carState, 'vEgoCluster'):
         self.shared_data.v_ego_kph = int(carState.vEgoCluster * 3.6 + 0.5)
       if hasattr(carState, 'vCruise'):
