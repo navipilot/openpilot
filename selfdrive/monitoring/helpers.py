@@ -70,6 +70,16 @@ class DRIVER_MONITOR_SETTINGS:
     self._WHEELPOS_CALIB_MIN_SPEED = 11
     self._WHEELPOS_THRESHOLD = 0.5
     self._WHEELPOS_FILTER_MIN_COUNT = int(15 / self._DT_DMON) # allow 15 seconds to converge wheel side
+    self._WHEELPOS_THRESHOLD_ENTER_RHD = self._WHEELPOS_THRESHOLD
+    self._WHEELPOS_THRESHOLD_ENTER_LHD = self._WHEELPOS_THRESHOLD
+    self._WHEELPOS_SAVE_MARGIN = 0.0
+
+    # C4 (mici) has shown borderline wheel-side probabilities around 0.5x.
+    # Use hysteresis and stricter persistence thresholds to avoid false RHD latching.
+    if device_type == 'mici':
+      self._WHEELPOS_THRESHOLD_ENTER_RHD = 0.65
+      self._WHEELPOS_THRESHOLD_ENTER_LHD = 0.35
+      self._WHEELPOS_SAVE_MARGIN = 0.05
 
     self._RECOVERY_FACTOR_MAX = 5.  # relative to minus step change
     self._RECOVERY_FACTOR_MIN = 1.25  # relative to minus step change
@@ -264,7 +274,22 @@ class DriverMonitoring:
     self.wheelpos.prob_calibrated = self.wheelpos.prob_offseter.filtered_stat.n > self.settings._WHEELPOS_FILTER_MIN_COUNT
 
     if self.wheelpos.prob_calibrated or demo_mode:
-      self.wheel_on_right = self.wheelpos.prob_offseter.filtered_stat.M > self.settings._WHEELPOS_THRESHOLD
+      wheelpos_mean = self.wheelpos.prob_offseter.filtered_stat.M
+      enter_rhd = self.settings._WHEELPOS_THRESHOLD_ENTER_RHD
+      enter_lhd = self.settings._WHEELPOS_THRESHOLD_ENTER_LHD
+
+      # Hysteresis: avoid side flapping near 0.5 and preserve last stable side.
+      if self.wheel_on_right_last is None:
+        if wheelpos_mean >= enter_rhd:
+          self.wheel_on_right = True
+        elif wheelpos_mean <= enter_lhd:
+          self.wheel_on_right = False
+        else:
+          self.wheel_on_right = self.wheel_on_right_default
+      elif self.wheel_on_right_last:
+        self.wheel_on_right = wheelpos_mean > enter_lhd
+      else:
+        self.wheel_on_right = wheelpos_mean >= enter_rhd
     else:
       self.wheel_on_right = self.wheel_on_right_default # use default/saved if calibration is unfinished
     # make sure no switching when engaged
