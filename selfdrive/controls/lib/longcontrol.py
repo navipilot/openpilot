@@ -72,7 +72,7 @@ class LongControl:
     self.decel_limit_v_ego_min = 0
     self.decel_limit_a_ego_max = 0
     self.decel_limit_a_ego_min = 0
-    self.a_ego_curr = 0
+    self.a_ego_curr_max = 0
     self.a_ego_curr_init = False
     self.gas_release_smooth_max_cnt = int(5.0 / DT_CTRL)
     self.gas_release_smooth_max_last = self.gas_release_smooth_max_cnt
@@ -80,6 +80,7 @@ class LongControl:
     self.output_accel_filtered = 0.0
     self.output_accel_init = False
     self.smooth_stop_mode = 0
+    self.smooth_stop_disable = False
 
   def reset(self):
     self.pid.reset()
@@ -118,6 +119,12 @@ class LongControl:
         self.pid._k_i = (self.CP.longitudinalTuning.kiBP, [longitudinalTuningKiV])
         self.pid._k_f = self.params.get_float("LongTuningKf") * 0.01
 
+    #new
+    if (CS.cruiseState.standstill and CS.gasPressed) or not active: #车辆静止或用户踩了油门踏板
+      self.smooth_stop_disable = True
+    elif not CS.brakePressed and self.smooth_stop_disable and self.smooth_stop_mode > 0 and 0 < self.decel_limit_v_ego_max < CS.vEgo:
+      self.smooth_stop_disable = False
+    #new
 
     """Update longitudinal control. This updates the state machine and runs a PID loop"""
     self.pid.neg_limit = accel_limits[0]
@@ -156,7 +163,10 @@ class LongControl:
                                      feedforward=a_target_ff)
 
       # new 为了停车柔和，限制低速时的减速度
-      if self.smooth_stop_mode == 2: #模式2
+      if self.smooth_stop_disable:
+        self.a_ego_curr_init = False
+        self.output_accel_init = False
+      elif self.smooth_stop_mode == 2: #模式2
         alpha = 0.3  # 平滑系数
         if not self.output_accel_init:
           self.output_accel_filtered = output_accel
@@ -169,12 +179,12 @@ class LongControl:
         if self.decel_limit_v_ego_max > 0 and smooth_stop:
           if CS.vEgo < self.decel_limit_v_ego_max or (self.a_ego_curr_init and (CS.vEgo < (self.decel_limit_v_ego_max + 0.4))):
             if not self.a_ego_curr_init:
-              self.a_ego_curr = min(self.output_accel_filtered, self.decel_limit_a_ego_max)
+              self.a_ego_curr_max = min(self.decel_limit_a_ego_min, min(self.output_accel_filtered, self.decel_limit_a_ego_max))
               self.a_ego_curr_init = True
             decel_limit_v_ego_min = min(self.decel_limit_v_ego_min, self.decel_limit_v_ego_max)
             min_accel = np.interp(CS.vEgo,
                                   [0.0, decel_limit_v_ego_min, self.decel_limit_v_ego_max],
-                                  [self.decel_limit_a_ego_min, self.decel_limit_a_ego_min, self.a_ego_curr])
+                                  [self.decel_limit_a_ego_min, self.decel_limit_a_ego_min, self.a_ego_curr_max])
             output_accel = max(output_accel, min_accel)
           else:
             self.a_ego_curr_init = False
@@ -186,12 +196,12 @@ class LongControl:
         if self.decel_limit_v_ego_max > 0 and smooth_stop:
           if CS.vEgo < self.decel_limit_v_ego_max:
             if not self.a_ego_curr_init:
-              self.a_ego_curr = min(CS.aEgo, self.decel_limit_a_ego_max)
+              self.a_ego_curr_max = min(self.decel_limit_a_ego_min, min(CS.aEgo, self.decel_limit_a_ego_max))
               self.a_ego_curr_init = True
             decel_limit_v_ego_min = min(self.decel_limit_v_ego_min, self.decel_limit_v_ego_max)
             min_accel = np.interp(CS.vEgo,
                                   [0.0, decel_limit_v_ego_min, self.decel_limit_v_ego_max],
-                                  [self.decel_limit_a_ego_min, self.decel_limit_a_ego_min, self.a_ego_curr])
+                                  [self.decel_limit_a_ego_min, self.decel_limit_a_ego_min, self.a_ego_curr_max])
             output_accel = max(output_accel, min_accel)
           elif CS.vEgo >= (self.decel_limit_v_ego_max + 1.):
             self.a_ego_curr_init = False
