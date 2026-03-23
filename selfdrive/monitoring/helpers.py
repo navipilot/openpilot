@@ -73,6 +73,8 @@ class DRIVER_MONITOR_SETTINGS:
     self._WHEELPOS_THRESHOLD_ENTER_RHD = self._WHEELPOS_THRESHOLD
     self._WHEELPOS_THRESHOLD_ENTER_LHD = self._WHEELPOS_THRESHOLD
     self._WHEELPOS_SAVE_MARGIN = 0.0
+    self._WHEELPOS_STARTUP_OVERRIDE_RHD = 0.55
+    self._WHEELPOS_STARTUP_OVERRIDE_LHD = 0.45
 
     # C4 (mici) has shown borderline wheel-side probabilities around 0.5x.
     # Use hysteresis and stricter persistence thresholds to avoid false RHD latching.
@@ -272,6 +274,14 @@ class DriverMonitoring:
       self.wheelpos.prob_offseter.push_and_update(rhd_pred)
 
     self.wheelpos.prob_calibrated = self.wheelpos.prob_offseter.filtered_stat.n > self.settings._WHEELPOS_FILTER_MIN_COUNT
+    startup_override = None
+    if not self.wheelpos.prob_calibrated and not demo_mode and not op_engaged:
+      left_face_detected = driver_state.leftDriverData.faceProb > self.settings._FACE_THRESHOLD
+      right_face_detected = driver_state.rightDriverData.faceProb > self.settings._FACE_THRESHOLD
+      if rhd_pred <= self.settings._WHEELPOS_STARTUP_OVERRIDE_LHD and left_face_detected and not right_face_detected:
+        startup_override = False
+      elif rhd_pred >= self.settings._WHEELPOS_STARTUP_OVERRIDE_RHD and right_face_detected and not left_face_detected:
+        startup_override = True
 
     if self.wheelpos.prob_calibrated or demo_mode:
       wheelpos_mean = self.wheelpos.prob_offseter.filtered_stat.M
@@ -290,6 +300,8 @@ class DriverMonitoring:
         self.wheel_on_right = wheelpos_mean > enter_lhd
       else:
         self.wheel_on_right = wheelpos_mean >= enter_rhd
+    elif startup_override is not None:
+      self.wheel_on_right = startup_override
     else:
       self.wheel_on_right = self.wheel_on_right_default # use default/saved if calibration is unfinished
     # make sure no switching when engaged
