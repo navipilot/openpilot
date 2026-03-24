@@ -2,7 +2,7 @@ from cereal import car, custom, log
 import cereal.messaging as messaging
 from opendbc.car import DT_CTRL, structs
 from opendbc.car.chrysler.values import RAM_DT
-from opendbc.car.gm.values import GMFlags
+from opendbc.car.gm.values import CAR as GM_CAR, GMFlags, SDGM_CAR
 from opendbc.car.interfaces import MAX_CTRL_SPEED
 
 from openpilot.selfdrive.selfdrived.events import Events
@@ -37,6 +37,21 @@ BRAND_EXTRA_GEARS = {
   'gm': [GearShifter.sport, GearShifter.low, GearShifter.eco, GearShifter.manumatic],
   'volkswagen': [GearShifter.eco, GearShifter.sport, GearShifter.manumatic],
   'hyundai': [GearShifter.sport, GearShifter.manumatic]
+}
+
+GM_STANDSTILL_BRAKE_CAMERA_CARS = {
+  GM_CAR.CHEVROLET_VOLT,
+  GM_CAR.CHEVROLET_VOLT_2019,
+  GM_CAR.CHEVROLET_VOLT_ASCM,
+  GM_CAR.CHEVROLET_VOLT_CAMERA,
+  GM_CAR.CHEVROLET_VOLT_CC,
+  GM_CAR.CHEVROLET_MALIBU,
+  GM_CAR.CHEVROLET_MALIBU_ASCM,
+  GM_CAR.CHEVROLET_MALIBU_SDGM,
+  GM_CAR.CHEVROLET_MALIBU_CC,
+  GM_CAR.CHEVROLET_MALIBU_HYBRID_CC,
+  GM_CAR.CHEVROLET_BLAZER,
+  GM_CAR.CHEVROLET_TRAVERSE,
 }
 
 
@@ -124,16 +139,23 @@ class CarSpecificEvents:
         events.add(EventName.belowSteerSpeed)
         self.gm_low_speed_alert_shown = True
 
-      # Enabling at a standstill with brake is allowed
-      # TODO: verify 17 Volt can enable for the first time at a stop and allow for all GMs
-      if CS.vEgo < self.CP.minEnableSpeed and not (CS.standstill and CS.brake >= 20 and
-                                                   self.CP.networkLocation == NetworkLocation.fwdCamera):
+      # Match StarPilot's GM-specific standstill engage behavior. Most camera-ACC cars can
+      # engage below 5 kph only when stopped with brake applied; SDGM remains narrower.
+      standstill_brake_enable_allowed = (
+        CS.standstill and
+        CS.brake >= 20 and
+        self.CP.networkLocation == NetworkLocation.fwdCamera and
+        (self.CP.carFingerprint in GM_STANDSTILL_BRAKE_CAMERA_CARS or self.CP.carFingerprint not in SDGM_CAR)
+      )
+      if CS.vEgo < self.CP.minEnableSpeed and not standstill_brake_enable_allowed:
         events.add(EventName.belowEngageSpeed)
       if CS.cruiseState.standstill and not self.CP.autoResumeSng:
         events.add(EventName.resumeRequired)
 
-      # OPGM variables
-      if (self.CP.flags & GMFlags.CC_LONG) and CS.vEgo < self.CP.minEnableSpeed and CS.cruiseState.enabled:
+      # Preserve the prior cycle's cruise-enabled state so low-speed disengage matches StarPilot.
+      if ((self.CP.flags & GMFlags.CC_LONG) and
+          CS.vEgo < self.CP.minEnableSpeed and
+          (CS.cruiseState.enabled or CS_prev.cruiseState.enabled)):
         events.add(EventName.speedTooLow)
 
     elif self.CP.brand == 'volkswagen':

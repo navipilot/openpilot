@@ -95,6 +95,8 @@ class LongitudinalPlanner:
 
   @staticmethod
   def get_model_speed_error(model_msg, v_ego):
+    if len(model_msg.temporalPose.trans):
+      return float(np.clip(model_msg.temporalPose.trans[0] - v_ego, -5.0, 5.0))
     if len(model_msg.velocity.x) == ModelConstants.IDX_N:
       return float(np.clip(model_msg.velocity.x[0] - v_ego, -5.0, 5.0))
     return 0.0

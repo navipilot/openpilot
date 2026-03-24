@@ -255,11 +255,9 @@ class DriverMonitoring:
 
   def _update_states(self, driver_state, cal_rpy, car_speed, op_engaged, standstill, demo_mode=False):
     rhd_pred = driver_state.wheelOnRightProb
-    left_face_prob = driver_state.leftDriverData.faceProb
-    right_face_prob = driver_state.rightDriverData.faceProb
     # calibrates only when there's movement and either face detected
-    if car_speed > self.settings._WHEELPOS_CALIB_MIN_SPEED and (left_face_prob > self.settings._FACE_THRESHOLD or
-                                          right_face_prob > self.settings._FACE_THRESHOLD):
+    if car_speed > self.settings._WHEELPOS_CALIB_MIN_SPEED and (driver_state.leftDriverData.faceProb > self.settings._FACE_THRESHOLD or
+                                          driver_state.rightDriverData.faceProb > self.settings._FACE_THRESHOLD):
       self.wheelpos.prob_offseter.push_and_update(rhd_pred)
 
     self.wheelpos.prob_calibrated = self.wheelpos.prob_offseter.filtered_stat.n > self.settings._WHEELPOS_FILTER_MIN_COUNT
@@ -267,19 +265,6 @@ class DriverMonitoring:
       self.wheel_on_right = self.wheelpos.prob_offseter.filtered_stat.M > self.settings._WHEELPOS_THRESHOLD
     else:
       self.wheel_on_right = self.wheel_on_right_default # use default/saved if calibration is unfinished
-
-    # On mici/C4, wheel-side inference can hover around 0.5 during startup or after off-car testing.
-    # If one face side is clearly valid and the other is below threshold, prefer the obvious face side
-    # when the wheel-side signal is still weak instead of latching the wrong side and reporting no face.
-    left_face_detected = left_face_prob > self.settings._FACE_THRESHOLD
-    right_face_detected = right_face_prob > self.settings._FACE_THRESHOLD
-    weak_wheelside_signal = abs(rhd_pred - self.settings._WHEELPOS_THRESHOLD) < 0.1
-    if weak_wheelside_signal or not self.wheelpos.prob_calibrated:
-      if left_face_detected and not right_face_detected:
-        self.wheel_on_right = False
-      elif right_face_detected and not left_face_detected:
-        self.wheel_on_right = True
-
     # make sure no switching when engaged
     if op_engaged and self.wheel_on_right_last is not None and self.wheel_on_right_last != self.wheel_on_right and not demo_mode:
       self.wheel_on_right = self.wheel_on_right_last
