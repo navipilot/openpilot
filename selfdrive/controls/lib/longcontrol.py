@@ -81,6 +81,7 @@ class LongControl:
     self.output_accel_init = False
     self.smooth_stop_mode = 0
     self.smooth_stop_disable = False
+    self.jerk_limit = 2.0  # 默认值，可调
 
   def reset(self):
     self.pid.reset()
@@ -166,7 +167,7 @@ class LongControl:
       if self.smooth_stop_disable:
         self.a_ego_curr_init = False
         self.output_accel_init = False
-      elif self.smooth_stop_mode == 2: #模式2
+      elif self.smooth_stop_mode == 2 or self.smooth_stop_mode == 3: #模式2
         alpha = 0.3  # 平滑系数
         if not self.output_accel_init:
           self.output_accel_filtered = output_accel
@@ -224,6 +225,33 @@ class LongControl:
       self.gas_release_smooth_cnt = self.gas_release_smooth_max_cnt
       self.gas_release_smooth_max_last = self.gas_release_smooth_max_cnt
     # new
+
+    # ==========================
+    # NEW: jerk limit
+    # ==========================
+    if self.smooth_stop_mode == 3:
+      if self.long_control_state in [LongCtrlState.pid, LongCtrlState.stopping]:
+        # NEW: 动态 jerk（低速更柔）
+        jerk_limit = np.interp(CS.vEgo,
+                               [0.0, 1.0, 5.0, 15.0],
+                               [0.2, 0.8, 1.5, 3.0])  # m/s^3
+
+        # NEW: 分开加速 / 减速 jerk（更细腻）
+        delta = output_accel - self.last_output_accel
+
+        if delta > 0:
+          jerk_limit_up = jerk_limit * 1.2  # 加速稍快一点
+          max_delta = jerk_limit_up * DT_CTRL
+        else:
+          jerk_limit_down = jerk_limit  # 刹车更平缓
+          max_delta = jerk_limit_down * DT_CTRL
+
+        delta = np.clip(delta, -max_delta, max_delta)
+        output_accel = self.last_output_accel + delta
+
+      if self.long_control_state in [LongCtrlState.off, LongCtrlState.starting]:
+        self.last_output_accel = output_accel
+    # NEW
 
     self.last_output_accel = np.clip(output_accel, accel_limits[0], accel_limits[1])
     return self.last_output_accel, a_target_ff, j_target_now
