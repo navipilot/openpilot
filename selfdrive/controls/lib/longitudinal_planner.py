@@ -19,7 +19,6 @@ from openpilot.common.swaglog import cloudlog
 from openpilot.frogpilot.common.frogpilot_variables import MINIMUM_LATERAL_ACCELERATION
 
 LON_MPC_STEP = 0.2  # first step is 0.2s
-A_CRUISE_MIN = -1.0
 A_CRUISE_MAX_BP = [0.0, 5., 10., 15., 20., 25., 40.]
 A_CRUISE_MAX_VALS = [1.125, 1.125, 1.125, 1.125, 1.25, 1.25, 1.5]
 CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
