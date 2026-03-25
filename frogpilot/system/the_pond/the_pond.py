@@ -190,12 +190,94 @@ class ParamsCompat:
     "ModelVersion": "DrivingModelVersion",
     "SecOCKey": "SecOCKeys",
   }
+  MIRRORED_PARAM_GROUPS = {
+    "Model": ("Model", "DrivingModel"),
+    "DrivingModel": ("Model", "DrivingModel"),
+    "ModelVersion": ("ModelVersion", "DrivingModelVersion"),
+    "DrivingModelVersion": ("ModelVersion", "DrivingModelVersion"),
+  }
 
   def __init__(self, params_obj):
     self._params = params_obj
 
   def _key(self, key):
     return self.MODEL_KEY_ALIASES.get(key, key)
+
+  @staticmethod
+  def _to_text(value):
+    if value is None:
+      return ""
+    if isinstance(value, bytes):
+      return value.decode("utf-8", errors="replace")
+    return str(value)
+
+  def _default_text(self, key):
+    try:
+      return self._to_text(self._params.get_default_value(key)).strip()
+    except Exception:
+      return ""
+
+  def _get_raw(self, key, block=False):
+    try:
+      return self._params.get(key, block=block)
+    except TypeError:
+      try:
+        return self._params.get(key)
+      except Exception:
+        return None
+    except Exception:
+      return None
+
+  def _resolve_mirrored_text(self, primary_key, secondary_key, block=False):
+    primary_raw = self._get_raw(primary_key, block=block)
+    secondary_raw = self._get_raw(secondary_key, block=block)
+
+    if primary_raw is None and secondary_raw is None:
+      return None
+
+    primary_val = self._to_text(primary_raw).strip()
+    secondary_val = self._to_text(secondary_raw).strip()
+
+    if primary_val == secondary_val:
+      return secondary_val or primary_val
+
+    primary_default = self._default_text(primary_key)
+    secondary_default = self._default_text(secondary_key)
+    primary_non_default = bool(primary_val) and primary_val != primary_default
+    secondary_non_default = bool(secondary_val) and secondary_val != secondary_default
+
+    if secondary_non_default and not primary_non_default:
+      return secondary_val
+    if primary_non_default and not secondary_non_default:
+      return primary_val
+
+    # Prefer DrivingModel* values on conflicts since runtime reads those keys.
+    return secondary_val or primary_val
+
+  def _put_single(self, key, value):
+    expected_type = _get_param_key_type(self._params, key)
+
+    typed_value = value
+    if expected_type == ParamKeyType.BOOL:
+      if isinstance(value, bool):
+        typed_value = value
+      elif isinstance(value, (int, float)):
+        typed_value = value != 0
+      else:
+        typed_value = str(value).strip().lower() in ("1", "true", "yes", "on")
+    elif expected_type == ParamKeyType.INT:
+      typed_value = int(float(value)) if value not in (None, "", b"") else 0
+    elif expected_type == ParamKeyType.FLOAT:
+      typed_value = float(value) if value not in (None, "", b"") else 0.0
+    elif expected_type == ParamKeyType.STRING:
+      if isinstance(value, bytes):
+        typed_value = value.decode("utf-8", errors="replace")
+      elif value is None:
+        typed_value = ""
+      else:
+        typed_value = str(value)
+
+    self._params.put(key, typed_value)
 
   @staticmethod
   def _coerce_legacy(value, encoding=None):
@@ -227,16 +309,15 @@ class ParamsCompat:
     return value
 
   def get(self, key, encoding=None, default=None, block=False):
-    resolved_key = self._key(key)
-    try:
-      value = self._params.get(resolved_key, block=block)
-    except TypeError:
-      try:
-        value = self._params.get(resolved_key)
-      except Exception:
+    mirrored_keys = self.MIRRORED_PARAM_GROUPS.get(key)
+    if mirrored_keys:
+      value = self._resolve_mirrored_text(mirrored_keys[0], mirrored_keys[1], block=block)
+      if value is None:
         return default
-    except Exception:
-      return default
+      return self._coerce_legacy(value, encoding)
+
+    resolved_key = self._key(key)
+    value = self._get_raw(resolved_key, block=block)
 
     if value is None:
       return default
@@ -246,35 +327,24 @@ class ParamsCompat:
     return self._params.get_bool(self._key(key))
 
   def put(self, key, value):
-    resolved_key = self._key(key)
-    expected_type = _get_param_key_type(self._params, resolved_key)
+    mirrored_keys = self.MIRRORED_PARAM_GROUPS.get(key)
+    if mirrored_keys:
+      for mirrored_key in dict.fromkeys(mirrored_keys):
+        self._put_single(mirrored_key, value)
+      return
 
-    typed_value = value
-    if expected_type == ParamKeyType.BOOL:
-      if isinstance(value, bool):
-        typed_value = value
-      elif isinstance(value, (int, float)):
-        typed_value = value != 0
-      else:
-        typed_value = str(value).strip().lower() in ("1", "true", "yes", "on")
-    elif expected_type == ParamKeyType.INT:
-      typed_value = int(float(value)) if value not in (None, "", b"") else 0
-    elif expected_type == ParamKeyType.FLOAT:
-      typed_value = float(value) if value not in (None, "", b"") else 0.0
-    elif expected_type == ParamKeyType.STRING:
-      if isinstance(value, bytes):
-        typed_value = value.decode("utf-8", errors="replace")
-      elif value is None:
-        typed_value = ""
-      else:
-        typed_value = str(value)
-
-    self._params.put(resolved_key, typed_value)
+    self._put_single(self._key(key), value)
 
   def put_bool(self, key, value):
     self._params.put_bool(self._key(key), bool(value))
 
   def remove(self, key):
+    mirrored_keys = self.MIRRORED_PARAM_GROUPS.get(key)
+    if mirrored_keys:
+      for mirrored_key in dict.fromkeys(mirrored_keys):
+        self._params.remove(mirrored_key)
+      return
+
     self._params.remove(self._key(key))
 
   def __getattr__(self, attr):
@@ -2611,6 +2681,9 @@ def setup(app):
 
       if key in ("Model", "DrivingModel"):
         selected_model = str_val.strip()
+        if not selected_model:
+          return jsonify({"error": "Driving model cannot be empty."}), 400
+
         params.put("Model", selected_model)
         params.put("DrivingModel", selected_model)
 
