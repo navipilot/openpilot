@@ -130,12 +130,13 @@ class CarSpecificEvents:
       events = self.create_common_events(CS, CS_prev, extra_gears=extra_gears, pcm_enable=self.CP.pcmCruise,
                                          suppress_low_speed_alert=True)
 
-      # StarPilot behavior: show the low-speed steer alert once per ignition cycle.
-      if (not CS.cruiseState.available and not CS_prev.cruiseState.available and
-          CS.vEgo < 0.1 and not CC.enabled):
-        self.gm_low_speed_alert_shown = False
-
-      if CS.lowSpeedAlert and not self.gm_low_speed_alert_shown:
+      # Show the low-speed steer alert once per drive when speed dips below min steer speed.
+      crossed_below_min_steer_speed = (
+        self.CP.minSteerSpeed > 0. and
+        CS_prev.vEgo >= self.CP.minSteerSpeed and
+        CS.vEgo < self.CP.minSteerSpeed
+      )
+      if CS.lowSpeedAlert and crossed_below_min_steer_speed and not self.gm_low_speed_alert_shown:
         events.add(EventName.belowSteerSpeed)
         self.gm_low_speed_alert_shown = True
 
