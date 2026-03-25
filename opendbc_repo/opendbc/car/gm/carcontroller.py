@@ -179,15 +179,18 @@ class CarController(CarControllerBase):
     accel_gain = np.interp(v_ego, [0.0, 3.0, 8.0, 20.0], [0.47, 0.52, 0.57, 0.61])
     pedaloffset = np.interp(v_ego, [0.0, 1.0, 3.0, 6.0, 15.0, 30.0], [0.085, 0.11, 0.17, 0.23, 0.235, 0.23])
 
-    accel_term_scale = (1.0 / max(gain, 1e-3)) if press_regen_paddle else 1.0
-    if accel >= 0.0:
-      small_cmd_scale = np.interp(abs(accel), [0.0, 0.35, 0.8, 1.5, 2.5], [0.58, 0.68, 0.82, 0.93, 1.0])
+    if not press_regen_paddle and accel < 0.0:
+      raw_pedal_gas = float(np.clip(pedaloffset + accel * 0.6, 0.0, 1.0))
     else:
-      small_cmd_scale = np.interp(abs(accel), [0.0, 0.35, 0.8, 1.5, 2.5], [0.44, 0.54, 0.70, 0.89, 1.0])
-    accel_cmd = accel * small_cmd_scale
-    if (not press_regen_paddle) and accel < -2.0:
-      accel_cmd *= np.interp(abs(accel), [2.0, 2.5, 3.0], [1.0, 1.03, 1.06])
-    raw_pedal_gas = float(np.clip(pedaloffset + accel_cmd * accel_gain * accel_term_scale, 0.0, 1.0))
+      accel_term_scale = (1.0 / max(gain, 1e-3)) if press_regen_paddle else 1.0
+      if accel >= 0.0:
+        small_cmd_scale = np.interp(abs(accel), [0.0, 0.35, 0.8, 1.5, 2.5], [0.58, 0.68, 0.82, 0.93, 1.0])
+      else:
+        small_cmd_scale = np.interp(abs(accel), [0.0, 0.35, 0.8, 1.5, 2.5], [0.44, 0.54, 0.70, 0.89, 1.0])
+      accel_cmd = accel * small_cmd_scale
+      if (not press_regen_paddle) and accel < -2.0:
+        accel_cmd *= np.interp(abs(accel), [2.0, 2.5, 3.0], [1.0, 1.03, 1.06])
+      raw_pedal_gas = float(np.clip(pedaloffset + accel_cmd * accel_gain * accel_term_scale, 0.0, 1.0))
 
     pedal_gas_max = np.interp(v_ego, [0.0, 1.0, 2.5, 4.5, 6.0, 8.0, 12.0], [0.20, 0.235, 0.29, 0.365, 0.52, 0.78, 1.0])
     target_pedal_gas = float(np.clip(raw_pedal_gas, 0.0, pedal_gas_max))
@@ -195,6 +198,8 @@ class CarController(CarControllerBase):
     if not self.pedal_active_last or switched_state:
       pedal_gas = target_pedal_gas
       self.pedal_active_last = True
+    elif not press_regen_paddle and accel < 0.0:
+      pedal_gas = target_pedal_gas
     else:
       urgency = float(np.clip(abs(accel) / 2.0, 0.0, 1.0))
       rate_up = np.interp(v_ego, [0.0, 3.0, 8.0, 20.0], [0.007, 0.012, 0.022, 0.036]) + 0.011 * urgency
