@@ -317,6 +317,7 @@ static void gm_rx_hook(const CANPacket_t *msg) {
         gm_update_periodic_phase(&gm_bd_state, now_us, GM_PADDLE_PERIOD_US, GM_PADDLE_LOCK_TOLERANCE_US);
         gm_bd_state.next_tx_us = now_us + GM_PADDLE_TX_OFFSET_US;
         gm_try_send_periodic_spoof(now_us, 0xBDU, 7U, &gm_bd_state, GM_PADDLE_PERIOD_US);
+        gm_try_send_periodic_spoof(now_us, 0x1F5U, 8U, &gm_prndl2_state, GM_PADDLE_PERIOD_US);
       }
     }
 
@@ -325,6 +326,7 @@ static void gm_rx_hook(const CANPacket_t *msg) {
       gm_update_periodic_phase(&gm_prndl2_state, now_us, GM_PADDLE_PERIOD_US, GM_PADDLE_LOCK_TOLERANCE_US);
       gm_prndl2_state.next_tx_us = now_us + GM_PADDLE_TX_OFFSET_US;
       gm_try_send_periodic_spoof(now_us, 0x1F5U, 8U, &gm_prndl2_state, GM_PADDLE_PERIOD_US);
+      gm_try_send_periodic_spoof(now_us, 0xBDU, 7U, &gm_bd_state, GM_PADDLE_PERIOD_US);
     }
 
     // Pedal Interceptor
@@ -433,9 +435,9 @@ static bool gm_tx_hook(const CANPacket_t *msg) {
         if (gm_3d1_next_tx_us == 0U) {
           gm_3d1_next_tx_us = now_us + GM_3D1_TX_OFFSET_US;
         }
-        // In scheduler mode, OP feed frames are timing/data inputs only.
-        // Actual 0x3D1 transmission is panda-internal.
-        tx = false;
+        bool stock_stale = (gm_3d1_last_stock_us == 0U) || (safety_get_ts_elapsed(now_us, gm_3d1_last_stock_us) > 300000U);
+        bool scheduler_ready = gm_3d1_phase_locked && !stock_stale;
+        tx = !scheduler_ready;
       }
     }
   }
@@ -466,9 +468,10 @@ static bool gm_tx_hook(const CANPacket_t *msg) {
           gm_bd_state.next_tx_us = now_us + GM_PADDLE_TX_OFFSET_US;
         }
       }
-      // In scheduler mode, OP feed frames are timing/data inputs only.
-      // Actual 0xBD transmission is panda-internal.
-      tx = false;
+      bool scheduler_ready = gm_periodic_scheduler_ready(&gm_bd_state, now_us, GM_PADDLE_STALE_US, GM_PADDLE_FEED_STALE_US);
+      if (scheduler_ready) {
+        tx = false;
+      }
     }
   }
 
@@ -490,9 +493,10 @@ static bool gm_tx_hook(const CANPacket_t *msg) {
           gm_prndl2_state.next_tx_us = now_us + GM_PADDLE_TX_OFFSET_US;
         }
       }
-      // In scheduler mode, OP feed frames are timing/data inputs only.
-      // Actual 0x1F5 transmission is panda-internal.
-      tx = false;
+      bool scheduler_ready = gm_periodic_scheduler_ready(&gm_prndl2_state, now_us, GM_PADDLE_STALE_US, GM_PADDLE_FEED_STALE_US);
+      if (scheduler_ready) {
+        tx = false;
+      }
     }
   }
 
