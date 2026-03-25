@@ -118,11 +118,12 @@ def create_adas_keepalive(bus):
 def create_gas_regen_command(packer, bus, throttle, idx, enabled, at_full_stop, include_always_one3=False):
   # Keep GM camera-long GasRegen bytes aligned with StarPilot's legacy layout.
   # The regenerated DBC shape does not pack to the same wire format on Global A.
+  throttle = int(throttle)
   dat = bytearray(8)
   dat[0] = ((idx & 0x3) << 6) | int(enabled)
-  dat[1] = 0x42 | (0x20 if at_full_stop else 0x00)
+  dat[1] = 0x42 | (0x20 if at_full_stop else 0x00) | ((throttle >> 13) & 0x1)
 
-  cmd = int(throttle) << 3
+  cmd = throttle << 3
   dat[2] = (cmd >> 8) & 0xFF
   dat[3] = cmd & 0xFF
   if include_always_one3:

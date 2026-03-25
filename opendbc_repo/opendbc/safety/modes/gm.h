@@ -383,8 +383,7 @@ static bool gm_tx_hook(const CANPacket_t *msg) {
   // GAS/REGEN: safety check
   if (msg->addr == 0x2CBU) {
     bool apply = GET_BIT(msg, 0U);
-    // convert float CAN signal to an int for gas checks: 22534 / 0.125 = 180272
-    int gas_regen = (((msg->data[1] & 0x7U) << 16) | (msg->data[2] << 8) | msg->data[3]) - 180272U;
+    int gas_regen = ((msg->data[1] & 0x1U) << 13) | (msg->data[2] << 5) | ((msg->data[3] & 0xF8U) >> 3);
 
     bool violation = false;
     // Allow apply bit in pre-enabled and overriding states
@@ -545,13 +544,10 @@ static safety_config gm_init(uint16_t param) {
   const uint16_t GM_PARAM_PANDA_3D1_SCHED = 16384;
   const uint16_t GM_PARAM_PANDA_PADDLE_SCHED = 32768;
 
-  // common safety checks assume unscaled integer values
-  static const int GM_GAS_TO_CAN = 8;  // 1 / 0.125
-
   static const LongitudinalLimits GM_ASCM_LONG_LIMITS = {
-    .max_gas = 1018 * GM_GAS_TO_CAN,
-    .min_gas = -650 * GM_GAS_TO_CAN,
-    .inactive_gas = -650 * GM_GAS_TO_CAN,
+    .max_gas = 8191,
+    .min_gas = 5500,
+    .inactive_gas = 5500,
     .max_brake = 400,
   };
 
@@ -566,9 +562,9 @@ static safety_config gm_init(uint16_t param) {
 
 
   static const LongitudinalLimits GM_CAM_LONG_LIMITS = {
-    .max_gas = 1346 * GM_GAS_TO_CAN,
-    .min_gas = -540 * GM_GAS_TO_CAN,
-    .inactive_gas = -500 * GM_GAS_TO_CAN,
+    .max_gas = 8848,
+    .min_gas = 5610,
+    .inactive_gas = 5650,
     .max_brake = 400,
   };
 
