@@ -178,7 +178,7 @@ class CarController(CarControllerBase):
     else:
       small_cmd_scale = np.interp(abs(accel), [0.0, 0.35, 0.8, 1.5, 2.5], [0.44, 0.54, 0.70, 0.89, 1.0])
     accel_cmd = accel * small_cmd_scale
-    if (not press_regen_paddle) and accel < -2.0:
+    if accel < -2.0:
       accel_cmd *= np.interp(abs(accel), [2.0, 2.5, 3.0], [1.0, 1.03, 1.06])
     raw_pedal_gas = float(np.clip(pedaloffset + accel_cmd * accel_gain * accel_term_scale, 0.0, 1.0))
 
@@ -428,12 +428,7 @@ class CarController(CarControllerBase):
 
           if self.CP.carFingerprint in CC_ONLY_CAR:
             # gas interceptor only used for full long control on cars without ACC
-            pedal_accel_cmd = actuators.accel
-            if (long_pitch_for_powertrain and
-                len(CC.orientationNED) == 3 and CS.out.vEgo > self.CP.vEgoStopping):
-              pedal_accel_cmd += math.sin(CC.orientationNED[1]) * ACCELERATION_DUE_TO_GRAVITY
-
-            interceptor_gas_cmd, press_regen_paddle = self.calc_pedal_command(pedal_accel_cmd, CC.longActive, CS.out.vEgo)
+            interceptor_gas_cmd, press_regen_paddle = self.calc_pedal_command(actuators.accel, CC.longActive, CS.out.vEgo)
 
         if self.CP.enableGasInterceptorDEPRECATED and self.apply_gas > self.params.INACTIVE_REGEN and CS.out.cruiseState.standstill:
           interceptor_gas_cmd = self.params.SNG_INTERCEPTOR_GAS
@@ -493,7 +488,7 @@ class CarController(CarControllerBase):
           # GasRegenCmdActive needs to be 1 to avoid cruise faults. It describes the ACC state, not actuation
           can_sends.append(gmcan.create_gas_regen_command(
             self.packer_pt, CanBus.POWERTRAIN, self.apply_gas, idx, acc_engaged, at_full_stop,
-            include_always_one3=self.CP.carFingerprint in kaofui_cars))
+            include_always_one3=self.CP.carFingerprint in kaofui_cars, use_volt_layout=self.is_volt))
           can_sends.append(gmcan.create_friction_brake_command(self.packer_ch, friction_brake_bus, self.apply_brake,
                                                              idx, CC.enabled, near_stop, at_full_stop, self.CP))
 

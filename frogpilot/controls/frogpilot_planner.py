@@ -20,6 +20,7 @@ from openpilot.frogpilot.controls.lib.frogpilot_following import FrogPilotFollow
 from openpilot.frogpilot.controls.lib.frogpilot_vcruise import FrogPilotVCruise
 from openpilot.frogpilot.controls.lib.weather_checker import WeatherChecker
 
+
 class FrogPilotPlanner:
   def __init__(self, error_log, ThemeManager):
     self.params = Params(return_defaults=True)

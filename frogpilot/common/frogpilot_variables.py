@@ -263,6 +263,7 @@ def update_frogpilot_toggles():
 class FrogPilotVariables:
   def __init__(self):
     self.params = Params(return_defaults=True)
+    self.params_raw = Params()
     self.params_memory = Params(memory=True)
 
     self.frogpilot_toggles = SimpleNamespace()
@@ -487,10 +488,10 @@ class FrogPilotVariables:
     ev_vehicle = gm_ev_vehicle or (toggle.car_make == "hyundai" and CP.carFingerprint in HYUNDAI_EV_CAR)
     ev_vehicle |= CP.transmissionType == car.CarParams.TransmissionType.direct
 
-    if self.params.get("EVTuning") == b"":
+    if self.params_raw.get("EVTuning") in (None, b""):
       self.params.put_bool("EVTuning", ev_vehicle)
 
-    if self.params.get("TruckTuning") == b"":
+    if self.params_raw.get("TruckTuning") in (None, b""):
       self.params.put_bool("TruckTuning", False)
 
     ev_tuning_param = self.params.get_bool("EVTuning")
@@ -504,7 +505,7 @@ class FrogPilotVariables:
     toggle.ev_tuning = ev_tuning_param if advanced_longitudinal_tuning else ev_vehicle
     toggle.truck_tuning = truck_tuning_param if advanced_longitudinal_tuning else False
     toggle.longitudinalActuatorDelay = self.get_value("LongitudinalActuatorDelay", cast=float, condition=advanced_longitudinal_tuning, default=longitudinalActuatorDelay, min=0, max=1)
-    toggle.max_desired_acceleration = self.get_value("MaxDesiredAcceleration", cast=float, condition=advanced_longitudinal_tuning, min=0.1, max=MAX_ACCELERATION)
+    toggle.max_desired_acceleration = self.get_value("MaxDesiredAcceleration", cast=float, condition=advanced_longitudinal_tuning, default=MAX_ACCELERATION, min=0.1, max=MAX_ACCELERATION)
     toggle.startAccel = self.get_value("StartAccel", cast=float, condition=advanced_longitudinal_tuning, default=startAccel, min=0, max=MAX_ACCELERATION)
     toggle.stopAccel = self.get_value("StopAccel", cast=float, condition=advanced_longitudinal_tuning, default=stopAccel, min=-MAX_ACCELERATION, max=0)
     toggle.stoppingDecelRate = self.get_value("StoppingDecelRate", cast=float, condition=advanced_longitudinal_tuning, default=toggle.stoppingDecelRate, min=0.001, max=1)

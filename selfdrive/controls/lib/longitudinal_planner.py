@@ -145,8 +145,6 @@ class LongitudinalPlanner:
         return float(np.clip(model_msg.temporalPose.trans[0] - v_ego, -5.0, 5.0))
     except AttributeError:
       pass
-    if len(model_msg.velocity.x) == ModelConstants.IDX_N:
-      return float(np.clip(model_msg.velocity.x[0] - v_ego, -5.0, 5.0))
     return 0.0
 
   @staticmethod
@@ -345,8 +343,7 @@ class LongitudinalPlanner:
                          v_ego=v_ego,
                          lead_dist=self.lead_dist_f if self.lead_dist_f is not None else lead_dist,
                          uncertainty=uncertainty,
-                         panic_bypass=panic_bypass,
-                         stop_distance=getattr(frogpilot_toggles, "stop_distance", 6.0))
+                         panic_bypass=panic_bypass)
     self.mpc.set_accel_limits(accel_limits_turns[0], accel_limits_turns[1])
     self.mpc.set_cur_state(self.v_desired_filter.x, self.a_desired)
     # After deciding the MPC mode via get_mpc_mode(), ensure MPC uses that mode when not mlsim
@@ -398,20 +395,33 @@ class LongitudinalPlanner:
     if -0.05 < self.a_desired < 0.05:
       self.a_desired = 0.0
 
-    action_t = frogpilot_toggles.longitudinalActuatorDelay + DT_MDL
-    output_a_target_mpc, output_should_stop_mpc = get_accel_from_plan(self.v_desired_trajectory, self.a_desired_trajectory,
-                                                                       action_t=action_t, vEgoStopping=frogpilot_toggles.vEgoStopping)
-    output_a_target_e2e = sm['modelV2'].action.desiredAcceleration
-    output_should_stop_e2e = sm['modelV2'].action.shouldStop
+    classic_model = bool(getattr(frogpilot_toggles, "classic_model", False))
+    tinygrad_model = bool(getattr(frogpilot_toggles, "tinygrad_model", False))
+    action_t = self.CP.longitudinalActuatorDelay + DT_MDL
 
-    if self.mode == 'acc' or self.generation == 'v9':
-      output_a_target = output_a_target_mpc
-      self.output_should_stop = output_should_stop_mpc
+    if classic_model:
+      output_a_target, output_should_stop = get_accel_from_plan_classic(
+        self.CP, self.v_desired_trajectory, self.a_desired_trajectory, frogpilot_toggles.vEgoStopping)
+    elif tinygrad_model:
+      output_a_target_mpc, output_should_stop_mpc = get_accel_from_plan(
+        self.v_desired_trajectory, self.a_desired_trajectory,
+        action_t=action_t, vEgoStopping=frogpilot_toggles.vEgoStopping)
+      output_a_target_e2e = sm['modelV2'].action.desiredAcceleration
+      output_should_stop_e2e = sm['modelV2'].action.shouldStop
+
+      if self.mode == 'acc' or self.generation == 'v9':
+        output_a_target = output_a_target_mpc
+        output_should_stop = output_should_stop_mpc
+      else:
+        output_a_target = min(output_a_target_mpc, output_a_target_e2e)
+        output_should_stop = output_should_stop_e2e or output_should_stop_mpc
     else:
-      output_a_target = min(output_a_target_mpc, output_a_target_e2e)
-      self.output_should_stop = output_should_stop_e2e or output_should_stop_mpc
+      output_a_target, output_should_stop = get_accel_from_plan(
+        self.v_desired_trajectory, self.a_desired_trajectory,
+        action_t=action_t, vEgoStopping=frogpilot_toggles.vEgoStopping)
 
     self.output_a_target = float(output_a_target)
+    self.output_should_stop = bool(output_should_stop)
 
   def publish(self, sm, pm):
     plan_send = messaging.new_message('longitudinalPlan')

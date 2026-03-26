@@ -418,8 +418,9 @@ class SelfdriveD:
       desired_lateral_accel = self.sm['modelV2'].action.desiredCurvature * (clipped_speed**2)
       undershooting = abs(desired_lateral_accel) / abs(1e-3 + actual_lateral_accel) > 1.2
       turning = abs(desired_lateral_accel) > 1.0
+      commanded_torque_at_max = abs(lac.output) > 0.99
       # TODO: lac.saturated includes speed and other checks, should be pulled out
-      if undershooting and turning and lac.saturated:
+      if undershooting and turning and (lac.saturated or commanded_torque_at_max):
         if self.frogpilot_toggles.goat_scream_alert:
           self.frogpilot_events.add(FrogPilotEventName.goatSteerSaturated)
         else:

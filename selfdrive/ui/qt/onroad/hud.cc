@@ -28,6 +28,10 @@ void HudRenderer::updateState(const UIState &s) {
   is_cruise_set = set_speed > 0 && set_speed != SET_SPEED_NA;
   is_cruise_available = set_speed != -1;
 
+  if (is_cruise_set && frogpilot_toggles.value("set_speed_offset").toDouble() > 0) {
+    set_speed += frogpilot_toggles.value("set_speed_offset").toDouble();
+  }
+
   if (is_cruise_set && !is_metric) {
     set_speed *= KM_TO_MILE;
   }

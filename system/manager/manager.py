@@ -126,6 +126,20 @@ def migrate_starpilot_default_parity(params: Params, params_cache: Params) -> No
   params.put_float("CEModelStopTime", 7.0)
   params_cache.put_float("CEModelStopTime", 7.0)
 
+  # Rebase default regression fix:
+  # EVTuning must default to enabled on EV/direct-drive platforms to preserve
+  # StarPilot acceleration profile behavior.
+  carparams_blob = params.get("CarParamsPersistent") or params.get("CarParams")
+  if carparams_blob is not None:
+    try:
+      with car.CarParams.from_bytes(carparams_blob) as cp:
+        is_ev_platform = cp.transmissionType == car.CarParams.TransmissionType.direct
+      if is_ev_platform and not params.get_bool("TruckTuning"):
+        params.put_bool("EVTuning", True)
+        params_cache.put_bool("EVTuning", True)
+    except Exception:
+      cloudlog.exception("Failed EVTuning EV default parity migration")
+
   cloudlog.warning("Applied one-time StarPilot default parity migration for lateral/longitudinal toggles")
 
   try:

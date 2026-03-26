@@ -8,6 +8,7 @@ from openpilot.frogpilot.controls.lib.speed_limit_controller import SpeedLimitCo
 
 OVERRIDE_FORCE_STOP_TIMER = 10
 
+
 class FrogPilotVCruise:
   def __init__(self, FrogPilotPlanner):
     self.frogpilot_planner = FrogPilotPlanner

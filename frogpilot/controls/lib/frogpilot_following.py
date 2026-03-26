@@ -2,7 +2,7 @@
 import numpy as np
 
 from openpilot.common.constants import CV
-from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import COMFORT_BRAKE, LEAD_DANGER_FACTOR, STOP_DISTANCE, desired_follow_distance, get_jerk_factor, get_T_FOLLOW
+from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import COMFORT_BRAKE, LEAD_DANGER_FACTOR, desired_follow_distance, get_jerk_factor, get_T_FOLLOW
 
 from openpilot.frogpilot.common.frogpilot_variables import CITY_SPEED_LIMIT, MAX_T_FOLLOW
 
@@ -25,8 +25,6 @@ class FrogPilotFollowing:
     self.t_follow = 0
 
   def update(self, long_control_active, v_ego, sm, frogpilot_toggles):
-    stop_distance = max(float(getattr(frogpilot_toggles, "stop_distance", STOP_DISTANCE)), 4.0)
-
     if long_control_active and sm["frogpilotCarState"].trafficModeEnabled:
       if sm["carState"].aEgo >= 0:
         self.base_acceleration_jerk = np.interp(v_ego, TRAFFIC_MODE_BP, frogpilot_toggles.traffic_mode_jerk_acceleration)
@@ -85,43 +83,41 @@ class FrogPilotFollowing:
       lead_distance = self.frogpilot_planner.lead_one.dRel
       v_lead = self.frogpilot_planner.lead_one.vLead
       closing_speed = max(0.0, v_ego - v_lead)
-      desired_gap = float(desired_follow_distance(v_ego, v_lead, self.t_follow, stop_distance))
+      desired_gap = float(desired_follow_distance(v_ego, v_lead, self.t_follow))
       ttc = lead_distance / max(closing_speed, 1e-3) if closing_speed > 0.1 else 1e6
 
       coast_window_open = lead_distance > desired_gap + max(4.0, 0.2 * v_ego)
       coast_window_far = lead_distance < desired_gap + max(25.0, 1.2 * v_ego)
       gentle_closing = closing_speed < max(2.0, 0.12 * v_ego)
+
       self.disable_throttle = (not self.following_lead and v_ego > HIGHWAY_DISABLE_THROTTLE_MIN_SPEED and coast_window_open and
                                coast_window_far and gentle_closing)
       self.disable_throttle &= ttc > 6.0 and lead_distance > desired_gap + 6.0
 
     if long_control_active and self.frogpilot_planner.tracking_lead:
-      if not sm["frogpilotCarState"].trafficModeEnabled:
-        self.update_follow_values(self.frogpilot_planner.lead_one.dRel, v_ego, self.frogpilot_planner.lead_one.vLead, frogpilot_toggles)
-      self.desired_follow_distance = int(desired_follow_distance(v_ego, self.frogpilot_planner.lead_one.vLead, self.t_follow, stop_distance))
+      self.update_follow_values(self.frogpilot_planner.lead_one.dRel, v_ego, self.frogpilot_planner.lead_one.vLead, frogpilot_toggles)
+      self.desired_follow_distance = int(desired_follow_distance(v_ego, self.frogpilot_planner.lead_one.vLead, self.t_follow))
     else:
       self.desired_follow_distance = 0
 
   def update_follow_values(self, lead_distance, v_ego, v_lead, frogpilot_toggles):
-    stop_distance = max(float(getattr(frogpilot_toggles, "stop_distance", STOP_DISTANCE)), 4.0)
-
-    # Keep StarPilot behavior for lead response, while still honoring stop distance/weather offsets.
     if frogpilot_toggles.human_following and v_lead > v_ego:
       distance_factor = max(lead_distance - (v_ego * self.t_follow), 1)
-      accelerating_offset = np.clip(stop_distance - v_ego, 1, distance_factor)
+      from frogpilot.common.frogpilot_variables import get_frogpilot_toggles
+      fp_toggles = get_frogpilot_toggles()
+      accelerating_offset = float(np.clip(fp_toggles.stop_distance - v_ego, 1, distance_factor))
 
       self.acceleration_jerk /= accelerating_offset
       self.speed_jerk /= accelerating_offset
       self.t_follow /= accelerating_offset
 
-    # Only apply the stronger slower-lead follow tightening for human-following, like StarPilot.
     if (frogpilot_toggles.conditional_slower_lead or frogpilot_toggles.human_following) and v_lead < v_ego:
       distance_factor = max(lead_distance - (v_lead * self.t_follow), 1)
-      braking_offset = np.clip(min(v_ego - v_lead, v_lead) - COMFORT_BRAKE, 1, distance_factor)
+      braking_offset = float(np.clip(min(v_ego - v_lead, v_lead) - COMFORT_BRAKE, 1, distance_factor))
 
       if frogpilot_toggles.human_following:
-        far_lead_offset = 0.0
-        if lead_distance >= 100:
-          far_lead_offset = max(lead_distance - (v_ego * self.t_follow) - stop_distance, 0)
+        from frogpilot.common.frogpilot_variables import get_frogpilot_toggles
+        fp_toggles = get_frogpilot_toggles()
+        far_lead_offset = max(lead_distance - (v_ego * self.t_follow) - fp_toggles.stop_distance, 0)
         self.t_follow /= braking_offset + far_lead_offset
       self.slower_lead = braking_offset > 1
