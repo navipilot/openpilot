@@ -448,8 +448,9 @@ class WifiManager:
 
       if "802-11-wireless" in settings:
         ssid = settings['802-11-wireless']['ssid'][1].decode("utf-8", "replace")
-        if ssid != "":
-          conns[ssid] = conn_path
+        ssid_key = _canonicalize_ssid(ssid)
+        if ssid_key != "":
+          conns[ssid_key] = conn_path
     return conns
 
   def _get_active_connections(self):
@@ -626,7 +627,7 @@ class WifiManager:
       return
 
     def worker():
-      conn_path = self._get_connections().get(ssid, None)
+      conn_path = self._get_connections().get(_canonicalize_ssid(ssid), None)
       if conn_path is not None:
         conn_addr = DBusAddress(conn_path, bus_name=NM, interface=NM_CONNECTION_IFACE)
         self._router_main.send_and_get_reply(new_method_call(conn_addr, 'Delete'))
@@ -680,7 +681,7 @@ class WifiManager:
       return
 
     def worker():
-      conn_path = self._get_connections().get(ssid, None)
+      conn_path = self._get_connections().get(_canonicalize_ssid(ssid), None)
       if conn_path is not None:
         if self._wifi_device is None:
           cloudlog.warning("No WiFi device found")
@@ -717,7 +718,7 @@ class WifiManager:
         ap_addr = DBusAddress(specific_obj_path, bus_name=NM, interface=NM_ACCESS_POINT_IFACE)
         ap_ssid = bytes(self._router_main.send_and_get_reply(Properties(ap_addr).get('Ssid')).body[0][1]).decode("utf-8", "replace")
 
-        if ap_ssid == ssid:
+        if _canonicalize_ssid(ap_ssid) == _canonicalize_ssid(ssid):
           self._router_main.send_and_get_reply(new_method_call(self._nm, 'DeactivateConnection', 'o', (conn_path,)))
           return
 
@@ -1026,7 +1027,7 @@ class WifiManager:
           cloudlog.exception(f"Failed to parse AP properties for {ap_path}")
 
       known_connections = self._get_connections()
-      networks = [Network.from_dbus(ssid, ap_list, ssid in known_connections) for ssid, ap_list in aps.items()]
+      networks = [Network.from_dbus(ssid, ap_list, _canonicalize_ssid(ssid) in known_connections) for ssid, ap_list in aps.items()]
       # sort with quantized strength to reduce jumping
       networks.sort(key=lambda n: (-n.is_connected, -round(n.strength / 100 * 2), n.ssid.lower()))
       self._networks = networks

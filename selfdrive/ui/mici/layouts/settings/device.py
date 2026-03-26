@@ -23,7 +23,7 @@ from openpilot.selfdrive.ui.mici.layouts.onboarding import TrainingGuide
 from openpilot.system.ui.lib.application import gui_app, FontWeight, MousePos
 from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.widgets import Widget, NavWidget
-from openpilot.selfdrive.ui.ui_state import ui_state
+from openpilot.selfdrive.ui.ui_state import device, ui_state
 from openpilot.system.ui.widgets.label import MiciLabel
 from openpilot.system.ui.widgets.html_render import HtmlModal, HtmlRenderer
 from openpilot.system.athena.registration import UNREGISTERED_DONGLE_ID
@@ -322,6 +322,8 @@ class GalaxyBigButton(BigButton):
 
 
 UPDATER_TIMEOUT = 10.0  # seconds to wait for updater to respond
+UPDATE_SCREEN_TIMEOUT = 180  # Keep display awake for 3 minutes during long-running update phases.
+EXTENDED_TIMEOUT_UPDATER_STATES = {"downloading...", "finalizing update..."}
 
 
 class UpdateOpenpilotBigButton(BigButton):
@@ -334,6 +336,7 @@ class UpdateOpenpilotBigButton(BigButton):
     self._waiting_for_updater_t: float | None = None
     self._hide_value_t: float | None = None
     self._state: UpdaterState = UpdaterState.IDLE
+    self._extended_timeout_enabled = False
 
     ui_state.add_offroad_transition_callback(self.offroad_transition)
 
@@ -361,6 +364,17 @@ class UpdateOpenpilotBigButton(BigButton):
 
     threading.Thread(target=run, daemon=True).start()
 
+  def hide_event(self):
+    super().hide_event()
+    self._set_extended_timeout(False)
+
+  def _set_extended_timeout(self, enabled: bool):
+    if self._extended_timeout_enabled == enabled:
+      return
+
+    self._extended_timeout_enabled = enabled
+    device.set_override_interactive_timeout(UPDATE_SCREEN_TIMEOUT if enabled else None)
+
   def set_value(self, value: str):
     super().set_value(value)
     if value:
@@ -370,10 +384,12 @@ class UpdateOpenpilotBigButton(BigButton):
 
   def _update_state(self):
     if ui_state.started:
+      self._set_extended_timeout(False)
       self.set_enabled(False)
       return
 
     updater_state = ui_state.params.get("UpdaterState") or ""
+    should_extend_timeout = updater_state in EXTENDED_TIMEOUT_UPDATER_STATES
     failed_count = ui_state.params.get("UpdateFailedCount")
     failed = False if failed_count is None else int(failed_count) > 0
 
@@ -436,6 +452,8 @@ class UpdateOpenpilotBigButton(BigButton):
 
     if self._state != UpdaterState.WAITING_FOR_UPDATER:
       self._waiting_for_updater_t = None
+
+    self._set_extended_timeout(should_extend_timeout)
 
 
 class DeviceLayoutMici(NavWidget):
