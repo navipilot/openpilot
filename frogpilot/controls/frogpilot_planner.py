@@ -8,7 +8,7 @@ from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.gps import get_gps_location_service
 from openpilot.common.params import Params
 from openpilot.common.realtime import DT_MDL
-from openpilot.selfdrive.car.cruise import V_CRUISE_MAX
+from openpilot.selfdrive.car.cruise import V_CRUISE_MAX, V_CRUISE_UNSET
 from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import A_CHANGE_COST, DANGER_ZONE_COST, J_EGO_COST, STOP_DISTANCE
 
 from openpilot.frogpilot.common.frogpilot_utilities import calculate_lane_width, calculate_road_curvature
@@ -64,7 +64,10 @@ class FrogPilotPlanner:
     controls_enabled = sm["selfdriveState"].enabled
     planner_active = controls_enabled or long_control_active
 
-    v_cruise = min(sm["carState"].vCruise, V_CRUISE_MAX) * CV.KPH_TO_MS
+    v_cruise_kph = sm["carState"].vCruise
+    if 0 < v_cruise_kph < V_CRUISE_UNSET and frogpilot_toggles.set_speed_offset > 0:
+      v_cruise_kph += frogpilot_toggles.set_speed_offset
+    v_cruise = min(v_cruise_kph, V_CRUISE_MAX) * CV.KPH_TO_MS
     v_ego = max(sm["carState"].vEgo, 0)
 
     if planner_active:

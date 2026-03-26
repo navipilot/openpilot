@@ -3,6 +3,7 @@ import numpy as np
 import pyray as rl
 from cereal import messaging, car, log
 from msgq.visionipc import VisionStreamType
+from openpilot.common.constants import CV
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.selfdrive.ui.mici.onroad import SIDE_PANEL_WIDTH
 from openpilot.selfdrive.ui.mici.onroad.alert_renderer import AlertRenderer
@@ -178,6 +179,93 @@ class ExperimentalModeBanner(Widget):
     self._label.render(banner_rect)
 
 
+class MinSteerSpeedBanner(Widget):
+  """One-shot-per-drive banner shown for the full first below-min-steer interval."""
+
+  def __init__(self):
+    super().__init__()
+    self._shown_this_drive = False
+    self._showing_interval = False
+    self._has_been_above_min = False
+    self._was_under_min = False
+    self._last_started_frame = -1
+    self._label = UnifiedLabel(
+      "",
+      34,
+      FontWeight.BOLD,
+      text_color=rl.WHITE,
+      alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
+      alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_MIDDLE,
+    )
+
+  def _reset(self):
+    self._shown_this_drive = False
+    self._showing_interval = False
+    self._has_been_above_min = False
+    self._was_under_min = False
+
+  @staticmethod
+  def _get_message(min_steer_speed: float) -> str:
+    speed_units = CV.MS_TO_KPH if ui_state.is_metric else CV.MS_TO_MPH
+    speed = int(round(min_steer_speed * speed_units))
+    unit = "km/h" if ui_state.is_metric else "mph"
+    return f"Steer Unavailable Under {speed} {unit}"
+
+  def _update_state(self):
+    if not ui_state.started:
+      self._last_started_frame = -1
+      self._reset()
+      return
+
+    if ui_state.started_frame != self._last_started_frame:
+      self._last_started_frame = ui_state.started_frame
+      self._reset()
+
+    sm = ui_state.sm
+    if sm.recv_frame["carParams"] < ui_state.started_frame or sm.recv_frame["carState"] < ui_state.started_frame:
+      return
+
+    min_steer_speed = float(sm["carParams"].minSteerSpeed)
+    if min_steer_speed <= 0:
+      self._showing_interval = False
+      self._was_under_min = False
+      return
+
+    under_min = float(sm["carState"].vEgo) < min_steer_speed
+    if not under_min:
+      self._has_been_above_min = True
+
+    crossed_below = under_min and not self._was_under_min
+    if (not self._shown_this_drive) and crossed_below and self._has_been_above_min:
+      self._showing_interval = True
+      self._shown_this_drive = True
+
+    if self._showing_interval and not under_min:
+      self._showing_interval = False
+
+    self._was_under_min = under_min
+    if self._showing_interval:
+      self._label.set_text(self._get_message(min_steer_speed))
+
+  def _render(self, rect):
+    self._update_state()
+    if not self._showing_interval:
+      return
+
+    banner_width = min(rect.width - 120, 760)
+    banner_height = 72
+    banner_rect = rl.Rectangle(
+      rect.x + (rect.width - banner_width) / 2,
+      rect.y + 22,
+      banner_width,
+      banner_height,
+    )
+
+    rl.draw_rectangle_rounded(banner_rect, 0.3, 12, rl.Color(0, 0, 0, 185))
+    rl.draw_rectangle_rounded_lines_ex(banner_rect, 0.3, 12, 4, rl.Color(218, 111, 37, 255))
+    self._label.render(banner_rect)
+
+
 class AugmentedRoadView(CameraView):
   def __init__(self, bookmark_callback=None, stream_type: VisionStreamType = VisionStreamType.VISION_STREAM_ROAD):
     super().__init__("camerad", stream_type)
@@ -204,6 +292,7 @@ class AugmentedRoadView(CameraView):
     self._driver_state_renderer = DriverStateRenderer()
     self._confidence_ball = ConfidenceBall()
     self._experimental_mode_banner = ExperimentalModeBanner()
+    self._min_steer_speed_banner = MinSteerSpeedBanner()
     self._offroad_label = UnifiedLabel("start the car to\nuse openpilot", 54, FontWeight.DISPLAY,
                                        text_color=rl.Color(255, 255, 255, int(255 * 0.9)),
                                        alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
@@ -307,6 +396,8 @@ class AugmentedRoadView(CameraView):
       self._hud_renderer.render(self._content_rect)
     if (not in_reverse) and alert_to_render is None:
       self._experimental_mode_banner.render(self._content_rect)
+    if not in_reverse:
+      self._min_steer_speed_banner.render(self._content_rect)
 
     # End clipping region
     rl.end_scissor_mode()

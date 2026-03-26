@@ -3,6 +3,7 @@ import numpy as np
 import pyray as rl
 from cereal import log, messaging
 from msgq.visionipc import VisionStreamType
+from openpilot.common.constants import CV
 from openpilot.selfdrive.ui import UI_BORDER_SIZE
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
 from openpilot.selfdrive.ui.onroad.alert_renderer import AlertRenderer
@@ -31,6 +32,95 @@ ROAD_CAM_MIN_SPEED = 15.0  # m/s (34 mph)
 INF_POINT = np.array([1000.0, 0.0, 0.0])
 
 
+class MinSteerSpeedBanner:
+  """One-shot-per-drive banner that stays visible for the first below-min-steer interval."""
+
+  def __init__(self):
+    self._shown_this_drive = False
+    self._showing_interval = False
+    self._has_been_above_min = False
+    self._was_under_min = False
+    self._last_started_frame = -1
+
+  def _reset(self):
+    self._shown_this_drive = False
+    self._showing_interval = False
+    self._has_been_above_min = False
+    self._was_under_min = False
+
+  def _get_message(self, min_steer_speed: float) -> str:
+    speed_units = CV.MS_TO_KPH if ui_state.is_metric else CV.MS_TO_MPH
+    speed = int(round(min_steer_speed * speed_units))
+    unit = "km/h" if ui_state.is_metric else "mph"
+    return f"Steer Unavailable Under {speed} {unit}"
+
+  def _update_state(self):
+    if not ui_state.started:
+      self._last_started_frame = -1
+      self._reset()
+      return
+
+    if ui_state.started_frame != self._last_started_frame:
+      self._last_started_frame = ui_state.started_frame
+      self._reset()
+
+    sm = ui_state.sm
+    if sm.recv_frame["carParams"] < ui_state.started_frame or sm.recv_frame["carState"] < ui_state.started_frame:
+      return
+
+    min_steer_speed = float(sm["carParams"].minSteerSpeed)
+    if min_steer_speed <= 0:
+      self._showing_interval = False
+      self._was_under_min = False
+      return
+
+    under_min = float(sm["carState"].vEgo) < min_steer_speed
+    if not under_min:
+      self._has_been_above_min = True
+
+    crossed_below = under_min and not self._was_under_min
+    if (not self._shown_this_drive) and crossed_below and self._has_been_above_min:
+      self._showing_interval = True
+      self._shown_this_drive = True
+
+    if self._showing_interval and not under_min:
+      self._showing_interval = False
+
+    self._was_under_min = under_min
+
+  def render(self, rect: rl.Rectangle):
+    self._update_state()
+
+    if not self._showing_interval:
+      return
+
+    min_steer_speed = float(ui_state.sm["carParams"].minSteerSpeed)
+    if min_steer_speed <= 0:
+      return
+
+    banner_width = min(rect.width - 120, 760)
+    banner_height = 84
+    banner_rect = rl.Rectangle(
+      rect.x + (rect.width - banner_width) / 2,
+      rect.y + 24,
+      banner_width,
+      banner_height,
+    )
+
+    rl.draw_rectangle_rounded(banner_rect, 0.3, 12, rl.Color(0, 0, 0, 185))
+    rl.draw_rectangle_rounded_lines_ex(banner_rect, 0.3, 12, 4, rl.Color(218, 111, 37, 255))
+
+    text = self._get_message(min_steer_speed)
+    font = gui_app.font()
+    font_size = 44
+    text_size = rl.measure_text_ex(font, text, font_size, 0)
+    text_pos = rl.Vector2(
+      banner_rect.x + (banner_rect.width - text_size.x) / 2,
+      banner_rect.y + (banner_rect.height - text_size.y) / 2,
+    )
+    rl.draw_text_ex(font, text, text_pos, font_size, 0, rl.WHITE)
+
+
 class AugmentedRoadView(CameraView):
   def __init__(self, stream_type: VisionStreamType = VisionStreamType.VISION_STREAM_ROAD):
     super().__init__("camerad", stream_type)
@@ -48,6 +138,7 @@ class AugmentedRoadView(CameraView):
     self._hud_renderer = HudRenderer()
     self.alert_renderer = AlertRenderer()
     self.driver_state_renderer = DriverStateRenderer()
+    self._min_steer_speed_banner = MinSteerSpeedBanner()
 
     # debug
     self._pm = messaging.PubMaster(['uiDebug'])
@@ -88,6 +179,7 @@ class AugmentedRoadView(CameraView):
     self._hud_renderer.render(self._content_rect)
     self.alert_renderer.render(self._content_rect)
     self.driver_state_renderer.render(self._content_rect)
+    self._min_steer_speed_banner.render(self._content_rect)
 
     # Custom UI extension point - add custom overlays here
     # Use self._content_rect for positioning within camera bounds

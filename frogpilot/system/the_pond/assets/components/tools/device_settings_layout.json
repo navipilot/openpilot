@@ -1689,6 +1689,13 @@
         "ui_type": "toggle"
       },
       {
+        "key": "LongPitch",
+        "label": "Smooth Pedal Response on Hills",
+        "description": "Smoothen acceleration and braking when driving downhill/uphill.",
+        "data_type": "bool",
+        "ui_type": "toggle"
+      },
+      {
         "key": "RemoteStartBootsComma",
         "label": "Remote Start Boots comma",
         "description": "Use the remote-start GM panda firmware at boot.\n\nRequired for GM remote-start startup signal behavior.",

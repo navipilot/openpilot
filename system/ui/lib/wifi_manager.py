@@ -722,10 +722,85 @@ class WifiManager:
           return
 
   def is_tethering_active(self) -> bool:
+    if self._fake_networking:
+      for network in self._networks:
+        if network.is_connected:
+          return bool(network.ssid == self._tethering_ssid)
+      return False
+
+    if self._nmcli_networking:
+      try:
+        active = subprocess.run(
+          ["nmcli", "-t", "-f", "NAME,TYPE,802-11-wireless.ssid", "connection", "show", "--active"],
+          check=False, capture_output=True, text=True,
+        )
+        for line in active.stdout.splitlines():
+          parts = self._parse_nmcli_line(line)
+          if len(parts) < 3 or parts[1] != "802-11-wireless":
+            continue
+          if _canonicalize_ssid(parts[2]) == _canonicalize_ssid(self._tethering_ssid):
+            return True
+      except Exception as e:
+        cloudlog.warning(f"nmcli tethering state lookup failed: {e}")
+      return False
+
+    if not self._dbus_available:
+      return False
+
+    def decode_ssid(value: Any) -> str:
+      if isinstance(value, bytes):
+        return value.decode("utf-8", "replace")
+      if isinstance(value, str):
+        return value
+      if isinstance(value, list):
+        try:
+          return bytes(value).decode("utf-8", "replace")
+        except Exception:
+          return str(value)
+      return str(value)
+
+    try:
+      for conn_path in self._get_active_connections():
+        conn_addr = DBusAddress(conn_path, bus_name=NM, interface=NM_ACTIVE_CONNECTION_IFACE)
+        conn_type = self._router_main.send_and_get_reply(Properties(conn_addr).get('Type')).body[0][1]
+        if conn_type != '802-11-wireless':
+          continue
+
+        settings_conn_path = self._router_main.send_and_get_reply(Properties(conn_addr).get('Connection')).body[0][1]
+        if settings_conn_path != "/":
+          settings = self._get_connection_settings(settings_conn_path)
+          ssid_value = settings.get('802-11-wireless', {}).get('ssid')
+          if isinstance(ssid_value, tuple) and len(ssid_value) > 1:
+            ssid = decode_ssid(ssid_value[1])
+            if _canonicalize_ssid(ssid) == _canonicalize_ssid(self._tethering_ssid):
+              return True
+
+        specific_obj_path = self._router_main.send_and_get_reply(Properties(conn_addr).get('SpecificObject')).body[0][1]
+        if specific_obj_path != "/":
+          ap_addr = DBusAddress(specific_obj_path, bus_name=NM, interface=NM_ACCESS_POINT_IFACE)
+          ap_ssid = decode_ssid(self._router_main.send_and_get_reply(Properties(ap_addr).get('Ssid')).body[0][1])
+          if _canonicalize_ssid(ap_ssid) == _canonicalize_ssid(self._tethering_ssid):
+            return True
+    except Exception as e:
+      cloudlog.warning(f"DBus tethering state lookup failed: {e}")
+
     for network in self._networks:
       if network.is_connected:
         return bool(network.ssid == self._tethering_ssid)
     return False
+
+  def disconnect_network(self, ssid: str, block: bool = False):
+    if not (self._dbus_available or self._fake_networking or self._nmcli_networking):
+      cloudlog.warning("disconnect_network called with no available networking backend")
+      return
+
+    def worker():
+      self._deactivate_connection(ssid)
+
+    if block:
+      worker()
+    else:
+      threading.Thread(target=worker, daemon=True).start()
 
   def set_tethering_password(self, password: str):
     if self._fake_networking:
@@ -862,6 +937,10 @@ class WifiManager:
       self._current_network_metered = metered
       self._enqueue_callbacks(self._networks_updated, self._networks)
       return
+
+    # Keep UI state responsive while the DBus update completes.
+    self._current_network_metered = metered
+    self._enqueue_callbacks(self._networks_updated, self._networks)
 
     def worker():
       for active_conn in self._get_active_connections():

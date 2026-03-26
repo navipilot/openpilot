@@ -250,6 +250,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"Fahrenheit", {PERSISTENT, BOOL, "0", "0", 3}},
     {"FlashPanda", {CLEAR_ON_MANAGER_START, BOOL, "0", "0"}},
     {"GMPedalLongitudinal", {PERSISTENT, BOOL, "1", "1", 2}},
+    {"LongPitch", {PERSISTENT, BOOL, "1", "0", 2}},
     {"RemoteStartBootsComma", {PERSISTENT, BOOL, "0", "0"}},
     {"RemapCancelToDistance", {PERSISTENT, BOOL, "0", "0"}},
     {"ForceAutoTune", {PERSISTENT, BOOL, "0", "0", 3}},

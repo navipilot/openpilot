@@ -252,6 +252,14 @@ class StarPilotGMVehicleLayout(StarPilotPanel):
         "key": "GMPedalLongitudinal",
       },
       {
+        "title": tr_noop("Smooth Pedal on Hills"),
+        "type": "toggle",
+        "get_state": lambda: self._params.get_bool("LongPitch"),
+        "set_state": lambda s: self._params.put_bool("LongPitch", s),
+        "color": "#FFC40D",
+        "key": "LongPitch",
+      },
+      {
         "title": tr_noop("Remote Start Panda"),
         "type": "toggle",
         "get_state": lambda: self._params.get_bool("RemoteStartBootsComma"),

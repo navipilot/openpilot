@@ -134,6 +134,7 @@ log_recv_queue: Queue[str] = queue.Queue()
 cancelled_uploads: set[str] = set()
 
 cur_upload_items: dict[int, UploadItem | None] = {}
+params_store = Params()
 
 
 def strip_zst_extension(fn: str) -> str:
@@ -144,6 +145,10 @@ def strip_zst_extension(fn: str) -> str:
 
 class AbortTransferException(Exception):
   pass
+
+
+def always_allow_uploads() -> bool:
+  return params_store.get_bool("AlwaysAllowUploads")
 
 
 class UploadQueueCache:
@@ -249,7 +254,7 @@ def cb(sm, item, tid, end_event: threading.Event, sz: int, cur: int) -> None:
   if not item.allow_cellular:
     if (time.monotonic() - sm.recv_time['deviceState']) > DEVICE_STATE_UPDATE_INTERVAL:
       sm.update(0)
-      if sm['deviceState'].networkMetered:
+      if sm['deviceState'].networkMetered and not always_allow_uploads():
         raise AbortTransferException
 
   if end_event.is_set():
@@ -282,7 +287,7 @@ def upload_handler(end_event: threading.Event) -> None:
       sm.update(0)
       metered = sm['deviceState'].networkMetered
       network_type = sm['deviceState'].networkType.raw
-      if metered and (not item.allow_cellular):
+      if metered and (not item.allow_cellular) and not always_allow_uploads():
         retry_upload(tid, end_event, False)
         continue
 

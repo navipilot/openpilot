@@ -112,12 +112,6 @@ class VCruiseHelper:
     else:
       self.v_cruise_kph += v_cruise_delta * CRUISE_INTERVAL_SIGN[button_type]
 
-    # FrogPilot variables
-    if long_press and frogpilot_toggles.set_speed_offset > 0:
-      self.v_cruise_kph += frogpilot_toggles.set_speed_offset
-      if button_type == ButtonType.decelCruise:
-        self.v_cruise_kph -= v_cruise_delta
-
     # If set is pressed while overriding, clip cruise speed to minimum of vEgo
     if CS.gasPressed and button_type in (ButtonType.decelCruise, ButtonType.setCruise):
       self.v_cruise_kph = max(self.v_cruise_kph, CS.vEgo * CV.MS_TO_KPH)

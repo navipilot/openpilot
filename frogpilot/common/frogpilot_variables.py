@@ -878,6 +878,10 @@ class FrogPilotVariables:
       "GMPedalLongitudinal",
       condition=toggle.car_make == "gm" and toggle.has_pedal,
     )
+    toggle.long_pitch = self.get_value(
+      "LongPitch",
+      condition=toggle.openpilot_longitudinal and toggle.car_make == "gm",
+    )
     toggle.remote_start_boots_comma = self.get_value("RemoteStartBootsComma", condition=toggle.car_make == "gm")
     toggle.remap_cancel_to_distance = self.get_value(
       "RemapCancelToDistance",

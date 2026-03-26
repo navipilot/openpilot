@@ -370,8 +370,10 @@ class CarController(CarControllerBase):
           self.apply_gas = self.params.INACTIVE_REGEN
           self.apply_brake = int(min(-100 * stop_accel, self.params.MAX_BRAKE))
         else:
+          long_pitch_enabled = bool(getattr(frogpilot_toggles, "long_pitch", True))
+
           if self.is_volt:
-            if len(CC.orientationNED) == 3 and CS.out.vEgo > self.CP.vEgoStopping:
+            if long_pitch_enabled and len(CC.orientationNED) == 3 and CS.out.vEgo > self.CP.vEgoStopping:
               volt_pitch_accel = math.sin(CC.orientationNED[1]) * ACCELERATION_DUE_TO_GRAVITY
             else:
               volt_pitch_accel = 0.0
@@ -395,7 +397,7 @@ class CarController(CarControllerBase):
             if self.apply_brake > 0:
               self.apply_gas = self.params.INACTIVE_REGEN
           else:
-            if len(CC.orientationNED) == 3 and CS.out.vEgo > self.CP.vEgoStopping:
+            if long_pitch_enabled and len(CC.orientationNED) == 3 and CS.out.vEgo > self.CP.vEgoStopping:
               accel_due_to_pitch = math.sin(CC.orientationNED[1]) * ACCELERATION_DUE_TO_GRAVITY
             else:
               accel_due_to_pitch = 0.0
@@ -424,7 +426,12 @@ class CarController(CarControllerBase):
 
           if self.CP.carFingerprint in CC_ONLY_CAR:
             # gas interceptor only used for full long control on cars without ACC
-            interceptor_gas_cmd, press_regen_paddle = self.calc_pedal_command(actuators.accel, CC.longActive, CS.out.vEgo)
+            pedal_accel_cmd = actuators.accel
+            if (long_pitch_enabled and
+                len(CC.orientationNED) == 3 and CS.out.vEgo > self.CP.vEgoStopping):
+              pedal_accel_cmd += math.sin(CC.orientationNED[1]) * ACCELERATION_DUE_TO_GRAVITY
+
+            interceptor_gas_cmd, press_regen_paddle = self.calc_pedal_command(pedal_accel_cmd, CC.longActive, CS.out.vEgo)
 
         if self.CP.enableGasInterceptorDEPRECATED and self.apply_gas > self.params.INACTIVE_REGEN and CS.out.cruiseState.standstill:
           interceptor_gas_cmd = self.params.SNG_INTERCEPTOR_GAS

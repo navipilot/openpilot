@@ -238,8 +238,8 @@ class NetworkInfoPage(NavWidget):
       self._connect_btn.set_label("connecting...")
       self._connect_btn.set_enabled(False)
     elif self._network.is_connected:
-      self._connect_btn.set_label("connected")
-      self._connect_btn.set_enabled(False)
+      self._connect_btn.set_label("disconnect")
+      self._connect_btn.set_enabled(True)
     elif self._network.security_type == SecurityType.UNSUPPORTED:
       self._connect_btn.set_label("connect")
       self._connect_btn.set_enabled(False)
@@ -407,6 +407,10 @@ class WifiUIMici(BigMultiOptionDialog):
     network = self._networks.get(ssid)
     if network is None:
       cloudlog.warning(f"Trying to connect to unknown network: {ssid}")
+      return
+
+    if network.is_connected:
+      self._wifi_manager.disconnect_network(network.ssid)
       return
 
     if network.is_saved:
