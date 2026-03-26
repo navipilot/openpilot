@@ -371,9 +371,11 @@ class CarController(CarControllerBase):
           self.apply_brake = int(min(-100 * stop_accel, self.params.MAX_BRAKE))
         else:
           long_pitch_enabled = bool(getattr(frogpilot_toggles, "long_pitch", True))
+          pedal_long_path = bool(self.CP.enableGasInterceptorDEPRECATED and (self.CP.flags & GMFlags.PEDAL_LONG.value))
+          long_pitch_for_powertrain = long_pitch_enabled and not pedal_long_path
 
           if self.is_volt:
-            if long_pitch_enabled and len(CC.orientationNED) == 3 and CS.out.vEgo > self.CP.vEgoStopping:
+            if long_pitch_for_powertrain and len(CC.orientationNED) == 3 and CS.out.vEgo > self.CP.vEgoStopping:
               volt_pitch_accel = math.sin(CC.orientationNED[1]) * ACCELERATION_DUE_TO_GRAVITY
             else:
               volt_pitch_accel = 0.0
@@ -397,7 +399,7 @@ class CarController(CarControllerBase):
             if self.apply_brake > 0:
               self.apply_gas = self.params.INACTIVE_REGEN
           else:
-            if long_pitch_enabled and len(CC.orientationNED) == 3 and CS.out.vEgo > self.CP.vEgoStopping:
+            if long_pitch_for_powertrain and len(CC.orientationNED) == 3 and CS.out.vEgo > self.CP.vEgoStopping:
               accel_due_to_pitch = math.sin(CC.orientationNED[1]) * ACCELERATION_DUE_TO_GRAVITY
             else:
               accel_due_to_pitch = 0.0
@@ -427,7 +429,7 @@ class CarController(CarControllerBase):
           if self.CP.carFingerprint in CC_ONLY_CAR:
             # gas interceptor only used for full long control on cars without ACC
             pedal_accel_cmd = actuators.accel
-            if (long_pitch_enabled and
+            if (long_pitch_for_powertrain and
                 len(CC.orientationNED) == 3 and CS.out.vEgo > self.CP.vEgoStopping):
               pedal_accel_cmd += math.sin(CC.orientationNED[1]) * ACCELERATION_DUE_TO_GRAVITY
 
