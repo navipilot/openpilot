@@ -15,16 +15,17 @@ TRAFFIC_COLOR = rl.Color(201, 34, 49, 255)
 
 
 def get_border_color(state: UIState):
+  enabled = state.sm["selfdriveState"].enabled
   if state.status == UIStatus.OVERRIDE:
     return OVERRIDE_COLOR
-  if state.traffic_mode_enabled and state.sm["selfdriveState"].enabled:
+  if state.traffic_mode_enabled and enabled:
     return TRAFFIC_COLOR
   if state.always_on_lateral_active:
     return AOL_COLOR
-  # Match Qt behavior: only USER_DISABLED (1) gets the CEM override color.
-  if state.conditional_status in CEM_DISABLED_OVERRIDE_STATUSES:
+  # Only color the border for CEM/experimental while actually enabled.
+  if enabled and state.conditional_status in CEM_DISABLED_OVERRIDE_STATUSES:
     return CEM_OVERRIDE_COLOR
-  if state.sm["selfdriveState"].experimentalMode:
+  if enabled and state.sm["selfdriveState"].experimentalMode:
     return EXPERIMENTAL_COLOR
   if state.status == UIStatus.ENGAGED:
     return ENGAGED_COLOR
