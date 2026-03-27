@@ -327,8 +327,26 @@ class FrogPilotVariables:
   def get_value(self, key, cast=bool, condition=True, conversion=None, default=None, min=None, max=None):
     if not condition or (self.frogpilot_toggles.tuning_level < self.tuning_levels.get(key, 0)):
       if default is not None:
-        return default
-      return False if cast is bool else self.default_values.get(key)
+        value = default
+      elif cast is bool:
+        return False
+      else:
+        value = self.default_values.get(key)
+        if cast is not None:
+          try:
+            value = cast(value)
+          except (TypeError, ValueError):
+            value = self.default_values.get(key)
+
+      if conversion is not None and isinstance(value, (int, float)):
+        value *= conversion
+
+      if min is not None and value < min:
+        value = min
+      elif max is not None and value > max:
+        value = max
+
+      return value
 
     if cast is bool:
       value = self.params.get_bool(key)
