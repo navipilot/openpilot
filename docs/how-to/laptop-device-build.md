@@ -2,6 +2,8 @@
 
 This flow builds **device-target (`larch64`) binaries on your laptop** using a Linux/aarch64 container and a synced comma sysroot.
 
+For the full StarPilot branch workflow, including host-native shorthand tools such as `./dev`, `./c3`, `./c4`, and `./raybig`, see [tools/STARPILOT_DEVELOPMENT.md](../../tools/STARPILOT_DEVELOPMENT.md).
+
 ## Prerequisites
 
 - Docker Desktop (or Podman) with Linux/aarch64 support.
@@ -105,18 +107,23 @@ Note:
 - `manager` mode requires the container runtime machine to be `aarch64`.
 - If your built image runs as `x86_64`, build mode still works for artifact generation, but manager launch in-container is not supported.
 
-Desktop UI workaround (keep device build + still inspect UI on macOS):
+Preferred host-side shorthand commands on this branch:
+
+```bash
+./c3
+./c4
+./raybig
+./dev replay
+./dev cabana
+./dev plotjuggler
+```
+
+These commands use the isolated `.host_runtime` cache so host-native artifacts do not churn the main tree.
+
+Legacy direct script entrypoints still exist if needed:
 
 ```bash
 scripts/launch_ui_desktop.sh
-```
-
-This builds a native macOS `selfdrive/ui/ui.macos`, restores device `selfdrive/ui/ui`, and launches the mac UI binary.
-
-Desktop C4/raylib UI launcher:
-
-```bash
 scripts/launch_ui_c4_desktop.sh
+scripts/launch_ui_raybig_desktop.sh
 ```
-
-This launches `selfdrive/ui/ui.py` in small-UI mode (`BIG=0`) with onboarding pre-accepted params.

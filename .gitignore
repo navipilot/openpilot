@@ -13,6 +13,7 @@ venv/
 a.out
 .hypothesis
 .cache/
+.host_runtime/
 .comma_sysroot/
 .venv-linux-arm64/
 compiledmodels/

@@ -63,6 +63,12 @@ AddOption('--minimal',
           default=os.path.exists(File('#.lfsconfig').abspath), # minimal by default on release branch (where there's no LFS)
           help='the minimum build to run openpilot. no tests, tools, etc.')
 
+AddOption('--extras',
+          action='store_true',
+          dest='extras',
+          default=os.path.exists(File('#.lfsconfig').abspath),
+          help='build optional tools/tests even when minimal is the default')
+
 def maybe_delegate_to_laptop_device_builder() -> None:
   if platform.system() != "Darwin":
     return

@@ -13,7 +13,6 @@ from opendbc.car.gm.values import GMSafetyFlags
 from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.selfdrive.modeld.fill_model_msg import fill_xyz_poly, fill_lane_line_meta
 from openpilot.selfdrive.test.process_replay.vision_meta import meta_from_encode_index
-from openpilot.selfdrive.controls.lib.longitudinal_planner import get_accel_from_plan, CONTROL_N_T_IDX
 from openpilot.system.manager.process_config import managed_processes
 from openpilot.tools.lib.logreader import LogIterable
 
@@ -98,6 +97,8 @@ def migration(inputs: list[str], product: str|None=None):
 
 @migration(inputs=["longitudinalPlan", "carParams"])
 def migrate_longitudinalPlan(msgs):
+  from openpilot.selfdrive.controls.lib.longitudinal_planner import CONTROL_N_T_IDX, get_accel_from_plan
+
   ops = []
 
   needs_migration = all(msg.longitudinalPlan.aTarget == 0.0 for _, msg in msgs if msg.which() == 'longitudinalPlan')
