@@ -126,10 +126,13 @@ void FrogPilotOnroadWindow::paintSteeringTorqueBorder(QPainter &p) {
   p.save();
 
   QLinearGradient gradient(rect.topLeft(), rect.bottomLeft());
+  QColor bottomGreen = bg_colors[STATUS_ENGAGED].lighter(120);
+  bottomGreen.setAlpha(bg_colors[STATUS_ENGAGED].alpha());
   gradient.setColorAt(0.0, bg_colors[STATUS_TRAFFIC_MODE_ENABLED]);
   gradient.setColorAt(0.25, bg_colors[STATUS_EXPERIMENTAL_MODE_ENABLED]);
   gradient.setColorAt(0.5, bg_colors[STATUS_CEM_DISABLED]);
   gradient.setColorAt(0.75, bg_colors[STATUS_ENGAGED]);
+  gradient.setColorAt(1.0, bottomGreen);
 
   int visibleHeight = rect.height() * smoothedSteer;
   int xPos = (torque < 0) ? rect.x() : (rect.x() + rect.width() - UI_BORDER_SIZE);
