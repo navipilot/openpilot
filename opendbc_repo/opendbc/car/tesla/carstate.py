@@ -155,24 +155,14 @@ class CarState(CarStateBase):
     lkas_ctrl_type = get_steer_ctrl_type(self.CP.flags, 2)
     ret.stockLkas = cp_ap_party.vl["DAS_steeringControl"]["DAS_steeringControlType"] == lkas_ctrl_type  # LANE_KEEP_ASSIST
 
-    # Stock Autosteer should be off (includes FSD)
+    # Stock Autosteer should be disengaged (includes FSD) — from dzid26/opendbc vtb branch.
+    # Check DAS_autopilotState (actual engagement) instead of DAS_autosteerEnabled (settings flag).
+    # States 0=DISABLED, 1=UNAVAILABLE, 2=AVAILABLE are safe; anything else means active steering.
     # TODO: find for TESLA_MODEL_X and HW2.5 vehicles
-    if not (self.CP.flags & TeslaFlags.MISSING_DAS_SETTINGS):
-      ret.invalidLkasSetting = cp_ap_party.vl["DAS_settings"]["DAS_autosteerEnabled"] != 0
-
-      # Because we don't have FSD 14 detection outside of a set of FW, we should check if this FW is accidentally missing from FSD_14_FW
-      # 1. If in Autosteer or FSD, already caught by invalidLkasSetting
-      # 2. If in TACC and DAS ever sends ANGLE_CONTROL (1), we can infer it's trying to do LKAS on FSD 14+
-      angle_control = cp_ap_party.vl["DAS_steeringControl"]["DAS_steeringControlType"] == 1  # ANGLE_CONTROL
-      if not ret.invalidLkasSetting and angle_control and not self.CP.flags & TeslaFlags.FSD_14:
-        self.suspected_fsd14 = True
-
-      if self.suspected_fsd14:
-        ret.invalidLkasSetting = True
-        if not self.fsd14_error_logged:
-          carlog.error("FSD 14 detected, but FW not in FSD_14_FW set")
-          self.fsd14_error_logged = True
-
+    if self.CP.carFingerprint in (CAR.TESLA_MODEL_3, CAR.TESLA_MODEL_Y):
+      ret.invalidLkasSetting = cp_ap_party.vl["DAS_status"]["DAS_autopilotState"] not in (0, 1, 2)
+    else:
+      pass
     # Buttons # ToDo: add Gap adjust button
 
     # Messages needed by carcontroller
