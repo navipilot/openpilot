@@ -90,6 +90,62 @@ This allows the driver to smoothly take over steering (e.g., obstacle avoidance,
 - `opendbc_repo/opendbc/dbc/tesla_raven_party.dbc` — CAN message definitions
 - `frogpilot/controls/lib/frogpilot_vcruise.py` — SLC cruise speed authority
 
+### 6. Jerk Ramp After Gas Override
+**Source:** [dzid26/opendbc vtb branch](https://github.com/dzid26/opendbc/tree/vtb) — `teslacan.py`, `values.py`
+
+**Problem:** When the driver presses gas while cruise is active and traveling above the set speed, then releases gas, the Tesla PCM transitions from OVERRIDE back to ENABLED. At that moment openpilot sends a sudden deceleration command with full `JERK_LIMIT_MAX` (4.9 m/s³), causing a jarring lurch.
+
+**Fix (two parts):**
+1. **set_speed:** During `cruise_override` (DI_cruiseState == OVERRIDE), keep `set_speed = V_CRUISE_MAX` instead of setting it to 0 on decel.
+2. **Jerk ramp:** When cruise override ends, `DAS_jerkMax` resets to 0 and ramps up at `JERK_RATE_UP` (1.0 m/s³/s) over ~5 seconds — a soft start for longitudinal control after gas override.
+
+**Files:**
+- `opendbc_repo/opendbc/car/tesla/teslacan.py` — jerk ramp logic in `create_longitudinal_command`
+- `opendbc_repo/opendbc/car/tesla/teslacan_legacy.py` — same fix for legacy cars
+- `opendbc_repo/opendbc/car/tesla/carstate.py` — `cruise_override` state tracking
+- `opendbc_repo/opendbc/car/tesla/carcontroller.py` — passes `cruise_override` to longitudinal command
+- `opendbc_repo/opendbc/car/tesla/values.py` — `JERK_RATE_UP` constant
+
+### 7. Cruise Speed Alignment and DBC Fix
+**Source:** [dzid26/opendbc vtb branch](https://github.com/dzid26/opendbc/tree/vtb) — `carstate.py`, `tesla_model3_party.dbc`
+
+**Problem:** Tesla's cluster display speed (`DI_uiSpeed`) is ~1% higher than `DI_vehicleSpeed`. Without compensating, openpilot's cruise target overshoots the displayed set speed on the Tesla dashboard.
+
+**Fix:**
+- Read `DI_uiSpeed` and `DI_uiSpeedUnits` to set `vEgoCluster`
+- Store cruise set speed in `cruiseState.speedCluster`, divide by 1.01 for `cruiseState.speed`
+- Fixed `DI_uiSpeedUnits` DBC bit position from 32 to 33 (genuine bug)
+
+**Files:**
+- `opendbc_repo/opendbc/car/tesla/carstate.py` — `vEgoCluster` and `speedCluster`
+- `opendbc_repo/opendbc/dbc/tesla_model3_party.dbc` — bit position fix
+
+### 8. invalidLkasSetting: Check Autopilot Engagement State
+**Source:** [dzid26/opendbc vtb branch](https://github.com/dzid26/opendbc/tree/vtb) — `carstate.py`
+
+Changed from checking `DAS_autosteerEnabled` (settings flag) to `DAS_autopilotState` from `DAS_status` (actual engagement state). States 0/1/2 are safe; anything else means Autopilot/FSD is actively steering.
+
+**File:** `opendbc_repo/opendbc/car/tesla/carstate.py`
+
+### 9. Broaden Stock Steering Control Detection
+**Source:** [dzid26/opendbc vtb branch](https://github.com/dzid26/opendbc/tree/vtb) — `tesla.h`
+
+Broadened from `steering_control_type == 2` (LKAS only) to `steering_control_type != 0` (any non-NONE). Catches LDA, ELDA, Autopark steering — any stock system controlling the wheel. Changed edge detection from `!controls_allowed` to `!is_lat_active()`.
+
+**Files:**
+- `opendbc_repo/opendbc/safety/modes/tesla.h` — `tesla_stock_lkas` → `tesla_stock_steering_control`
+- `opendbc_repo/opendbc/safety/modes/tesla_legacy.h` — same for legacy
+
+### 10. Autopark → Summon Rename
+**Source:** [dzid26/opendbc vtb branch](https://github.com/dzid26/opendbc/tree/vtb) — `carstate.py`, `tesla.h`
+
+`DI_autoparkState` is used by Summon (including Smart Summon), not Autopark. Renamed all internal variables for semantic correctness. No behavioral change.
+
+**Files:**
+- `opendbc_repo/opendbc/car/tesla/carstate.py` — `autopark` → `summon`
+- `opendbc_repo/opendbc/safety/modes/tesla.h` — `tesla_autopark` → `tesla_summon`
+- `opendbc_repo/opendbc/safety/tests/libsafety/safety.c`
+
 ---
 
 ## CAN Bus Architecture (Tesla Legacy)
@@ -119,6 +175,6 @@ This allows the driver to smoothly take over steering (e.g., obstacle avoidance,
 
 - **[BogGyver](https://github.com/BogGyver)** — Pioneer of openpilot on Tesla, early Tesla integration work that paved the way for community support
 - **[xnor-tech](https://github.com/xnor-tech/openpilot)** ([lukasloetkolben](https://github.com/lukasloetkolben)) — Tesla Model S/X legacy platform support, harness kit design, safety mode implementation, and dedicated ongoing work to support Tesla in upstream openpilot branches
-- **[dzfrog](https://github.com/dzfrog)** — Virtual Torque Blending (VTB) approach and steering override research
+- **[dzid26](https://github.com/dzid26)** ([opendbc vtb branch](https://github.com/dzid26/opendbc/tree/vtb)) — Jerk ramp after gas override, cruise speed alignment, DBC signal fix, invalidLkasSetting improvement, stock steering control broadening, and autopark→summon corrections. Based on sunnypilot's Tesla integration
 - **[FrogAi/FrogPilot](https://github.com/FrogAi/FrogPilot)** — Base fork with AOL, SLC, CEM, and extensive customization framework
 - **[comma.ai](https://github.com/commaai/openpilot)** — openpilot core
