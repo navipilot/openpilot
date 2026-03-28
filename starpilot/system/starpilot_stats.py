@@ -224,7 +224,7 @@ def send_stats():
       .tag("branch", build_metadata.channel)
       .tag("dongle_id", stats_dongle_id)
 
-      .field("blocked_user", starpilot_toggles.block_user)
+      .field("blocked_user", False)
       .field("current_months_kilometers", int(starpilot_stats.get("CurrentMonthsKilometers", 0)))
       .field("event", 1)
       .field("starpilot_drives", int(starpilot_stats.get("StarPilotDrives", 0)))

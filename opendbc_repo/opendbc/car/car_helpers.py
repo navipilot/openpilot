@@ -127,6 +127,12 @@ def _get_gm_stored_candidate_fallback(fingerprints: dict[int, dict], stored_cand
   return None
 
 
+def _apply_starpilot_access_policy(candidate: str, starpilot_toggles: SimpleNamespace | None) -> str:
+  # Branch-based dashcam gating was removed. Keep the resolved candidate even if
+  # an older serialized toggle payload still contains block_user=True.
+  return candidate
+
+
 def can_fingerprint(can_recv: CanRecvCallable) -> tuple[str | None, dict[int, dict]]:
   finger = gen_empty_fingerprint()
   candidate_cars = {i: all_legacy_fingerprint_cars() for i in [0, 1]}  # attempt fingerprint on both bus 0 and 1
@@ -274,8 +280,7 @@ def get_car(can_recv: CanRecvCallable, can_send: CanSendCallable, set_obd_multip
     params.put_nonblocking("CarMake", candidate.split('_')[0].title())
     params.put_nonblocking("CarModel", str(candidate))
 
-  if starpilot_toggles.block_user:
-    candidate = "MOCK"
+  candidate = _apply_starpilot_access_policy(candidate, starpilot_toggles)
 
   # Legacy branch migration guard: normalize stale platform names from any source
   # (forced params, cached CarParams, fixed fingerprint env) before interface lookup.

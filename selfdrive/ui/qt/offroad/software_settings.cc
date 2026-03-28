@@ -62,11 +62,6 @@ SoftwarePanel::SoftwarePanel(QWidget* parent) : ListWidget(parent) {
     auto current = params.get("GitBranch");
     QStringList branches = QString::fromStdString(params.get("UpdaterAvailableBranches")).split(",");
     if (!isFrogsGoMoo()) {
-      for (int i = branches.size() - 1; i >= 0; --i) {
-        if (branches[i].startsWith("StarPilot-Development", Qt::CaseInsensitive)) {
-          branches.removeAt(i);
-        }
-      }
       branches.removeAll("StarPilot-Vetting");
       branches.removeAll("MAKE-PRS-HERE");
     }

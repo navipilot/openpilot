@@ -80,7 +80,7 @@ def install_starpilot(build_metadata, params):
 
   update_boot_logo(starpilot=True, selected_logo=params.get("BootLogo"))
 
-  if build_metadata.channel == "StarPilot-Development" and is_FrogsGoMoo():
+  if is_FrogsGoMoo():
     mount_options = run_cmd(["findmnt", "-n", "-o", "OPTIONS", "/persist"], "Successfully retrieved mount options", "Failed to retrieve mount options")
     run_cmd(["sudo", "mount", "-o", "remount,rw", "/persist"], "Successfully remounted /persist as read-write", "Failed to remount /persist")
     run_cmd(["sudo", "python3", FROGS_GO_MOO_PATH], "Successfully ran frogsgomoo.py", "Failed to run frogsgomoo.py")

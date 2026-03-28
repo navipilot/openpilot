@@ -3541,11 +3541,9 @@ def setup(app):
     build_metadata = get_build_metadata()
 
     short_branch = build_metadata.channel
-    if short_branch == "StarPilot-Development":
-      env = "Development"
-    elif build_metadata.release_channel:
+    if build_metadata.release_channel:
       env = "Release"
-    elif short_branch == "StarPilot-Testing":
+    elif short_branch in ("StarPilot-Development", "StarPilot-Testing"):
       env = "Testing"
     elif build_metadata.tested_channel:
       env = "Staging"

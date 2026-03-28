@@ -1,6 +1,8 @@
+from types import SimpleNamespace
+
 import pytest
 from opendbc.car.can_definitions import CanData
-from opendbc.car.car_helpers import FRAME_FINGERPRINT, _get_gm_stored_candidate_fallback, can_fingerprint
+from opendbc.car.car_helpers import FRAME_FINGERPRINT, _apply_starpilot_access_policy, _get_gm_stored_candidate_fallback, can_fingerprint
 from opendbc.car.fingerprints import _FINGERPRINTS as FINGERPRINTS
 
 
@@ -74,3 +76,8 @@ class TestCanFingerprint:
     candidate = _get_gm_stored_candidate_fallback(fingerprints, "CHEVROLET_VOLT_CC", "CHEVROLET_VOLT_CC")
 
     assert candidate is None
+
+  def test_starpilot_access_policy_ignores_stale_block_user_toggle(self):
+    candidate = _apply_starpilot_access_policy("CHEVROLET_VOLT_CC", SimpleNamespace(block_user=True))
+
+    assert candidate == "CHEVROLET_VOLT_CC"

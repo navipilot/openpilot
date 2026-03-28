@@ -288,14 +288,14 @@ class StarPilotVariables:
     self.tuning_levels = {key.decode(): self.params.get_tuning_level(key) for key in self.params.all_keys()}
 
     branch = get_build_metadata().channel
-    self.development_branch = branch == "StarPilot-Development"
     self.release_branch = branch == "StarPilot"
     self.staging_branch = branch == "StarPilot-Staging"
     self.testing_branch = branch == "StarPilot-Testing"
     self.vetting_branch = branch == "StarPilot-Vetting"
 
     self.frogs_go_moo = FROGS_GO_MOO_PATH.is_file()
-    toggle.block_user = (self.development_branch or branch == "MAKE-PRS-HERE" or self.vetting_branch) and not self.frogs_go_moo
+    # Development/vetting branches are no longer gated into dashcam mode.
+    toggle.block_user = False
 
     toggle.tuning_level = self.params.get("TuningLevel") if self.params.get_bool("TuningLevelConfirmed") else TUNING_LEVELS["ADVANCED"]
 
@@ -306,7 +306,6 @@ class StarPilotVariables:
     toggle.use_higher_bitrate &= self.get_value("NoUploads")
     toggle.use_higher_bitrate &= not self.get_value("DisableOnroadUploads")
     toggle.use_higher_bitrate &= not self.vetting_branch
-    toggle.use_higher_bitrate |= self.development_branch
 
     HD_PATH.parent.mkdir(parents=True, exist_ok=True)
     if not HD_PATH.is_file() and toggle.use_higher_bitrate:

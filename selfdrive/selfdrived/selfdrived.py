@@ -4,7 +4,6 @@ import time
 import threading
 
 import cereal.messaging as messaging
-import openpilot.system.sentry as sentry
 
 from cereal import car, custom, log
 from msgq.visionipc import VisionIpcClient, VisionStreamType
@@ -166,10 +165,6 @@ class SelfdriveD:
     self.has_menu = self.CP.brand == "gm" and self.CP.carFingerprint not in CC_ONLY_CAR
 
     self.FPCP = messaging.log_from_bytes(self.params.get("StarPilotCarParams", block=True), custom.StarPilotCarParams)
-
-    if self.starpilot_toggles.block_user:
-      self.startup_event = StarPilotEventName.blockUser
-      sentry.capture_block()
 
   def update_events(self, CS):
     """Compute onroadEvents from carState"""
