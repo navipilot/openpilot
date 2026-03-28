@@ -129,10 +129,10 @@ procs = [
 # StarPilot variables
 device_type = HARDWARE.get_device_type()
 if device_type in ("tici", "tizi"):
-  procs.append(NativeProcess("ui", "selfdrive/ui", ["./ui"], always_run, watchdog_max_dt=5))
+  procs.append(NativeProcess("ui", "selfdrive/ui", ["./ui"], always_run, watchdog_max_dt=10))
 else:
   # C4 (mici) runs the Python raylib UI path; keep watchdog parity with C3/C3X.
-  procs.append(PythonProcess("ui", "selfdrive.ui.ui", always_run, watchdog_max_dt=5))
+  procs.append(PythonProcess("ui", "selfdrive.ui.ui", always_run, watchdog_max_dt=10))
 procs += [
   PythonProcess("device_syncd", "starpilot.system.device_syncd", always_run),
   PythonProcess("starpilot_process", "starpilot.starpilot_process", always_run),
