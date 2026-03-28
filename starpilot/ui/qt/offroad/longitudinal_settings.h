@@ -50,7 +50,7 @@ private:
 
   QSet<QString> parentKeys;
 
-  StarPilotButtonsControl *weatherKeyControl;
+
 
   StarPilotParamValueControl *longitudinalActuatorDelayToggle;
   StarPilotParamValueControl *startAccelToggle;

@@ -130,14 +130,6 @@ class StarPilotTracking:
       if self.starpilot_events.stopped_for_light:
         self.starpilot_stats["StopLightTime"] = self.starpilot_stats.get("StopLightTime", 0) + DT_MDL
 
-    weather_api_calls = self.starpilot_stats.get("WeatherAPICalls", {})
-    weather_api_calls["2.5"] = weather_api_calls.get("2.5", 0) + self.starpilot_weather.api_25_calls
-    weather_api_calls["3.0"] = weather_api_calls.get("3.0", 0) + self.starpilot_weather.api_3_calls
-    self.starpilot_stats["WeatherAPICalls"] = weather_api_calls
-
-    self.starpilot_weather.api_25_calls = 0
-    self.starpilot_weather.api_3_calls = 0
-
     suffix = "unknown"
     for category in WEATHER_CATEGORIES.values():
       if any(start <= self.starpilot_weather.weather_id <= end for start, end in category["ranges"]):

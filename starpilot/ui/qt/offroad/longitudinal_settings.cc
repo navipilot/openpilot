@@ -185,7 +185,6 @@ StarPilotLongitudinalPanel::StarPilotLongitudinalPanel(StarPilotSettingsWindow *
     {"ReduceAccelerationSnow", tr("Reduce Acceleration by:"), tr("<b>Lower the maximum acceleration in snow.</b> Increase for softer takeoffs; decrease for quicker but less stable takeoffs."), ""},
     {"ReduceLateralAccelerationSnow", tr("Reduce Speed in Curves by:"), tr("<b>Lower the desired speed while driving through curves in snow.</b> Increase for safer, gentler turns; decrease for more aggressive driving in curves."), ""},
 
-    {"SetWeatherKey", tr("Set Your Own Key"), tr("<b>Set your own \"OpenWeatherMap\" key to increase the weather update rate.</b><br><br><i>Personal keys grant 1,000 free calls per day, allowing for updates every minute. The default key is shared and only updates every 15 minutes.</i>"), ""},
 
     {"SpeedLimitController", tr("Speed Limit Controller"), tr("<b>Limit openpilot's maximum driving speed to the current speed limit</b> obtained from downloaded maps, Mapbox, or the dashboard for supported vehicles (Ford, Genesis, Hyundai, Kia, Lexus, Toyota)."), "../../starpilot/assets/toggle_icons/icon_speed_limit.png"},
     {"SLCFallback", tr("Fallback Speed"), tr("<b>The speed used by \"Speed Limit Controller\" when no speed limit is found.</b><br><br>- <b>Set Speed</b>: Use the cruise set speed<br>- <b>Experimental Mode</b>: Estimate the limit using the driving model<br>- <b>Previous Limit</b>: Keep using the last confirmed limit"), ""},
@@ -406,70 +405,6 @@ StarPilotLongitudinalPanel::StarPilotLongitudinalPanel(StarPilotSettingsWindow *
         qolOpen = true;
       });
       longitudinalToggle = weatherToggle;
-    } else if (param == "SetWeatherKey") {
-      weatherKeyControl = new StarPilotButtonsControl(title, desc, icon, {tr("ADD"), tr("TEST")});
-      QObject::connect(weatherKeyControl, &StarPilotButtonsControl::buttonClicked, [this](int id) {
-        if (id == 0) {
-          if (!params.get("WeatherToken").empty()) {
-            if (StarPilotConfirmationDialog::yesorno(tr("Are you sure you want to remove your key?"), this)) {
-              params.remove("WeatherToken");
-
-              weatherKeyControl->setText(0, tr("ADD"));
-              weatherKeyControl->setVisibleButton(1, false);
-            }
-          } else {
-            int keyLength = 32;
-            QString currentKey = QString::fromStdString(params.get("WeatherToken"));
-            QString newKey = InputDialog::getText(tr("Enter your \"OpenWeatherMap\" key"), this, tr("Characters: 0/%1").arg(keyLength), false, -1, currentKey, keyLength).trimmed();
-            if (!newKey.isEmpty()) {
-              params.put("WeatherToken", newKey.toStdString());
-
-              weatherKeyControl->setText(0, tr("REMOVE"));
-              weatherKeyControl->setVisibleButton(1, true);
-            }
-          }
-        } else if (id == 1) {
-          weatherKeyControl->setValue(tr("Testing..."));
-
-          QString key = QString::fromStdString(params.get("WeatherToken")).trimmed();
-          QString url30 = QString("https://api.openweathermap.org/data/3.0/onecall?lat=42.4293&lon=-83.9850&exclude=current,minutely,hourly,daily,alerts&appid=%1").arg(key);
-
-          QNetworkRequest request(url30);
-          QNetworkReply *reply = networkManager->get(request);
-          QObject::connect(reply, &QNetworkReply::finished, this, [=]() {
-            reply->deleteLater();
-
-            if (reply->error() == QNetworkReply::NoError) {
-              weatherKeyControl->setValue("");
-              ConfirmationDialog::alert(tr("Key is valid!"), this);
-              return;
-            }
-
-            int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-            if (status == 401 || status == 403) {
-              QString url25 = QString("https://api.openweathermap.org/data/2.5/weather?lat=42.4293&lon=-83.9850&appid=%1").arg(key);
-
-              QNetworkRequest request25(url25);
-              QNetworkReply *reply25 = networkManager->get(request25);
-              QObject::connect(reply25, &QNetworkReply::finished, this, [=]() {
-                reply25->deleteLater();
-
-                weatherKeyControl->setValue("");
-                if (reply25->error() == QNetworkReply::NoError) {
-                  ConfirmationDialog::alert(tr("Your key is valid for version 2.5, but version 3.0 is highly recommended! Please subscribe to the \"One Call API 3.0\" plan!"), this);
-                } else {
-                   int status25 = reply25->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-                   ConfirmationDialog::alert(tr("Invalid key! (Error: %1)").arg(status25), this);
-                }
-              });
-            } else {
-              weatherKeyControl->setValue("");
-              ConfirmationDialog::alert(tr("An error occurred: %1").arg(reply->errorString()), this);
-            }
-          });
-        }
-      });
-      longitudinalToggle = weatherKeyControl;
     } else if (param == "LowVisibilityOffsets") {
       ButtonControl *manageLowVisibilitOffsetsButton = new ButtonControl(title, tr("MANAGE"), desc);
       QObject::connect(manageLowVisibilitOffsetsButton, &ButtonControl::clicked, [longitudinalLayout, weatherLowVisibilityPanel, this]() {
@@ -872,9 +807,7 @@ void StarPilotLongitudinalPanel::showEvent(QShowEvent *event) {
   vEgoStartingToggle->setTitle(QString(tr("Start Speed (Default: %1)")).arg(QString::number(parent->vEgoStarting, 'f', 2)));
   vEgoStoppingToggle->setTitle(QString(tr("Stop Speed (Default: %1)")).arg(QString::number(parent->vEgoStopping, 'f', 2)));
 
-  bool keyExists = !params.get("WeatherToken").empty();
-  weatherKeyControl->setText(0, keyExists ? tr("REMOVE") : tr("ADD"));
-  weatherKeyControl->setVisibleButton(1, keyExists && fs.starpilot_scene.online);
+
 
   updateToggles();
 }
