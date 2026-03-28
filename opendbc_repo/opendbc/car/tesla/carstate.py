@@ -181,6 +181,11 @@ class CarState(CarStateBase):
         fused_speed_limit *= CV.MPH_TO_KPH
       fp_ret.dashboardSpeedLimit = fused_speed_limit * CV.KPH_TO_MS
 
+    # Tesla Driver Profile detection: DAS_autosteerEnabled from DAS_settings (msg 659)
+    # reflects the Autosteer Beta toggle per driver profile. When OFF (0), the driver
+    # doesn't want lateral control — used to auto-set pauseLateral in frogpilot_card.
+    fp_ret.autosteerEnabled = cp_ap_party.vl["DAS_settings"]["DAS_autosteerEnabled"] == 1
+
     return ret, fp_ret
 
   def update_legacy(self, can_parsers) -> structs.CarState:
@@ -290,12 +295,18 @@ class CarState(CarStateBase):
         fused_speed_limit *= CV.MPH_TO_KPH
       fp_ret.dashboardSpeedLimit = fused_speed_limit * CV.KPH_TO_MS
 
+    # Tesla Driver Profile detection: DAS_autosteerEnabled from DAS_settings (msg 659)
+    # reflects the Autosteer Beta toggle per driver profile. When OFF (0), the driver
+    # doesn't want lateral control — used to auto-set pauseLateral in frogpilot_card.
+    fp_ret.autosteerEnabled = cp_ap_party.vl["DAS_settings"]["DAS_autosteerEnabled"] == 1
+
     # Debug: log dashboard speed limit and key states every ~2s (100 frames at 50Hz)
     self._debug_frame += 1
     if self._debug_frame % 100 == 0:
-      cloudlog.warning("DASH raw=%.0f units=%s final=%.1f m/s | cruise avail=%s enabled=%s gear=%s hands_on=%d",
+      cloudlog.warning("DASH raw=%.0f units=%s final=%.1f m/s | cruise avail=%s enabled=%s gear=%s hands_on=%d autosteer=%s",
                   autopilot_status["DAS_fusedSpeedLimit"], speed_units, fp_ret.dashboardSpeedLimit,
-                  ret.cruiseState.available, ret.cruiseState.enabled, ret.gearShifter, self.hands_on_level)
+                  ret.cruiseState.available, ret.cruiseState.enabled, ret.gearShifter, self.hands_on_level,
+                  fp_ret.autosteerEnabled)
 
     return ret, fp_ret
 

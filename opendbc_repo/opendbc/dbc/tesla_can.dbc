@@ -87,6 +87,11 @@ BO_ 697 DAS_control: 8 NEO
  SG_ DAS_controlCounter : 53|3@1+ (1,0) [0|0] "" NEO
  SG_ DAS_controlChecksum : 56|8@1+ (1,0) [0|0] "" NEO
 
+BO_ 659 DAS_settings: 8 NEO
+ SG_ DAS_autosteerEnabled : 38|1@0+ (1,0) [0|1] "" NEO
+ SG_ DAS_settingCounter : 52|4@1+ (1,0) [0|15] "" NEO
+ SG_ DAS_settingChecksum : 56|8@1+ (1,0) [0|255] "" NEO
+
 BO_ 521 DAS_longControl: 8 NEO
  SG_ DAS_locMode : 0|2@1+ (1,0) [0|0] "" NEO
  SG_ DAS_locState : 2|3@1+ (1,0) [0|0] "" NEO

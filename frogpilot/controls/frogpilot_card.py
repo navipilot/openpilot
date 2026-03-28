@@ -107,6 +107,12 @@ class FrogPilotCard:
 
     self.force_coast &= not (carState.brakePressed or carState.gasPressed)
 
+    # Tesla Driver Profile: auto-pause lateral when Autosteer Beta is OFF in the active
+    # driver profile (DAS_autosteerEnabled == 0 from DAS_settings msg 659). This lets
+    # Profile 1 use full OP (long+lat) while Profile 2 uses long-only (no lateral).
+    if self.CP.brand == "tesla":
+      self.pause_lateral = not frogpilotCarState.autosteerEnabled
+
     frogpilotCarState.accelPressed = self.accel_pressed
     frogpilotCarState.alwaysOnLateralEnabled = self.always_on_lateral_enabled
     frogpilotCarState.decelPressed = self.decel_pressed
