@@ -284,7 +284,6 @@ void send_peripheral_state(Panda *panda, PubMaster *pm) {
 void process_panda_state(Panda *panda, PubMaster *pm, bool engaged, bool is_onroad, bool spoofing_started) {
   auto ignition_opt = send_panda_states(pm, panda, is_onroad, spoofing_started);
   if (!ignition_opt) {
-    LOGE("Failed to get ignition_opt");
     return;
   }
 
@@ -429,7 +428,6 @@ void pandad_run(Panda *panda) {
 void pandad_main_thread(std::string serial) {
   if (serial.empty()) {
     auto serials = Panda::list();
-
     if (serials.empty()) {
       LOGW("no pandas found, exiting");
       return;
@@ -447,7 +445,7 @@ void pandad_main_thread(std::string serial) {
   }
 
   if (!do_exit) {
-    LOGW("connected to panda");
+    LOGW("connected to panda, starting pandad");
     pandad_run(panda);
   }
 

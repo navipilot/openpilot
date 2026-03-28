@@ -2,6 +2,7 @@
 
 #include <unistd.h>
 
+#include <algorithm>
 #include <cassert>
 #include <stdexcept>
 #include <vector>
@@ -13,8 +14,19 @@
 const bool PANDAD_MAXOUT = getenv("PANDAD_MAXOUT") != nullptr;
 
 Panda::Panda(std::string serial) {
+#ifndef __APPLE__
+  // try SPI first, then USB
+  try {
+    handle = std::make_unique<PandaSpiHandle>(serial);
+    LOGW("connected to %s over SPI", serial.c_str());
+  } catch (std::exception &e) {
+    handle = std::make_unique<PandaUsbHandle>(serial);
+    LOGW("connected to %s over USB", serial.c_str());
+  }
+#else
   handle = std::make_unique<PandaUsbHandle>(serial);
   LOGW("connected to %s over USB", serial.c_str());
+#endif
 
   hw_type = get_hw_type();
   can_reset_communications();
@@ -33,7 +45,17 @@ std::string Panda::hw_serial() {
 }
 
 std::vector<std::string> Panda::list() {
-  return PandaSpiHandle::list();
+#ifndef __APPLE__
+  std::vector<std::string> serials = PandaSpiHandle::list();
+  for (const auto &s : PandaUsbHandle::list()) {
+    if (std::find(serials.begin(), serials.end(), s) == serials.end()) {
+      serials.push_back(s);
+    }
+  }
+#else
+  std::vector<std::string> serials = PandaUsbHandle::list();
+#endif
+  return serials;
 }
 
 void Panda::set_safety_model(cereal::CarParams::SafetyModel safety_model, uint16_t safety_param) {
@@ -217,7 +239,7 @@ bool Panda::can_receive(std::vector<can_frame>& out_vec) {
   // Check if enough space left in buffer to store RECV_SIZE data
   assert(receive_buffer_size + RECV_SIZE <= sizeof(receive_buffer));
 
-  int recv = handle->bulk_read(0x81, &receive_buffer[receive_buffer_size], RECV_SIZE);
+  int recv = handle->bulk_read(0x81, &receive_buffer[receive_buffer_size], RECV_SIZE, 100);
   if (!comms_healthy()) {
     return false;
   }
