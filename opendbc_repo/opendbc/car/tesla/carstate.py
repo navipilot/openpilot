@@ -69,6 +69,15 @@ class CarState(CarStateBase):
     ret.vEgoRaw = cp_party.vl["DI_speed"]["DI_vehicleSpeed"] * CV.KPH_TO_MS
     ret.vEgo, ret.aEgo = self.update_speed_kf(ret.vEgoRaw)
 
+    # Displayed speed (from dzid26/opendbc vtb branch): Tesla's DI_uiSpeed is ~1% higher
+    # than DI_vehicleSpeed with half-unit hysteresis. Read it with units for vEgoCluster.
+    ui_speed_units = self.can_define.dv["DI_speed"]["DI_uiSpeedUnits"].get(int(cp_party.vl["DI_speed"]["DI_uiSpeedUnits"]), None)
+    ui_speed_scale = 1.01
+    if ui_speed_units == "DI_SPEED_KPH":
+      ret.vEgoCluster = cp_party.vl["DI_speed"]["DI_uiSpeed"] * CV.KPH_TO_MS
+    elif ui_speed_units == "DI_SPEED_MPH":
+      ret.vEgoCluster = cp_party.vl["DI_speed"]["DI_uiSpeed"] * CV.MPH_TO_MS
+
     # Gas pedal
     ret.gasPressed = cp_party.vl["DI_systemStatus"]["DI_accelPedalPos"] > 0
 
@@ -106,10 +115,14 @@ class CarState(CarStateBase):
 
     # Match panda safety cruise engaged logic
     ret.cruiseState.enabled = cruise_enabled and not self.autopark
+    # Cruise speed alignment (from dzid26/opendbc vtb branch): store displayed set speed
+    # in speedCluster, then divide by ~1% UI scale so openpilot's target doesn't overshoot
+    # the displayed speed on the Tesla dashboard.
     if speed_units == "KPH":
-      ret.cruiseState.speed = max(cp_party.vl["DI_state"]["DI_digitalSpeed"] * CV.KPH_TO_MS, 1e-3)
+      ret.cruiseState.speedCluster = cp_party.vl["DI_state"]["DI_digitalSpeed"] * CV.KPH_TO_MS
     elif speed_units == "MPH":
-      ret.cruiseState.speed = max(cp_party.vl["DI_state"]["DI_digitalSpeed"] * CV.MPH_TO_MS, 1e-3)
+      ret.cruiseState.speedCluster = cp_party.vl["DI_state"]["DI_digitalSpeed"] * CV.MPH_TO_MS
+    ret.cruiseState.speed = max(ret.cruiseState.speedCluster / ui_speed_scale, 1e-3)
     ret.cruiseState.available = cruise_state == "STANDBY" or ret.cruiseState.enabled
     ret.cruiseState.standstill = False  # This needs to be false, since we can resume from stop without sending anything special
     ret.standstill = cp_party.vl["ESP_B"]["ESP_vehicleStandstillSts"] == 1
