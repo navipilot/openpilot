@@ -1848,7 +1848,7 @@ def _resolve_troubleshoot_default_value(key, value_type, default_values):
   return _coerce_param_value(default_raw_value, safe_type)
 
 def _get_safety_snapshot_text():
-  cp_bytes = params.get("CarParamsPersistent") or params.get("CarParams")
+  cp_bytes = params.get("CarParamsPersistent")
   if not cp_bytes:
     return "Unavailable"
 
@@ -1869,7 +1869,7 @@ def _get_safety_snapshot_text():
     return "Unavailable"
 
 def _get_fingerprint_snapshot_text():
-  cp_bytes = params.get("CarParamsPersistent") or params.get("CarParams")
+  cp_bytes = params.get("CarParamsPersistent")
   cp_fingerprint = ""
   try:
     if cp_bytes:
@@ -1890,9 +1890,6 @@ def _get_fingerprint_snapshot_text():
   if cp_fingerprint:
     return cp_fingerprint
   return "Unknown"
-
-def _get_openpilot_enabled_snapshot_text():
-  return "Yes" if params.get_bool("OpenpilotEnabledToggle") else "No"
 
 def _build_troubleshoot_section_payload(section_definition, value_types, default_values, layout_metadata):
   section_keys = [str(key).strip() for key in section_definition.get("keys", []) if str(key).strip()]
@@ -1948,12 +1945,6 @@ def _build_troubleshoot_payload():
       "id": "fingerprint",
       "label": "Fingerprint",
       "value": _get_fingerprint_snapshot_text(),
-      "resettable": False,
-    },
-    {
-      "id": "openpilot_enabled",
-      "label": "Enable openpilot",
-      "value": _get_openpilot_enabled_snapshot_text(),
       "resettable": False,
     },
     {

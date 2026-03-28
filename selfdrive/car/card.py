@@ -120,12 +120,7 @@ class Car:
       self.RI = RI
 
     self.CP.alternativeExperience = 0
-    openpilot_enabled_toggle_raw = self.params.get("OpenpilotEnabledToggle")
-    if openpilot_enabled_toggle_raw in (None, b""):
-      openpilot_enabled_toggle = True
-      self.params.put_bool("OpenpilotEnabledToggle", True)
-    else:
-      openpilot_enabled_toggle = self.params.get_bool("OpenpilotEnabledToggle")
+    openpilot_enabled_toggle = self.params.get_bool("OpenpilotEnabledToggle")
     controller_available = self.CI.CC is not None and openpilot_enabled_toggle
     self.CP.passive = not controller_available
     if self.CP.passive:
