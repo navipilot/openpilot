@@ -97,10 +97,10 @@ void UIState::updateStatus(StarPilotUIState *fs) {
 
     if (state == cereal::SelfdriveState::OpenpilotState::PRE_ENABLED || state == cereal::SelfdriveState::OpenpilotState::OVERRIDING) {
       status = STATUS_OVERRIDE;
+    } else if (starpilot_scene.switchback_mode_enabled && (ss.getEnabled() || starpilot_scene.always_on_lateral_active)) {
+      status = STATUS_SWITCHBACK_MODE_ENABLED;
     } else if (starpilot_scene.always_on_lateral_active) {
       status = STATUS_ALWAYS_ON_LATERAL_ACTIVE;
-    } else if (starpilot_scene.switchback_mode_enabled && ss.getEnabled()) {
-      status = STATUS_SWITCHBACK_MODE_ENABLED;
     } else if (starpilot_scene.traffic_mode_enabled && ss.getEnabled()) {
       status = STATUS_TRAFFIC_MODE_ENABLED;
     } else {

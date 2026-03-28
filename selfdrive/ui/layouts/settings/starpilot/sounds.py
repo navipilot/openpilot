@@ -72,7 +72,7 @@ class StarPilotSoundsLayout(StarPilotPanel):
         panel.refresh_visibility()
 
 class StarPilotVolumeControlLayout(StarPilotPanel):
-  COOLDOWN_INFO = {"title": tr_noop("Switchback Mode Cooldown"), "icon": "toggle_icons/icon_mute.png", "min": 0, "max": 60}
+  COOLDOWN_INFO = {"title": tr_noop("Switchback Mode Cooldown"), "icon": "toggle_icons/icon_mute.png", "min": 0, "max": 30}
   VOLUME_INFO = {
     "BelowSteerSpeedVolume": {"title": tr_noop("Min Steer Speed Alert"), "icon": "toggle_icons/icon_mute.png", "min": 0},
     "DisengageVolume": {"title": tr_noop("Disengage Volume"), "icon": "toggle_icons/icon_mute.png", "min": 0},
@@ -117,8 +117,8 @@ class StarPilotVolumeControlLayout(StarPilotPanel):
       if v == 0:
         return tr("Off")
       if v == 1:
-        return tr("1 second")
-      return f"{v} {tr('seconds')}"
+        return tr("1 minute")
+      return f"{v} {tr('minutes')}"
 
     self.CATEGORIES.append({
       "title": self.COOLDOWN_INFO["title"],
@@ -158,7 +158,7 @@ class StarPilotVolumeControlLayout(StarPilotPanel):
 
     gui_app.set_modal_overlay(SliderDialog(
       tr(self.COOLDOWN_INFO["title"]), 0, self.COOLDOWN_INFO["max"], 1, current_v, on_close,
-      unit=" s", labels={0: tr("Off")}, color="#FF0097"
+      unit=" min", labels={0: tr("Off")}, color="#FF0097"
     ))
 
   @classmethod

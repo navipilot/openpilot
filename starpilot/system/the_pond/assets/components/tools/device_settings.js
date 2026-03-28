@@ -202,7 +202,7 @@ function formatSliderValue(val, stepStr, precisionInt, key) {
 
   if (key === "SwitchbackModeCooldown") {
     if (v === 0) return "Off"
-    return v === 1 ? "1 sec" : `${v} sec`
+    return v === 1 ? "1 min" : `${v} min`
   }
 
   const volumeKeys = [

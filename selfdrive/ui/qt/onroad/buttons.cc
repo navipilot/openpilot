@@ -92,14 +92,14 @@ void ExperimentalButton::showEvent(QShowEvent *event) {
 void ExperimentalButton::updateBackgroundColor() {
   if (isDown() || !engageable) {
     background_color = QColor(0, 0, 0, 166);
+  } else if (starpilot_scene.switchback_mode_enabled) {
+    background_color = bg_colors[STATUS_SWITCHBACK_MODE_ENABLED];
   } else if (starpilot_scene.always_on_lateral_active) {
     background_color = bg_colors[STATUS_ALWAYS_ON_LATERAL_ACTIVE];
   } else if (starpilot_scene.conditional_status == 1) {
     background_color = bg_colors[STATUS_CEM_DISABLED];
   } else if (experimental_mode) {
     background_color = bg_colors[STATUS_EXPERIMENTAL_MODE_ENABLED];
-  } else if (starpilot_scene.switchback_mode_enabled) {
-    background_color = bg_colors[STATUS_SWITCHBACK_MODE_ENABLED];
   } else if (starpilot_scene.traffic_mode_enabled) {
     background_color = bg_colors[STATUS_TRAFFIC_MODE_ENABLED];
   } else {

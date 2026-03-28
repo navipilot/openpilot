@@ -52,10 +52,10 @@ StarPilotSoundsPanel::StarPilotSoundsPanel(StarPilotSettingsWindow *parent, bool
       soundsToggle = alertVolumeControlToggle;
     } else if (alertCooldownKeys.contains(param)) {
       std::map<float, QString> cooldownLabels;
-      for (int i = 0; i <= 60; ++i) {
-        cooldownLabels[i] = i == 0 ? tr("Off") : i == 1 ? tr("1 second") : QString::number(i) + tr(" seconds");
+      for (int i = 0; i <= 30; ++i) {
+        cooldownLabels[i] = i == 0 ? tr("Off") : i == 1 ? tr("1 minute") : QString::number(i) + tr(" minutes");
       }
-      soundsToggle = new StarPilotParamValueControl(param, title, desc, icon, 0, 60, QString(), cooldownLabels, 1);
+      soundsToggle = new StarPilotParamValueControl(param, title, desc, icon, 0, 30, QString(), cooldownLabels, 1);
     } else if (alertVolumeControlKeys.contains(param)) {
       std::map<float, QString> volumeLabels;
       for (int i = 0; i <= 101; ++i) {

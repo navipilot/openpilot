@@ -738,14 +738,14 @@ void StarPilotAnnotatedCameraWidget::paintPathEdges(QPainter &p, int height) {
     gradient.setColorAt(1.0f, QColor(baseColor.red(), baseColor.green(), baseColor.blue(), 255.0f * 0.0f));
   };
 
-  if (starpilot_scene.always_on_lateral_active) {
+  if (starpilot_scene.switchback_mode_enabled) {
+    setPathEdgeColors(bg_colors[STATUS_SWITCHBACK_MODE_ENABLED]);
+  } else if (starpilot_scene.always_on_lateral_active) {
     setPathEdgeColors(bg_colors[STATUS_ALWAYS_ON_LATERAL_ACTIVE]);
   } else if (starpilot_scene.conditional_status == 1) {
     setPathEdgeColors(bg_colors[STATUS_CEM_DISABLED]);
   } else if (experimentalMode) {
     setPathEdgeColors(bg_colors[STATUS_EXPERIMENTAL_MODE_ENABLED]);
-  } else if (starpilot_scene.switchback_mode_enabled) {
-    setPathEdgeColors(bg_colors[STATUS_SWITCHBACK_MODE_ENABLED]);
   } else if (starpilot_scene.traffic_mode_enabled) {
     setPathEdgeColors(bg_colors[STATUS_TRAFFIC_MODE_ENABLED]);
   } else if (starpilot_toggles.value("color_scheme").toString() != "stock") {

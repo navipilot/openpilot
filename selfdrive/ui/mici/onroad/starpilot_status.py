@@ -17,9 +17,10 @@ TRAFFIC_COLOR = rl.Color(201, 34, 49, 255)
 
 def get_border_color(state: UIState):
   enabled = state.sm["selfdriveState"].enabled
+  lateral_active = enabled or state.always_on_lateral_active
   if state.status == UIStatus.OVERRIDE:
     return OVERRIDE_COLOR
-  if state.switchback_mode_enabled and enabled:
+  if state.switchback_mode_enabled and lateral_active:
     return SWITCHBACK_COLOR
   if state.traffic_mode_enabled and enabled:
     return TRAFFIC_COLOR
