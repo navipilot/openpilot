@@ -14,19 +14,18 @@
 const bool PANDAD_MAXOUT = getenv("PANDAD_MAXOUT") != nullptr;
 
 Panda::Panda(std::string serial) {
-#ifndef __APPLE__
-  // try SPI first, then USB
+  // try USB first, then SPI
   try {
-    handle = std::make_unique<PandaSpiHandle>(serial);
-    LOGW("connected to %s over SPI", serial.c_str());
-  } catch (std::exception &e) {
     handle = std::make_unique<PandaUsbHandle>(serial);
     LOGW("connected to %s over USB", serial.c_str());
-  }
+  } catch (std::exception &e) {
+#ifndef __APPLE__
+    handle = std::make_unique<PandaSpiHandle>(serial);
+    LOGW("connected to %s over SPI", serial.c_str());
 #else
-  handle = std::make_unique<PandaUsbHandle>(serial);
-  LOGW("connected to %s over USB", serial.c_str());
+    throw;
 #endif
+  }
 
   hw_type = get_hw_type();
   can_reset_communications();
@@ -45,15 +44,13 @@ std::string Panda::hw_serial() {
 }
 
 std::vector<std::string> Panda::list() {
+  std::vector<std::string> serials = PandaUsbHandle::list();
 #ifndef __APPLE__
-  std::vector<std::string> serials = PandaSpiHandle::list();
-  for (const auto &s : PandaUsbHandle::list()) {
+  for (const auto &s : PandaSpiHandle::list()) {
     if (std::find(serials.begin(), serials.end(), s) == serials.end()) {
       serials.push_back(s);
     }
   }
-#else
-  std::vector<std::string> serials = PandaUsbHandle::list();
 #endif
   return serials;
 }
