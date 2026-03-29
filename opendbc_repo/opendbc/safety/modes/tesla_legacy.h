@@ -1,6 +1,6 @@
 #pragma once
 
-#include "opendbc/safety/safety_declarations.h"
+#include "opendbc/safety/declarations.h"
 
 static bool tesla_external_panda = false;
 static bool tesla_hw1 = false;
