@@ -150,6 +150,9 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, model_
     elif direction == LaneChangeDirection.right:
       tracks = {k: v for k, v in tracks.items() if v.yRel < 0}
 
+  if not tracks:
+    return None
+
   offset_vision_dist = lead.x[0] - RADAR_TO_CAMERA
 
   def prob(c):
@@ -243,11 +246,11 @@ def get_adjacent_lead(tracks: dict[int, Track], standstill: bool, model_data: ca
 
 
 class RadarD:
-  def __init__(self, delay: float = 0.0):
+  def __init__(self, radar_ts: float = DT_MDL, delay: float = 0.0):
     self.current_time = 0.0
 
     self.tracks: dict[int, Track] = {}
-    self.kalman_params = KalmanParams(DT_MDL)
+    self.kalman_params = KalmanParams(radar_ts)
 
     self.v_ego = 0.0
     self.v_ego_hist = deque([0.0], maxlen=int(round(delay / DT_MDL)) + 1)
@@ -342,7 +345,11 @@ def main() -> None:
                            ignore_valid=['starpilotPlan'])
   pm = messaging.PubMaster(['radarState'])
 
-  RD = RadarD(CP.radarDelay)
+  radar_ts = float(getattr(CP, "radarTimeStepDEPRECATED", DT_MDL) or DT_MDL)
+  if not 0.01 < radar_ts < 0.2:
+    radar_ts = DT_MDL
+
+  RD = RadarD(radar_ts=radar_ts, delay=CP.radarDelay)
 
   sm = sm.extend(['starpilotPlan'])
   pm = pm.extend(['starpilotRadarState'])
