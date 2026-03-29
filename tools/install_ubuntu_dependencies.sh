@@ -64,13 +64,35 @@ function install_ubuntu_common_requirements() {
     portaudio19-dev \
     qttools5-dev-tools \
     libqt5svg5-dev \
-    libqt5serialbus5-dev  \
     libqt5x11extras5-dev \
     libqt5opengl5-dev \
     gettext
 }
 
-# Install Ubuntu 24.04 LTS packages
+# Newer Ubuntu releases (>= 25.x) dropped Qt5SerialBus from repos while keeping
+# the rest of Qt5 5.15.x. The noble (24.04) debs are ABI-compatible; the only
+# blocker is a virtual-package version guard, which --force-depends safely skips.
+function ensure_qt5serialbus() {
+  if dpkg -s libqt5serialbus5-dev >/dev/null 2>&1; then
+    return 0
+  fi
+  if apt-cache show libqt5serialbus5-dev >/dev/null 2>&1; then
+    $SUDO apt-get install -y --no-install-recommends libqt5serialbus5-dev
+    return 0
+  fi
+
+  echo "libqt5serialbus5-dev missing from repos — installing noble (24.04) debs..."
+  local tmpdir=$(mktemp -d)
+  local base="http://archive.ubuntu.com/ubuntu/pool/universe/q/qtserialbus-everywhere-src"
+  local ver="5.15.13-1"
+  for pkg in libqt5serialbus5 libqt5serialbus5-dev libqt5serialbus5-plugins; do
+    wget -q -P "$tmpdir" "${base}/${pkg}_${ver}_amd64.deb"
+  done
+  $SUDO dpkg --force-depends -i "$tmpdir"/*.deb
+  rm -rf "$tmpdir"
+}
+
+# Install Ubuntu 24.04+ packages
 function install_ubuntu_lts_latest_requirements() {
   install_ubuntu_common_requirements
 
@@ -80,13 +102,15 @@ function install_ubuntu_lts_latest_requirements() {
     qtbase5-dev-tools \
     python3-dev \
     python3-venv
+
+  ensure_qt5serialbus
 }
 
 # Detect OS using /etc/os-release file
 if [ -f "/etc/os-release" ]; then
   source /etc/os-release
   case "$VERSION_CODENAME" in
-    "jammy" | "kinetic" | "noble")
+    "jammy" | "kinetic" | "noble" | "questing")
       install_ubuntu_lts_latest_requirements
       ;;
     *)

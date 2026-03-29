@@ -244,7 +244,7 @@ start_fake_wifi() {
 }
 
 if ! python_ui_runtime_ok >/dev/null 2>&1; then
-  echo "Preparing macOS Python UI runtime extensions..."
+  echo "Preparing host Python UI runtime extensions..."
   sync_deps
   sync_raylib
   prepare_common_host_artifacts

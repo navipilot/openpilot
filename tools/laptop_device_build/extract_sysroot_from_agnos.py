@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import urllib.request
+import urllib.parse
 from pathlib import Path
 
 
@@ -81,7 +82,8 @@ def download_and_prepare_image(url: str, cache_dir: Path, force_download: bool) 
   if raw_image.exists():
     return raw_image
 
-  if url.endswith(".xz"):
+  parsed_url = urllib.parse.urlparse(url)
+  if parsed_url.path.endswith(".xz"):
     if not compressed.exists():
       download(url, compressed)
     if not raw_image.exists():
