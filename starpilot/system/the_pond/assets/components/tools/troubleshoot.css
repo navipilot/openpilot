@@ -83,6 +83,10 @@
   grid-template-columns: 2fr 1fr 1fr;
 }
 
+.troubleshootHeaderRowLearned {
+  grid-template-columns: 2fr 1fr 1fr 1.3fr;
+}
+
 .troubleshootHeaderRowSnapshot {
   grid-template-columns: 2fr 2fr;
 }
@@ -95,12 +99,17 @@
   grid-template-columns: 2fr 1fr 1fr;
 }
 
+.troubleshootItemRowLearned {
+  grid-template-columns: 2fr 1fr 1fr 1.3fr;
+}
+
 .troubleshootItemLabel {
   font-weight: 600;
 }
 
 .troubleshootItemValue,
-.troubleshootItemDefault {
+.troubleshootItemDefault,
+.troubleshootItemLearned {
   font-family: "Open Sans", sans-serif;
   word-break: break-word;
 }
@@ -110,6 +119,11 @@
   .troubleshootItemRow {
     grid-template-columns: 1.3fr 1fr 1fr;
     font-size: 0.9rem;
+  }
+
+  .troubleshootHeaderRowLearned,
+  .troubleshootItemRowLearned {
+    grid-template-columns: 1.3fr 0.95fr 0.95fr 1.2fr;
   }
 
   .troubleshootSnapshotRow {

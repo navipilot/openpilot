@@ -6,6 +6,7 @@ from openpilot.common.params import Params
 from openpilot.system.hardware import HARDWARE, PC
 from openpilot.selfdrive.ui.ui_state import ui_state
 from cereal import car, log, custom, messaging
+from opendbc.car.gm.values import GMFlags
 
 @dataclass
 class StarPilotCarState:
@@ -25,6 +26,7 @@ class StarPilotCarState:
     hasBSM: bool = False
     hasRadar: bool = True
     hasPedal: bool = False
+    hasSASCM: bool = False
     hasSNG: bool = False
     hasNNFFLog: bool = True
     hasAutoTune: bool = True
@@ -81,6 +83,7 @@ class StarPilotState:
             fallback_model = "CHEVROLET_BOLT_ACC_2022_2023"
 
         self.car_state.hasPedal = starpilot_toggles.get("has_pedal", True)
+        self.car_state.hasSASCM = starpilot_toggles.get("has_sascm", False)
         self.car_state.hasSDSU = starpilot_toggles.get("has_sdsu", False)
         self.car_state.hasZSS = starpilot_toggles.get("has_zss", False)
         self.car_state.isBolt = fallback_model.startswith("CHEVROLET_BOLT")
@@ -139,6 +142,7 @@ class StarPilotState:
             self.car_state.hasOpenpilotLongitudinal = bool(self._safe_get(CP, "openpilotLongitudinalControl", False))
             self.car_state.hasPCMCruise = bool(self._safe_get(CP, "pcmCruise", False))
             self.car_state.hasPedal = bool(self._safe_get(CP, "enableGasInterceptorDEPRECATED", False))
+            self.car_state.hasSASCM = car_make == "gm" and bool(self._safe_get(CP, "flags", 0) & GMFlags.SASCM.value)
             self.car_state.hasRadar = not bool(self._safe_get(CP, "radarUnavailable", False))
             self.car_state.hasSDSU = starpilot_toggles.get("has_sdsu", False)
             self.car_state.hasSNG = bool(self._safe_get(CP, "autoResumeSng", False))

@@ -26,8 +26,9 @@ import time
 import traceback
 from urllib.parse import quote
 
-from cereal import car, messaging
+from cereal import car, log, messaging
 from opendbc.can.parser import CANParser
+from opendbc.car.gm.values import GMFlags
 from opendbc.car.toyota.carcontroller import LOCK_CMD, UNLOCK_CMD
 from openpilot.common.params import ParamKeyType, Params
 from openpilot.common.realtime import DT_HW
@@ -1956,6 +1957,63 @@ def _resolve_troubleshoot_default_value(key, value_type, default_values):
 
   return _coerce_param_value(default_raw_value, safe_type)
 
+def _normalize_live_delay_status(status):
+  status_text = str(status or "").strip().lower()
+  if status_text in {"estimated", "unestimated", "invalid"}:
+    return status_text
+
+  try:
+    if status == log.LiveDelayData.Status.estimated:
+      return "estimated"
+    if status == log.LiveDelayData.Status.unestimated:
+      return "unestimated"
+    if status == log.LiveDelayData.Status.invalid:
+      return "invalid"
+  except Exception:
+    pass
+
+  return status_text
+
+def _get_steer_delay_learned_text():
+  live_delay_bytes = _safe_params_get_live_raw("LiveDelay")
+  if not live_delay_bytes:
+    return "Unavailable"
+
+  current_cp_bytes = _safe_params_get_live_raw("CarParamsPersistent")
+  previous_cp_bytes = _safe_params_get_live_raw("CarParamsPrevRoute")
+  if current_cp_bytes and previous_cp_bytes:
+    try:
+      with car.CarParams.from_bytes(current_cp_bytes) as current_cp, car.CarParams.from_bytes(previous_cp_bytes) as previous_cp:
+        current_fingerprint = str(getattr(current_cp, "carFingerprint", "") or "")
+        previous_fingerprint = str(getattr(previous_cp, "carFingerprint", "") or "")
+        if current_fingerprint and previous_fingerprint and current_fingerprint != previous_fingerprint:
+          return "Unavailable"
+    except Exception:
+      pass
+
+  try:
+    live_delay = messaging.log_from_bytes(live_delay_bytes, log.Event).liveDelay
+  except Exception:
+    return "Unavailable"
+
+  estimate = _safe_float(getattr(live_delay, "lateralDelayEstimate", 0.0), 0.0)
+  cal_perc = int(max(0, min(100, _safe_float(getattr(live_delay, "calPerc", 0), 0))))
+  status = _normalize_live_delay_status(getattr(live_delay, "status", ""))
+
+  if status == "estimated":
+    return f"Complete ({estimate:.2f}s)"
+  if status == "invalid":
+    return f"Invalid ({estimate:.2f}s)"
+  if status == "unestimated":
+    return f"Learning {cal_perc}% ({estimate:.2f}s)"
+
+  return f"{estimate:.2f}s"
+
+def _get_troubleshoot_learned_values():
+  return {
+    "SteerDelay": _get_steer_delay_learned_text(),
+  }
+
 def _get_safety_snapshot_text():
   cp_bytes = params.get("CarParamsPersistent")
   if not cp_bytes:
@@ -2026,6 +2084,7 @@ def _get_hardware_snapshot_items():
   has_bsm = None
   has_openpilot_longitudinal = None
   has_pedal = False
+  has_sascm = bool(starpilot_toggles.get("has_sascm", False))
   has_radar = None
   has_sdsu = bool(starpilot_toggles.get("has_sdsu", False))
   has_sng = None
@@ -2044,6 +2103,7 @@ def _get_hardware_snapshot_items():
         has_bsm = bool(getattr(cp, "enableBsm", False))
         has_openpilot_longitudinal = bool(getattr(cp, "openpilotLongitudinalControl", False))
         has_pedal = bool(getattr(cp, "enableGasInterceptorDEPRECATED", False))
+        has_sascm = car_make == "gm" and bool(getattr(cp, "flags", 0) & GMFlags.SASCM.value)
         has_radar = not bool(getattr(cp, "radarUnavailable", False))
         has_sdsu = bool(starpilot_toggles.get("has_sdsu", has_sdsu))
         has_sng = bool(getattr(cp, "autoResumeSng", False))
@@ -2054,6 +2114,7 @@ def _get_hardware_snapshot_items():
           fallback_make = str(starpilot_toggles.get("car_make", "") or "gm")
           fallback_model = str(starpilot_toggles.get("car_model", "") or "CHEVROLET_BOLT_ACC_2022_2023")
           has_pedal = bool(starpilot_toggles.get("has_pedal", True))
+          has_sascm = bool(starpilot_toggles.get("has_sascm", has_sascm))
           has_sdsu = bool(starpilot_toggles.get("has_sdsu", has_sdsu))
           has_zss = bool(starpilot_toggles.get("has_zss", has_zss))
           is_bolt = fallback_model.startswith("CHEVROLET_BOLT")
@@ -2064,6 +2125,7 @@ def _get_hardware_snapshot_items():
   elif PC:
     fallback_model = str(starpilot_toggles.get("car_model", "") or "CHEVROLET_BOLT_ACC_2022_2023")
     has_pedal = bool(starpilot_toggles.get("has_pedal", True))
+    has_sascm = bool(starpilot_toggles.get("has_sascm", has_sascm))
     has_sdsu = bool(starpilot_toggles.get("has_sdsu", has_sdsu))
     has_zss = bool(starpilot_toggles.get("has_zss", has_zss))
     is_bolt = fallback_model.startswith("CHEVROLET_BOLT")
@@ -2085,6 +2147,8 @@ def _get_hardware_snapshot_items():
   detected = []
   if has_pedal:
     detected.append("comma Pedal")
+  if has_sascm:
+    detected.append("SASCM")
   if has_sdsu:
     detected.append("SDSU")
   if has_zss:
@@ -2093,6 +2157,7 @@ def _get_hardware_snapshot_items():
   return [
     {"id": "hardware_detected", "label": "Hardware Detected", "value": ", ".join(detected) if detected else "None", "resettable": False},
     {"id": "pedal_detected", "label": "Pedal Detected", "value": _snapshot_bool_text(has_pedal), "resettable": False},
+    {"id": "sascm_detected", "label": "SASCM Detected", "value": _snapshot_bool_text(has_sascm), "resettable": False},
     {"id": "sdsu_detected", "label": "SDSU Detected", "value": _snapshot_bool_text(has_sdsu), "resettable": False},
     {"id": "zss_detected", "label": "ZSS Detected", "value": _snapshot_bool_text(has_zss), "resettable": False},
     {"id": "blind_spot_support", "label": "Blind Spot Support", "value": _snapshot_bool_text(has_bsm), "resettable": False},
@@ -2103,7 +2168,7 @@ def _get_hardware_snapshot_items():
     {"id": "sng_support", "label": "Stop-and-Go Support", "value": _snapshot_bool_text(has_sng), "resettable": False},
   ]
 
-def _build_troubleshoot_section_payload(section_definition, value_types, default_values, layout_metadata):
+def _build_troubleshoot_section_payload(section_definition, value_types, default_values, layout_metadata, learned_values):
   section_keys = [str(key).strip() for key in section_definition.get("keys", []) if str(key).strip()]
   items = []
 
@@ -2131,18 +2196,21 @@ def _build_troubleshoot_section_payload(section_definition, value_types, default
       "label": label,
       "value": current_value,
       "defaultValue": default_value,
+      "learnedValue": learned_values.get(key),
     })
 
   return {
     "id": section_definition["id"],
     "title": section_definition["title"],
     "resettable": True,
+    "hasLearnedColumn": any(item.get("learnedValue") not in (None, "") for item in items),
     "items": items,
   }
 
 def _build_troubleshoot_payload():
   _, value_types = _get_param_type_info()
   default_values = _get_default_param_values()
+  learned_values = _get_troubleshoot_learned_values()
   layout_metadata = _get_layout_param_metadata()
 
   longitudinal_personality_raw = _safe_params_get("LongitudinalPersonality", encoding="utf-8", default="") or ""
@@ -2175,7 +2243,7 @@ def _build_troubleshoot_payload():
   ]
 
   sections = [
-    _build_troubleshoot_section_payload(section_definition, value_types, default_values, layout_metadata)
+    _build_troubleshoot_section_payload(section_definition, value_types, default_values, layout_metadata, learned_values)
     for section_definition in _TROUBLESHOOT_SECTION_DEFINITIONS
   ]
 

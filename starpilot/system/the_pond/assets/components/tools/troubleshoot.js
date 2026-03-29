@@ -23,6 +23,12 @@ function formatValue(value) {
   return text || "(empty)"
 }
 
+function formatLearnedValue(value) {
+  if (value === null || value === undefined) return ""
+  const text = String(value).trim()
+  return text ? formatValue(value) : ""
+}
+
 function buildReportText() {
   const lines = []
   lines.push("StarPilot Troubleshoot Report")
@@ -38,7 +44,10 @@ function buildReportText() {
     lines.push("")
     lines.push(section.title)
     for (const item of section.items || []) {
-      lines.push(`- ${item.label}: ${formatValue(item.value)} (default: ${formatValue(item.defaultValue)})`)
+      const learnedSuffix = formatLearnedValue(item.learnedValue)
+        ? `, learned: ${formatLearnedValue(item.learnedValue)}`
+        : ""
+      lines.push(`- ${item.label}: ${formatValue(item.value)} (default: ${formatValue(item.defaultValue)}${learnedSuffix})`)
     }
   }
 
@@ -132,11 +141,13 @@ function initialize() {
 
 function itemRows(section) {
   const items = Array.isArray(section?.items) ? section.items : []
+  const rowClassName = section?.hasLearnedColumn ? "troubleshootItemRow troubleshootItemRowLearned" : "troubleshootItemRow"
   return items.map((item) => html`
-    <div class="troubleshootItemRow">
+    <div class="${rowClassName}">
       <div class="troubleshootItemLabel">${item.label}</div>
       <div class="troubleshootItemValue">${formatValue(item.value)}</div>
       <div class="troubleshootItemDefault">${formatValue(item.defaultValue)}</div>
+      ${section?.hasLearnedColumn ? html`<div class="troubleshootItemLearned">${formatLearnedValue(item.learnedValue)}</div>` : ""}
     </div>
   `)
 }
@@ -192,10 +203,11 @@ export function Troubleshoot() {
                 </button>
               ` : ""}
             </div>
-            <div class="troubleshootHeaderRow">
+            <div class="${section?.hasLearnedColumn ? "troubleshootHeaderRow troubleshootHeaderRowLearned" : "troubleshootHeaderRow"}">
               <span>Setting</span>
               <span>Current</span>
               <span>Default</span>
+              ${section?.hasLearnedColumn ? html`<span>Learned</span>` : ""}
             </div>
             ${itemRows(section)}
           </div>

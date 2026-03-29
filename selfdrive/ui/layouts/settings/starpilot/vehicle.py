@@ -489,6 +489,7 @@ class StarPilotVehicleInfoLayout(StarPilotPanel):
               None,
               [
                 tr("Pedal") if starpilot_state.car_state.canUsePedal else "",
+                tr("SASCM") if starpilot_state.car_state.hasSASCM else "",
                 tr("SDSU") if starpilot_state.car_state.canUseSDSU else "",
                 tr("ZSS") if starpilot_state.car_state.hasZSS else "",
               ],
