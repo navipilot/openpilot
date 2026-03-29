@@ -8,7 +8,8 @@
 void OnroadAlerts::updateState(const UIState &s, const StarPilotUIState &fs) {
   Alert a = getAlert(*(s.sm), *(fs.sm), s.scene.started_frame);
   if (!alert.equal(a)) {
-    if (alert.status == cereal::SelfdriveState::AlertStatus::NORMAL && starpilot_toggles.value("hide_alerts").toBool()) {
+    // Hide only incoming NORMAL alerts. Keep userPrompt/critical visible.
+    if (a.status == cereal::SelfdriveState::AlertStatus::NORMAL && starpilot_toggles.value("hide_alerts").toBool()) {
       clear();
     } else {
       alert = a;
