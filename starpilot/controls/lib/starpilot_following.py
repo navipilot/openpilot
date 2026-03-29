@@ -9,6 +9,16 @@ from openpilot.starpilot.common.starpilot_variables import CITY_SPEED_LIMIT, MAX
 TRAFFIC_MODE_BP = [0., CITY_SPEED_LIMIT]
 PERSONALITY_BP = [20. * CV.KPH_TO_MS, 90. * CV.KPH_TO_MS]
 
+
+def get_longitudinal_personality(sm):
+  controls_state = sm["controlsState"]
+  for attr in ("personalityDEPRECATED", "personality"):
+    try:
+      return getattr(controls_state, attr)
+    except Exception:
+      pass
+  return sm["selfdriveState"].personality
+
 class StarPilotFollowing:
   def __init__(self, StarPilotPlanner):
     self.starpilot_planner = StarPilotPlanner
@@ -24,6 +34,8 @@ class StarPilotFollowing:
     self.t_follow = 0
 
   def update(self, long_control_active, v_ego, sm, starpilot_toggles):
+    personality = get_longitudinal_personality(sm)
+
     if long_control_active and sm["starpilotCarState"].trafficModeEnabled:
       if sm["carState"].aEgo >= 0:
         self.base_acceleration_jerk = np.interp(v_ego, TRAFFIC_MODE_BP, starpilot_toggles.traffic_mode_jerk_acceleration)
@@ -40,21 +52,21 @@ class StarPilotFollowing:
           starpilot_toggles.aggressive_jerk_acceleration, starpilot_toggles.aggressive_jerk_danger, starpilot_toggles.aggressive_jerk_speed,
           starpilot_toggles.standard_jerk_acceleration, starpilot_toggles.standard_jerk_danger, starpilot_toggles.standard_jerk_speed,
           starpilot_toggles.relaxed_jerk_acceleration, starpilot_toggles.relaxed_jerk_danger, starpilot_toggles.relaxed_jerk_speed,
-          starpilot_toggles.custom_personalities, sm["selfdriveState"].personality
+          starpilot_toggles.custom_personalities, personality
         )
       else:
         self.base_acceleration_jerk, self.base_danger_jerk, self.base_speed_jerk = get_jerk_factor(
           starpilot_toggles.aggressive_jerk_deceleration, starpilot_toggles.aggressive_jerk_danger, starpilot_toggles.aggressive_jerk_speed_decrease,
           starpilot_toggles.standard_jerk_deceleration, starpilot_toggles.standard_jerk_danger, starpilot_toggles.standard_jerk_speed_decrease,
           starpilot_toggles.relaxed_jerk_deceleration, starpilot_toggles.relaxed_jerk_danger, starpilot_toggles.relaxed_jerk_speed_decrease,
-          starpilot_toggles.custom_personalities, sm["selfdriveState"].personality
+          starpilot_toggles.custom_personalities, personality
         )
 
       self.t_follow = get_T_FOLLOW(
         starpilot_toggles.aggressive_follow,
         starpilot_toggles.standard_follow,
         starpilot_toggles.relaxed_follow,
-        starpilot_toggles.custom_personalities, sm["selfdriveState"].personality
+        starpilot_toggles.custom_personalities, personality
       )
       if isinstance(self.t_follow, (list, tuple)):
         self.t_follow = float(np.interp(v_ego, PERSONALITY_BP, self.t_follow))

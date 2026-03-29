@@ -33,6 +33,16 @@ _A_TOTAL_MAX_V = [1.7, 3.2]
 _A_TOTAL_MAX_BP = [20., 40.]
 
 
+def get_longitudinal_personality(sm):
+  controls_state = sm['controlsState']
+  for attr in ('personalityDEPRECATED', 'personality'):
+    try:
+      return getattr(controls_state, attr)
+    except Exception:
+      pass
+  return sm['selfdriveState'].personality
+
+
 def get_max_accel(v_ego):
   return np.interp(v_ego, A_CRUISE_MAX_BP, A_CRUISE_MAX_VALS)
 
@@ -335,11 +345,13 @@ class LongitudinalPlanner:
       except Exception:
         pass
 
+    personality = get_longitudinal_personality(sm)
+
     self.mpc.set_weights(sm['starpilotPlan'].accelerationJerk,
                          sm['starpilotPlan'].dangerJerk,
                          sm['starpilotPlan'].speedJerk,
                          prev_accel_constraint,
-                         personality=sm['selfdriveState'].personality,
+                         personality=personality,
                          v_ego=v_ego,
                          lead_dist=self.lead_dist_f if self.lead_dist_f is not None else lead_dist,
                          uncertainty=uncertainty,
@@ -353,7 +365,7 @@ class LongitudinalPlanner:
     tracking_lead = bool(sm['starpilotPlan'].trackingLead)
     self.mpc.update(sm['radarState'], v_cruise, x, v, a, j,
                     sm['starpilotPlan'].dangerFactor, sm['starpilotPlan'].tFollow,
-                    personality=sm['selfdriveState'].personality, tracking_lead=tracking_lead)
+                    personality=personality, tracking_lead=tracking_lead)
 
     self.a_desired_trajectory_full = np.interp(CONTROL_N_T_IDX, T_IDXS_MPC, self.mpc.a_solution)
     self.v_desired_trajectory = np.interp(CONTROL_N_T_IDX, T_IDXS_MPC, self.mpc.v_solution)
