@@ -199,7 +199,7 @@ static void tesla_rx_hook(const CANPacket_t *msg) {
       bool tesla_stock_steering_control_now = steering_control_type != 0;  // any non-NONE type
 
       // Only consider rising edges while controls are not allowed
-      if (tesla_stock_steering_control_now && !tesla_stock_steering_control_prev && !is_lat_active()) {
+      if (tesla_stock_steering_control_now && !tesla_stock_steering_control_prev && !controls_allowed) {
         tesla_stock_steering_control = true;
       }
       if (!tesla_stock_steering_control_now) {
