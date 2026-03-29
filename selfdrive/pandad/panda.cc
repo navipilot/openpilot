@@ -14,18 +14,20 @@
 const bool PANDAD_MAXOUT = getenv("PANDAD_MAXOUT") != nullptr;
 
 Panda::Panda(std::string serial) {
-  // try USB first, then SPI
+#ifndef __APPLE__
+  // try SPI first with empty serial (SPI uses hardware UID which
+  // differs from the USB serial format passed by pandad.py)
   try {
+    handle = std::make_unique<PandaSpiHandle>("");
+    LOGW("connected to %s over SPI", handle->hw_serial.c_str());
+  } catch (std::exception &e) {
     handle = std::make_unique<PandaUsbHandle>(serial);
     LOGW("connected to %s over USB", serial.c_str());
-  } catch (std::exception &e) {
-#ifndef __APPLE__
-    handle = std::make_unique<PandaSpiHandle>(serial);
-    LOGW("connected to %s over SPI", serial.c_str());
-#else
-    throw;
-#endif
   }
+#else
+  handle = std::make_unique<PandaUsbHandle>(serial);
+  LOGW("connected to %s over USB", serial.c_str());
+#endif
 
   hw_type = get_hw_type();
   can_reset_communications();
