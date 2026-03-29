@@ -44,6 +44,26 @@ function agnos_init {
   fi
 }
 
+LEGACY_DEVICE_STATE_CLEANUP_FLAG="/data/starpilot_legacy_device_state_cleanup_v1"
+
+function cleanup_legacy_device_state {
+  if [ -f "$LEGACY_DEVICE_STATE_CLEANUP_FLAG" ]; then
+    return
+  fi
+
+  echo "Cleaning up legacy device state"
+  if sudo rm -rf /data/params/d/* \
+    && sudo rm -rf /persist/params/d/* \
+    && sudo rm -rf /cache/params/d/* \
+    && sudo rm -rf /data/media/0/realdata/* \
+    && sudo rm -rf /data/models/*; then
+    sudo touch "$LEGACY_DEVICE_STATE_CLEANUP_FLAG"
+  else
+    echo "Failed cleaning up legacy device state"
+    return 1
+  fi
+}
+
 function launch {
   # Remove orphaned git lock if it exists on boot
   [ -f "$DIR/.git/index.lock" ] && rm -f $DIR/.git/index.lock
@@ -91,6 +111,8 @@ function launch {
   if [ -f /AGNOS ]; then
     agnos_init
   fi
+
+  cleanup_legacy_device_state
 
   # write tmux scrollback to a file
   tmux capture-pane -pq -S-1000 > /tmp/launch_log
