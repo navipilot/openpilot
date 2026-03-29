@@ -41,7 +41,7 @@ from panda import Panda
 from openpilot.starpilot.assets.theme_manager import HOLIDAY_THEME_PATH, THEME_COMPONENT_PARAMS
 from openpilot.starpilot.common.starpilot_utilities import delete_file, get_lock_status, run_cmd
 from openpilot.starpilot.common.starpilot_variables import ACTIVE_THEME_PATH, ERROR_LOGS_PATH, EXCLUDED_KEYS, LEGACY_STARPILOT_PARAM_RENAMES, RESOURCES_REPO, SCREEN_RECORDINGS_PATH, THEME_SAVE_PATH,\
-                                                           update_starpilot_toggles
+                                                           default_ev_tuning_enabled, update_starpilot_toggles
 from openpilot.starpilot.common.testing_grounds import (
   DEFAULT_TESTING_GROUND_VARIANT as SHARED_DEFAULT_TESTING_GROUND_VARIANT,
   TESTING_GROUND_VARIANT_LABELS as SHARED_TESTING_GROUND_VARIANT_LABELS,
@@ -351,6 +351,7 @@ class ParamsCompat:
     return getattr(self._params, attr)
 
 _params_raw = Params(return_defaults=True)
+_params_live_raw = Params()
 _params_memory_raw = Params(memory=True)
 
 def _normalize_default_value(value):
@@ -623,6 +624,25 @@ _TROUBLESHOOT_ADVANCED_LONGITUDINAL_KEYS = [
   "StoppingDecelRate",
   "VEgoStopping",
 ]
+
+_RUNTIME_DEFAULT_STOCK_KEYS = {
+  "SteerDelay": "SteerDelayStock",
+  "SteerFriction": "SteerFrictionStock",
+  "SteerOffset": "SteerOffsetStock",
+  "SteerKP": "SteerKPStock",
+  "SteerLatAccel": "SteerLatAccelStock",
+  "SteerRatio": "SteerRatioStock",
+  "LongitudinalActuatorDelay": "LongitudinalActuatorDelayStock",
+  "StartAccel": "StartAccelStock",
+  "StopAccel": "StopAccelStock",
+  "StoppingDecelRate": "StoppingDecelRateStock",
+  "VEgoStarting": "VEgoStartingStock",
+  "VEgoStopping": "VEgoStoppingStock",
+}
+
+_RUNTIME_DEFAULT_ZERO_OK_KEYS = {
+  "SteerOffset",
+}
 
 _TROUBLESHOOT_SECTION_DEFINITIONS = [
   {
@@ -1664,7 +1684,9 @@ def _get_default_param_values():
       for key, default_val, _, _ in starpilot_default_params
       if key not in EXCLUDED_KEYS
     }
-  return _cached_default_values
+  default_values = dict(_cached_default_values)
+  default_values.update(_get_runtime_default_param_overrides())
+  return default_values
 
 def _coerce_param_value(raw_value, value_type):
   safe_type = value_type or str
@@ -1708,6 +1730,12 @@ def _safe_params_get(key, encoding=None, default=None):
   except Exception:
     return default
 
+def _safe_params_get_live_raw(key, default=None, block=False):
+  try:
+    return _params_live_raw.get(key, block=block)
+  except Exception:
+    return default
+
 def _safe_params_get_bool(key, default=False):
   try:
     return params.get_bool(key)
@@ -1722,6 +1750,59 @@ def _is_blank_param_raw(raw_value):
   if isinstance(raw_value, str):
     return len(raw_value.strip()) == 0
   return False
+
+def _has_runtime_default_value(key, raw_value):
+  if _is_blank_param_raw(raw_value):
+    return False
+
+  if key in _RUNTIME_DEFAULT_ZERO_OK_KEYS:
+    return True
+
+  try:
+    if isinstance(raw_value, bytes):
+      raw_value = raw_value.decode("utf-8", errors="replace")
+    return float(str(raw_value).strip()) != 0.0
+  except Exception:
+    return True
+
+def _get_runtime_default_param_overrides():
+  overrides = {}
+
+  for key, stock_key in _RUNTIME_DEFAULT_STOCK_KEYS.items():
+    stock_raw = _safe_params_get_live_raw(stock_key)
+    if _has_runtime_default_value(key, stock_raw):
+      overrides[key] = stock_raw
+      overrides[stock_key] = stock_raw
+
+  cp_bytes = _safe_params_get_live_raw("CarParamsPersistent")
+  if not cp_bytes:
+    return overrides
+
+  try:
+    with car.CarParams.from_bytes(cp_bytes) as cp:
+      overrides["EVTuning"] = default_ev_tuning_enabled(cp)
+
+      car_param_defaults = {
+        "SteerDelay": getattr(cp, "steerActuatorDelay", None),
+        "SteerRatio": getattr(cp, "steerRatio", None),
+        "LongitudinalActuatorDelay": getattr(cp, "longitudinalActuatorDelay", None),
+        "StartAccel": getattr(cp, "startAccel", None),
+        "StopAccel": getattr(cp, "stopAccel", None),
+        "StoppingDecelRate": getattr(cp, "stoppingDecelRate", None),
+        "VEgoStarting": getattr(cp, "vEgoStarting", None),
+        "VEgoStopping": getattr(cp, "vEgoStopping", None),
+      }
+
+      for key, value in car_param_defaults.items():
+        if key in overrides or value is None:
+          continue
+        if key not in _RUNTIME_DEFAULT_ZERO_OK_KEYS and float(value) == 0.0:
+          continue
+        overrides[key] = value
+  except Exception:
+    pass
+
+  return overrides
 
 def _get_current_param_value(key, value_type):
   safe_type = value_type or str
@@ -1831,15 +1912,23 @@ def _resolve_troubleshoot_current_value(key, value_type, default_values):
   safe_type = value_type or str
 
   if safe_type == bool:
+    raw_value = _safe_params_get_live_raw(key)
+    if not _is_blank_param_raw(raw_value):
+      return _coerce_param_value(raw_value, safe_type)
+
+    default_raw_value = default_values.get(key)
+    if not _is_blank_param_raw(default_raw_value):
+      return _coerce_param_value(default_raw_value, safe_type)
+
     return _safe_params_get_bool(key)
 
-  raw_value = _safe_params_get(key)
+  raw_value = _safe_params_get_live_raw(key)
   if not _is_blank_param_raw(raw_value):
     return _coerce_param_value(raw_value, safe_type)
 
   stock_key = f"{key}Stock"
   if stock_key in default_values:
-    stock_raw_value = _safe_params_get(stock_key)
+    stock_raw_value = _safe_params_get_live_raw(stock_key)
     if not _is_blank_param_raw(stock_raw_value):
       return _coerce_param_value(stock_raw_value, safe_type)
 
@@ -1857,7 +1946,7 @@ def _resolve_troubleshoot_default_value(key, value_type, default_values):
 
   stock_key = f"{key}Stock"
   if stock_key in default_values:
-    stock_current_raw = _safe_params_get(stock_key)
+    stock_current_raw = _safe_params_get_live_raw(stock_key)
     if not _is_blank_param_raw(stock_current_raw):
       return _coerce_param_value(stock_current_raw, safe_type)
 
@@ -1910,6 +1999,109 @@ def _get_fingerprint_snapshot_text():
   if cp_fingerprint:
     return cp_fingerprint
   return "Unknown"
+
+def _snapshot_bool_text(value):
+  if value is True:
+    return "Yes"
+  if value is False:
+    return "No"
+  return "Unavailable"
+
+def _get_starpilot_toggles_snapshot():
+  raw_toggles = _safe_params_get_live_raw("StarPilotToggles")
+  if not raw_toggles:
+    return {}
+
+  try:
+    if isinstance(raw_toggles, bytes):
+      raw_toggles = raw_toggles.decode("utf-8", errors="replace")
+    parsed = json.loads(str(raw_toggles) or "{}")
+    return parsed if isinstance(parsed, dict) else {}
+  except Exception:
+    return {}
+
+def _get_hardware_snapshot_items():
+  starpilot_toggles = _get_starpilot_toggles_snapshot()
+
+  has_bsm = None
+  has_openpilot_longitudinal = None
+  has_pedal = False
+  has_radar = None
+  has_sdsu = bool(starpilot_toggles.get("has_sdsu", False))
+  has_sng = None
+  has_zss = bool(starpilot_toggles.get("has_zss", False))
+  can_use_pedal = None
+  can_use_sdsu = None
+  is_bolt = False
+
+  cp_bytes = _safe_params_get_live_raw("CarParamsPersistent")
+  if cp_bytes:
+    try:
+      with car.CarParams.from_bytes(cp_bytes) as cp:
+        car_fingerprint = str(getattr(cp, "carFingerprint", "") or "")
+        car_make = str(getattr(cp, "brand", "") or getattr(cp, "carName", "") or "")
+
+        has_bsm = bool(getattr(cp, "enableBsm", False))
+        has_openpilot_longitudinal = bool(getattr(cp, "openpilotLongitudinalControl", False))
+        has_pedal = bool(getattr(cp, "enableGasInterceptorDEPRECATED", False))
+        has_radar = not bool(getattr(cp, "radarUnavailable", False))
+        has_sdsu = bool(starpilot_toggles.get("has_sdsu", has_sdsu))
+        has_sng = bool(getattr(cp, "autoResumeSng", False))
+        has_zss = bool(starpilot_toggles.get("has_zss", has_zss))
+        is_bolt = car_fingerprint.startswith("CHEVROLET_BOLT")
+
+        if PC and (car_make == "mock" or car_fingerprint == "MOCK"):
+          fallback_make = str(starpilot_toggles.get("car_make", "") or "gm")
+          fallback_model = str(starpilot_toggles.get("car_model", "") or "CHEVROLET_BOLT_ACC_2022_2023")
+          has_pedal = bool(starpilot_toggles.get("has_pedal", True))
+          has_sdsu = bool(starpilot_toggles.get("has_sdsu", has_sdsu))
+          has_zss = bool(starpilot_toggles.get("has_zss", has_zss))
+          is_bolt = fallback_model.startswith("CHEVROLET_BOLT")
+          if fallback_make == "gm" and has_openpilot_longitudinal is None:
+            has_openpilot_longitudinal = True
+    except Exception:
+      pass
+  elif PC:
+    fallback_model = str(starpilot_toggles.get("car_model", "") or "CHEVROLET_BOLT_ACC_2022_2023")
+    has_pedal = bool(starpilot_toggles.get("has_pedal", True))
+    has_sdsu = bool(starpilot_toggles.get("has_sdsu", has_sdsu))
+    has_zss = bool(starpilot_toggles.get("has_zss", has_zss))
+    is_bolt = fallback_model.startswith("CHEVROLET_BOLT")
+
+  if can_use_pedal is None:
+    can_use_pedal = has_pedal or is_bolt
+  if can_use_sdsu is None:
+    can_use_sdsu = has_sdsu
+
+  fpcp_bytes = _safe_params_get_live_raw("StarPilotCarParamsPersistent")
+  if fpcp_bytes:
+    try:
+      fpcp = messaging.log_from_bytes(fpcp_bytes, custom.StarPilotCarParams)
+      can_use_pedal = bool(getattr(fpcp, "canUsePedal", can_use_pedal))
+      can_use_sdsu = bool(getattr(fpcp, "canUseSDSU", can_use_sdsu))
+    except Exception:
+      pass
+
+  detected = []
+  if has_pedal:
+    detected.append("comma Pedal")
+  if has_sdsu:
+    detected.append("SDSU")
+  if has_zss:
+    detected.append("ZSS")
+
+  return [
+    {"id": "hardware_detected", "label": "Hardware Detected", "value": ", ".join(detected) if detected else "None", "resettable": False},
+    {"id": "pedal_detected", "label": "Pedal Detected", "value": _snapshot_bool_text(has_pedal), "resettable": False},
+    {"id": "sdsu_detected", "label": "SDSU Detected", "value": _snapshot_bool_text(has_sdsu), "resettable": False},
+    {"id": "zss_detected", "label": "ZSS Detected", "value": _snapshot_bool_text(has_zss), "resettable": False},
+    {"id": "blind_spot_support", "label": "Blind Spot Support", "value": _snapshot_bool_text(has_bsm), "resettable": False},
+    {"id": "openpilot_longitudinal_support", "label": "openpilot Longitudinal Support", "value": _snapshot_bool_text(has_openpilot_longitudinal), "resettable": False},
+    {"id": "pedal_support", "label": "comma Pedal Support", "value": _snapshot_bool_text(can_use_pedal), "resettable": False},
+    {"id": "radar_support", "label": "Radar Support", "value": _snapshot_bool_text(has_radar), "resettable": False},
+    {"id": "sdsu_support", "label": "SDSU Support", "value": _snapshot_bool_text(can_use_sdsu), "resettable": False},
+    {"id": "sng_support", "label": "Stop-and-Go Support", "value": _snapshot_bool_text(has_sng), "resettable": False},
+  ]
 
 def _build_troubleshoot_section_payload(section_definition, value_types, default_values, layout_metadata):
   section_keys = [str(key).strip() for key in section_definition.get("keys", []) if str(key).strip()]
@@ -1967,6 +2159,7 @@ def _build_troubleshoot_payload():
       "value": _get_fingerprint_snapshot_text(),
       "resettable": False,
     },
+    *_get_hardware_snapshot_items(),
     {
       "id": "driving_model",
       "label": "Current Driving Model",
@@ -2883,11 +3076,7 @@ def setup(app):
   @app.route("/api/params/defaults", methods=["GET"])
   def get_default_params():
     allowed_keys, types = _get_param_type_info()
-    defaults_lookup = {
-      key: default_val
-      for key, default_val, _, _ in starpilot_default_params
-      if key in allowed_keys
-    }
+    defaults_lookup = _get_default_param_values()
 
     result = {}
     for key in allowed_keys:

@@ -252,6 +252,18 @@ def normalize_legacy_car_model(car_model):
   normalized = LEGACY_CARMODEL_MIGRATIONS.get(car_model, car_model)
   return normalized
 
+def default_ev_tuning_enabled(CP):
+  car_make = str(getattr(CP, "brand", "") or "")
+  car_model = normalize_legacy_car_model(getattr(CP, "carFingerprint", "")) or ""
+
+  gm_ev_vehicle = car_make == "gm" and car_model in GM_EV_CAR
+  gm_ev_vehicle &= not (car_model.startswith("CHEVROLET_VOLT") and not car_model.endswith("_CC"))
+  gm_ev_vehicle &= car_model != "CHEVROLET_MALIBU_HYBRID_CC"
+
+  ev_vehicle = gm_ev_vehicle or (car_make == "hyundai" and car_model in HYUNDAI_EV_CAR)
+  ev_vehicle |= getattr(CP, "transmissionType", None) == car.CarParams.TransmissionType.direct
+  return bool(ev_vehicle)
+
 def get_starpilot_toggles(sm=messaging.SubMaster(["starpilotPlan"])):
   toggles = process_starpilot_toggles(sm["starpilotPlan"].starpilotToggles)
 
@@ -515,11 +527,7 @@ class StarPilotVariables:
     toggle.use_custom_steerRatio = bool(round(toggle.steerRatio, 2) != round(steerRatio, 2)) and not toggle.force_auto_tune or toggle.force_auto_tune_off
 
     advanced_longitudinal_tuning = toggle.openpilot_longitudinal and self.get_value("AdvancedLongitudinalTune")
-    gm_ev_vehicle = toggle.car_make == "gm" and CP.carFingerprint in GM_EV_CAR
-    gm_ev_vehicle &= not (toggle.car_model.startswith("CHEVROLET_VOLT") and not toggle.car_model.endswith("_CC"))
-    gm_ev_vehicle &= toggle.car_model != "CHEVROLET_MALIBU_HYBRID_CC"
-    ev_vehicle = gm_ev_vehicle or (toggle.car_make == "hyundai" and CP.carFingerprint in HYUNDAI_EV_CAR)
-    ev_vehicle |= CP.transmissionType == car.CarParams.TransmissionType.direct
+    ev_vehicle = default_ev_tuning_enabled(CP)
 
     if self.params_raw.get("EVTuning") in (None, b""):
       self.params.put_bool("EVTuning", ev_vehicle)
