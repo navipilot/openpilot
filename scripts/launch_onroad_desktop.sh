@@ -204,6 +204,13 @@ cleanup() {
     wait "${REPLAY_PID}" >/dev/null 2>&1 || true
   fi
 
+  if [[ -n "${OPENPILOT_PREFIX:-}" && "${OPENPILOT_PREFIX}" == desktop-onroad-* ]]; then
+    echo "Cleaning up temporary prefix environment (${OPENPILOT_PREFIX})..."
+    rm -rf "/dev/shm/msgq_${OPENPILOT_PREFIX}"
+    rm -rf "/tmp/comma_download_cache${OPENPILOT_PREFIX}"
+    rm -rf "${HOME}/.comma${OPENPILOT_PREFIX}"
+  fi
+
   exit "${exit_code}"
 }
 
@@ -239,6 +246,7 @@ prepare_env() {
     unset OPENPILOT_PREFIX
   else
     export OPENPILOT_PREFIX="${PREFIX_ARG:-${OPENPILOT_PREFIX:-desktop-onroad-$$}}"
+    mkdir -p "/dev/shm/msgq_${OPENPILOT_PREFIX}"
   fi
 }
 
