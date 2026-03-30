@@ -7,7 +7,6 @@ from opendbc.car.gm import gmcan
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.gm.values import ASCM_INT, CAR, CC_ONLY_CAR, CC_REGEN_PADDLE_CAR, DBC, EV_CAR, SDGM_CAR, AccState, CanBus, CarControllerParams, CruiseButtons, GMFlags
 from opendbc.car.interfaces import CarControllerBase
-from opendbc.car.gm.cancel_logic import get_stock_cc_active_for_cancel
 from openpilot.common.params import Params, UnknownKeyName
 from openpilot.starpilot.common.testing_grounds import testing_ground
 
@@ -19,6 +18,13 @@ LongCtrlState = structs.CarControl.Actuators.LongControlState
 CAMERA_CANCEL_DELAY_FRAMES = 10
 # Enforce a minimum interval between steering messages to avoid a fault
 MIN_STEER_MSG_INTERVAL_MS = 15
+
+
+def get_stock_cc_active_for_cancel(CP, CS):
+  stock_cc_active = CS.out.cruiseState.enabled or CS.pcm_acc_status != AccState.OFF
+  if CP.carFingerprint == CAR.CHEVROLET_BOLT_ACC_2022_2023_PEDAL:
+    return CS.out.cruiseState.enabled
+  return stock_cc_active
 
 
 class CarController(CarControllerBase):
