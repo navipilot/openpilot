@@ -3839,6 +3839,78 @@ def setup(app):
     buffer.seek(0)
     return send_file(buffer, as_attachment=True, download_name="speed_limits.json", mimetype="application/json")
 
+  def _speed_limits_status_payload():
+    status = params_memory.get("UpdateSpeedLimitsStatus", encoding="utf-8") or ""
+    processing = bool(status and status != "Completed!")
+    enabled = params.get_bool("SpeedLimitFiller")
+    is_onroad = params.get_bool("IsOnroad")
+    time_valid = system_time_valid()
+
+    network_connected = True
+    try:
+      sm = messaging.SubMaster(["deviceState"], poll="deviceState")
+      sm.update(0)
+      network_connected = sm["deviceState"].networkType != log.DeviceState.NetworkType.none
+    except Exception:
+      pass
+
+    overpass_requests = {}
+    try:
+      overpass_requests = json.loads(params.get("OverpassRequests", encoding="utf-8") or "{}")
+    except Exception:
+      pass
+
+    current_day = datetime.now(timezone.utc).day
+    saved_day = int(overpass_requests.get("day", current_day) or current_day)
+    total_requests = int(overpass_requests.get("total_requests", 0) or 0)
+    max_requests = int(overpass_requests.get("max_requests", 10000) or 10000)
+    if saved_day != current_day:
+      total_requests = 0
+    api_limit_hit = total_requests >= max_requests
+
+    reason = ""
+    if not enabled:
+      reason = "Enable Speed Limit Filler on the device first."
+    elif processing:
+      reason = status
+    elif is_onroad:
+      reason = "Processing is only available while parked."
+    elif not time_valid:
+      reason = "System time is not valid yet."
+    elif not network_connected:
+      reason = "Connect the device to the internet first."
+    elif api_limit_hit:
+      reason = "Today's Overpass API request limit has been reached."
+
+    return {
+      "apiLimitHit": api_limit_hit,
+      "canProcessNow": enabled and not processing and not is_onroad and time_valid and network_connected and not api_limit_hit,
+      "enabled": enabled,
+      "isOnroad": is_onroad,
+      "networkConnected": network_connected,
+      "processing": processing,
+      "reason": reason,
+      "status": status or "Idle",
+      "timeValid": time_valid,
+      "totalRequests": total_requests,
+      "maxRequests": max_requests,
+    }
+
+  @app.route("/api/speed_limits/status", methods=["GET"])
+  def speed_limits_status():
+    return jsonify(_speed_limits_status_payload()), 200
+
+  @app.route("/api/speed_limits/process", methods=["POST"])
+  def process_speed_limits():
+    payload = _speed_limits_status_payload()
+    if not payload["canProcessNow"]:
+      return jsonify({"error": payload["reason"] or "Speed limit processing is unavailable right now."}), 409
+
+    params_memory.put("UpdateSpeedLimitsStatus", "Calculating...")
+    params_memory.put_bool("UpdateSpeedLimits", True)
+
+    return jsonify({"message": "Speed limit processing started.", "status": "Calculating..."}), 202
+
   @app.route("/api/stats", methods=["GET"])
   def get_stats():
     build_metadata = get_build_metadata()

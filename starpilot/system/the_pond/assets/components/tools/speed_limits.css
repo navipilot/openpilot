@@ -13,7 +13,7 @@
 }
 
 .download-speed-limits-button + .download-speed-limits-button {
-  margin-top: var(--padding-sm);
+  margin-top: 0;
 }
 
 .download-speed-limits-button:hover {
@@ -22,25 +22,39 @@
   transform: var(--hover-scale-sm);
 }
 .download-speed-limits-button-wrapper {
-  height: calc(100% + 20px);
-  position: relative;
+  align-items: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: var(--padding-sm);
   width: 100%;
 }
 
 .download-speed-limits-link {
   color: var(--text-color);
   font-size: var(--font-size-sm);
-  left: 50%;
-  margin-top: var(--border-radius-sm);
-  position: absolute;
+  text-align: center;
   text-decoration: underline;
-  top: 100%;
-  transform: translateX(-50%);
   white-space: nowrap;
+}
+
+.download-speed-limits-note {
+  color: var(--secondary-fg);
+  font-size: var(--font-size-sm);
+  margin: 0;
+  text-align: center;
+}
+
+.download-speed-limits-status {
+  color: var(--text-color);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-demi-bold);
+  margin: 0;
+  text-align: center;
 }
 
 .download-speed-limits-text {
   color: var(--text-color);
+  margin-bottom: 0;
   text-align: center;
 }
 
