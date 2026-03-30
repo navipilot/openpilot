@@ -1408,6 +1408,13 @@
         "parent_key": "AdvancedCustomUI"
       },
       {
+        "key": "HolidayThemes",
+        "label": "Holiday Themes",
+        "description": "Automatically apply seasonal theme assets during holiday windows. Turn this off to keep your normal theme year-round.",
+        "data_type": "bool",
+        "ui_type": "toggle"
+      },
+      {
         "key": "CustomUI",
         "label": "Driving Screen Widgets",
         "description": "Custom StarPilot widgets for the driving screen.",
