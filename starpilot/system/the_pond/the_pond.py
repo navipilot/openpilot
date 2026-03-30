@@ -41,7 +41,7 @@ from panda import Panda
 
 from openpilot.starpilot.assets.theme_manager import HOLIDAY_THEME_PATH, THEME_COMPONENT_PARAMS
 from openpilot.starpilot.common.starpilot_utilities import delete_file, get_lock_status, run_cmd
-from openpilot.starpilot.common.starpilot_variables import ACTIVE_THEME_PATH, ERROR_LOGS_PATH, EXCLUDED_KEYS, LEGACY_STARPILOT_PARAM_RENAMES, RESOURCES_REPO, SCREEN_RECORDINGS_PATH, THEME_SAVE_PATH,\
+from openpilot.starpilot.common.starpilot_variables import ACTIVE_THEME_PATH, ERROR_LOGS_PATH, EXCLUDED_KEYS, LEGACY_STARPILOT_PARAM_RENAMES, RESOURCES_REPO, SCREEN_RECORDINGS_PATH, STOCK_THEME_PATH, THEME_SAVE_PATH,\
                                                            default_ev_tuning_enabled, update_starpilot_toggles
 from openpilot.starpilot.common.testing_grounds import (
   DEFAULT_TESTING_GROUND_VARIANT as SHARED_DEFAULT_TESTING_GROUND_VARIANT,
@@ -4330,6 +4330,8 @@ def setup(app):
 
     if theme_type == "active" or theme == "__active__":
       file_path = ACTIVE_THEME_PATH / asset_path
+    elif theme_type == "stock" or theme == "__stock__":
+      file_path = STOCK_THEME_PATH / asset_path
     elif asset_path.startswith("steering_wheels/"):
       file_path = THEME_SAVE_PATH / asset_path
     elif asset_path.startswith("steering_wheel/") and "holiday" in theme_type:
@@ -4548,7 +4550,10 @@ def setup(app):
   @app.route("/api/themes/load/<path:theme_path>")
   def load_theme(theme_path):
     theme_type = request.args.get("type", "")
-    theme_dir = HOLIDAY_THEME_PATH / theme_path if "holiday" in theme_type else THEME_SAVE_PATH / "theme_packs" / theme_path
+    if theme_type == "stock" or theme_path == "__stock__":
+      theme_dir = STOCK_THEME_PATH
+    else:
+      theme_dir = HOLIDAY_THEME_PATH / theme_path if "holiday" in theme_type else THEME_SAVE_PATH / "theme_packs" / theme_path
 
     response_data = {
       "colors": None,
@@ -4567,16 +4572,15 @@ def setup(app):
 
     icons_dir = theme_dir / "icons"
     if icons_dir.exists():
-      if (icons_dir / "button_home.gif").exists():
-        response_data["images"]["homeButton"] = {
-          "filename": "button_home.gif",
-          "path": "icons/button_home.gif"
-        }
-      if (icons_dir / "button_settings.png").exists():
-        response_data["images"]["settingsButton"] = {
-          "filename": "button_settings.png",
-          "path": "icons/button_settings.png"
-        }
+      for base_name, response_key in [("button_home", "homeButton"), ("button_settings", "settingsButton")]:
+        for ext in [".gif", ".png", ".jpg", ".jpeg"]:
+          filename = f"{base_name}{ext}"
+          if (icons_dir / filename).exists():
+            response_data["images"][response_key] = {
+              "filename": filename,
+              "path": f"icons/{filename}"
+            }
+            break
 
     distance_dir = theme_dir / "distance_icons"
     if distance_dir.exists():
@@ -4642,7 +4646,14 @@ def setup(app):
           }
 
     steering_wheel_path = None
-    if "holiday" in theme_type:
+    if theme_type == "stock" or theme_path == "__stock__":
+      steering_dir = theme_dir / "steering_wheel"
+      if steering_dir.exists() and steering_dir.is_dir():
+        for file in steering_dir.iterdir():
+          if file.is_file() and file.suffix.lower() in [".png", ".jpg", ".jpeg", ".gif"]:
+            steering_wheel_path = f"steering_wheel/{file.name}"
+            break
+    elif "holiday" in theme_type:
       steering_dir = theme_dir / "steering_wheel"
       if steering_dir.exists() and steering_dir.is_dir():
         for file in steering_dir.iterdir():

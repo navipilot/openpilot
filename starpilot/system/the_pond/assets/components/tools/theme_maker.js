@@ -33,6 +33,15 @@ const SOUND_DEFINITIONS = [
   { key: "startup", label: "Startup Sound" },
 ];
 
+const BUILTIN_THEME_OPTIONS = {
+  colors: { name: "Stock", path: "__stock__", type: "stock", builtin: true },
+  distance_icons: { name: "Stock", path: "__stock__", type: "stock", builtin: true },
+  icons: { name: "Stock", path: "__stock__", type: "stock", builtin: true },
+  sounds: { name: "Stock", path: "__stock__", type: "stock", builtin: true },
+  steering_wheel: { name: "Stock", path: "__stock__", type: "stock", builtin: true },
+  turn_signals: { name: "None (Stock)", path: "__stock_none__", type: "stock_none", builtin: true },
+};
+
 const fileStore = {
   images: { distanceIcons: {} },
   sounds: {},
@@ -705,6 +714,19 @@ export function ThemeMaker() {
     state.showManageThemesModal = true;
   };
 
+  const getVisibleThemesForActiveTab = () => {
+    const builtinTheme = BUILTIN_THEME_OPTIONS[state.activeTab];
+    const visibleThemes = state.themes.filter(theme => {
+      if (state.activeTab === "steering_wheel") {
+        return theme.type === "steering_wheel" || (theme.type === "holiday" && theme.hasSteeringWheel);
+      }
+      const key = `has${state.activeTab.charAt(0).toUpperCase() + state.activeTab.slice(1).replace(/_([a-z])/g, g => g[1].toUpperCase())}`;
+      return theme[key];
+    });
+
+    return builtinTheme ? [builtinTheme, ...visibleThemes] : visibleThemes;
+  };
+
   const mergeDownloadablesIntoThemes = () => {
     const byName = new Map();
     const norm = (s) => (s || "")
@@ -888,11 +910,12 @@ export function ThemeMaker() {
         }
       }
 
-      if (assetType === "steering_wheel" && theme.path) {
+      if (assetType === "steering_wheel" && data.images.steeringWheel?.path) {
         const url = `/api/themes/asset/${theme.path}/${data.images.steeringWheel.path}?type=${theme.type}`;
         const fileResponse = await fetch(url);
         const blob = await fileResponse.blob();
-        const file = new File([blob], theme.path, { type: blob.type });
+        const filename = data.images.steeringWheel.filename || theme.path;
+        const file = new File([blob], filename, { type: blob.type });
         fileStore.images.steeringWheel = file;
         state.imageFileNames.steeringWheel = theme.name;
       }
@@ -941,6 +964,26 @@ export function ThemeMaker() {
     } finally {
       state.isLoadingAsset = false;
     }
+  };
+
+  const loadBuiltinTurnSignals = () => {
+    clearAssetType("turn_signals");
+    state.themeSubmitted = false;
+    state.turnSignalLength = 100;
+    state.turnSignalType = "Single Image";
+    state.turnSignalStyle = "Traditional";
+    state.imageFileNames.turnSignal = "None";
+    state.imageFileNames.turnSignalBlindspot = "";
+    showSnackbar('Loaded stock turn signals.');
+  };
+
+  const loadSelectableThemeAsset = async (theme, assetType) => {
+    if (theme?.type === "stock_none" && assetType === "turn_signals") {
+      loadBuiltinTurnSignals();
+      return;
+    }
+
+    await loadThemeAsset(theme, assetType);
   };
 
   const confirmDelete = (theme) => {
@@ -1370,16 +1413,11 @@ export function ThemeMaker() {
             `)}
           </div>
           <div class="themes-list">
-            ${() => state.themes.filter(theme => {
-              if (state.activeTab === "steering_wheel") {
-                return theme.type === "steering_wheel" || (theme.type === "holiday" && theme.hasSteeringWheel);
-              }
-              const key = `has${state.activeTab.charAt(0).toUpperCase() + state.activeTab.slice(1).replace(/_([a-z])/g, g => g[1].toUpperCase())}`;
-              return theme[key];
-            }).map(theme => html`
-              <div class="theme-item" @click="${() => !state.isLoadingAsset && loadThemeAsset(theme, state.activeTab)}">
+            ${() => getVisibleThemesForActiveTab().map(theme => html`
+              <div class="theme-item" @click="${() => !state.isLoadingAsset && loadSelectableThemeAsset(theme, state.activeTab)}">
                 <span class="theme-button">${theme.name} ${theme.is_user_created ? " 🌟" : ""}</span>
                 ${() => {
+                  if (theme.builtin) return "";
                   const key = `localHas${state.activeTab
                     .replace(/_([a-z])/g, (_, c) => c.toUpperCase())
                     .replace(/^[a-z]/, c => c.toUpperCase())}`;
