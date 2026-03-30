@@ -184,7 +184,11 @@ class CarState(CarStateBase):
     # Tesla Driver Profile detection: DAS_autosteerEnabled from DAS_settings (msg 659)
     # reflects the Autosteer Beta toggle per driver profile. When OFF (0), the driver
     # doesn't want lateral control — used to auto-set pauseLateral in frogpilot_card.
-    fp_ret.autosteerEnabled = cp_ap_party.vl["DAS_settings"]["DAS_autosteerEnabled"] == 1
+    # Model X and HW 2.5 vehicles don't broadcast DAS_settings on the autopilot_party bus.
+    if self.CP.flags & TeslaFlags.MISSING_DAS_SETTINGS:
+      fp_ret.autosteerEnabled = True
+    else:
+      fp_ret.autosteerEnabled = cp_ap_party.vl["DAS_settings"]["DAS_autosteerEnabled"] == 1
 
     return ret, fp_ret
 
@@ -298,7 +302,11 @@ class CarState(CarStateBase):
     # Tesla Driver Profile detection: DAS_autosteerEnabled from DAS_settings (msg 659)
     # reflects the Autosteer Beta toggle per driver profile. When OFF (0), the driver
     # doesn't want lateral control — used to auto-set pauseLateral in frogpilot_card.
-    fp_ret.autosteerEnabled = cp_ap_party.vl["DAS_settings"]["DAS_autosteerEnabled"] == 1
+    # Model X and HW 2.5 vehicles don't broadcast DAS_settings on the autopilot_party bus.
+    if self.CP.flags & TeslaFlags.MISSING_DAS_SETTINGS:
+      fp_ret.autosteerEnabled = True
+    else:
+      fp_ret.autosteerEnabled = cp_ap_party.vl["DAS_settings"]["DAS_autosteerEnabled"] == 1
 
     # Debug: log dashboard speed limit and key states every ~2s (100 frames at 50Hz)
     self._debug_frame += 1
