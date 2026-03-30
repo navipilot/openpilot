@@ -127,7 +127,9 @@ class MapSpeedLogger:
     self.filtered_dataset = list(self.cleanup_dataset(fallback_dataset))
 
   def get_speed_limit_source(self):
+    vision_speed_limit = self.params_memory.get_float("VisionSpeedLimit") if self.params.get_bool("VisionSpeedLimitDetection") else 0
     sources = [
+      (vision_speed_limit, "Vision"),
       (self.sm["starpilotPlan"].slcMapboxSpeedLimit, "Mapbox"),
       (self.sm["starpilotCarState"].dashboardSpeedLimit, "Dashboard")
     ]

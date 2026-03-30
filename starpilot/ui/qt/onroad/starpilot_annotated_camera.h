@@ -119,6 +119,7 @@ private:
   float speedLimit;
   float stoppingDistance;
   float unconfirmedSpeedLimit;
+  float visionSpeedLimit;
 
   std::string speedLimitSource;
 
@@ -144,6 +145,7 @@ private:
   QPixmap speedIcon;
   QPixmap stopSignImg;
   QPixmap turnIcon;
+  QPixmap visionIcon;
 
   QPoint cemStatusPosition;
   QPoint compassPosition;

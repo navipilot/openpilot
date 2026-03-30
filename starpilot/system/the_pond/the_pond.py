@@ -30,6 +30,7 @@ from cereal import car, log, messaging
 from opendbc.can.parser import CANParser
 from opendbc.car.gm.values import GMFlags
 from opendbc.car.toyota.carcontroller import LOCK_CMD, UNLOCK_CMD
+from openpilot.common.constants import CV
 from openpilot.common.params import ParamKeyType, Params
 from openpilot.common.realtime import DT_HW
 from openpilot.common.time_helpers import system_time_valid
@@ -3845,6 +3846,18 @@ def setup(app):
     enabled = params.get_bool("SpeedLimitFiller")
     is_onroad = params.get_bool("IsOnroad")
     time_valid = system_time_valid()
+    is_metric = params.get_bool("IsMetric")
+
+    vision_enabled = params.get_bool("VisionSpeedLimitDetection")
+    vision_speed_limit = params_memory.get_float("VisionSpeedLimit") if vision_enabled else 0
+    vision_confidence = params_memory.get_float("VisionSpeedLimitConfidence") if vision_enabled else 0
+    vision_bookmark_count = params_memory.get_int("VisionSpeedLimitBookmarkCount") if vision_enabled else 0
+    vision_debug_session = params_memory.get("VisionSpeedLimitDebugSession", encoding="utf-8") if vision_enabled else ""
+    vision_last_event = params_memory.get("VisionSpeedLimitLastEvent", encoding="utf-8") if vision_enabled else ""
+    vision_status = params_memory.get("VisionSpeedLimitStatus", encoding="utf-8") or ("Idle" if vision_enabled else "Disabled")
+    vision_stream = params_memory.get("VisionSpeedLimitStream", encoding="utf-8") if vision_enabled else ""
+    vision_speed_unit = "km/h" if is_metric else "mph"
+    vision_display_speed = round(vision_speed_limit * (CV.MS_TO_KPH if is_metric else CV.MS_TO_MPH)) if vision_speed_limit > 0 else 0
 
     network_connected = True
     try:
@@ -3894,6 +3907,15 @@ def setup(app):
       "timeValid": time_valid,
       "totalRequests": total_requests,
       "maxRequests": max_requests,
+      "visionConfidence": vision_confidence,
+      "visionBookmarkCount": vision_bookmark_count,
+      "visionDebugSession": vision_debug_session,
+      "visionDisplaySpeed": vision_display_speed,
+      "visionEnabled": vision_enabled,
+      "visionLastEvent": vision_last_event,
+      "visionSpeedUnit": vision_speed_unit,
+      "visionStatus": vision_status,
+      "visionStream": vision_stream,
     }
 
   @app.route("/api/speed_limits/status", methods=["GET"])

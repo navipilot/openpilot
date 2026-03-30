@@ -73,6 +73,9 @@ def allow_uploads(started: bool, params: Params, CP: car.CarParams, starpilot_to
 def run_speed_limit_filler(started: bool, params: Params, CP: car.CarParams, starpilot_toggles: SimpleNamespace) -> bool:
   return starpilot_toggles.speed_limit_filler
 
+def run_speed_limit_vision(started: bool, params: Params, CP: car.CarParams, starpilot_toggles: SimpleNamespace) -> bool:
+  return starpilot_toggles.vision_speed_limit_detection
+
 procs = [
   DaemonProcess("manage_athenad", "system.athena.manage_athenad", "AthenadPid"),
 
@@ -140,6 +143,7 @@ procs += [
   PythonProcess("the_pond", "starpilot.system.the_pond.the_pond", always_run, nice=19),
   PythonProcess("galaxy", "starpilot.system.galaxy.galaxy", always_run, nice=19),
   PythonProcess("speed_limit_filler", "starpilot.system.speed_limit_filler", run_speed_limit_filler),
+  PythonProcess("speed_limit_vision", "starpilot.system.speed_limit_vision", run_speed_limit_vision),
 ]
 
 managed_processes = {p.name: p for p in procs}

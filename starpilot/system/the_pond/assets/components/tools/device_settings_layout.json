@@ -1137,6 +1137,29 @@
         "is_parent_toggle": true
       },
       {
+        "key": "VisionSpeedLimitDetection",
+        "label": "Vision Speed Limit Detection",
+        "description": "Use the road camera to detect speed limit signs for SLC and speed limit filling.",
+        "data_type": "bool",
+        "ui_type": "toggle"
+      },
+      {
+        "key": "VisionSpeedLimitAutoBookmark",
+        "label": "Auto-Bookmark Vision Signs",
+        "description": "Automatically save confirmed vision-detected speed limit signs into the speed-limit debug session so they can be imported into the training set later.",
+        "data_type": "bool",
+        "ui_type": "toggle",
+        "parent_key": "VisionSpeedLimitDetection"
+      },
+      {
+        "key": "VisionSpeedLimitAutoPreserveSegment",
+        "label": "Preserve Auto-Bookmarked Segments",
+        "description": "Also send a real bookmark for confirmed auto-bookmarks so loggerd preserves the route segment. Leave this off unless you specifically want the extra storage usage.",
+        "data_type": "bool",
+        "ui_type": "toggle",
+        "parent_key": "VisionSpeedLimitAutoBookmark"
+      },
+      {
         "key": "SLCConfirmation",
         "label": "Confirm New Speed Limits",
         "description": "Ask before changing to a new speed limit. To accept, tap the flashing on-screen widget or press the Cruise Increase button. To deny, press the Cruise Decrease button or ignore the prompt for 30 seconds.",
@@ -1178,6 +1201,62 @@
         "description": "Use Mapbox speed-limit data when no other source is available.",
         "data_type": "bool",
         "ui_type": "toggle",
+        "parent_key": "SpeedLimitController"
+      },
+      {
+        "key": "SLCPriority1",
+        "label": "Primary Speed Limit Source",
+        "description": "Choose the first speed-limit source to trust when more than one is available.",
+        "data_type": "string",
+        "ui_type": "dropdown",
+        "options": [
+          {
+            "value": "Dashboard",
+            "label": "Dashboard"
+          },
+          {
+            "value": "Map Data",
+            "label": "Map Data"
+          },
+          {
+            "value": "Vision",
+            "label": "Vision"
+          },
+          {
+            "value": "Highest",
+            "label": "Highest"
+          },
+          {
+            "value": "Lowest",
+            "label": "Lowest"
+          }
+        ],
+        "parent_key": "SpeedLimitController"
+      },
+      {
+        "key": "SLCPriority2",
+        "label": "Secondary Speed Limit Source",
+        "description": "Choose the backup speed-limit source when the primary one is unavailable.",
+        "data_type": "string",
+        "ui_type": "dropdown",
+        "options": [
+          {
+            "value": "None",
+            "label": "None"
+          },
+          {
+            "value": "Dashboard",
+            "label": "Dashboard"
+          },
+          {
+            "value": "Map Data",
+            "label": "Map Data"
+          },
+          {
+            "value": "Vision",
+            "label": "Vision"
+          }
+        ],
         "parent_key": "SpeedLimitController"
       },
       {

@@ -611,7 +611,7 @@ class StarPilotSpeedLimitControllerLayout(StarPilotPanel):
     return f"{primary}, {secondary}"
 
   def _on_priority_clicked(self):
-    primary_options = ["Dashboard", "Map Data", "Highest", "Lowest"]
+    primary_options = ["Dashboard", "Map Data", "Vision", "Highest", "Lowest"]
     current_primary = self._params.get("SLCPriority1", encoding='utf-8') or "Map Data"
     current_secondary = self._params.get("SLCPriority2", encoding='utf-8') or "None"
 
@@ -622,7 +622,7 @@ class StarPilotSpeedLimitControllerLayout(StarPilotPanel):
         self._rebuild_grid()
 
     def show_secondary_dialog(primary):
-      secondary_options = ["None"] + [option for option in ("Dashboard", "Map Data") if option != primary]
+      secondary_options = ["None"] + [option for option in ("Dashboard", "Map Data", "Vision") if option != primary]
       selected_secondary = current_secondary if current_secondary in secondary_options else "None"
       gui_app.set_modal_overlay(
         SelectionDialog(

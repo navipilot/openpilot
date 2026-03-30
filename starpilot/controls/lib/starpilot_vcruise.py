@@ -73,7 +73,7 @@ class StarPilotVCruise:
       self.slc_offset = self.slc.offset
       self.slc_target = self.slc.target
     elif starpilot_toggles.show_speed_limits:
-      self.slc.update_limits(sm["starpilotCarState"].dashboardSpeedLimit, now, time_validated, v_cruise, v_ego, sm)
+      self.slc.update_limits(sm["starpilotCarState"].dashboardSpeedLimit, now, time_validated, v_cruise, v_ego, sm, display_only=True)
 
       self.slc_offset = 0
       self.slc_target = self.slc.target

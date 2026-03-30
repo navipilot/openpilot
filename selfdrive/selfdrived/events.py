@@ -265,6 +265,15 @@ def below_steer_speed_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.S
     Priority.LOW, VisualAlert.none, AudibleAlert.prompt, 1.5)
 
 
+def speed_limit_changed_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality, starpilot_toggles: SimpleNamespace) -> Alert:
+  speed_limit = sm["starpilotPlan"].unconfirmedSlcSpeedLimit or sm["starpilotPlan"].slcSpeedLimit
+  return Alert(
+    "Speed limit detected",
+    f"Confirm {get_display_speed(speed_limit, metric)}?",
+    StarPilotAlertStatus.starpilot, AlertSize.mid,
+    Priority.LOW, VisualAlert.none, AudibleAlert.prompt, 3.0)
+
+
 def calibration_incomplete_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality, starpilot_toggles: SimpleNamespace) -> Alert:
   first_word = 'Recalibrating' if sm['liveCalibration'].calStatus == log.LiveCalibrationData.Status.recalibrating else 'Calibrating'
   return Alert(
@@ -1176,11 +1185,7 @@ STARPILOT_EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   },
 
   StarPilotEventName.speedLimitChanged: {
-    ET.PERMANENT: Alert(
-      "Speed limit changed",
-      "",
-      StarPilotAlertStatus.starpilot, AlertSize.small,
-      Priority.LOW, VisualAlert.none, AudibleAlert.prompt, 3.),
+    ET.PERMANENT: speed_limit_changed_alert,
   },
 
   StarPilotEventName.trafficModeActive: {

@@ -377,6 +377,7 @@ class AugmentedRoadView(CameraView):
       return
 
     in_reverse = self._is_in_reverse()
+    self._hud_renderer.prepare(self._content_rect)
 
     # Draw all UI overlays
     if not in_reverse:
@@ -384,6 +385,8 @@ class AugmentedRoadView(CameraView):
 
     # Fade out bottom of overlays for looks
     rl.draw_texture_ex(self._fade_texture, rl.Vector2(self._content_rect.x, self._content_rect.y), 0.0, 1.0, rl.WHITE)
+    if not in_reverse:
+      self._hud_renderer.render_background()
 
     alert_to_render, not_animating_out = self._alert_renderer.will_render()
 
@@ -400,7 +403,7 @@ class AugmentedRoadView(CameraView):
     if ui_state.started:
       self._alert_renderer.render(self._content_rect)
     if not in_reverse:
-      self._hud_renderer.render(self._content_rect)
+      self._hud_renderer.render_foreground()
     if (not in_reverse) and alert_to_render is None:
       self._experimental_mode_banner.render(self._content_rect)
     if not in_reverse:

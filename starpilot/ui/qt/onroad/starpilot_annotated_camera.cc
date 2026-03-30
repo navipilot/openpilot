@@ -19,6 +19,7 @@ StarPilotAnnotatedCameraWidget::StarPilotAnnotatedCameraWidget(QWidget *parent) 
   speedIcon = loadPixmap("../../starpilot/assets/other_images/speed_icon.png", {widget_size, widget_size});
   stopSignImg = loadPixmap("../../starpilot/assets/other_images/stop_sign.png", {btn_size, btn_size});
   turnIcon = loadPixmap("../../starpilot/assets/other_images/turn_icon.png", {widget_size, widget_size});
+  visionIcon = loadPixmap("../../starpilot/assets/other_images/speed_icon.png", {btn_size / 2, btn_size / 2}).scaled(iconSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
 
   loadGif("../../starpilot/assets/other_images/curve_icon.gif", cemCurveIcon, QSize(widget_size, widget_size), this);
   loadGif("../../starpilot/assets/other_images/lead_icon.gif", cemLeadIcon, QSize(widget_size, widget_size), this);
@@ -182,11 +183,12 @@ void StarPilotAnnotatedCameraWidget::updateState(const UIState &s, const StarPil
   roadCurvature = starpilotPlan.getRoadCurvature();
   roadName = QString::fromStdString(mapdOut.getRoadName());
   slcOverriddenSpeed = starpilotPlan.getSlcOverriddenSpeed();
-  speedLimit = slcOverriddenSpeed != 0 ? slcOverriddenSpeed : starpilotPlan.getSlcSpeedLimit();
+  speedLimit = starpilotPlan.getSlcSpeedLimit();
   speedLimitChanged = starpilotPlan.getSpeedLimitChanged();
   speedLimitSource = starpilotPlan.getSlcSpeedLimitSource();
   stoppingDistance = modelV2.getPosition().getX().size() > 33 - 1 ? modelV2.getPosition().getX()[33 - 1] : 0.0;
   unconfirmedSpeedLimit = starpilotPlan.getUnconfirmedSlcSpeedLimit();
+  visionSpeedLimit = params.getBool("VisionSpeedLimitDetection") ? params_memory.getFloat("VisionSpeedLimit") : 0.0;
   weatherDaytime = starpilotPlan.getWeatherDaytime();
   weatherId = starpilotPlan.getWeatherId();
 
@@ -1028,11 +1030,13 @@ void StarPilotAnnotatedCameraWidget::paintSpeedLimitSources(QPainter &p) {
 
   QRect dashboardRect(speedLimitRect.x() - signMargin, speedLimitRect.y() + speedLimitRect.height() + UI_BORDER_SIZE, 450, 60);
   QRect mapDataRect(dashboardRect.x(), dashboardRect.y() + dashboardRect.height() + UI_BORDER_SIZE / 2, 450, 60);
-  QRect mapboxRect(mapDataRect.x(), mapDataRect.y() + mapDataRect.height() + UI_BORDER_SIZE / 2, 450, 60);
+  QRect visionRect(mapDataRect.x(), mapDataRect.y() + mapDataRect.height() + UI_BORDER_SIZE / 2, 450, 60);
+  QRect mapboxRect(visionRect.x(), visionRect.y() + visionRect.height() + UI_BORDER_SIZE / 2, 450, 60);
   QRect nextLimitRect(mapboxRect.x(), mapboxRect.y() + mapboxRect.height() + UI_BORDER_SIZE / 2, 450, 60);
 
   drawSource(dashboardRect, dashboardIcon, "Dashboard", dashboardSpeedLimit * speedConversion);
   drawSource(mapDataRect, mapDataIcon, "Map Data", mapSpeedLimit * speedConversion);
+  drawSource(visionRect, visionIcon, "Vision", visionSpeedLimit * speedConversion);
   drawSource(mapboxRect, mapboxIcon, "Mapbox", mapboxSpeedLimit * speedConversion);
   drawSource(nextLimitRect, nextMapsIcon, "Upcoming", nextSpeedLimit * speedConversion);
 

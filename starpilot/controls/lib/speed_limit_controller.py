@@ -51,6 +51,7 @@ class SpeedLimitController:
     self.speed_limit_changed_timer = 0
     self.target = 0
     self.unconfirmed_speed_limit = 0
+    self.vision_limit = 0
 
     self.previous_source = "None"
     self.source = "None"
@@ -255,12 +256,14 @@ class SpeedLimitController:
 
       self.starpilot_planner.params.put_nonblocking("PreviousSpeedLimit", self.target)
 
-  def update_limits(self, dashboard_speed_limit, now, time_validated, v_cruise, v_ego, sm):
+  def update_limits(self, dashboard_speed_limit, now, time_validated, v_cruise, v_ego, sm, display_only=False):
     self.update_map_speed_limit(v_ego, sm)
+    self.vision_limit = self.starpilot_planner.params_memory.get_float("VisionSpeedLimit") if getattr(self.starpilot_toggles, "vision_speed_limit_detection", False) else 0
 
     limits = {
       "Dashboard": dashboard_speed_limit,
-      "Map Data": self.map_speed_limit
+      "Map Data": self.map_speed_limit,
+      "Vision": self.vision_limit,
     }
     filtered_limits = {source: limit for source, limit in limits.items() if limit >= 1}
 
@@ -297,7 +300,7 @@ class SpeedLimitController:
           desired_source = "Mapbox"
           desired_target = self.mapbox_limit
 
-      if desired_target == 0 or self.target == 0:
+      if not display_only and (desired_target == 0 or self.target == 0):
         if self.denied_target != self.previous_target > 0 and self.starpilot_toggles.slc_fallback_previous_speed_limit:
           desired_source = self.previous_source
           desired_target = self.previous_target
@@ -310,6 +313,20 @@ class SpeedLimitController:
     else:
       self.mapbox_limit = 0
       self.segment_distance = 0
+
+    if display_only:
+      self.speed_limit_changed_timer = 0
+      self.unconfirmed_speed_limit = 0
+      self.overridden_speed = 0
+
+      if desired_target >= 1:
+        self.source = desired_source
+        self.target = desired_target
+      else:
+        self.source = "None"
+        self.target = 0
+
+      return
 
     if abs(desired_target - self.previous_target) >= 1:
       self.handle_limit_change(desired_source, desired_target, sm)
