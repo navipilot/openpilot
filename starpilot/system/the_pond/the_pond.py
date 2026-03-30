@@ -727,6 +727,17 @@ def _is_plots_boot_stabilizing():
     return False
   return _get_system_uptime_seconds() < _PLOTS_BOOT_STABILIZATION_WINDOW_S
 
+def _extract_plots_speed_mps(controls_state, live_pose):
+  try:
+    velocity_device = getattr(live_pose, "velocityDevice", None)
+    if velocity_device and getattr(velocity_device, "valid", False):
+      # Use forward device-frame velocity for plot gating without adding any new subscriptions.
+      return abs(_safe_float(getattr(velocity_device, "x", 0.0), 0.0))
+  except Exception:
+    pass
+
+  return abs(_safe_float(getattr(controls_state, "vPid", 0.0), 0.0))
+
 def _extract_lateral_accel_values(controls_state, speed_mps):
   v_ego = max(0.0, _safe_float(speed_mps))
   speed_sq = v_ego * v_ego
@@ -833,7 +844,7 @@ def _plots_worker():
 
       controls_state = sm["controlsState"]
       live_pose = sm["livePose"]
-      speed = _safe_float(getattr(controls_state, "vPid", 0.0))
+      speed = _extract_plots_speed_mps(controls_state, live_pose)
       controls_active = bool(getattr(controls_state, "active", False))
       long_control_state = int(_safe_float(getattr(controls_state, "longControlState", 0)))
       longitudinal_control_active = controls_active and long_control_state != 0
