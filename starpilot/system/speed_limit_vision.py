@@ -23,6 +23,7 @@ OCR_MIN_CONFIDENCE = 0.35
 VALUE_TEMPLATE_MIN_CONFIDENCE = 0.62
 HISTORY_SECONDS = 2.0
 CONSISTENT_DETECTIONS = 2
+CHANGE_CONSISTENT_DETECTIONS = 3
 MODEL_DETECTION_SHORT_CIRCUIT_CONFIDENCE = 0.65
 PUBLISHED_HOLD_SECONDS = 12.0
 PUBLISHED_CHANGE_COOLDOWN_SECONDS = 1.4
@@ -1317,6 +1318,15 @@ class SpeedLimitVisionDaemon:
     candidate_speed_limit, candidate_count = counts.most_common(1)[0]
     matching_entries = [entry for entry in self.history if entry.speed_limit_mph == candidate_speed_limit]
     best_confidence = max(entry.confidence for entry in matching_entries)
+    current_speed_limit = self.published_speed_limit_mph
+    current_count = counts.get(current_speed_limit, 0) if current_speed_limit > 0 else 0
+
+    if current_speed_limit > 0 and candidate_speed_limit != current_speed_limit:
+      if candidate_count < CHANGE_CONSISTENT_DETECTIONS:
+        return None
+      if candidate_count <= current_count:
+        return None
+      return candidate_speed_limit, best_confidence
 
     if best_confidence >= STRONG_DETECTION_CONFIDENCE or candidate_count >= CONSISTENT_DETECTIONS:
       return candidate_speed_limit, best_confidence
@@ -1371,6 +1381,8 @@ class SpeedLimitVisionDaemon:
         self.params_memory.put_float("VisionSpeedLimit", speed_limit_mph * CV.MPH_TO_MS)
         self.params_memory.put_float("VisionSpeedLimitConfidence", confidence)
       if published_changed:
+        self.history.clear()
+        self.history.append(HistoryEntry(speed_limit_mph, confidence, time.monotonic()))
         self._schedule_auto_bookmark(speed_limit_mph, confidence, self.last_publish_change_at)
 
     status = f"{status_prefix} {speed_limit_mph} mph ({confidence * 100:.0f}%)"
