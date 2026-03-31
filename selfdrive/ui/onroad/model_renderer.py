@@ -137,12 +137,14 @@ class ModelRenderer(Widget):
     # the fixed number of lane/edge slots used by the UI.
     for lane_line in self._lane_lines:
       lane_line.raw_points = np.empty((0, 3), dtype=np.float32)
-    for i, lane_line in enumerate(model.laneLines[:len(self._lane_lines)]):
+    for i in range(min(len(self._lane_lines), len(model.laneLines))):
+      lane_line = model.laneLines[i]
       self._lane_lines[i].raw_points = np.array([lane_line.x, lane_line.y, lane_line.z], dtype=np.float32).T
 
     for road_edge in self._road_edges:
       road_edge.raw_points = np.empty((0, 3), dtype=np.float32)
-    for i, road_edge in enumerate(model.roadEdges[:len(self._road_edges)]):
+    for i in range(min(len(self._road_edges), len(model.roadEdges))):
+      road_edge = model.roadEdges[i]
       self._road_edges[i].raw_points = np.array([road_edge.x, road_edge.y, road_edge.z], dtype=np.float32).T
 
     lane_line_probs = np.array(model.laneLineProbs, dtype=np.float32)
