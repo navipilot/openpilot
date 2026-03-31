@@ -500,6 +500,7 @@ class StarPilotVariables:
     toggle.debug_mode = self.params.get_bool("DebugMode")
     toggle.force_offroad = self.params.get_bool("ForceOffroad")
     toggle.force_onroad = self.params.get_bool("ForceOnroad")
+    toggle.safe_mode = self.params.get_bool("SafeMode")
 
     toggle.is_metric = self.params.get_bool("IsMetric")
     distance_conversion = 1 if toggle.is_metric else CV.FOOT_TO_METER

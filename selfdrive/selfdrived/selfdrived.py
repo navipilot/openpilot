@@ -125,7 +125,8 @@ class SelfdriveD:
     self.logged_comm_issue = None
     self.not_running_prev = None
     self.experimental_mode = False
-    self.personality = self.params.get("LongitudinalPersonality", return_default=True)
+    self.safe_mode = self.params.get_bool("SafeMode")
+    self.personality = log.LongitudinalPersonality.relaxed if self.safe_mode else self.params.get("LongitudinalPersonality", return_default=True)
     self.recalibrating_seen = False
     self.state_machine = StateMachine()
     self.rk = Ratekeeper(100, print_delay_threshold=None)
@@ -477,7 +478,7 @@ class SelfdriveD:
       if self.starpilot_toggles.personality_profile_via_lkas:
         distance_pressed |= any(not be.pressed and be.type == ButtonType.lkas for be in CS.buttonEvents)
 
-      if not distance_pressed and self.distance_pressed_previously:
+      if not distance_pressed and self.distance_pressed_previously and not self.safe_mode:
         if self.display_timer > 0 or not self.has_menu:
           self.personality = (self.personality - 1) % 3
           self.params.put_nonblocking('LongitudinalPersonality', self.personality)
@@ -627,12 +628,15 @@ class SelfdriveD:
 
   def params_thread(self, evt):
     while not evt.is_set():
+      self.safe_mode = self.params.get_bool("SafeMode")
       self.is_metric = self.params.get_bool("IsMetric")
       self.is_ldw_enabled = self.params.get_bool("IsLdwEnabled")
       self.disengage_on_accelerator = self.params.get_bool("DisengageOnAccelerator")
-      if not self.starpilot_toggles.conditional_experimental_mode:
+      if self.safe_mode:
+        self.experimental_mode = False
+      elif not self.starpilot_toggles.conditional_experimental_mode:
         self.experimental_mode = self.params.get_bool("ExperimentalMode") and self.CP.openpilotLongitudinalControl
-      self.personality = self.params.get("LongitudinalPersonality", return_default=True)
+      self.personality = log.LongitudinalPersonality.relaxed if self.safe_mode else self.params.get("LongitudinalPersonality", return_default=True)
       time.sleep(0.1)
 
   def run(self):

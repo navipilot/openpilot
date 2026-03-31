@@ -14,13 +14,13 @@ class ExperimentalModeButton(Widget):
     self.button_height = 125
 
     self.params = Params()
-    self.experimental_mode = self.params.get_bool("ExperimentalMode")
+    self.experimental_mode = self.params.get_bool("ExperimentalMode") and not self.params.get_bool("SafeMode")
 
     self.chill_pixmap = gui_app.texture("icons/couch.png", self.img_width, self.img_width)
     self.experimental_pixmap = gui_app.texture("icons/experimental_grey.png", self.img_width, self.img_width)
 
   def show_event(self):
-    self.experimental_mode = self.params.get_bool("ExperimentalMode")
+    self.experimental_mode = self.params.get_bool("ExperimentalMode") and not self.params.get_bool("SafeMode")
 
   def _get_gradient_colors(self):
     alpha = 0xCC if self.is_pressed else 0xFF

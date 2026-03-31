@@ -415,6 +415,8 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"ScreenTimeout", {PERSISTENT, INT, "30", "30", 2}},
     {"ScreenTimeoutOnroad", {PERSISTENT, INT, "30", "10", 2}},
     {"SecOCKeys", {PERSISTENT | DONT_LOG, STRING, "", "", 0}},
+    {"SafeMode", {PERSISTENT, BOOL, "0", "0", 0}},
+    {"SafeModeBackup", {PERSISTENT, JSON, "{}", "{}"}},
     {"SetSpeedLimit", {PERSISTENT, BOOL, "0", "0", 1}},
     {"SetSpeedOffset", {PERSISTENT, FLOAT, "0.0", "0.0", 2}},
     {"ShowCEMStatus", {PERSISTENT, BOOL, "1", "0", 2}},

@@ -54,6 +54,12 @@ class TogglesLayout(Widget):
         "experimental_white.png",
         False,
       ),
+      "SafeMode": (
+        lambda: tr("Safe Mode"),
+        tr("Temporarily force driving-affecting StarPilot settings back to safe defaults, stock tuning, and the branch default model until disabled."),
+        "warning.png",
+        True,
+      ),
       "DisengageOnAccelerator": (
         lambda: tr("Disengage on Accelerator Pedal"),
         DESCRIPTIONS["DisengageOnAccelerator"],
@@ -153,6 +159,14 @@ class TogglesLayout(Widget):
 
   def _update_toggles(self):
     ui_state.update_params()
+    safe_mode = self._params.get_bool("SafeMode")
+    if safe_mode:
+      if self._params.get_bool("ExperimentalMode"):
+        self._params.put_bool("ExperimentalMode", False)
+      if self._params.get("LongitudinalPersonality", return_default=True) != int(log.LongitudinalPersonality.relaxed):
+        self._params.put_int("LongitudinalPersonality", int(log.LongitudinalPersonality.relaxed))
+      self._toggles["ExperimentalMode"].action_item.set_state(False)
+      self._long_personality_setting.action_item.set_selected_button(int(log.LongitudinalPersonality.relaxed))
 
     e2e_description = tr(
       "openpilot defaults to driving in chill mode. Experimental mode enables alpha-level features that aren't ready for chill mode. " +
@@ -168,9 +182,9 @@ class TogglesLayout(Widget):
 
     if ui_state.CP is not None:
       if ui_state.has_longitudinal_control:
-        self._toggles["ExperimentalMode"].action_item.set_enabled(True)
+        self._toggles["ExperimentalMode"].action_item.set_enabled(not safe_mode)
         self._toggles["ExperimentalMode"].set_description(e2e_description)
-        self._long_personality_setting.action_item.set_enabled(True)
+        self._long_personality_setting.action_item.set_enabled(not safe_mode)
       else:
         # no long for now
         self._toggles["ExperimentalMode"].action_item.set_enabled(False)

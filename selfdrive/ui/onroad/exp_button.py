@@ -63,6 +63,9 @@ class ExpButton(Widget):
     return self._experimental_mode
 
   def _is_toggle_allowed(self):
+    if self._params.get_bool("SafeMode"):
+      return False
+
     if not self._params.get_bool("ExperimentalModeConfirmed"):
       return False
 

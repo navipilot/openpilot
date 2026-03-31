@@ -32,6 +32,9 @@ ExperimentalButton::ExperimentalButton(QWidget *parent) : experimental_mode(fals
 
 void ExperimentalButton::changeMode() {
   const auto cp = (*uiState()->sm)["carParams"].getCarParams();
+  if (params.getBool("SafeMode")) {
+    return;
+  }
   bool can_change = hasLongitudinalControl(cp) && params.getBool("ExperimentalModeConfirmed");
   if (can_change) {
     if (starpilot_toggles.value("conditional_experimental_mode").toBool()) {

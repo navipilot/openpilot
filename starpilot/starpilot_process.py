@@ -15,6 +15,12 @@ from openpilot.system.athena.registration import UNREGISTERED_DONGLE_ID
 from openpilot.starpilot.assets.model_manager import MODEL_DOWNLOAD_ALL_PARAM, MODEL_DOWNLOAD_PARAM, ModelManager
 from openpilot.starpilot.assets.theme_manager import THEME_COMPONENT_PARAMS, ThemeManager
 from openpilot.starpilot.common.starpilot_functions import update_maps, update_openpilot
+from openpilot.starpilot.common.safe_mode import (
+  SAFE_MODE_ENFORCE_FRAMES,
+  apply_safe_mode,
+  restore_safe_mode,
+  safe_mode_enabled,
+)
 from openpilot.starpilot.common.starpilot_utilities import ThreadManager, flash_panda, is_url_pingable, lock_doors, use_konik_server
 from openpilot.starpilot.common.starpilot_variables import ERROR_LOGS_PATH, StarPilotVariables
 from openpilot.starpilot.controls.starpilot_planner import StarPilotPlanner
@@ -144,6 +150,7 @@ def starpilot_thread():
                             poll="modelV2")
 
   params = Params(return_defaults=True)
+  params_raw = Params()
   params_memory = Params(memory=True)
 
   starpilot_variables = StarPilotVariables()
@@ -157,12 +164,16 @@ def starpilot_thread():
   next_drive_stats_sync = 0.0
 
   run_update_checks = False
+  safe_mode_active = safe_mode_enabled(params_raw)
   started_previously = False
   time_validated = False
 
   error_log = ERROR_LOGS_PATH / "error.txt"
   if error_log.is_file():
     error_log.unlink()
+
+  if safe_mode_active:
+    apply_safe_mode(params, params_raw, params_memory)
 
   while True:
     sm.update()
@@ -207,6 +218,17 @@ def starpilot_thread():
 
     if rate_keeper.frame % ASSET_CHECK_RATE == 0:
       check_assets(now, model_manager, theme_manager, thread_manager, params, params_memory, starpilot_toggles)
+
+    current_safe_mode = safe_mode_enabled(params_raw)
+    safe_mode_changed = current_safe_mode != safe_mode_active
+    if safe_mode_changed:
+      if current_safe_mode:
+        apply_safe_mode(params, params_raw, params_memory)
+      else:
+        restore_safe_mode(params_raw, params_memory)
+      safe_mode_active = current_safe_mode
+    elif current_safe_mode and (params_memory.get_bool("StarPilotTogglesUpdated") or rate_keeper.frame % SAFE_MODE_ENFORCE_FRAMES == 0):
+      apply_safe_mode(params, params_raw, params_memory, ensure_backup=False)
 
     if params_memory.get_bool("StarPilotTogglesUpdated") or theme_manager.theme_updated:
       starpilot_toggles = update_toggles(starpilot_variables, started, theme_manager, thread_manager, time_validated, params, starpilot_toggles)

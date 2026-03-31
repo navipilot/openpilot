@@ -51,6 +51,9 @@ class StarPilotCard:
       self.traffic_mode_enabled = not self.traffic_mode_enabled
 
   def handle_experimental_mode(self, sm, starpilot_toggles):
+    if getattr(starpilot_toggles, "safe_mode", False):
+      return
+
     if starpilot_toggles.conditional_experimental_mode:
       if self.params_memory.get_int("CEStatus") in (CEStatus["USER_DISABLED"], CEStatus["USER_OVERRIDDEN"]):
         override_value = CEStatus["OFF"]

@@ -18,6 +18,7 @@ class TogglesLayoutMici(NavWidget):
     self.set_back_callback(back_callback)
 
     self._personality_toggle = BigMultiParamToggle("driving personality", "LongitudinalPersonality", ["aggressive", "standard", "relaxed"])
+    self._safe_mode_btn = BigParamControl("safe mode", "SafeMode", toggle_callback=restart_needed_callback)
     self._experimental_btn = BigParamControl("experimental mode", "ExperimentalMode")
     is_metric_toggle = BigParamControl("use metric units", "IsMetric")
     ldw_toggle = BigParamControl("lane departure warnings", "IsLdwEnabled")
@@ -28,6 +29,7 @@ class TogglesLayoutMici(NavWidget):
 
     self._scroller = Scroller([
       self._personality_toggle,
+      self._safe_mode_btn,
       self._experimental_btn,
       is_metric_toggle,
       ldw_toggle,
@@ -40,6 +42,7 @@ class TogglesLayoutMici(NavWidget):
     # Toggle lists
     self._refresh_toggles = (
       ("ExperimentalMode", self._experimental_btn),
+      ("SafeMode", self._safe_mode_btn),
       ("IsMetric", is_metric_toggle),
       ("IsLdwEnabled", ldw_toggle),
       ("AlwaysOnDM", always_on_dm_toggle),
@@ -74,6 +77,16 @@ class TogglesLayoutMici(NavWidget):
 
   def _update_toggles(self):
     ui_state.update_params()
+    safe_mode = ui_state.params.get_bool("SafeMode")
+    self._experimental_btn.set_enabled(not safe_mode)
+    self._personality_toggle.set_enabled(not safe_mode)
+    if safe_mode:
+      if ui_state.params.get_bool("ExperimentalMode"):
+        ui_state.params.put_bool("ExperimentalMode", False)
+      if ui_state.params.get("LongitudinalPersonality", return_default=True) != int(log.LongitudinalPersonality.relaxed):
+        ui_state.params.put_int("LongitudinalPersonality", int(log.LongitudinalPersonality.relaxed))
+      self._experimental_btn.set_checked(False)
+      self._personality_toggle.set_value("relaxed")
 
     # CP gating for experimental mode
     if ui_state.CP is not None:
@@ -85,6 +98,8 @@ class TogglesLayoutMici(NavWidget):
         self._experimental_btn.set_visible(False)
         self._experimental_btn.set_checked(False)
         self._personality_toggle.set_visible(False)
+        self._experimental_btn.set_enabled(False)
+        self._personality_toggle.set_enabled(False)
         ui_state.params.remove("ExperimentalMode")
 
     # Refresh toggles from params to mirror external changes

@@ -42,6 +42,13 @@ TogglesPanel::TogglesPanel(SettingsWindow *parent) : ListWidget(parent) {
       false,
     },
     {
+      "SafeMode",
+      tr("Safe Mode"),
+      tr("Temporarily force driving-affecting StarPilot settings back to safe defaults, stock tuning, and the branch default model until disabled."),
+      "../assets/icons/warning.png",
+      true,
+    },
+    {
       "DisengageOnAccelerator",
       tr("Disengage on Accelerator Pedal"),
       tr("When enabled, pressing the accelerator pedal will disengage openpilot."),
@@ -164,6 +171,15 @@ void TogglesPanel::showEvent(QShowEvent *event) {
 
 void TogglesPanel::updateToggles() {
   const bool showAllToggles = params.getBool("ShowAllToggles");
+  const bool safe_mode = params.getBool("SafeMode");
+  if (safe_mode) {
+    if (params.getBool("ExperimentalMode")) {
+      params.putBool("ExperimentalMode", false);
+    }
+    if (params.getInt("LongitudinalPersonality") != static_cast<int>(cereal::LongitudinalPersonality::RELAXED)) {
+      params.putInt("LongitudinalPersonality", static_cast<int>(cereal::LongitudinalPersonality::RELAXED));
+    }
+  }
   auto experimental_mode_toggle = toggles["ExperimentalMode"];
   const QString e2e_description = QString("%1<br>"
                                           "<h4>%2</h4><br>"
@@ -187,9 +203,12 @@ void TogglesPanel::updateToggles() {
 
     if (hasLongitudinalControl(CP) || showAllToggles) {
       // normal description and toggle
-      experimental_mode_toggle->setEnabled(true);
+      experimental_mode_toggle->setEnabled(!safe_mode);
       experimental_mode_toggle->setDescription(e2e_description);
-      long_personality_setting->setEnabled(true);
+      long_personality_setting->setEnabled(!safe_mode);
+      if (safe_mode) {
+        long_personality_setting->setCheckedButton(static_cast<int>(cereal::LongitudinalPersonality::RELAXED));
+      }
     } else {
       // no long for now
       experimental_mode_toggle->setEnabled(false);
@@ -213,6 +232,12 @@ void TogglesPanel::updateToggles() {
     experimental_mode_toggle->refresh();
   } else {
     experimental_mode_toggle->setDescription(e2e_description);
+  }
+
+  if (safe_mode) {
+    experimental_mode_toggle->setEnabled(false);
+    long_personality_setting->setEnabled(false);
+    long_personality_setting->setCheckedButton(static_cast<int>(cereal::LongitudinalPersonality::RELAXED));
   }
 
   StarPilotUIState &fs = *starpilotUIState();

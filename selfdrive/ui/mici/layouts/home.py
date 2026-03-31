@@ -94,6 +94,7 @@ class MiciHomeLayout(Widget):
 
     self._version_text = None
     self._experimental_mode = False
+    self._safe_mode = False
     self._current_model_name = "default"
 
     self._settings_txt = gui_app.texture("icons_mici/settings.png", 48, 48)
@@ -128,7 +129,8 @@ class MiciHomeLayout(Widget):
     self._update_params()
 
   def _update_params(self):
-    self._experimental_mode = ui_state.params.get_bool("ExperimentalMode")
+    self._safe_mode = ui_state.params.get_bool("SafeMode")
+    self._experimental_mode = ui_state.params.get_bool("ExperimentalMode") and not self._safe_mode
 
     def _clean_name(value: str) -> str:
       return re.sub(r"[🗺️👀📡]", "", value).replace("(Default)", "").strip()
@@ -215,7 +217,7 @@ class MiciHomeLayout(Widget):
     if self._mouse_down_t is not None:
       if time.monotonic() - self._mouse_down_t > 0.5:
         # long gating for experimental mode - only allow toggle if longitudinal control is available
-        if ui_state.has_longitudinal_control:
+        if ui_state.has_longitudinal_control and not self._safe_mode:
           self._experimental_mode = not self._experimental_mode
           ui_state.params.put("ExperimentalMode", self._experimental_mode)
         self._mouse_down_t = None
