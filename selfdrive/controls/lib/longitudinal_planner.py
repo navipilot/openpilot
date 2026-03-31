@@ -64,6 +64,29 @@ def limit_accel_in_turns(v_ego, angle_steers, a_target, CP):
   return [a_target[0], min(a_target[1], a_x_allowed)]
 
 
+def get_vehicle_min_accel(CP, v_ego):
+  # Planner-side physical decel capability estimate for GM pedal-long paths.
+  if getattr(CP, "carName", "") == "gm" and getattr(CP, "enableGasInterceptorDEPRECATED", False):
+    try:
+      from opendbc.car.gm.values import GMFlags, CAR
+      if bool(CP.flags & GMFlags.PEDAL_LONG.value):
+        bolt_pedal_long_cars = {
+          CAR.CHEVROLET_BOLT_CC_2017,
+          CAR.CHEVROLET_BOLT_CC_2018_2021,
+          CAR.CHEVROLET_BOLT_ACC_2022_2023_PEDAL,
+          CAR.CHEVROLET_BOLT_CC_2022_2023,
+          CAR.CHEVROLET_MALIBU_HYBRID_CC,
+        }
+        if CP.carFingerprint in bolt_pedal_long_cars:
+          return float(np.interp(v_ego, [0.0, 1.5, 4.0, 8.0, 15.0, 30.0],
+                                 [-0.93, -1.28, -1.98, -2.58, -2.86, -2.95]))
+        return float(np.interp(v_ego, [0.0, 1.5, 4.0, 8.0, 15.0, 30.0],
+                               [-0.95, -1.3, -1.85, -2.3, -2.6, -2.8]))
+    except Exception:
+      pass
+  return float(ACCEL_MIN)
+
+
 def get_accel_from_plan_classic(CP, speeds, accels, vEgoStopping):
   if len(speeds) == CONTROL_N:
     v_target_now = np.interp(DT_MDL, CONTROL_N_T_IDX, speeds)
@@ -215,6 +238,7 @@ class LongitudinalPlanner:
       accel_limits = [sm['starpilotPlan'].minAcceleration, sm['starpilotPlan'].maxAcceleration]
       steer_angle_without_offset = sm['carState'].steeringAngleDeg - sm['liveParameters'].angleOffsetDeg
       accel_limits_turns = limit_accel_in_turns(v_ego, steer_angle_without_offset, accel_limits, self.CP)
+      accel_limits_turns[0] = max(get_vehicle_min_accel(self.CP, v_ego), accel_limits_turns[0])
     else:
       accel_limits = [ACCEL_MIN, ACCEL_MAX]
       accel_limits_turns = [ACCEL_MIN, ACCEL_MAX]

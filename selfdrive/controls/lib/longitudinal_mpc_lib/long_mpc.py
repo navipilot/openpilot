@@ -498,8 +498,9 @@ class LongitudinalMpc:
       a_lead_tau = LEAD_ACCEL_TAU
 
     # MPC will not converge if immediate crash is expected
-    # Clip lead distance to what is still possible to brake for
-    min_x_lead = ((v_ego + v_lead)/2) * (v_ego - v_lead) / (-ACCEL_MIN * 2)
+    # Clip lead distance using the currently active vehicle decel capability.
+    min_decel = min(float(self.cruise_min_a), -0.1)
+    min_x_lead = ((v_ego + v_lead)/2) * (v_ego - v_lead) / (-min_decel * 2)
     x_lead = np.clip(x_lead, min_x_lead, 1e8)
     v_lead = np.clip(v_lead, 0.0, 1e8)
     a_lead = np.clip(a_lead, -10., 5.)
@@ -533,7 +534,7 @@ class LongitudinalMpc:
     lead_0_obstacle = lead_xv_0[:,0] + get_stopped_equivalence_factor(lead_xv_0[:,1])
     lead_1_obstacle = lead_xv_1[:,0] + get_stopped_equivalence_factor(lead_xv_1[:,1])
 
-    self.params[:,0] = ACCEL_MIN
+    self.params[:,0] = self.cruise_min_a
     self.params[:,1] = max(0.0, self.max_a)
 
     # Update in ACC mode or ACC/e2e blend
