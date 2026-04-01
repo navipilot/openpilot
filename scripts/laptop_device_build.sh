@@ -389,7 +389,7 @@ run_larch64_scons() {
   local cmd
 cmd="$(cat <<EOF
 set -euo pipefail
-export UV_CACHE_DIR=/tmp/uv-cache
+export UV_CACHE_DIR=/work/.cache/uv
 export SCONS_CACHE=/work/.cache/scons
 export SP_FORCE_TICI=1
 export SP_FORCE_ARCH=larch64
@@ -540,7 +540,7 @@ run_manager() {
   local cmd
 cmd="$(cat <<EOF
 set -euo pipefail
-export UV_CACHE_DIR=/tmp/uv-cache
+export UV_CACHE_DIR=/work/.cache/uv
 export SP_FORCE_TICI=1
 export SP_FORCE_ARCH=larch64
 export SP_TICI_SYSROOT=/opt/tici-sysroot
