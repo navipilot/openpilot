@@ -260,6 +260,7 @@ class StarPilotCurveSpeedLayout(StarPilotPanel):
     self.CATEGORIES = [
       {
         "title": tr_noop("Curve Speed Controller"),
+        "desc": tr_noop("Automatically slow down for upcoming curves using data learned from your driving style."),
         "type": "toggle",
         "get_state": lambda: self._params.get_bool("CurveSpeedController"),
         "set_state": lambda s: self._params.put_bool("CurveSpeedController", s),
@@ -268,6 +269,7 @@ class StarPilotCurveSpeedLayout(StarPilotPanel):
       },
       {
         "title": tr_noop("Status Widget"),
+        "desc": tr_noop("Show the Curve Speed Controller ambient effect on the driving screen."),
         "type": "toggle",
         "get_state": lambda: self._params.get_bool("ShowCSCStatus"),
         "set_state": lambda s: self._params.put_bool("ShowCSCStatus", s),
@@ -275,6 +277,7 @@ class StarPilotCurveSpeedLayout(StarPilotPanel):
       },
       {
         "title": tr_noop("Calibrated Lateral Accel"),
+        "desc": tr_noop("The learned lateral acceleration from collected driving data. Higher values allow faster cornering."),
         "type": "value",
         "get_value": lambda: f"{self._params_memory.get_float('CalibratedLateralAcceleration'):.2f} m/s²",
         "on_click": lambda: None,
@@ -282,6 +285,7 @@ class StarPilotCurveSpeedLayout(StarPilotPanel):
       },
       {
         "title": tr_noop("Calibration Progress"),
+        "desc": tr_noop("How much curve data has been collected. Normal for the value to stay low."),
         "type": "value",
         "get_value": lambda: f"{self._params_memory.get_float('CalibrationProgress'):.2f}%",
         "on_click": lambda: None,
@@ -289,6 +293,7 @@ class StarPilotCurveSpeedLayout(StarPilotPanel):
       },
       {
         "title": tr_noop("Reset Curve Data"),
+        "desc": tr_noop("Reset collected user data for Curve Speed Controller."),
         "type": "hub",
         "on_click": lambda: self._reset_curve_data(),
         "color": "#1BA1E2",
@@ -299,8 +304,9 @@ class StarPilotCurveSpeedLayout(StarPilotPanel):
   def _reset_curve_data(self):
     def on_close(res):
       if res == DialogResult.CONFIRM:
-        self._params.remove("CalibratedLateralAcceleration")
+        self._params.put_float("CalibratedLateralAcceleration", 2.00)
         self._params.remove("CalibrationProgress")
+        self._params.remove("CurvatureData")
         self._rebuild_grid()
 
     gui_app.set_modal_overlay(ConfirmDialog(tr("Reset Curve Data?"), tr("Confirm"), on_close=on_close))
@@ -576,6 +582,15 @@ class StarPilotSpeedLimitControllerLayout(StarPilotPanel):
   def __init__(self):
     super().__init__()
     self.CATEGORIES = [
+      {
+        "title": tr_noop("Speed Limit Controller"),
+        "desc": tr_noop("Limit the car's maximum speed to the current speed limit."),
+        "type": "toggle",
+        "get_state": lambda: self._params.get_bool("SpeedLimitController"),
+        "set_state": lambda s: self._params.put_bool("SpeedLimitController", s),
+        "icon": "toggle_icons/icon_speed_limit.png",
+        "color": "#1BA1E2",
+      },
       {"title": tr_noop("SLC Offsets"), "panel": "slc_offsets", "icon": "toggle_icons/icon_speed_limit.png", "color": "#1BA1E2"},
       {"title": tr_noop("SLC Quality of Life"), "panel": "slc_qol", "icon": "toggle_icons/icon_speed_limit.png", "color": "#1BA1E2"},
       {"title": tr_noop("SLC Visuals"), "panel": "slc_visuals", "icon": "toggle_icons/icon_speed_limit.png", "color": "#1BA1E2"},

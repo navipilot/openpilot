@@ -84,9 +84,9 @@ class StarPilotPanel(Widget):
           bg_color=cat.get("color"),
         )
       elif tile_type == "toggle":
-        tile = ToggleTile(title=tr(cat["title"]), get_state=cat["get_state"], set_state=cat["set_state"], icon_path=cat.get("icon"), bg_color=cat.get("color"))
+        tile = ToggleTile(title=tr(cat["title"]), get_state=cat["get_state"], set_state=cat["set_state"], icon_path=cat.get("icon"), bg_color=cat.get("color"), desc=tr(cat.get("desc", "")))
       elif tile_type == "value":
-        tile = ValueTile(title=tr(cat["title"]), get_value=cat["get_value"], on_click=cat["on_click"], icon_path=cat.get("icon"), bg_color=cat.get("color"))
+        tile = ValueTile(title=tr(cat["title"]), get_value=cat["get_value"], on_click=cat["on_click"], icon_path=cat.get("icon"), bg_color=cat.get("color"), desc=tr(cat.get("desc", "")))
       else:
         continue
 

@@ -222,7 +222,8 @@ purge_host_desktop_ui_artifacts() {
     "${WORK_DIR}/selfdrive/ui/main.o" \
     "${WORK_DIR}/selfdrive/ui/moc_ui.o" \
     "${WORK_DIR}/selfdrive/ui/ui.o" \
-    "${WORK_DIR}/selfdrive/ui/ui"
+    "${WORK_DIR}/selfdrive/ui/ui" \
+    "${WORK_DIR}/cereal/gen/cpp/"*.capnp.o
 }
 
 ensure_host_python_tools() {
@@ -324,7 +325,14 @@ sync_worktree() {
     rsync_args+=(--exclude "${pattern}")
   done
 
+  local _capnp_before
+  _capnp_before="$(stat -c '%Y' "${WORK_DIR}/cereal/custom.capnp" 2>/dev/null || echo 0)"
   rsync "${rsync_args[@]}" "${ROOT_DIR}/" "${WORK_DIR}/"
+  local _capnp_after
+  _capnp_after="$(stat -c '%Y' "${WORK_DIR}/cereal/custom.capnp" 2>/dev/null || echo 0)"
+  if [[ "${_capnp_before}" != "${_capnp_after}" ]]; then
+    rm -rf "${SP_SCONS_CACHE_DIR:-${HOST_ROOT}/scons_cache}"
+  fi
   purge_host_desktop_ui_artifacts
   rm -f "${WORK_DIR}/third_party/libjson11.a" "${WORK_DIR}/third_party/libkaitai.a"
   sync_host_generated_headers

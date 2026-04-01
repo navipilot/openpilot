@@ -90,14 +90,17 @@ class HubTile(MetroTile):
 
 
 class ToggleTile(MetroTile):
-  def __init__(self, title: str, get_state: Callable[[], bool], set_state: Callable[[bool], None], icon_path: str | None = None, bg_color: rl.Color | str | None = None):
+  def __init__(self, title: str, get_state: Callable[[], bool], set_state: Callable[[bool], None], icon_path: str | None = None,
+               bg_color: rl.Color | str | None = None, desc: str = ""):
     if bg_color: super().__init__(bg_color=bg_color)
     else: super().__init__(bg_color=rl.Color(0, 163, 0, 255))
     self.title = title
+    self.desc = desc
     self.get_state = get_state
     self.set_state = set_state
     self._icon = gui_app.starpilot_texture(icon_path, 80, 80) if icon_path else None
     self._font = gui_app.font(FontWeight.BOLD)
+    self._font_desc = gui_app.font(FontWeight.NORMAL)
     self._active_color = self.bg_color
     self._inactive_color = rl.Color(120, 120, 120, 255)
 
@@ -122,6 +125,8 @@ class ToggleTile(MetroTile):
     title_x = rect.x + padding + (55 if self._icon else 0)
     max_title_width = rect.width - (title_x - rect.x) - padding
     self._draw_text_fit(self._font, self.title, rl.Vector2(title_x, rect.y + padding + 2), max_title_width, 35)
+    if self.desc:
+      self._draw_text_fit(self._font_desc, self.desc, rl.Vector2(title_x, rect.y + padding + 40), max_title_width, 22)
     state_text = tr("ON") if active else tr("OFF")
     ts = measure_text_cached(self._font, state_text, 30)
     rl.draw_text_ex(self._font, state_text, rl.Vector2(rect.x + rect.width - ts.x - padding, rect.y + rect.height - 50), 30, 0, rl.WHITE)
@@ -129,34 +134,22 @@ class ToggleTile(MetroTile):
 
 class ValueTile(MetroTile):
   def __init__(self, title: str, get_value: Callable[[], str], on_click: Callable, icon_path: str | None = None,
-               bg_color: rl.Color | str | None = None, is_enabled: Callable[[], bool] | None = None):
+               bg_color: rl.Color | str | None = None, is_enabled: Callable[[], bool] | None = None, desc: str = ""):
     super().__init__(bg_color=bg_color, on_click=on_click)
     self.title = title
+    self.desc = desc
     self.get_value = get_value
-    self.is_enabled = is_enabled or (lambda: True)
+    # Wire is_enabled into the parent Widget.enabled property
+    self._enabled = is_enabled or (lambda: True)
     self._icon = gui_app.starpilot_texture(icon_path, 80, 80) if icon_path else None
     self._font = gui_app.font(FontWeight.BOLD)
+    self._font_desc = gui_app.font(FontWeight.NORMAL)
     self._active_color = self.bg_color
     self._disabled_color = rl.Color(120, 120, 120, 255)
 
-  def _enabled(self) -> bool:
-    return self.is_enabled() if callable(self.is_enabled) else bool(self.is_enabled)
-
-  def _handle_mouse_press(self, mouse_pos: MousePos):
-    if not self._enabled():
-      self._is_pressed = False
-      return
-    super()._handle_mouse_press(mouse_pos)
-
-  def _handle_mouse_release(self, mouse_pos: MousePos):
-    if not self._enabled():
-      self._is_pressed = False
-      return
-    super()._handle_mouse_release(mouse_pos)
-
   def _render(self, rect: rl.Rectangle):
     self.set_rect(rect)
-    enabled = self._enabled()
+    enabled = self.enabled
     base_color = self._active_color if enabled else self._disabled_color
     r, g, b = max(0, base_color.r - 20), max(0, base_color.g - 20), max(0, base_color.b - 20)
     color = rl.Color(r, g, b, 255) if self._is_pressed and enabled else base_color
@@ -169,7 +162,9 @@ class ValueTile(MetroTile):
     title_x = rect.x + padding + (55 if self._icon else 0)
     max_title_width = rect.width - (title_x - rect.x) - padding
     self._draw_text_fit(self._font, self.title, rl.Vector2(title_x, rect.y + padding + 2), max_title_width, 35)
-    
+    if self.desc:
+      self._draw_text_fit(self._font_desc, self.desc, rl.Vector2(title_x, rect.y + padding + 40), max_title_width, 22)
+
     val_text = self.get_value()
     # Bottom value: scale to fit if it's too long (common for Car Models)
     max_val_width = rect.width - 2 * padding
