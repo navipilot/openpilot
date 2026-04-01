@@ -8,6 +8,7 @@ from openpilot.starpilot.common.starpilot_variables import CITY_SPEED_LIMIT, MAX
 
 TRAFFIC_MODE_BP = [0., CITY_SPEED_LIMIT]
 PERSONALITY_BP = [20. * CV.KPH_TO_MS, 90. * CV.KPH_TO_MS]
+HIGHWAY_DISABLE_THROTTLE_MIN_SPEED = 45. * CV.MPH_TO_MS
 
 
 def get_longitudinal_personality(sm):
@@ -93,10 +94,20 @@ class StarPilotFollowing:
     if self.starpilot_planner.tracking_lead and self.starpilot_planner.lead_one.status:
       lead_distance = self.starpilot_planner.lead_one.dRel
       v_lead = self.starpilot_planner.lead_one.vLead
+      closing_speed = max(0.0, v_ego - v_lead)
+      desired_gap = float(desired_follow_distance(v_ego, v_lead, self.t_follow))
+      ttc = lead_distance / max(closing_speed, 1e-3) if closing_speed > 0.1 else 1e6
 
-      self.disable_throttle = not self.following_lead
-      self.disable_throttle &= lead_distance + 6.0 < (self.t_follow * 4.0) * v_ego
-      self.disable_throttle &= v_lead < v_ego * 0.75
+      # Keep a mild coasting behavior only for far/low-risk slower leads.
+      coast_window_open = lead_distance > desired_gap + max(4.0, 0.2 * v_ego)
+      coast_window_far = lead_distance < desired_gap + max(25.0, 1.2 * v_ego)
+      gentle_closing = closing_speed < max(2.0, 0.12 * v_ego)
+
+      # Highway-only coast suppression: keep low-speed lead departures responsive.
+      self.disable_throttle = (not self.following_lead and v_ego > HIGHWAY_DISABLE_THROTTLE_MIN_SPEED and coast_window_open and
+                               coast_window_far and gentle_closing)
+      # Never coast when we are entering a potentially late-braking scenario.
+      self.disable_throttle &= ttc > 6.0 and lead_distance > desired_gap + 6.0
 
     if long_control_active and self.starpilot_planner.tracking_lead:
       self.update_follow_values(self.starpilot_planner.lead_one.dRel, v_ego, self.starpilot_planner.lead_one.vLead, starpilot_toggles)
