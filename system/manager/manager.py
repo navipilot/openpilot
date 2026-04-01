@@ -34,6 +34,7 @@ from openpilot.starpilot.common.starpilot_variables import (
 
 LEGACY_BOLT_FP_MIGRATION_FLAG = Path("/data") / "legacy_bolt_fp_migration_v1"
 STARPILOT_DEFAULTS_PARITY_MIGRATION_FLAG = Path("/data") / "starpilot_defaults_parity_v1"
+STARPILOT_HUMANLIKE_DISABLE_MIGRATION_FLAG = Path("/data") / "starpilot_humanlike_disable_v1"
 STARPILOT_PARAM_RENAME_MIGRATION_FLAG = Path("/data") / "starpilot_param_rename_v1"
 STARPILOT_PARAM_CANONICALIZATION_MIGRATION_FLAG = Path("/data") / "starpilot_param_canonicalization_v1"
 STARPILOT_PC_ROOT_MIGRATION_FLAG = Path("/data") / "starpilot_pc_root_v1"
@@ -376,6 +377,30 @@ def migrate_starpilot_default_parity(params: Params, params_cache: Params) -> No
     cloudlog.exception(f"Failed to write migration flag: {STARPILOT_DEFAULTS_PARITY_MIGRATION_FLAG}")
 
 
+def migrate_disable_humanlike_defaults(params: Params, params_cache: Params) -> None:
+  if STARPILOT_HUMANLIKE_DISABLE_MIGRATION_FLAG.exists():
+    return
+
+  disabled_keys: list[str] = []
+
+  for key in ("HumanAcceleration", "HumanFollowing", "HumanLaneChanges"):
+    if not (params.get_bool(key) or params_cache.get_bool(key)):
+      continue
+
+    params.put_bool(key, False)
+    params_cache.put_bool(key, False)
+    disabled_keys.append(key)
+
+  if disabled_keys:
+    cloudlog.warning(f"Applied one-time human-like toggle disable migration for {disabled_keys}")
+
+  try:
+    STARPILOT_HUMANLIKE_DISABLE_MIGRATION_FLAG.parent.mkdir(parents=True, exist_ok=True)
+    STARPILOT_HUMANLIKE_DISABLE_MIGRATION_FLAG.write_text(f"{datetime.datetime.now(datetime.UTC).isoformat()}\n")
+  except Exception:
+    cloudlog.exception(f"Failed to write migration flag: {STARPILOT_HUMANLIKE_DISABLE_MIGRATION_FLAG}")
+
+
 def _read_raw_param_bytes(params: Params, key: str | bytes):
   try:
     path = params.get_param_path(key)
@@ -542,6 +567,7 @@ def manager_init() -> None:
   # before bulk reads below to avoid repeated cast warnings and UI-side churn.
   migrate_param_type_canonicalization(params)
   migrate_starpilot_default_parity(params, params_cache)
+  migrate_disable_humanlike_defaults(params, params_cache)
 
   # set unset params to their default value
   for k in params.all_keys():

@@ -164,6 +164,26 @@ class TestManager:
     assert Path(params.get_param_path("HumanFollowing")).is_file()
     assert not params.get_bool("HumanFollowing")
 
+  def test_migrate_disable_humanlike_defaults(self, tmp_path, monkeypatch):
+    monkeypatch.setattr(manager, "STARPILOT_HUMANLIKE_DISABLE_MIGRATION_FLAG", tmp_path / "starpilot_humanlike_disable_v1")
+
+    params = FileBackedFakeParams(tmp_path / "params", {
+      "HumanAcceleration": True,
+      "HumanFollowing": True,
+    })
+    params_cache = FileBackedFakeParams(tmp_path / "cache", {
+      "HumanLaneChanges": True,
+    })
+
+    manager.migrate_disable_humanlike_defaults(params, params_cache)
+
+    assert not params.get_bool("HumanAcceleration")
+    assert not params.get_bool("HumanFollowing")
+    assert not params.get_bool("HumanLaneChanges")
+    assert not params_cache.get_bool("HumanAcceleration")
+    assert not params_cache.get_bool("HumanFollowing")
+    assert not params_cache.get_bool("HumanLaneChanges")
+
   @pytest.mark.skip("this test is flaky the way it's currently written, should be moved to test_onroad")
   def test_clean_exit(self, subtests):
     """
