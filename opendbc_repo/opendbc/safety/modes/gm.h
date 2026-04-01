@@ -606,10 +606,16 @@ static safety_config gm_init(uint16_t param) {
   };
 
   static RxCheck gm_pedal_rx_checks[] = {
-    GM_COMMON_RX_CHECKS
-    {.msg = {{0xBD, 0, 7, 40U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},
-    {.msg = {{0x3D1, 0, 8, 10U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},  // Non-ACC PCM
-    {.msg = {{0x201, 0, 6, 10U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},  // pedal
+    {.msg = {{0x184, 0, 8, 10U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},
+    {.msg = {{0x34A, 0, 5, 10U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},
+    {.msg = {{0x1E1, 0, 7, 10U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true},
+             {0x1E1, 2, 7, 100000U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true},
+             { 0 }}},
+    {.msg = {{0xF1, 0, 6, 10U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true},
+             {0xF1, 2, 6, 100000U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true},
+             { 0 }}},
+    {.msg = {{0x1C4, 0, 8, 10U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},
+    {.msg = {{0xC9, 0, 8, 10U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},
   };
 
   static RxCheck gm_cam_acc_rx_checks[] = {
@@ -619,11 +625,16 @@ static safety_config gm_init(uint16_t param) {
   };
 
   static RxCheck gm_cam_acc_pedal_rx_checks[] = {
-    GM_COMMON_RX_CHECKS
-    GM_ACC_RX_CHECKS
-    {.msg = {{0xBD, 0, 7, 40U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},
-    {.msg = {{0x201, 0, 6, 10U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},  // pedal
-    {.msg = {{0x370, 2, 6, 10U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},  // camera ACC status
+    {.msg = {{0x184, 0, 8, 10U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},
+    {.msg = {{0x34A, 0, 5, 10U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},
+    {.msg = {{0x1E1, 0, 7, 10U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true},
+             {0x1E1, 2, 7, 100000U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true},
+             { 0 }}},
+    {.msg = {{0xF1, 0, 6, 10U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true},
+             {0xF1, 2, 6, 100000U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true},
+             { 0 }}},
+    {.msg = {{0x1C4, 0, 8, 10U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},
+    {.msg = {{0xC9, 0, 8, 10U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},
   };
 
   static RxCheck gm_sdgm_acc_rx_checks[] = {
@@ -650,8 +661,7 @@ static safety_config gm_init(uint16_t param) {
   gm_cc_long = GET_FLAG(param, GM_PARAM_CC_LONG);
   gm_has_acc = !GET_FLAG(param, GM_PARAM_NO_ACC);
   gm_pedal_long = GET_FLAG(param, GM_PARAM_PEDAL_LONG);
-  // Keep pedal-long behavior robust even if only PEDAL_LONG is present during transitions.
-  enable_gas_interceptor = GET_FLAG(param, GM_PARAM_PEDAL_INTERCEPTOR) || gm_pedal_long;
+  enable_gas_interceptor = GET_FLAG(param, GM_PARAM_PEDAL_INTERCEPTOR);
   gm_force_ascm = GET_FLAG(param, GM_PARAM_HW_ASCM_LONG);
   gm_force_brake_c9 = GET_FLAG(param, GM_PARAM_FORCE_BRAKE_C9);
   gm_bolt_2022_pedal = GET_FLAG(param, GM_PARAM_BOLT_2022_PEDAL);

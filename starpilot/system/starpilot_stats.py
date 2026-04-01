@@ -8,6 +8,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "..", "third_party"))
 
 from collections import Counter
 from datetime import datetime, timezone
+from cereal import log
 from influxdb_client import InfluxDBClient, Point
 from influxdb_client.client.write_api import SYNCHRONOUS
 
@@ -49,6 +50,33 @@ def _json_object(value):
     except Exception:
       return {}
   return {}
+
+def get_live_delay_stats():
+  defaults = {
+    "lagd_calibration_percent": 0,
+    "lagd_valid_blocks": 0,
+    "lagd_applied_delay_seconds": 0.0,
+    "lagd_learned_delay_seconds": 0.0,
+    "lagd_learned_delay_std_seconds": 0.0,
+  }
+
+  live_delay_data = params.get("LiveDelay")
+  if not live_delay_data:
+    return defaults
+
+  try:
+    with log.Event.from_bytes(live_delay_data) as live_delay_msg:
+      live_delay = live_delay_msg.liveDelay
+      return {
+        "lagd_calibration_percent": int(getattr(live_delay, "calPerc", 0)),
+        "lagd_valid_blocks": int(getattr(live_delay, "validBlocks", 0)),
+        "lagd_applied_delay_seconds": float(getattr(live_delay, "lateralDelay", 0.0)),
+        "lagd_learned_delay_seconds": float(getattr(live_delay, "lateralDelayEstimate", 0.0)),
+        "lagd_learned_delay_std_seconds": float(getattr(live_delay, "lateralDelayEstimateStd", 0.0)),
+      }
+  except Exception as exception:
+    print(f"Failed to parse LiveDelay stats: {exception}")
+    return defaults
 
 def get_population_value(population_str):
   if population_str is None:
@@ -209,6 +237,7 @@ def send_stats():
 
     device_type = HARDWARE.get_device_type()
     stats_dongle_id = params.get("StarPilotDongleId", encoding="utf-8") or params.get("DongleId", encoding="utf-8") or "unknown"
+    live_delay_stats = get_live_delay_stats()
 
     user_point = (
       Point("user_stats")
@@ -238,6 +267,11 @@ def send_stats():
       .field("has_sascm", getattr(starpilot_toggles, "has_sascm", False))
       .field("has_zss", starpilot_toggles.has_zss)
       .field("latitude", latitude)
+      .field("lagd_applied_delay_seconds", live_delay_stats["lagd_applied_delay_seconds"])
+      .field("lagd_calibration_percent", live_delay_stats["lagd_calibration_percent"])
+      .field("lagd_learned_delay_seconds", live_delay_stats["lagd_learned_delay_seconds"])
+      .field("lagd_learned_delay_std_seconds", live_delay_stats["lagd_learned_delay_std_seconds"])
+      .field("lagd_valid_blocks", live_delay_stats["lagd_valid_blocks"])
       .field("longitude", longitude)
       .field("rainbow_path", starpilot_toggles.rainbow_path)
       .field("random_events", starpilot_toggles.random_events)
