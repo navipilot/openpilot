@@ -4,14 +4,17 @@ Import('env', 'qt_env', 'arch', 'common', 'messaging', 'visionipc', 'transformat
 base_libs = [common, messaging, visionipc, transformations,
              'm', 'OpenCL', 'ssl', 'crypto', 'pthread'] + qt_env["LIBS"]
 
-base_libs += ['avcodec', 'avformat', 'avutil', 'swresample', 'yuv', 'OmxCore']
+base_libs += ['avcodec', 'avformat', 'avutil', 'swresample', 'yuv']
+
+# OpenMAX is only available in the device-target runtime/sysroot. Host desktop
+# UI builds on Linux should not need or link it.
+if arch == 'larch64':
+  base_libs.append('OmxCore')
 
 if arch == 'larch64':
   base_libs.append('EGL')
 
 if arch == "Darwin":
-  if "OmxCore" in base_libs:
-    base_libs.remove("OmxCore")
   del base_libs[base_libs.index('OpenCL')]
   qt_env['FRAMEWORKS'] += ['OpenCL']
 

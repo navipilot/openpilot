@@ -170,15 +170,18 @@ class WifiManager:
     allow_desktop_fake = PC and os.getenv("SP_ALLOW_DESKTOP_FAKE_WIFI", "0").lower() in TRUE_VALUES
     has_nmcli = shutil.which("nmcli") is not None
 
+    if allow_desktop_fake:
+      self._router_main = None
+      self._conn_monitor = None
+      self._nm = None
+      self._fake_networking = True
     # DBus connections
-    if not JEEPNY_AVAILABLE:
+    elif not JEEPNY_AVAILABLE:
       cloudlog.warning(f"jeepney unavailable: {JEEPNY_IMPORT_ERROR}")
       self._router_main = None
       self._conn_monitor = None
       self._nm = None
-      if allow_desktop_fake:
-        self._fake_networking = True
-      elif has_nmcli:
+      if has_nmcli:
         self._nmcli_networking = True
       else:
         cloudlog.error("No networking backend available (jeepney missing, nmcli unavailable)")
@@ -193,9 +196,7 @@ class WifiManager:
         self._router_main = None
         self._conn_monitor = None
         self._nm = None
-        if allow_desktop_fake:
-          self._fake_networking = True
-        elif has_nmcli:
+        if has_nmcli:
           self._nmcli_networking = True
         else:
           cloudlog.error("No networking backend available (D-Bus unavailable, nmcli unavailable)")

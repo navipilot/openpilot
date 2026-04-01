@@ -9,6 +9,8 @@ The goal is simple: keep the device build intact, keep host tools consistent wit
 
 ## Prerequisites
 
+- On Ubuntu/Linux, run `tools/install_ubuntu_dependencies.sh`
+  - `tools/ubuntu_setup.sh` runs both the Ubuntu and Python dependency installers
 - Run `tools/install_python_dependencies.sh`
 - Have `uv` available in your shell
 - For device-target builds, install Docker Desktop or Podman with Linux/aarch64 support
