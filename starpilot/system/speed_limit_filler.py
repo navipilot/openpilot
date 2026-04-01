@@ -19,9 +19,12 @@ NetworkType = log.DeviceState.NetworkType
 
 BOUNDING_BOX_RADIUS_DEGREE = 0.1
 MAX_ENTRIES = 1_000_000
+MAX_PENDING_ADDITIONS = 2_000
 MAX_OVERPASS_DATA_BYTES = 1_073_741_824
 MAX_OVERPASS_REQUESTS = 10_000
 METERS_PER_DEG_LAT = 111_320
+PENDING_FLUSH_BATCH_SIZE = 1_000
+PENDING_FLUSH_INTERVAL_S = 60.0
 VETTING_INTERVAL_DAYS = 7
 ACTIVE_SEGMENT_BUFFER_METERS = 25
 MAX_BEARING_DELTA = 45
@@ -40,8 +43,9 @@ class MapSpeedLogger:
 
     self.cached_segments = {}
 
-    self.dataset_additions = deque(maxlen=MAX_ENTRIES)
+    self.dataset_additions = deque(maxlen=MAX_PENDING_ADDITIONS)
     self.filtered_dataset = []
+    self.last_dataset_flush = time.monotonic()
 
     self.overpass_requests = self.params.get("OverpassRequests")
     self.overpass_requests.setdefault("day", datetime.now(timezone.utc).day)
@@ -80,6 +84,8 @@ class MapSpeedLogger:
 
       entry_copy = item.copy()
       entry_copy.pop("last_vetted", None)
+      if "last_vetted" in item:
+        entry_copy = {key: entry_copy[key] for key in required if key != "last_vetted"}
 
       key = json.dumps(entry_copy, sort_keys=True)
       cleaned_data[key] = item
@@ -118,13 +124,68 @@ class MapSpeedLogger:
     if filtered_dataset is None:
       filtered_dataset = self.params.get("SpeedLimitsFiltered") or []
 
-    live_match_entries = [entry for entry in filtered_dataset if self.has_live_match_fields(entry)]
-    if live_match_entries:
-      self.filtered_dataset = live_match_entries
-      return
+    if filtered_dataset and not any(self.has_live_match_fields(entry) for entry in filtered_dataset):
+      dataset = self.cleanup_dataset(self.params.get("SpeedLimits"))
+      filtered_dataset = self.enrich_filtered_dataset(dataset, filtered_dataset)
 
-    fallback_dataset = self.params.get("SpeedLimits") or []
-    self.filtered_dataset = list(self.cleanup_dataset(fallback_dataset))
+    self.filtered_dataset = [entry for entry in filtered_dataset if self.has_live_match_fields(entry)]
+
+  @staticmethod
+  def get_entry_identity(entry):
+    start_coordinates = entry.get("start_coordinates")
+    if not isinstance(start_coordinates, dict):
+      return None
+
+    try:
+      return (
+        bool(entry.get("incorrect_limit")),
+        round(float(start_coordinates["latitude"]), 6),
+        round(float(start_coordinates["longitude"]), 6),
+        str(entry.get("source", "")),
+        round(float(entry.get("speed_limit", 0)), 3),
+      )
+    except (KeyError, TypeError, ValueError):
+      return None
+
+  def enrich_filtered_dataset(self, dataset, filtered_dataset):
+    dataset_by_identity = {}
+    for entry in dataset:
+      if not self.has_live_match_fields(entry):
+        continue
+
+      identity = self.get_entry_identity(entry)
+      if identity is None or identity in dataset_by_identity:
+        continue
+
+      dataset_by_identity[identity] = entry
+
+    if not dataset_by_identity:
+      return filtered_dataset
+
+    filtered_entries = list(filtered_dataset)
+    updated = False
+    for index, entry in enumerate(filtered_entries):
+      if self.has_live_match_fields(entry):
+        continue
+
+      identity = self.get_entry_identity(entry)
+      matching_entry = dataset_by_identity.get(identity)
+      if matching_entry is None:
+        continue
+
+      filtered_entries[index] = {
+        **entry,
+        "bearing": matching_entry["bearing"],
+        "end_coordinates": matching_entry["end_coordinates"],
+        "road_name": matching_entry["road_name"],
+        "road_width": matching_entry["road_width"],
+      }
+      updated = True
+
+    if not updated:
+      return filtered_dataset
+
+    return self.cleanup_dataset(filtered_entries)
 
   def get_speed_limit_source(self):
     vision_speed_limit = self.params_memory.get_float("VisionSpeedLimit") if self.params.get_bool("VisionSpeedLimitDetection") else 0
@@ -170,6 +231,28 @@ class MapSpeedLogger:
     self.params.put("OverpassRequests", self.overpass_requests)
     self.params.put("SpeedLimits", list(dataset))
     self.params.put("SpeedLimitsFiltered", list(filtered_dataset))
+
+  def flush_pending_dataset_additions(self, force=False):
+    if not self.dataset_additions:
+      if force:
+        self.last_dataset_flush = time.monotonic()
+      return
+
+    now = time.monotonic()
+    should_flush = force
+    should_flush |= len(self.dataset_additions) >= PENDING_FLUSH_BATCH_SIZE
+    should_flush |= (now - self.last_dataset_flush) >= PENDING_FLUSH_INTERVAL_S
+    if not should_flush:
+      return
+
+    existing_dataset = self.params.get("SpeedLimits") or []
+    existing_dataset.extend(self.dataset_additions)
+
+    new_dataset = self.cleanup_dataset(existing_dataset)
+    self.params.put("SpeedLimits", list(new_dataset))
+
+    self.dataset_additions.clear()
+    self.last_dataset_flush = now
 
   def find_current_speed_limit_entry(self, latitude, longitude, road_name, current_bearing):
     best_match = None
@@ -371,6 +454,7 @@ class MapSpeedLogger:
       "speed_limit": speed_limit,
       "start_coordinates": self.previous_coordinates,
     })
+    self.flush_pending_dataset_additions()
 
     self.previous_coordinates = {"latitude": current_latitude, "longitude": current_longitude}
 
@@ -469,6 +553,7 @@ class MapSpeedLogger:
 
     dataset = self.cleanup_dataset(self.params.get("SpeedLimits"))
     filtered_dataset = self.cleanup_dataset(self.params.get("SpeedLimitsFiltered"))
+    filtered_dataset = self.enrich_filtered_dataset(dataset, filtered_dataset)
 
     filtered_dataset = self.vet_entries(filtered_dataset)
     self.update_params(dataset, filtered_dataset)
@@ -547,16 +632,11 @@ def main():
 
       previously_started = True
     elif previously_started:
-      existing_dataset = logger.params.get("SpeedLimits") or []
-      existing_dataset.extend(logger.dataset_additions)
-
-      new_dataset = logger.cleanup_dataset(existing_dataset)
-      logger.params.put("SpeedLimits", list(new_dataset))
+      logger.flush_pending_dataset_additions(force=True)
 
       if logger.sm["deviceState"].networkType in (NetworkType.ethernet, NetworkType.wifi):
         logger.params_memory.put_bool("UpdateSpeedLimits", True)
 
-      logger.dataset_additions.clear()
       logger.clear_live_speed_limits()
 
       previously_started = False

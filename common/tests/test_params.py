@@ -101,6 +101,16 @@ class TestParams:
     assert q.get("CarParams") is None
     assert q.get("CarParams", True) == b"1"
 
+  def test_put_nonblocking_latest_value_wins(self, tmp_path):
+    q = Params(str(tmp_path))
+    for i in range(100):
+      q.put_nonblocking("CarParams", f"value-{i}".encode())
+
+    del q
+
+    r = Params(str(tmp_path))
+    assert r.get("CarParams") == b"value-99"
+
   def test_params_all_keys(self):
     keys = Params().all_keys()
 

@@ -55,7 +55,7 @@ class StarPilotPlanner:
     self.tracking_lead_filter = FirstOrderFilter(0, 0.5, DT_MDL)
 
   def shutdown(self):
-    self.starpilot_vcruise.slc.executor.shutdown(wait=False, cancel_futures=True)
+    self.starpilot_vcruise.slc.shutdown()
     self.starpilot_weather.executor.shutdown(wait=False, cancel_futures=True)
 
   def update(self, now, time_validated, sm, starpilot_toggles):

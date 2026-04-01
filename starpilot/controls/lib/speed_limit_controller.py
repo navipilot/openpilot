@@ -70,10 +70,15 @@ class SpeedLimitController:
     self.previous_target = self.starpilot_planner.params.get_float("PreviousSpeedLimit")
 
     self.executor = ThreadPoolExecutor(max_workers=1)
+    self.mapbox_future = None
 
     self.session = requests.Session()
     self.session.headers.update({"Accept-Language": "en"})
     self.session.headers.update({"User-Agent": "starpilot-mapbox-speed-limit-retriever/1.0 (https://github.com/FrogAi/StarPilot)"})
+
+  def shutdown(self):
+    self.executor.shutdown(wait=False, cancel_futures=True)
+    self.session.close()
 
   @property
   def experimental_mode(self):
@@ -113,11 +118,9 @@ class SpeedLimitController:
       return
 
     def make_request():
+      successful = False
+      response_data = None
       try:
-        self.calling_mapbox = True
-
-        successful = False
-
         if not is_url_pingable(self.mapbox_host):
           self.segment_distance = 1000
           return None
@@ -160,8 +163,7 @@ class SpeedLimitController:
         response.raise_for_status()
 
         successful = True
-
-        return response.json()
+        response_data = response.json()
       except Exception as exception:
         print(f"Unexpected error in Mapbox request: {exception}")
       finally:
@@ -170,8 +172,7 @@ class SpeedLimitController:
         if not successful:
           self.mapbox_limit = 0
           self.segment_distance = v_ego
-
-          return None
+      return response_data
 
     def complete_request(future):
       try:
@@ -212,8 +213,18 @@ class SpeedLimitController:
         print(f"Mapbox Callback Error: {exception}")
         self.mapbox_limit = 0
         self.segment_distance = v_ego
+      finally:
+        self.mapbox_future = None
 
-    future = self.executor.submit(make_request)
+    self.calling_mapbox = True
+    try:
+      future = self.executor.submit(make_request)
+    except RuntimeError:
+      self.calling_mapbox = False
+      self.segment_distance = v_ego
+      return
+
+    self.mapbox_future = future
     future.add_done_callback(complete_request)
 
   def handle_limit_change(self, desired_source, desired_target, sm):

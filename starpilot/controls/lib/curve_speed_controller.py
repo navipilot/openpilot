@@ -25,11 +25,54 @@ class CurveSpeedController:
     self.training_timer = 0
 
     curvature_data = self.starpilot_planner.params.get("CurvatureData")
-    self.curvature_data = curvature_data if isinstance(curvature_data, dict) else {}
+    self.curvature_data = self._normalize_curvature_data(curvature_data)
 
     self.required_curvatures = [str(round(road_curvature, ROUNDING_PRECISION)) for road_curvature in np.arange(MIN_CURVATURE, MAX_CURVATURE + STEP, STEP)]
 
     self.update_lateral_acceleration()
+
+  @staticmethod
+  def _bucket_curvature(road_curvature):
+    clipped_curvature = float(np.clip(road_curvature, MIN_CURVATURE, MAX_CURVATURE))
+    bucket_index = round((clipped_curvature - MIN_CURVATURE) / STEP)
+    bucketed_curvature = MIN_CURVATURE + (bucket_index * STEP)
+    return str(round(bucketed_curvature, ROUNDING_PRECISION))
+
+  @classmethod
+  def _normalize_curvature_data(cls, curvature_data):
+    if not isinstance(curvature_data, dict):
+      return {}
+
+    normalized = {}
+    for key, value in curvature_data.items():
+      if not isinstance(value, dict):
+        continue
+
+      try:
+        raw_curvature = abs(float(key))
+        average = float(value["average"])
+        count = int(value["count"])
+      except (KeyError, TypeError, ValueError):
+        continue
+
+      if count <= 0:
+        continue
+
+      bucket = cls._bucket_curvature(raw_curvature)
+      if bucket in normalized:
+        existing = normalized[bucket]
+        total_count = existing["count"] + count
+        normalized[bucket] = {
+          "average": ((existing["average"] * existing["count"]) + (average * count)) / total_count,
+          "count": total_count,
+        }
+      else:
+        normalized[bucket] = {
+          "average": average,
+          "count": count,
+        }
+
+    return normalized
 
   def log_data(self, v_ego, sm):
     self.enable_training = v_ego > CRUISING_SPEED
@@ -41,9 +84,9 @@ class CurveSpeedController:
 
       if self.training_timer >= PLANNER_TIME and self.starpilot_planner.driving_in_curve and not (sm["carState"].leftBlinker or sm["carState"].rightBlinker):
         lateral_acceleration = abs(self.starpilot_planner.lateral_acceleration)
-        road_curvature = abs(round(self.starpilot_planner.road_curvature, ROUNDING_PRECISION))
+        road_curvature = self._bucket_curvature(abs(self.starpilot_planner.road_curvature))
 
-        key = str(road_curvature)
+        key = road_curvature
         if key in self.curvature_data:
           data = self.curvature_data[key]
 

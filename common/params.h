@@ -2,9 +2,11 @@
 
 #include <future>
 #include <map>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <tuple>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -120,7 +122,10 @@ private:
 
   // for nonblocking write
   std::future<void> future;
-  SafeQueue<std::pair<std::string, std::string>> queue;
+  SafeQueue<std::string> queue;
+  std::mutex pending_writes_lock;
+  std::unordered_map<std::string, std::string> pending_writes;
+  bool writer_running = false;
 
   // StarPilot variables
   std::string cache_path;

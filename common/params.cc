@@ -109,7 +109,10 @@ Params::~Params() {
   if (future.valid()) {
     future.wait();
   }
+  std::scoped_lock lk(pending_writes_lock);
   assert(queue.empty());
+  assert(pending_writes.empty());
+  assert(!writer_running);
 }
 
 std::vector<std::string> Params::allKeys() const {
@@ -245,19 +248,59 @@ void Params::clearAll(ParamKeyFlag key_flag) {
 }
 
 void Params::putNonBlocking(const std::string &key, const std::string &val) {
-   queue.push(std::make_pair(key, val));
-  // start thread on demand
-  if (!future.valid() || future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+  bool should_enqueue = false;
+  bool should_start_thread = false;
+
+  {
+    std::scoped_lock lk(pending_writes_lock);
+    auto it = pending_writes.find(key);
+    if (it == pending_writes.end()) {
+      pending_writes.emplace(key, val);
+      should_enqueue = true;
+    } else {
+      it->second = val;
+    }
+
+    if (!writer_running) {
+      writer_running = true;
+      should_start_thread = true;
+    }
+  }
+
+  if (should_enqueue) {
+    queue.push(key);
+  }
+
+  if (should_start_thread) {
     future = std::async(std::launch::async, &Params::asyncWriteThread, this);
   }
 }
 
 void Params::asyncWriteThread() {
-  // TODO: write the latest one if a key has multiple values in the queue.
-  std::pair<std::string, std::string> p;
-  while (queue.try_pop(p, 0)) {
+  std::string key;
+  while (true) {
+    if (!queue.try_pop(key, 0)) {
+      std::scoped_lock lk(pending_writes_lock);
+      if (queue.empty() && pending_writes.empty()) {
+        writer_running = false;
+        return;
+      }
+      continue;
+    }
+
+    std::string val;
+    {
+      std::scoped_lock lk(pending_writes_lock);
+      auto it = pending_writes.find(key);
+      if (it == pending_writes.end()) {
+        continue;
+      }
+      val = std::move(it->second);
+      pending_writes.erase(it);
+    }
+
     // Params::put is Thread-Safe
-    put(p.first, p.second);
+    put(key, val);
   }
 }
 
