@@ -117,7 +117,8 @@ class Car:
       self.CI, self.CP, self.FPCP = CI, CI.CP, CI.FPCP
       self.RI = RI
 
-    self.CP.alternativeExperience = 0
+    interface_alternative_experience = self.CP.alternativeExperience
+    self.CP.alternativeExperience = interface_alternative_experience
     openpilot_enabled_toggle = self.params.get_bool("OpenpilotEnabledToggle")
     controller_available = self.CI.CC is not None and openpilot_enabled_toggle
     self.CP.passive = not controller_available
@@ -172,9 +173,13 @@ class Car:
 
     self.starpilot_toggles = get_starpilot_toggles()
 
+    self.FPCP.alternativeExperience |= interface_alternative_experience
+
     if self.starpilot_toggles.always_on_lateral:
+      self.CP.alternativeExperience |= ALTERNATIVE_EXPERIENCE.ALWAYS_ON_LATERAL
       self.FPCP.alternativeExperience |= ALTERNATIVE_EXPERIENCE.ALWAYS_ON_LATERAL
     if getattr(self.starpilot_toggles, "remap_cancel_to_distance", False):
+      self.CP.alternativeExperience |= ALTERNATIVE_EXPERIENCE.GM_REMAP_CANCEL_TO_DISTANCE
       self.FPCP.alternativeExperience |= ALTERNATIVE_EXPERIENCE.GM_REMAP_CANCEL_TO_DISTANCE
 
     fpcp_bytes = self.FPCP.to_bytes()
