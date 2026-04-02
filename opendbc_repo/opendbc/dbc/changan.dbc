@@ -1303,4 +1303,5 @@ BO_ 3221225472 VECTOR__INDEPENDENT_SIG_MSG: 0 Vector__XXX
  SG_ Diagnose_message406 : 0|1@0+ (1,0) [1|1] "" Vector__XXX
  SG_ Diagnose_message409 : 0|1@0+ (1,0) [1|1] "" Vector__XXX
 
+VAL_ 817 TCU_GearForDisplay 11 "S" 10 "D" 9 "N" 8 "R" 7 "P";
 VAL_ 824 TCU_GearForDisplay 11 "S" 10 "D" 9 "N" 8 "R" 7 "P";
