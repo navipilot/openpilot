@@ -294,9 +294,8 @@ class ChanganRLogTester:
 
             print(f"检测到车型: {self.car_fingerprint}")
 
-            # Initialize CarInterface to get CarParams
-            ci = CarInterface(None, None, None)
-            self.CP = ci.get_params_for_platform(self.car_fingerprint)
+            # Get CarParams using the class method
+            self.CP = CarInterface.get_non_essential_params(str(self.car_fingerprint))
 
             # Initialize CarState
             self.car_state = CarState(self.CP)
