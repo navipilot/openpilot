@@ -13,10 +13,13 @@ class CarState(CarStateBase):
     can_define = CANDefine(DBC[CP.carFingerprint][Bus.pt])
 
     # Different gear signal names and messages per model
-    # Z6/Z6_IDD use changan.dbc with GW_338/TCU_GearForDisplay
+    # Z6 uses changan.dbc with GW_331/TCU_GearForDisplay
+    # Z6_IDD uses changan.dbc with GW_338/TCU_GearForDisplay
     # QIYUAN_A05/A07 use changan_can.dbc with GEAR/gearShifter
-    if CP.carFingerprint in (CAR.CHANGAN_Z6, CAR.CHANGAN_Z6_IDD):
-      self.shifter_values = can_define.dv["GW_338"]["TCU_GearForDisplay"]  # changan.dbc
+    if CP.carFingerprint == CAR.CHANGAN_Z6:
+      self.shifter_values = can_define.dv["GW_331"]["TCU_GearForDisplay"]  # changan.dbc Z6
+    elif CP.carFingerprint == CAR.CHANGAN_Z6_IDD:
+      self.shifter_values = can_define.dv["GW_338"]["TCU_GearForDisplay"]  # changan.dbc Z6_IDD
     else:  # QIYUAN_A05, QIYUAN_A07
       self.shifter_values = can_define.dv["GEAR"]["gearShifter"]  # changan_can.dbc
 
@@ -88,10 +91,10 @@ class CarState(CarStateBase):
       ret.gasPressed = cp.vl["GW_196"]["gasPressed"] != 0 # IDD may use same msg or GW_1C6 1踩 0松
 
     # Gear - different message/signal per model
-    if CP.carFingerprint == CAR.CHANGAN_Z6_IDD:
+    if CP.carFingerprint == CAR.CHANGAN_Z6:
+      can_gear = int(cp.vl["GW_331"]["TCU_GearForDisplay"])  # changan.dbc Z6
+    elif CP.carFingerprint == CAR.CHANGAN_Z6_IDD:
       can_gear = int(cp.vl["GW_338"]["TCU_GearForDisplay"])  # changan.dbc Z6_IDD
-    elif CP.carFingerprint == CAR.CHANGAN_Z6:
-      can_gear = int(cp.vl["GW_338"]["TCU_GearForDisplay"])  # changan.dbc Z6
     else:  # QIYUAN_A05, QIYUAN_A07
       can_gear = int(cp.vl["GEAR"]["gearShifter"])  # changan_can.dbc
     ret.gearShifter = self.parse_gear_shifter(self.shifter_values.get(can_gear, None))
@@ -177,10 +180,13 @@ class CarState(CarStateBase):
     ]
 
     # Different gear message/signal per model:
-    # - Z6/Z6_IDD use GW_338 with TCU_GearForDisplay (in changan.dbc)
+    # - Z6 uses GW_331 with TCU_GearForDisplay (in changan.dbc)
+    # - Z6_IDD uses GW_338 with TCU_GearForDisplay (in changan.dbc)
     # - A05/A07 use GEAR with gearShifter (in changan_can.dbc)
-    if CP.carFingerprint in (CAR.CHANGAN_Z6, CAR.CHANGAN_Z6_IDD):
-      pt_messages += [("GW_338", 10)]  # TCU_GearForDisplay in changan.dbc
+    if CP.carFingerprint == CAR.CHANGAN_Z6:
+      pt_messages += [("GW_331", 10)]  # TCU_GearForDisplay in changan.dbc Z6
+    elif CP.carFingerprint == CAR.CHANGAN_Z6_IDD:
+      pt_messages += [("GW_338", 10)]  # TCU_GearForDisplay in changan.dbc Z6_IDD
     else:  # QIYUAN_A05, QIYUAN_A07
       pt_messages += [("GEAR", 10)]  # gearShifter in changan_can.dbc
 
