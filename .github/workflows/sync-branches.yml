@@ -19,7 +19,7 @@ jobs:
       - name: Add upstream repositories and fetch branches
         run: |
           set -e
-          echo "Fetching branches from upstream repositories..."
+          echo "=== Fetching branches from upstream repositories ==="
 
           # Helper: add or update remote safely
           add_or_update_remote () {
@@ -32,34 +32,57 @@ jobs:
             fi
           }
 
-          # Carrotpilot (ajouatom/openpilot) branch: c3-v9
-          add_or_update_remote carrotpilot https://github.com/ajouatom/openpilot.git
-          git fetch carrotpilot c3-v9 --no-tags || echo "⚠️ carrotpilot  -v9 fetch failed"
+          # ========= 上游仓库配置 =========
 
-          # Dragonpilot (dragonpilot/dragonpilot) branch: pre-build
+          # Carrotpilot (c3-v9)
+          add_or_update_remote carrotpilot https://github.com/ajouatom/openpilot.git
+          git fetch carrotpilot c3-v9 --no-tags || echo "⚠️ carrotpilot c3-v9 fetch failed"
+
+          # Dragonpilot (pre-build)
           add_or_update_remote dragonpilot https://github.com/dragonpilot/dragonpilot.git
           git fetch dragonpilot pre-build --no-tags || echo "⚠️ dragonpilot pre-build fetch failed"
 
-          # FrogPilot (FrogAi/FrogPilot) branch: FrogPilot
+          # FrogPilot (FrogPilot)
           add_or_update_remote frogpilot https://github.com/FrogAi/FrogPilot.git
           git fetch frogpilot FrogPilot --no-tags || echo "⚠️ frogpilot FrogPilot fetch failed"
 
-      - name: Push branches to your repository (rename to fork names)
+          # ✅ 新增：机械小哥 (changan)
+          add_or_update_remote jixie https://github.com/liruifeng1120/jixiexiaoge.git
+          git fetch jixie changan --no-tags || echo "⚠️ jixie changan fetch failed"
+
+      - name: Push branches to your repository (force sync)
         run: |
           set +e
+          echo "=== Syncing branches to origin ==="
 
-          # Carrotpilot: ajouatom/carrot2-v9 -> Carrotpilot
-          git checkout -B Carrotpilot carrotpilot/c3-v9 \
-            && git push origin Carrotpilot --force \
-            || echo "⚠️ Carrotpilot push skipped"
+          sync_branch () {
+            local target_branch="$1"
+            local source_ref="$2"
 
+            echo "---- Sync: $source_ref -> $target_branch ----"
 
-          # Dragonpilot: dragonpilot/pre-build -> Dragonpilot
-          git checkout -B Dragonpilot dragonpilot/pre-build \
-            && git push origin Dragonpilot --force \
-            || echo "⚠️ Dragonpilot push skipped"
+            git rev-parse "$source_ref" >/dev/null 2>&1
+            if [ $? -ne 0 ]; then
+              echo "⚠️ Source $source_ref not found, skipping"
+              return
+            fi
 
-          # FrogPilot: FrogAi/FrogPilot -> FrogPilot
-          git checkout -B FrogPilot frogpilot/FrogPilot \
-            && git push origin FrogPilot --force \
-            || echo "⚠️ FrogPilot push skipped"
+            git checkout -B "$target_branch" "$source_ref" \
+              && git push origin "$target_branch" --force \
+              && echo "✅ Synced $target_branch" \
+              || echo "⚠️ Failed syncing $target_branch"
+          }
+
+          # ========= 分支同步 =========
+
+          sync_branch Carrotpilot carrotpilot/c3-v9
+          sync_branch Dragonpilot dragonpilot/pre-build
+          sync_branch FrogPilot frogpilot/FrogPilot
+          sync_branch Changan jixie/changan
+
+      - name: Optional - Tag sync timestamp
+        run: |
+          set +e
+          TAG_NAME="sync-$(date +%Y%m%d-%H%M)"
+          git tag -f $TAG_NAME
+          git push origin $TAG_NAME --force || echo "⚠️ tag push failed"
