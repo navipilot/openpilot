@@ -11,7 +11,12 @@ class CarState(CarStateBase):
   def __init__(self, CP):
     super().__init__(CP)
     can_define = CANDefine(DBC[CP.carFingerprint][Bus.pt])
-    self.shifter_values = can_define.dv["GEAR"]["gearShifter"] # 2车一致
+
+    # Different gear signal names for QIYUAN_A05 vs other models (from DAS reference)
+    if CP.carFingerprint == CAR.QIYUAN_A05:
+      self.shifter_values = can_define.dv["GW_331"]["TCU_GearForDisplay"]
+    else:
+      self.shifter_values = can_define.dv["GEAR"]["gearShifter"]  # Z6, Z6_IDD, A07
 
     self.eps_torque_scale = EPS_SCALE[CP.carFingerprint] / 100.0
     self.cluster_speed_hyst_gap = CV.KPH_TO_MS / 2.0
@@ -80,7 +85,11 @@ class CarState(CarStateBase):
       ret.brakePressed = cp.vl["GW_196"]["brakePressed"] != 0 # 区分油门刹车 1踩 0松
       ret.gasPressed = cp.vl["GW_196"]["gasPressed"] != 0 # IDD may use same msg or GW_1C6 1踩 0松
 
-    can_gear = int(cp.vl["GEAR"]["gearShifter"]) # 2车一致 复用
+    # Gear - different message for QIYUAN_A05
+    if self.CP.carFingerprint == CAR.QIYUAN_A05:
+      can_gear = int(cp.vl["GW_331"]["TCU_GearForDisplay"])
+    else:
+      can_gear = int(cp.vl["GEAR"]["gearShifter"])  # Z6, Z6_IDD, A07
     ret.gearShifter = self.parse_gear_shifter(self.shifter_values.get(can_gear, None))
     ret.leftBlindspot = False   # 盲区
     ret.rightBlindspot = False  # 盲区
@@ -161,15 +170,20 @@ class CarState(CarStateBase):
       ("GW_24F", 50),
       ("GW_28B", 25),
       ("buttonEvents", 25),
-      ("GEAR", 10),
     ]
+
+    # Different gear message for QIYUAN_A05 (from DAS reference)
+    if CP.carFingerprint == CAR.QIYUAN_A05:
+      pt_messages += [("GW_331", 10)]  # TCU_GearForDisplay
+    else:
+      pt_messages += [("GEAR", 10)]  # gearShifter for Z6, Z6_IDD, A07
 
     if CP.carFingerprint == CAR.CHANGAN_Z6_IDD:
       pt_messages += [
         ("SPEED", 100),
         ("GW_1A6", 100),
       ]
-    else: #Z6
+    else: #Z6, A05, A07
       pt_messages += [
         ("GW_187", 100), #Z6 车速
         ("GW_196", 100), #Z6 踏板
