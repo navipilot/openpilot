@@ -20,15 +20,15 @@
 #define CHANGAN_BTN_SET     (0x01U << 5)  // 设置按钮（1=按下，可选）
 
 const AngleSteeringLimits CHANGAN_STEER_LIMITS = {
-  .max_angle = 4760,
+  .max_angle = 1800,  // 180.0 degrees * 10 (from DAS reference)
   .angle_deg_to_can = 10.,
   .angle_rate_up_lookup = {
-    .x = {0, 5, 15},
-    .y = {5, 0.8, 0.15},
+    .x = {0, 10, 20},  // Updated from DAS reference
+    .y = {5, 1.4, 0.15},  // Updated from DAS reference
   },
   .angle_rate_down_lookup = {
-    .x = {0, 5, 15},
-    .y = {5, 3.5, 0.4},
+    .x = {0, 10, 20},  // Updated from DAS reference
+    .y = {5, 1.4, 0.26},  // Updated from DAS reference
   },
   .enforce_angle_error = false,
   .inactive_angle_is_zero = false,
