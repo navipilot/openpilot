@@ -12,11 +12,13 @@ class CarState(CarStateBase):
     super().__init__(CP)
     can_define = CANDefine(DBC[CP.carFingerprint][Bus.pt])
 
-    # Different gear signal names for QIYUAN_A05 vs other models (from DAS reference)
-    if CP.carFingerprint == CAR.QIYUAN_A05:
-      self.shifter_values = can_define.dv["GW_331"]["TCU_GearForDisplay"]
-    else:
-      self.shifter_values = can_define.dv["GEAR"]["gearShifter"]  # Z6, Z6_IDD, A07
+    # Different gear signal names and messages per model
+    # Z6/Z6_IDD use changan.dbc with GW_331/TCU_GearForDisplay
+    # QIYUAN_A05/A07 use changan_can.dbc with GEAR/gearShifter
+    if CP.carFingerprint in (CAR.CHANGAN_Z6, CAR.CHANGAN_Z6_IDD):
+      self.shifter_values = can_define.dv["GW_331"]["TCU_GearForDisplay"]  # changan.dbc
+    else:  # QIYUAN_A05, QIYUAN_A07
+      self.shifter_values = can_define.dv["GEAR"]["gearShifter"]  # changan_can.dbc
 
     self.eps_torque_scale = EPS_SCALE[CP.carFingerprint] / 100.0
     self.cluster_speed_hyst_gap = CV.KPH_TO_MS / 2.0
@@ -85,11 +87,11 @@ class CarState(CarStateBase):
       ret.brakePressed = cp.vl["GW_196"]["brakePressed"] != 0 # 区分油门刹车 1踩 0松
       ret.gasPressed = cp.vl["GW_196"]["gasPressed"] != 0 # IDD may use same msg or GW_1C6 1踩 0松
 
-    # Gear - different message for QIYUAN_A05
-    if self.CP.carFingerprint == CAR.QIYUAN_A05:
-      can_gear = int(cp.vl["GW_331"]["TCU_GearForDisplay"])
-    else:
-      can_gear = int(cp.vl["GEAR"]["gearShifter"])  # Z6, Z6_IDD, A07
+    # Gear - different message/signal per model
+    if CP.carFingerprint in (CAR.CHANGAN_Z6, CAR.CHANGAN_Z6_IDD):
+      can_gear = int(cp.vl["GW_331"]["TCU_GearForDisplay"])  # changan.dbc
+    else:  # QIYUAN_A05, QIYUAN_A07
+      can_gear = int(cp.vl["GEAR"]["gearShifter"])  # changan_can.dbc
     ret.gearShifter = self.parse_gear_shifter(self.shifter_values.get(can_gear, None))
     ret.leftBlindspot = False   # 盲区
     ret.rightBlindspot = False  # 盲区
@@ -172,11 +174,13 @@ class CarState(CarStateBase):
       ("buttonEvents", 25),
     ]
 
-    # Different gear message for QIYUAN_A05 (from DAS reference)
-    if CP.carFingerprint == CAR.QIYUAN_A05:
-      pt_messages += [("GW_331", 10)]  # TCU_GearForDisplay
-    else:
-      pt_messages += [("GEAR", 10)]  # gearShifter for Z6, Z6_IDD, A07
+    # Different gear message/signal per model:
+    # - Z6/Z6_IDD use GW_331 with TCU_GearForDisplay (in changan.dbc)
+    # - A05/A07 use GEAR with gearShifter (in changan_can.dbc)
+    if CP.carFingerprint in (CAR.CHANGAN_Z6, CAR.CHANGAN_Z6_IDD):
+      pt_messages += [("GW_331", 10)]  # TCU_GearForDisplay in changan.dbc
+    else:  # QIYUAN_A05, QIYUAN_A07
+      pt_messages += [("GEAR", 10)]  # gearShifter in changan_can.dbc
 
     if CP.carFingerprint == CAR.CHANGAN_Z6_IDD:
       pt_messages += [
