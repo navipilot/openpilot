@@ -51,7 +51,7 @@ class CAR(Platforms):
   CHANGAN_Z6 = PlatformConfig(
     [ChangAnCarDocs("Changan Z6")],
     CarSpecs(mass=2205, wheelbase=2.80, steerRatio=15.0, centerToFrontRatio=0.44, tireStiffnessFactor=0.444),
-    DbcDict({Bus.pt: "changan_can", Bus.cam: "changan_can"}),
+    DbcDict({Bus.pt: "changan", Bus.cam: "changan"}),
   )
   CHANGAN_Z6_IDD = PlatformConfig(
     [ChangAnCarDocs("Changan Z6 iDD")],
