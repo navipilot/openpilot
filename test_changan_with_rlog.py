@@ -129,28 +129,42 @@ class ChanganRLogTester:
             self.warnings.append("未找到 carParams 消息")
             return {}
 
-        # Get the first carParams message
-        cp_msg = car_params_msgs[0]
-        cp = cp_msg.carParams
+        try:
+            # Get the first carParams message
+            cp_msg = car_params_msgs[0]
+            cp = cp_msg.carParams
 
-        params = {
-            'carName': cp.carName,
-            'carFingerprint': cp.carFingerprint,
-            'mass': cp.mass,
-            'wheelbase': cp.wheelbase,
-            'steerRatio': cp.steerRatio,
-            'centerToFront': cp.centerToFront,
-        }
+            # Use getattr with defaults to handle missing attributes gracefully
+            params = {
+                'carName': getattr(cp, 'carName', 'Unknown'),
+                'carFingerprint': getattr(cp, 'carFingerprint', 'Unknown'),
+                'mass': getattr(cp, 'mass', 0.0),
+                'wheelbase': getattr(cp, 'wheelbase', 0.0),
+                'steerRatio': getattr(cp, 'steerRatio', 0.0),
+                'centerToFront': getattr(cp, 'centerToFront', 0.0),
+            }
 
-        print(f"车辆信息:")
-        print(f"  名称: {params['carName']}")
-        print(f"  指纹: {params['carFingerprint']}")
-        print(f"  质量: {params['mass']:.1f} kg")
-        print(f"  轴距: {params['wheelbase']:.2f} m")
-        print(f"  转向比: {params['steerRatio']:.1f}")
-        print(f"  中心到前轴: {params['centerToFront']:.2f} m")
+            print(f"车辆信息:")
+            print(f"  名称: {params['carName']}")
+            print(f"  指纹: {params['carFingerprint']}")
+            if params['mass'] > 0:
+                print(f"  质量: {params['mass']:.1f} kg")
+            if params['wheelbase'] > 0:
+                print(f"  轴距: {params['wheelbase']:.2f} m")
+            if params['steerRatio'] > 0:
+                print(f"  转向比: {params['steerRatio']:.1f}")
+            if params['centerToFront'] > 0:
+                print(f"  中心到前轴: {params['centerToFront']:.2f} m")
 
-        return params
+            return params
+
+        except Exception as e:
+            error_msg = f"解析 carParams 失败: {str(e)}"
+            print(f"⚠ 警告: {error_msg}")
+            self.warnings.append(error_msg)
+            import traceback
+            traceback.print_exc()
+            return {}
 
     def test_can_parsing(self) -> bool:
         """
