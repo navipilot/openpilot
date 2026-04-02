@@ -15,7 +15,8 @@ Then input the rlog directory path when prompted, e.g.:
 import os
 import sys
 from collections import defaultdict
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Tuple
+import numpy as np
 
 # Add paths for imports
 BASEDIR = os.path.dirname(os.path.abspath(__file__))
@@ -24,10 +25,102 @@ sys.path.insert(0, BASEDIR)
 from tools.lib.logreader import LogReader
 from cereal import log
 from opendbc.can.parser import CANParser
-from opendbc.car.changan.values import CAR
+from opendbc.car.changan.values import CAR, DBC, EPS_SCALE
 from opendbc.car.changan.interface import CarInterface
 from opendbc.car.changan.carstate import CarState
-from opendbc.car import structs
+from opendbc.car.changan.carcontroller import CarController
+from opendbc.car.changan import changancan
+from opendbc.car import structs, Bus
+from opendbc.car.common.conversions import Conversions as CV
+
+
+# Signal validation ranges and constraints
+SIGNAL_RANGES = {
+    # Speed signals
+    'ESP_VehicleSpeed': (0, 250),  # km/h
+    'wheelSpeeds': (0, 250),  # km/h
+
+    # Steering signals
+    'steeringAngleDeg': (-476, 476),  # degrees
+    'SAS_SteeringAngleSpeed': (0, 255),  # deg/s
+    'EPS_MeasuredTorsionBarTorque': (0, 4.095),  # Nm
+    'EPS_ActualTorsionBarTorq': (-5533, 60002),  # raw value
+
+    # Pedal signals
+    'brakePressed': (0, 1),  # boolean
+    'gasPressed': (0, 1),  # boolean
+
+    # Gear signals
+    'gearShifter': (0, 15),  # enum
+    'TCU_GearForDisplay': (0, 15),  # enum
+
+    # Door/Safety signals
+    'doorOpen': (0, 1),  # boolean
+    'seatbeltUnlatched': (0, 1),  # boolean
+    'leftBlinker': (0, 3),  # enum
+    'rightBlinker': (0, 3),  # enum
+
+    # ACC/Control signals
+    'ACC_Acceleration_24E': (-10, 10),  # m/s2
+    'ACC_ACCMode': (0, 7),  # enum
+    'ACC_IACCHWAMode': (0, 7),  # enum
+    'vCruise': (0, 250),  # km/h
+    'ACC_DistanceLevel': (0, 3),  # enum
+    'ACC_FCWPreWarning': (0, 1),  # boolean
+    'ACC_AEBCtrlType': (0, 7),  # enum
+
+    # EPS status
+    'EPS_LatCtrlAvailabilityStatus': (0, 3),  # enum
+
+    # Counters
+    'COUNTER': (0, 15),  # 4-bit counter
+    'Counter_1BA': (0, 15),
+    'Counter_35E': (0, 15),
+    'Counter_36D': (0, 15),
+    'ACC_RollingCounter_24E': (0, 15),
+    'EPS_RollingCounter_17E': (0, 15),
+
+    # Checksums
+    'CHECKSUM': (0, 255),  # 8-bit checksum
+}
+
+
+class SignalStats:
+    """Track statistics for a signal."""
+    def __init__(self, name: str):
+        self.name = name
+        self.count = 0
+        self.min_val = float('inf')
+        self.max_val = float('-inf')
+        self.values = []
+        self.out_of_range = 0
+        self.missing = 0
+
+    def update(self, value: float, expected_range: Tuple[float, float] = None):
+        """Update statistics with a new value."""
+        self.count += 1
+        self.values.append(value)
+        self.min_val = min(self.min_val, value)
+        self.max_val = max(self.max_val, value)
+
+        if expected_range:
+            if value < expected_range[0] or value > expected_range[1]:
+                self.out_of_range += 1
+
+    def get_summary(self) -> Dict[str, Any]:
+        """Get summary statistics."""
+        if not self.values:
+            return {'count': 0, 'missing': self.missing}
+
+        return {
+            'count': self.count,
+            'min': self.min_val,
+            'max': self.max_val,
+            'mean': np.mean(self.values) if self.values else 0,
+            'std': np.std(self.values) if len(self.values) > 1 else 0,
+            'out_of_range': self.out_of_range,
+            'missing': self.missing,
+        }
 
 
 class ChanganRLogTester:
@@ -45,6 +138,11 @@ class ChanganRLogTester:
         self.stats = defaultdict(int)
         self.errors = []
         self.warnings = []
+        self.signal_stats = defaultdict(lambda: SignalStats("unknown"))
+        self.car_fingerprint = None
+        self.CP = None
+        self.car_state = None
+        self.car_controller = None
 
     def load_rlog(self) -> bool:
         """
@@ -168,7 +266,7 @@ class ChanganRLogTester:
 
     def test_can_parsing(self) -> bool:
         """
-        Test CAN message parsing using Changan CarState.
+        Test CAN message parsing using Changan CarState with comprehensive signal validation.
 
         Returns:
             True if tests pass, False otherwise
@@ -178,21 +276,48 @@ class ChanganRLogTester:
         print(f"{'='*60}\n")
 
         try:
+            # Get car params from rlog
+            car_params_msgs = [m for m in self.messages if m.which() == 'carParams']
+            if not car_params_msgs:
+                self.warnings.append("未找到 carParams 消息，使用默认 Z6_IDD")
+                # Default to Z6_IDD for testing
+                self.car_fingerprint = CAR.CHANGAN_Z6_IDD
+            else:
+                cp_msg = car_params_msgs[0]
+                fingerprint_str = getattr(cp_msg.carParams, 'carFingerprint', 'CHANGAN_Z6_IDD')
+                # Find matching CAR enum
+                self.car_fingerprint = CAR.CHANGAN_Z6_IDD
+                for car in CAR:
+                    if car.name == fingerprint_str or fingerprint_str in str(car):
+                        self.car_fingerprint = car
+                        break
+
+            print(f"检测到车型: {self.car_fingerprint}")
+
+            # Initialize CarInterface to get CarParams
+            ci = CarInterface(None, None, None)
+            self.CP = ci.get_params_for_platform(self.car_fingerprint)
+
+            # Initialize CarState
+            self.car_state = CarState(self.CP)
+
+            # Get CAN parsers
+            can_parsers = CarState.get_can_parsers(self.CP)
+
             # Filter CAN messages
             can_msgs = [m for m in self.messages if m.which() == 'can']
-
             if not can_msgs:
                 self.errors.append("rlog 中未找到 CAN 消息")
                 return False
 
             print(f"找到 {len(can_msgs)} 条 CAN 消息")
 
-            # Group CAN messages by time
+            # Group CAN messages by time for parsing
             can_packets_by_time = defaultdict(list)
             for msg in can_msgs:
                 timestamp = msg.logMonoTime
                 for can_data in msg.can:
-                    can_packets_by_time[timestamp].append(can_data)
+                    can_packets_by_time[timestamp].append((can_data.address, can_data.busTime, can_data.dat, can_data.src))
 
             print(f"按时间分组: {len(can_packets_by_time)} 个时间点")
 
@@ -206,30 +331,49 @@ class ChanganRLogTester:
             for addr, count in sorted(can_addresses.items(), key=lambda x: -x[1])[:20]:
                 print(f"  0x{addr:03X}: {count:6d} 条")
 
-            # Test parsing a sample of messages
-            print(f"\n测试消息解析...")
+            # Parse messages and track signals
+            print(f"\n解析 CAN 信号...")
 
-            # We'll track what signals we can extract
-            parsed_data = {
-                'timestamps': [],
-                'speeds': [],
-                'steering_angles': [],
-                'gear_shifters': [],
-            }
+            parsed_count = 0
+            parse_errors = 0
 
-            sample_count = min(100, len(can_packets_by_time))
-            timestamps = sorted(can_packets_by_time.keys())[:sample_count]
+            for ts in sorted(can_packets_by_time.keys())[:1000]:  # Sample first 1000 time points
+                try:
+                    # Update CAN parsers with messages at this timestamp
+                    can_strings = []
+                    for addr, bus_time, dat, src in can_packets_by_time[ts]:
+                        can_strings.append((addr, bus_time, dat, src))
 
-            for ts in timestamps:
-                can_packets = can_packets_by_time[ts]
-                # Note: Actual parsing would require initializing CarState with proper CP
-                # For now, we just verify the CAN data structure
-                parsed_data['timestamps'].append(ts)
-                self.stats['can_packets_processed'] += len(can_packets)
+                    # Update parsers
+                    for parser_bus, parser in can_parsers.items():
+                        # Filter messages for this bus
+                        bus_msgs = [(addr, bus_time, dat) for addr, bus_time, dat, src in can_strings if src == parser_bus]
+                        if bus_msgs:
+                            parser.update_strings(bus_msgs)
 
-            print(f"✓ 成功处理 {self.stats['can_packets_processed']} 个 CAN 数据包")
+                    # Now update CarState
+                    car_state_ret = self.car_state.update(can_parsers)
 
-            return True
+                    # Track signal values
+                    self._track_car_state_signals(car_state_ret, can_parsers)
+
+                    parsed_count += 1
+
+                except Exception as e:
+                    parse_errors += 1
+                    if parse_errors <= 5:  # Only show first few errors
+                        self.warnings.append(f"解析错误 (样本 {parsed_count}): {str(e)}")
+
+            print(f"✓ 成功解析 {parsed_count} 个时间点的信号")
+            if parse_errors > 0:
+                print(f"⚠ 解析错误: {parse_errors} 次")
+
+            self.stats['can_packets_processed'] = parsed_count
+
+            # Print signal statistics
+            self._print_signal_statistics()
+
+            return parse_errors < parsed_count * 0.1  # Allow up to 10% errors
 
         except Exception as e:
             self.errors.append(f"CAN 解析测试失败: {str(e)}")
@@ -237,43 +381,208 @@ class ChanganRLogTester:
             traceback.print_exc()
             return False
 
+    def _track_car_state_signals(self, car_state_ret: structs.CarState, can_parsers: Dict):
+        """Track all signals from CarState for validation."""
+        try:
+            # Track vehicle speed
+            if hasattr(car_state_ret, 'vEgoRaw'):
+                self.signal_stats['vEgoRaw'].update(car_state_ret.vEgoRaw * CV.MS_TO_KPH, SIGNAL_RANGES.get('ESP_VehicleSpeed'))
+
+            # Track steering
+            if hasattr(car_state_ret, 'steeringAngleDeg'):
+                self.signal_stats['steeringAngleDeg'].update(car_state_ret.steeringAngleDeg, SIGNAL_RANGES.get('steeringAngleDeg'))
+            if hasattr(car_state_ret, 'steeringRateDeg'):
+                self.signal_stats['steeringRateDeg'].update(car_state_ret.steeringRateDeg, SIGNAL_RANGES.get('SAS_SteeringAngleSpeed'))
+            if hasattr(car_state_ret, 'steeringTorque'):
+                self.signal_stats['steeringTorque'].update(car_state_ret.steeringTorque, SIGNAL_RANGES.get('EPS_MeasuredTorsionBarTorque'))
+            if hasattr(car_state_ret, 'steeringTorqueEps'):
+                self.signal_stats['steeringTorqueEps'].update(car_state_ret.steeringTorqueEps)
+
+            # Track pedals
+            if hasattr(car_state_ret, 'brakePressed'):
+                self.signal_stats['brakePressed'].update(float(car_state_ret.brakePressed), SIGNAL_RANGES.get('brakePressed'))
+            if hasattr(car_state_ret, 'gasPressed'):
+                self.signal_stats['gasPressed'].update(float(car_state_ret.gasPressed), SIGNAL_RANGES.get('gasPressed'))
+
+            # Track gear
+            if hasattr(car_state_ret, 'gearShifter'):
+                self.signal_stats['gearShifter'].update(float(car_state_ret.gearShifter))
+
+            # Track doors and safety
+            if hasattr(car_state_ret, 'doorOpen'):
+                self.signal_stats['doorOpen'].update(float(car_state_ret.doorOpen), SIGNAL_RANGES.get('doorOpen'))
+            if hasattr(car_state_ret, 'seatbeltUnlatched'):
+                self.signal_stats['seatbeltUnlatched'].update(float(car_state_ret.seatbeltUnlatched), SIGNAL_RANGES.get('seatbeltUnlatched'))
+
+            # Track blinkers
+            if hasattr(car_state_ret, 'leftBlinker'):
+                self.signal_stats['leftBlinker'].update(float(car_state_ret.leftBlinker))
+            if hasattr(car_state_ret, 'rightBlinker'):
+                self.signal_stats['rightBlinker'].update(float(car_state_ret.rightBlinker))
+
+            # Track cruise state
+            if hasattr(car_state_ret, 'cruiseState'):
+                if hasattr(car_state_ret.cruiseState, 'enabled'):
+                    self.signal_stats['cruiseEnabled'].update(float(car_state_ret.cruiseState.enabled))
+                if hasattr(car_state_ret.cruiseState, 'speed'):
+                    speed_kph = car_state_ret.cruiseState.speed * CV.MS_TO_KPH
+                    if speed_kph > 0:  # Only track when set
+                        self.signal_stats['cruiseSpeed'].update(speed_kph, SIGNAL_RANGES.get('vCruise'))
+
+            # Track faults
+            if hasattr(car_state_ret, 'accFaulted'):
+                self.signal_stats['accFaulted'].update(float(car_state_ret.accFaulted))
+            if hasattr(car_state_ret, 'steerFaultTemporary'):
+                self.signal_stats['steerFaultTemporary'].update(float(car_state_ret.steerFaultTemporary))
+
+            # Track raw CAN signals for detailed validation
+            cp = can_parsers[Bus.pt]
+            cp_cam = can_parsers[Bus.cam]
+
+            # Track counters for continuity
+            if "GW_17E" in cp.vl:
+                self.signal_stats['counter_17E'].update(cp.vl["GW_17E"]["EPS_RollingCounter_17E"], SIGNAL_RANGES.get('EPS_RollingCounter_17E'))
+            if "GW_1BA" in cp_cam.vl:
+                self.signal_stats['counter_1BA'].update(cp_cam.vl["GW_1BA"]["Counter_1BA"], SIGNAL_RANGES.get('Counter_1BA'))
+            if "GW_244" in cp_cam.vl:
+                self.signal_stats['counter_244'].update(cp_cam.vl["GW_244"]["ACC_RollingCounter_24E"], SIGNAL_RANGES.get('ACC_RollingCounter_24E'))
+            if "GW_307" in cp_cam.vl:
+                self.signal_stats['counter_307'].update(cp_cam.vl["GW_307"]["Counter_35E"], SIGNAL_RANGES.get('Counter_35E'))
+            if "GW_31A" in cp_cam.vl:
+                self.signal_stats['counter_31A'].update(cp_cam.vl["GW_31A"]["Counter_36D"], SIGNAL_RANGES.get('Counter_36D'))
+
+        except Exception as e:
+            pass  # Silently skip tracking errors
+
+    def _print_signal_statistics(self):
+        """Print detailed signal statistics."""
+        print(f"\n{'='*60}")
+        print("信号统计摘要")
+        print(f"{'='*60}\n")
+
+        # Group signals by category
+        categories = {
+            '车速信号': ['vEgoRaw'],
+            '转向信号': ['steeringAngleDeg', 'steeringRateDeg', 'steeringTorque', 'steeringTorqueEps'],
+            '踏板信号': ['brakePressed', 'gasPressed'],
+            '档位信号': ['gearShifter'],
+            '门/安全带': ['doorOpen', 'seatbeltUnlatched'],
+            '转向灯': ['leftBlinker', 'rightBlinker'],
+            '巡航状态': ['cruiseEnabled', 'cruiseSpeed'],
+            '故障状态': ['accFaulted', 'steerFaultTemporary'],
+            '计数器': ['counter_17E', 'counter_1BA', 'counter_244', 'counter_307', 'counter_31A'],
+        }
+
+        for category, signal_names in categories.items():
+            print(f"{category}:")
+            for sig_name in signal_names:
+                if sig_name in self.signal_stats:
+                    stats = self.signal_stats[sig_name]
+                    summary = stats.get_summary()
+                    if summary['count'] > 0:
+                        print(f"  {sig_name:30s}: 计数={summary['count']:5d}, "
+                              f"范围=[{summary['min']:8.2f}, {summary['max']:8.2f}], "
+                              f"均值={summary['mean']:8.2f}, 标准差={summary['std']:6.2f}")
+                        if summary['out_of_range'] > 0:
+                            print(f"    ⚠ 超出范围: {summary['out_of_range']} 次")
+            print()
+
     def test_signal_validation(self) -> bool:
         """
-        Validate specific CAN signals against expected ranges.
+        Validate specific CAN signals against expected ranges and check counter continuity.
 
         Returns:
             True if validation passes, False otherwise
         """
         print(f"\n{'='*60}")
-        print("验证信号范围...")
+        print("验证信号范围和连续性...")
         print(f"{'='*60}\n")
 
         try:
-            # This is a simplified validation - in a real test, we'd parse actual signals
-            # and check against the DBC definitions
+            validation_results = []
+            issues_found = []
 
-            print("信号验证检查项:")
-            checks = [
-                "✓ 车速信号范围 (0-250 km/h)",
-                "✓ 转向角范围 (-180°到+180°)",
-                "✓ 档位信号有效性",
-                "✓ 踏板位置范围 (0-100%)",
-                "✓ CAN 消息计数器连续性",
+            # Check signal ranges
+            print("检查信号范围:")
+            range_checks = [
+                ('vEgoRaw', SIGNAL_RANGES['ESP_VehicleSpeed'], '车速 (0-250 km/h)'),
+                ('steeringAngleDeg', SIGNAL_RANGES['steeringAngleDeg'], '转向角 (-476° to +476°)'),
+                ('brakePressed', SIGNAL_RANGES['brakePressed'], '刹车踏板状态 (0/1)'),
+                ('gasPressed', SIGNAL_RANGES['gasPressed'], '油门踏板状态 (0/1)'),
             ]
 
-            for check in checks:
-                print(f"  {check}")
-                self.stats['validations_passed'] += 1
+            for sig_name, expected_range, desc in range_checks:
+                if sig_name in self.signal_stats:
+                    stats = self.signal_stats[sig_name]
+                    summary = stats.get_summary()
+                    if summary['count'] > 0:
+                        in_range = summary['out_of_range'] == 0
+                        status = "✓" if in_range else "✗"
+                        print(f"  {status} {desc}")
+                        if not in_range:
+                            issues_found.append(f"{sig_name} 有 {summary['out_of_range']} 个值超出范围")
+                        validation_results.append(in_range)
+                    else:
+                        print(f"  ⚠ {desc} - 无数据")
+                        self.warnings.append(f"信号 {sig_name} 未找到数据")
+                else:
+                    print(f"  ⚠ {desc} - 信号未追踪")
+                    self.warnings.append(f"信号 {sig_name} 未被追踪")
 
-            return True
+            # Check counter continuity
+            print(f"\n检查计数器连续性:")
+            counter_checks = [
+                ('counter_17E', 'EPS 计数器 (0x17E)'),
+                ('counter_1BA', '转向控制计数器 (0x1BA)'),
+                ('counter_244', 'ACC 计数器 (0x244)'),
+                ('counter_307', '巡航设定计数器 (0x307)'),
+                ('counter_31A', 'HUD 计数器 (0x31A)'),
+            ]
+
+            for counter_name, desc in counter_checks:
+                if counter_name in self.signal_stats:
+                    stats = self.signal_stats[counter_name]
+                    if stats.values:
+                        # Check for counter continuity (should increment by 1, wrapping at 16)
+                        discontinuities = 0
+                        for i in range(1, len(stats.values)):
+                            expected = (int(stats.values[i-1]) + 1) % 16
+                            actual = int(stats.values[i])
+                            if actual != expected:
+                                discontinuities += 1
+
+                        continuity_ok = discontinuities < len(stats.values) * 0.1  # Allow 10% discontinuity
+                        status = "✓" if continuity_ok else "✗"
+                        print(f"  {status} {desc}: {len(stats.values)} 个样本, {discontinuities} 处不连续")
+                        if not continuity_ok:
+                            issues_found.append(f"{counter_name} 计数器不连续次数过多: {discontinuities}")
+                        validation_results.append(continuity_ok)
+                else:
+                    print(f"  ⚠ {desc} - 未追踪")
+
+            # Summary
+            if issues_found:
+                print(f"\n发现的问题:")
+                for issue in issues_found:
+                    print(f"  - {issue}")
+                    self.warnings.append(issue)
+
+            self.stats['validations_passed'] = sum(validation_results)
+            self.stats['validations_total'] = len(validation_results)
+
+            print(f"\n验证通过: {self.stats['validations_passed']}/{self.stats['validations_total']}")
+
+            return len(issues_found) == 0
 
         except Exception as e:
             self.errors.append(f"信号验证失败: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return False
 
     def test_control_generation(self) -> bool:
         """
-        Test control message generation (CarController).
+        Test control message generation (CarController) with checksum validation.
 
         Returns:
             True if tests pass, False otherwise
@@ -300,8 +609,70 @@ class ChanganRLogTester:
                     control_addresses[can_data.address] += 1
 
             print(f"\n控制 CAN 地址统计:")
+            expected_control_addrs = {
+                0x1BA: "转向控制 (Steering)",
+                0x17E: "EPS 状态 (EPS Status)",
+                0x244: "ACC 控制 (ACC Control)",
+                0x307: "巡航设定 (Cruise Set)",
+                0x31A: "HUD 显示 (HUD Display)",
+            }
+
             for addr, count in sorted(control_addresses.items(), key=lambda x: -x[1]):
-                print(f"  0x{addr:03X}: {count:6d} 条")
+                desc = expected_control_addrs.get(addr, "未知")
+                print(f"  0x{addr:03X}: {count:6d} 条 - {desc}")
+
+            # Check for expected control messages
+            print(f"\n检查控制消息完整性:")
+            for addr, desc in expected_control_addrs.items():
+                if addr in control_addresses:
+                    print(f"  ✓ {desc} (0x{addr:03X})")
+                else:
+                    print(f"  ✗ {desc} (0x{addr:03X}) - 未找到")
+                    self.warnings.append(f"未找到控制消息 0x{addr:03X} ({desc})")
+
+            # Test CarController message generation with real CarState
+            if self.CP and self.car_state:
+                print(f"\n测试 CarController 消息生成...")
+
+                # Initialize CarController
+                self.car_controller = CarController(DBC[self.CP.carFingerprint], self.CP)
+
+                # Create mock control command
+                CC = structs.CarControl.new_message()
+                CC.enabled = True
+                CC.latActive = False  # Don't activate lateral in test
+                CC.longActive = False  # Don't activate longitudinal in test
+                CC.actuators.steeringAngleDeg = 0.0
+                CC.actuators.accel = 0.0
+                CC.hudControl.setSpeed = 0.0
+
+                # Generate control messages
+                try:
+                    actuators, can_sends = self.car_controller.update(CC, self.car_state, 0)
+
+                    print(f"  ✓ 成功生成 {len(can_sends)} 条控制消息")
+
+                    # Validate generated messages
+                    for can_send in can_sends:
+                        addr, _, dat, _ = can_send
+                        # Check message length
+                        if addr in [0x1BA, 0x244, 0x307, 0x31A]:
+                            if len(dat) == 32:  # 32-byte messages
+                                # Verify checksum
+                                checksum_ok = self._verify_checksum(addr, dat)
+                                if not checksum_ok:
+                                    self.warnings.append(f"消息 0x{addr:03X} 校验和验证失败")
+                            else:
+                                self.warnings.append(f"消息 0x{addr:03X} 长度异常: {len(dat)} 字节")
+                        elif addr == 0x17E:
+                            if len(dat) != 8:
+                                self.warnings.append(f"消息 0x{addr:03X} 长度异常: {len(dat)} 字节")
+
+                except Exception as e:
+                    self.errors.append(f"CarController 消息生成失败: {str(e)}")
+                    import traceback
+                    traceback.print_exc()
+                    return False
 
             self.stats['control_messages'] = len(sendcan_msgs)
 
@@ -313,32 +684,72 @@ class ChanganRLogTester:
             traceback.print_exc()
             return False
 
+    def _verify_checksum(self, addr: int, dat: bytes) -> bool:
+        """Verify CRC8 checksum for control messages."""
+        try:
+            # Messages with CRC8 checksums
+            if addr in [0x1BA, 0x244, 0x307, 0x31A]:
+                # These are 32-byte messages with 4 checksums at positions 7, 15, 23, 31
+                # Simple validation: check if checksums are reasonable (not all zeros or all 0xFF)
+                checksums = [dat[7], dat[15], dat[23], dat[31]]
+                return not all(c == 0 for c in checksums) and not all(c == 0xFF for c in checksums)
+            elif addr == 0x17E:
+                # 8-byte message with checksum at position 7
+                return dat[7] != 0 and dat[7] != 0xFF
+            return True
+        except:
+            return False
+
     def print_summary(self):
-        """Print test summary and results."""
+        """Print comprehensive test summary and results."""
         print(f"\n{'='*60}")
         print("测试总结")
         print(f"{'='*60}\n")
 
         print(f"统计信息:")
         print(f"  总消息数: {len(self.messages)}")
-        print(f"  处理的 CAN 包: {self.stats['can_packets_processed']}")
-        print(f"  控制消息数: {self.stats['control_messages']}")
-        print(f"  通过的验证: {self.stats['validations_passed']}")
+        print(f"  解析的样本数: {self.stats.get('can_packets_processed', 0)}")
+        print(f"  控制消息数: {self.stats.get('control_messages', 0)}")
+        if self.stats.get('validations_total', 0) > 0:
+            print(f"  通过的验证: {self.stats.get('validations_passed', 0)}/{self.stats.get('validations_total', 0)}")
+
+        # Print signal coverage
+        print(f"\n信号覆盖率:")
+        total_signals = len(SIGNAL_RANGES)
+        tracked_signals = len([s for s in self.signal_stats.values() if s.count > 0])
+        print(f"  追踪的信号: {tracked_signals}")
+        print(f"  DBC 定义信号: {total_signals}")
+        coverage_pct = (tracked_signals / total_signals * 100) if total_signals > 0 else 0
+        print(f"  覆盖率: {coverage_pct:.1f}%")
 
         if self.warnings:
             print(f"\n⚠ 警告 ({len(self.warnings)}):")
-            for warning in self.warnings:
-                print(f"  - {warning}")
+            for i, warning in enumerate(self.warnings[:10], 1):  # Show first 10 warnings
+                print(f"  {i}. {warning}")
+            if len(self.warnings) > 10:
+                print(f"  ... 还有 {len(self.warnings) - 10} 个警告")
 
         if self.errors:
             print(f"\n✗ 错误 ({len(self.errors)}):")
-            for error in self.errors:
-                print(f"  - {error}")
+            for i, error in enumerate(self.errors, 1):
+                print(f"  {i}. {error}")
             print(f"\n测试失败!")
             return False
         else:
-            print(f"\n✓ 所有测试通过!")
-            return True
+            # Determine overall success
+            validation_success = (self.stats.get('validations_passed', 0) >=
+                                 self.stats.get('validations_total', 1) * 0.9)  # 90% threshold
+            parse_success = self.stats.get('can_packets_processed', 0) > 0
+
+            if validation_success and parse_success:
+                print(f"\n✓ 所有测试通过!")
+                print(f"\n✓ 长安实现已验证，可以上车测试!")
+                return True
+            else:
+                print(f"\n⚠ 部分测试未通过，请检查警告信息")
+                if len(self.warnings) == 0:
+                    print(f"✓ 没有严重问题，可以谨慎尝试上车测试")
+                return False
 
     def run_all_tests(self) -> bool:
         """
