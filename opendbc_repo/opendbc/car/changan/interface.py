@@ -32,10 +32,7 @@ class CarInterface(CarInterfaceBase):
     ret.steerActuatorDelay = 0.12  # Fixed from DAS reference
     ret.steerLimitTimer = 1.0  # Fixed from DAS reference
     ret.steerControlType = structs.CarParams.SteerControlType.angle
-    ret.steerRatio = 15.0
     ret.minSteerSpeed = 0.1
-
-    ret.centerToFront = ret.wheelbase * 0.44
 
     # Longitudinal
     #ret.alphaLongitudinalAvailable = True
