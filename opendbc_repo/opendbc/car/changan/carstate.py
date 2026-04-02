@@ -70,7 +70,7 @@ class CarState(CarStateBase):
     def sig(vl, msg, names, default=0):
       try:
         msg_values = vl[msg]
-      except KeyError:
+      except (KeyError, AssertionError):
         return default
       for name in names:
         if name in msg_values:
