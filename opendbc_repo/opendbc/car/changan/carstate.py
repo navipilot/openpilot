@@ -88,8 +88,10 @@ class CarState(CarStateBase):
       ret.gasPressed = cp.vl["GW_196"]["gasPressed"] != 0 # IDD may use same msg or GW_1C6 1踩 0松
 
     # Gear - different message/signal per model
-    if CP.carFingerprint in (CAR.CHANGAN_Z6, CAR.CHANGAN_Z6_IDD):
-      can_gear = int(cp.vl["GW_338"]["TCU_GearForDisplay"])  # changan.dbc
+    if CP.carFingerprint == CAR.CHANGAN_Z6_IDD:
+      can_gear = int(cp.vl["GW_338"]["TCU_GearForDisplay"])  # changan.dbc Z6_IDD
+    elif CP.carFingerprint == CAR.CHANGAN_Z6:
+      can_gear = int(cp.vl["GW_338"]["TCU_GearForDisplay"])  # changan.dbc Z6
     else:  # QIYUAN_A05, QIYUAN_A07
       can_gear = int(cp.vl["GEAR"]["gearShifter"])  # changan_can.dbc
     ret.gearShifter = self.parse_gear_shifter(self.shifter_values.get(can_gear, None))
