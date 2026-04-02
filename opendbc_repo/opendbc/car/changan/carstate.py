@@ -17,11 +17,14 @@ class CarState(CarStateBase):
     # Z6_IDD uses changan.dbc with GW_338/TCU_GearForDisplay
     # QIYUAN_A05/A07 use changan_can.dbc with GEAR/gearShifter
     if CP.carFingerprint == CAR.CHANGAN_Z6:
-      self.shifter_values = can_define.dv["GW_331"]["TCU_GearForDisplay"]  # changan.dbc Z6
+      # Some changan.dbc versions only define TCU_GearForDisplay enum under GW_338.
+      self.shifter_values = can_define.dv.get("GW_331", {}).get("TCU_GearForDisplay")
+      if self.shifter_values is None:
+        self.shifter_values = can_define.dv.get("GW_338", {}).get("TCU_GearForDisplay", {})
     elif CP.carFingerprint == CAR.CHANGAN_Z6_IDD:
-      self.shifter_values = can_define.dv["GW_338"]["TCU_GearForDisplay"]  # changan.dbc Z6_IDD
+      self.shifter_values = can_define.dv.get("GW_338", {}).get("TCU_GearForDisplay", {})
     else:  # QIYUAN_A05, QIYUAN_A07
-      self.shifter_values = can_define.dv["GEAR"]["gearShifter"]  # changan_can.dbc
+      self.shifter_values = can_define.dv.get("GEAR", {}).get("gearShifter", {})
 
     self.eps_torque_scale = EPS_SCALE[CP.carFingerprint] / 100.0
     self.cluster_speed_hyst_gap = CV.KPH_TO_MS / 2.0
@@ -91,9 +94,9 @@ class CarState(CarStateBase):
       ret.gasPressed = cp.vl["GW_196"]["gasPressed"] != 0 # IDD may use same msg or GW_1C6 1踩 0松
 
     # Gear - different message/signal per model
-    if CP.carFingerprint == CAR.CHANGAN_Z6:
+    if self.CP.carFingerprint == CAR.CHANGAN_Z6:
       can_gear = int(cp.vl["GW_331"]["TCU_GearForDisplay"])  # changan.dbc Z6
-    elif CP.carFingerprint == CAR.CHANGAN_Z6_IDD:
+    elif self.CP.carFingerprint == CAR.CHANGAN_Z6_IDD:
       can_gear = int(cp.vl["GW_338"]["TCU_GearForDisplay"])  # changan.dbc Z6_IDD
     else:  # QIYUAN_A05, QIYUAN_A07
       can_gear = int(cp.vl["GEAR"]["gearShifter"])  # changan_can.dbc
@@ -176,7 +179,6 @@ class CarState(CarStateBase):
       ("GW_180", 100),
       ("GW_24F", 50),
       ("GW_28B", 25),
-      ("buttonEvents", 25),
     ]
 
     # Different gear message/signal per model:
