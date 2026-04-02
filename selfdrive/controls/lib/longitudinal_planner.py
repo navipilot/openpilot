@@ -363,12 +363,6 @@ class LongitudinalPlanner:
     # Trigger if either slope is high or magnitude is high; require a valid lead and closing
     panic_bypass = closing_fast and (uncert_slope > UNCERT_SLOPE_TRIG or uncertainty >= UNCERT_MAG_TRIG)
 
-    if panic_bypass:
-      try:
-        cloudlog.error(f"LON_SLOPE; slope={uncert_slope:.3f}/s; uncertainty={uncertainty:.3f}; v_ego={v_ego:.2f}; v_rel={(v_ego - self.lead_one.vLead) if self.lead_one.status else 0.0:.2f}; lead_dist={self.lead_dist_f if self.lead_dist_f is not None else -1:.2f}; trigger=True")
-      except Exception:
-        pass
-
     personality = get_longitudinal_personality(sm)
 
     self.mpc.set_weights(sm['starpilotPlan'].accelerationJerk,
