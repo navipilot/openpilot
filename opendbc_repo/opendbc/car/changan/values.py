@@ -15,7 +15,6 @@ PEDAL_TRANSITION = 10. * CV.MPH_TO_MS
 class ChanganFlags(IntFlag):
   CHANGAN_Z6 = 1
   CHANGAN_Z6_IDD = 2
-  QIYUAN_A05 = 4
 
 
 class CarControllerParams:
@@ -58,17 +57,6 @@ class CAR(Platforms):
     CHANGAN_Z6.specs,
     CHANGAN_Z6.dbc_dict,
     flags=ChanganFlags.CHANGAN_Z6_IDD,
-  )
-  QIYUAN_A05 = PlatformConfig(
-    [ChangAnCarDocs("Qiyuan A05")],
-    CarSpecs(mass=1965, wheelbase=2.76, steerRatio=13.9, centerToFrontRatio=0.44, tireStiffnessFactor=0.444),
-    DbcDict({Bus.pt: "changan_can", Bus.cam: "changan_can"}),
-    flags=ChanganFlags.QIYUAN_A05,
-  )
-  QIYUAN_A07 = PlatformConfig(
-    [ChangAnCarDocs("Qiyuan A07")],
-    CarSpecs(mass=2190, wheelbase=2.76, steerRatio=13.9, centerToFrontRatio=0.44, tireStiffnessFactor=0.444),
-    DbcDict({Bus.pt: "changan_can", Bus.cam: "changan_can"}),
   )
 
 

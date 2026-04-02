@@ -15,16 +15,14 @@ class CarState(CarStateBase):
     # Different gear signal names and messages per model
     # Z6 uses changan.dbc with GW_331/TCU_GearForDisplay
     # Z6_IDD uses changan.dbc with GW_338/TCU_GearForDisplay
-    # QIYUAN_A05/A07 use changan_can.dbc with GEAR/gearShifter
+    # Only CHANGAN_Z6 and CHANGAN_Z6_IDD are supported.
     if CP.carFingerprint == CAR.CHANGAN_Z6:
       # Some changan.dbc versions only define TCU_GearForDisplay enum under GW_338.
       self.shifter_values = can_define.dv.get("GW_331", {}).get("TCU_GearForDisplay")
       if self.shifter_values is None:
         self.shifter_values = can_define.dv.get("GW_338", {}).get("TCU_GearForDisplay", {})
-    elif CP.carFingerprint == CAR.CHANGAN_Z6_IDD:
+    else:
       self.shifter_values = can_define.dv.get("GW_338", {}).get("TCU_GearForDisplay", {})
-    else:  # QIYUAN_A05, QIYUAN_A07
-      self.shifter_values = can_define.dv.get("GEAR", {}).get("gearShifter", {})
 
     self.eps_torque_scale = EPS_SCALE[CP.carFingerprint] / 100.0
     self.cluster_speed_hyst_gap = CV.KPH_TO_MS / 2.0
@@ -70,7 +68,10 @@ class CarState(CarStateBase):
     ret = structs.CarState()
 
     def sig(vl, msg, names, default=0):
-      msg_values = vl.get(msg, {})
+      try:
+        msg_values = vl[msg]
+      except KeyError:
+        return default
       for name in names:
         if name in msg_values:
           return msg_values[name]
@@ -84,8 +85,6 @@ class CarState(CarStateBase):
     # Vehicle Speed
     if self.CP.carFingerprint == CAR.CHANGAN_Z6_IDD:
       carspd = sig(cp.vl, "SPEED", ["wheelSpeeds"], sig(cp.vl, "GW_17A", ["ESP_VehicleSpeed"], 0))
-    elif self.CP.carFingerprint == CAR.QIYUAN_A07:
-      carspd = sig(cp.vl, "GW_1C2", ["ESP_VehicleSpeed"], sig(cp.vl, "GW_187", ["ESP_VehicleSpeed"], 0))
     else:
       carspd = sig(cp.vl, "GW_187", ["ESP_VehicleSpeed"], 0)
     speed = carspd if carspd <= 5 else ((carspd / 0.98) + 2)
@@ -105,10 +104,8 @@ class CarState(CarStateBase):
     # Gear - different message/signal per model
     if self.CP.carFingerprint == CAR.CHANGAN_Z6:
       can_gear = int(sig(cp.vl, "GW_331", ["TCU_GearForDisplay"], sig(cp.vl, "GW_338", ["TCU_GearForDisplay"], 0)))
-    elif self.CP.carFingerprint == CAR.CHANGAN_Z6_IDD:
+    else:
       can_gear = int(sig(cp.vl, "GW_338", ["TCU_GearForDisplay"], 0))
-    else:  # QIYUAN_A05, QIYUAN_A07
-      can_gear = int(sig(cp.vl, "GEAR", ["gearShifter"], 0))
     ret.gearShifter = self.parse_gear_shifter(self.shifter_values.get(can_gear, None))
     ret.leftBlindspot = False   # 盲区
     ret.rightBlindspot = False  # 盲区
@@ -197,21 +194,16 @@ class CarState(CarStateBase):
     # Different gear message/signal per model:
     # - Z6 uses GW_331 with TCU_GearForDisplay (in changan.dbc)
     # - Z6_IDD uses GW_338 with TCU_GearForDisplay (in changan.dbc)
-    # - A05/A07 use GEAR with gearShifter (in changan_can.dbc)
+    # Only CHANGAN_Z6 and CHANGAN_Z6_IDD are supported.
     if CP.carFingerprint == CAR.CHANGAN_Z6:
       pt_messages += [
         ("GW_331", 10),  # TCU_GearForDisplay in changan.dbc Z6
         ("GW_338", 10),  # fallback for DBC variants that map enum on GW_338
       ]
-    elif CP.carFingerprint == CAR.CHANGAN_Z6_IDD:
+    else:
       pt_messages += [
         ("GW_338", 10),  # TCU_GearForDisplay in changan.dbc Z6_IDD
         ("GW_17A", 100),
-      ]
-    else:  # QIYUAN_A05, QIYUAN_A07
-      pt_messages += [
-        ("GEAR", 10),      # gearShifter in changan_can.dbc
-        ("buttonEvents", 25),
       ]
 
     if CP.carFingerprint == CAR.CHANGAN_Z6_IDD:
@@ -219,15 +211,10 @@ class CarState(CarStateBase):
         ("GW_1A6", 100),
         ("GW_1C6", 100),
       ]
-    else: #Z6, A05, A07
+    else: # Z6
       pt_messages += [
-        ("GW_187", 100), # Z6/A05 车速
-        ("GW_196", 100), #Z6 踏板
-      ]
-
-    if CP.carFingerprint in (CAR.QIYUAN_A05, CAR.QIYUAN_A07):
-      pt_messages += [
-        ("SPEED", 100),
+        ("GW_187", 100),
+        ("GW_196", 100),
       ]
 
     cam_messages = [
