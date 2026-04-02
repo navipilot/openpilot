@@ -209,6 +209,54 @@ class ChanganRLogTester:
             traceback.print_exc()
             return False
 
+    def _create_test_car_params(self, car_fingerprint) -> structs.CarParams:
+        """
+        Create minimal CarParams for testing without Params() dependency.
+        This avoids the segmentation fault from Params() initialization.
+        """
+        ret = structs.CarParams.new_message()
+
+        # Get platform config
+        platform = car_fingerprint
+        ret.carFingerprint = str(car_fingerprint)
+        ret.carName = platform.config.car_docs[0].name if platform.config.car_docs else "Unknown"
+
+        # Set basic specs from platform config
+        ret.mass = platform.config.specs.mass
+        ret.wheelbase = platform.config.specs.wheelbase
+        ret.steerRatio = platform.config.specs.steerRatio
+        ret.centerToFront = ret.wheelbase * platform.config.specs.centerToFrontRatio
+        ret.minEnableSpeed = platform.config.specs.minEnableSpeed if platform.config.specs.minEnableSpeed else -1.0
+        ret.minSteerSpeed = platform.config.specs.minSteerSpeed if platform.config.specs.minSteerSpeed else 0.1
+        ret.tireStiffnessFactor = platform.config.specs.tireStiffnessFactor
+        ret.flags = int(platform.config.flags)
+
+        # Set brand and safety
+        ret.brand = "changan"
+        ret.safetyConfigs = [structs.CarParams.SafetyConfig.new_message()]
+        ret.safetyConfigs[0].safetyModel = structs.CarParams.SafetyModel.changan
+
+        # Set transmission and control types
+        ret.transmissionType = structs.CarParams.TransmissionType.automatic
+        ret.steerControlType = structs.CarParams.SteerControlType.angle
+        ret.radarUnavailable = True
+        ret.enableBsm = True
+
+        # Set steering params
+        ret.steerActuatorDelay = 0.12
+        ret.steerLimitTimer = 1.0
+
+        # Set longitudinal params
+        ret.longitudinalActuatorDelay = 0.35
+        ret.vEgoStopping = 0.25
+        ret.vEgoStarting = 0.25
+        ret.stoppingDecelRate = 0.3
+        ret.startingState = True
+        ret.startAccel = 0.8
+        ret.stopAccel = -0.35
+
+        return ret
+
     def analyze_car_params(self) -> Dict[str, Any]:
         """
         Analyze carParams from rlog to identify the car model.
@@ -294,8 +342,8 @@ class ChanganRLogTester:
 
             print(f"检测到车型: {self.car_fingerprint}")
 
-            # Get CarParams using the class method
-            self.CP = CarInterface.get_non_essential_params(str(self.car_fingerprint))
+            # Get CarParams - create manually to avoid Params() dependency
+            self.CP = self._create_test_car_params(self.car_fingerprint)
 
             # Initialize CarState
             self.car_state = CarState(self.CP)
