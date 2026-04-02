@@ -193,18 +193,6 @@ FW_VERSIONS = {
       b"\x00\x00\x00\x00\x00\x00\x00\x00",
     ],
   },
-  CAR.QIYUAN_A05: {
-    # Placeholder - to be populated with actual A05 firmware data when available
-    (Ecu.engine, 0x700, None): [
-      b"\x00\x00\x00\x00\x00\x00\x00\x00",
-    ],
-  },
-  CAR.QIYUAN_A07: {
-    # Placeholder - to be populated with actual A07 firmware data when available
-    (Ecu.engine, 0x700, None): [
-      b"\x00\x00\x00\x00\x00\x00\x00\x00",
-    ],
-  },
 }
 
 FINGERPRINTS = {
