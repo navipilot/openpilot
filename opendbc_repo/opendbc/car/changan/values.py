@@ -50,7 +50,7 @@ class ChangAnCarDocs(CarDocs):
 class CAR(Platforms):
   CHANGAN_Z6 = PlatformConfig(
     [ChangAnCarDocs("Changan Z6")],
-    CarSpecs(mass=2205, wheelbase=2.80, steerRatio=15.0, tireStiffnessFactor=0.444),
+    CarSpecs(mass=2205, wheelbase=2.80, steerRatio=15.0, centerToFrontRatio=0.44, tireStiffnessFactor=0.444),
     DbcDict({Bus.pt: "changan_can", Bus.cam: "changan_can"}),
   )
   CHANGAN_Z6_IDD = PlatformConfig(
@@ -61,13 +61,13 @@ class CAR(Platforms):
   )
   QIYUAN_A05 = PlatformConfig(
     [ChangAnCarDocs("Qiyuan A05")],
-    CarSpecs(mass=1965, wheelbase=2.76, steerRatio=13.9, tireStiffnessFactor=0.444),
+    CarSpecs(mass=1965, wheelbase=2.76, steerRatio=13.9, centerToFrontRatio=0.44, tireStiffnessFactor=0.444),
     DbcDict({Bus.pt: "changan_can", Bus.cam: "changan_can"}),
     flags=ChanganFlags.QIYUAN_A05,
   )
   QIYUAN_A07 = PlatformConfig(
     [ChangAnCarDocs("Qiyuan A07")],
-    CarSpecs(mass=2190, wheelbase=2.76, steerRatio=13.9, tireStiffnessFactor=0.444),
+    CarSpecs(mass=2190, wheelbase=2.76, steerRatio=13.9, centerToFrontRatio=0.44, tireStiffnessFactor=0.444),
     DbcDict({Bus.pt: "changan_can", Bus.cam: "changan_can"}),
   )
 
