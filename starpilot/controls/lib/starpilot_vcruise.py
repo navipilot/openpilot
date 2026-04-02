@@ -19,6 +19,7 @@ class StarPilotVCruise:
 
     self.forcing_stop = False
     self.override_force_stop = False
+    self.override_force_standstill = False
 
     self.override_force_stop_timer = 0
     self.force_stop_timer = 0.0
@@ -41,6 +42,13 @@ class StarPilotVCruise:
       self.override_force_stop_timer = OVERRIDE_FORCE_STOP_TIMER
     elif self.override_force_stop_timer > 0:
       self.override_force_stop_timer -= DT_MDL
+
+    force_standstill_enabled = controls_enabled and starpilot_toggles.force_standstill and sm["carState"].standstill
+    if force_standstill_enabled:
+      self.override_force_standstill |= sm["carState"].gasPressed
+      self.override_force_standstill |= sm["starpilotCarState"].accelPressed
+    else:
+      self.override_force_standstill = False
 
     v_cruise_cluster = max(sm["carState"].vCruiseCluster * CV.KPH_TO_MS, v_cruise)
     v_cruise_diff = v_cruise_cluster - v_cruise
@@ -81,7 +89,12 @@ class StarPilotVCruise:
       self.slc_offset = 0
       self.slc_target = 0
 
-    if force_stop_enabled and not self.override_force_stop:
+    if force_standstill_enabled and not self.override_force_standstill:
+      self.forcing_stop = True
+      self.tracked_model_length = 0.0
+      v_cruise = 0.0
+
+    elif force_stop_enabled and not self.override_force_stop:
       self.forcing_stop |= not sm["carState"].standstill
 
       self.tracked_model_length = max(self.tracked_model_length - (v_ego * DT_MDL), 0)

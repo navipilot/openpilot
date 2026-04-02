@@ -417,6 +417,13 @@ def custom_startup_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubM
 
 
 def forcing_stop_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality, starpilot_toggles: SimpleNamespace) -> Alert:
+  if CS.standstill:
+    return Alert(
+      "Holding the car at a stop",
+      "Press the gas pedal or 'Resume' button to override",
+      StarPilotAlertStatus.starpilot, AlertSize.mid,
+      Priority.MID, VisualAlert.none, AudibleAlert.prompt, 1.)
+
   model_length = sm["starpilotPlan"].forcingStopLength
   model_length_msg = f"{model_length:.1f} meters" if metric else f"{model_length * CV.METER_TO_FOOT:.1f} feet"
 

@@ -66,6 +66,7 @@ SAFE_MODE_MANAGED_KEYS = (
   "TacoTune",
   "QOLLongitudinal",
   "ForceStops",
+  "ForceStandstill",
   "IncreasedStoppedDistance",
   "MapGears",
   "MapAcceleration",

@@ -522,6 +522,13 @@ class StarPilotLongitudinalQOLLayout(StarPilotPanel):
         "color": "#597497",
       },
       {
+        "title": tr_noop("Force Standstill State"),
+        "type": "toggle",
+        "get_state": lambda: self._params.get_bool("ForceStandstill"),
+        "set_state": lambda s: self._params.put_bool("ForceStandstill", s),
+        "color": "#597497",
+      },
+      {
         "title": tr_noop("Stopped Distance"),
         "type": "value",
         "get_value": lambda: f"{self._params.get_int('IncreasedStoppedDistance')} ft",

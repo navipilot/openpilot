@@ -929,6 +929,14 @@
         "parent_key": "QOLLongitudinal"
       },
       {
+        "key": "ForceStandstill",
+        "label": "Force Standstill State",
+        "description": "Keep openpilot in the standstill state until you press the gas pedal or the Resume/+ cruise button.\n\nThis applies to any engaged stop, not just red lights or stop signs.",
+        "data_type": "bool",
+        "ui_type": "toggle",
+        "parent_key": "QOLLongitudinal"
+      },
+      {
         "key": "IncreasedStoppedDistance",
         "label": "Increase Stopped Distance by:",
         "description": "Add extra space when stopped behind vehicles. Increase for more room; decrease for shorter gaps.",
