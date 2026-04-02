@@ -12,6 +12,13 @@ class CarInterface(CarInterfaceBase):
   CarController = CarController
   RadarInterface = RadarInterface
 
+  def check_comma_nn_ff_support(self, car):
+    return False
+
+  def initialize_lat_torque_nn(self, car, eps_firmware) -> bool:
+    self.lat_torque_nn_model = None
+    return False
+
   @staticmethod
   def get_pid_accel_limits(CP, current_speed, cruise_speed):
     return CarControllerParams.ACCEL_MIN, CarControllerParams.ACCEL_MAX

@@ -84,7 +84,7 @@ class CarState(CarStateBase):
 
     # Vehicle Speed
     if self.CP.carFingerprint == CAR.CHANGAN_Z6_IDD:
-      carspd = sig(cp.vl, "SPEED", ["wheelSpeeds"], sig(cp.vl, "GW_17A", ["ESP_VehicleSpeed"], 0))
+      carspd = sig(cp.vl, "GW_17A", ["ESP_VehicleSpeed"], 0)
     else:
       carspd = sig(cp.vl, "GW_187", ["ESP_VehicleSpeed"], 0)
     speed = carspd if carspd <= 5 else ((carspd / 0.98) + 2)
