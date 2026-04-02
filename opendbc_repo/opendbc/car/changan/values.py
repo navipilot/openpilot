@@ -22,14 +22,14 @@ class CarControllerParams:
   ACCEL_MAX = 2.0
   ACCEL_MIN = -3.5
   STEER_STEP = 1
-  STEER_MAX = 480
+  STEER_MAX = 900  # Fixed from DAS reference
   STEER_ERROR_MAX = 650
-  MAX_STEERING_ANGLE = 480.0  # From reference
+  MAX_STEERING_ANGLE = 180.0  # Fixed from DAS reference
   STEERING_SMOOTHING_FACTOR = 0.3
   ANGLE_LIMITS: AngleSteeringLimits = AngleSteeringLimits(
-    480,
-    ([10, 50], [1.4, 1.4]),  # Matches reference
-    ([10, 50], [1.4, 1.4]),  # Matches reference
+    180,  # Max angle: 180 degrees (from DAS reference)
+    ([10, 20], [1.4, 0.15]),  # Angle rate up (from DAS reference)
+    ([10, 20], [1.4, 0.26]),  # Angle rate down (from DAS reference)
   )
 
   def __init__(self, CP):
@@ -58,6 +58,17 @@ class CAR(Platforms):
     CHANGAN_Z6.specs,
     CHANGAN_Z6.dbc_dict,
     flags=ChanganFlags.CHANGAN_Z6_IDD,
+  )
+  QIYUAN_A05 = PlatformConfig(
+    [ChangAnCarDocs("Qiyuan A05")],
+    CarSpecs(mass=1965, wheelbase=2.76, steerRatio=13.9, tireStiffnessFactor=0.444),
+    DbcDict({Bus.pt: "changan_can", Bus.cam: "changan_can"}),
+    flags=ChanganFlags.QIYUAN_A05,
+  )
+  QIYUAN_A07 = PlatformConfig(
+    [ChangAnCarDocs("Qiyuan A07")],
+    CarSpecs(mass=2190, wheelbase=2.76, steerRatio=13.9, tireStiffnessFactor=0.444),
+    DbcDict({Bus.pt: "changan_can", Bus.cam: "changan_can"}),
   )
 
 

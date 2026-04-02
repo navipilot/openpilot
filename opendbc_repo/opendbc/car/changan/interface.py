@@ -29,8 +29,8 @@ class CarInterface(CarInterfaceBase):
     ret.enableBsm = True
 
     # Steering
-    ret.steerActuatorDelay = 0.1
-    ret.steerLimitTimer = 0.8
+    ret.steerActuatorDelay = 0.12  # Fixed from DAS reference
+    ret.steerLimitTimer = 1.0  # Fixed from DAS reference
     ret.steerControlType = structs.CarParams.SteerControlType.angle
     ret.steerRatio = 15.0
     ret.minSteerSpeed = 0.1
