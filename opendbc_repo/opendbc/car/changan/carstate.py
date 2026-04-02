@@ -69,16 +69,25 @@ class CarState(CarStateBase):
     cp_cam = can_parsers[Bus.cam]
     ret = structs.CarState()
 
+    def sig(vl, msg, names, default=0):
+      msg_values = vl.get(msg, {})
+      for name in names:
+        if name in msg_values:
+          return msg_values[name]
+      return default
+
     # Door / Seatbelt
-    ret.doorOpen = cp.vl["GW_28B"]["doorOpen"] == 1 # 2车一致 0未开 1已开
-    ret.seatbeltUnlatched = cp.vl["GW_50"]["seatbeltUnlatched"] == 1 # 1未系 0已系
+    ret.doorOpen = sig(cp.vl, "GW_28B", ["BCM_DriverDoorStatus", "doorOpen"], 0) == 1
+    ret.seatbeltUnlatched = sig(cp.vl, "GW_50", ["SRS_DriverBuckleSwitchStatus", "seatbeltUnlatched"], 0) == 1
     ret.parkingBrake = False
 
     # Vehicle Speed
     if self.CP.carFingerprint == CAR.CHANGAN_Z6_IDD:
-      carspd = cp.vl["SPEED"]["wheelSpeeds"] # 区分车速
+      carspd = sig(cp.vl, "SPEED", ["wheelSpeeds"], sig(cp.vl, "GW_17A", ["ESP_VehicleSpeed"], 0))
+    elif self.CP.carFingerprint == CAR.QIYUAN_A07:
+      carspd = sig(cp.vl, "GW_1C2", ["ESP_VehicleSpeed"], sig(cp.vl, "GW_187", ["ESP_VehicleSpeed"], 0))
     else:
-      carspd = cp.vl["GW_187"]["ESP_VehicleSpeed"] #区分车速
+      carspd = sig(cp.vl, "GW_187", ["ESP_VehicleSpeed"], 0)
     speed = carspd if carspd <= 5 else ((carspd / 0.98) + 2)
     ret.vEgoRaw = speed * CV.KPH_TO_MS
     ret.vEgo, ret.aEgo = self.update_speed_kf(ret.vEgoRaw)
@@ -87,29 +96,31 @@ class CarState(CarStateBase):
 
     # Gas, Brake, Gear
     if self.CP.carFingerprint == CAR.CHANGAN_Z6_IDD:
-      ret.brakePressed = cp.vl["GW_1A6"]["brakePressed"] != 0 # 区分油门刹车 1踩 0松
-      ret.gasPressed = cp.vl["GW_1A6"]["gasPressed"] != 0 # IDD may use same msg or GW_1C6 1踩 0松
+      ret.brakePressed = sig(cp.vl, "GW_1A6", ["EMS_BrakePedalStatus", "brakePressed"], 0) != 0
+      ret.gasPressed = sig(cp.vl, "GW_1A6", ["EMS_RealAccPedal", "gasPressed"], sig(cp.vl, "GW_1C6", ["EMS_RealAccPedal"], 0)) != 0
     else:
-      ret.brakePressed = cp.vl["GW_196"]["brakePressed"] != 0 # 区分油门刹车 1踩 0松
-      ret.gasPressed = cp.vl["GW_196"]["gasPressed"] != 0 # IDD may use same msg or GW_1C6 1踩 0松
+      ret.brakePressed = sig(cp.vl, "GW_196", ["EMS_BrakePedalStatus", "brakePressed"], 0) != 0
+      ret.gasPressed = sig(cp.vl, "GW_196", ["EMS_RealAccPedal", "gasPressed"], 0) != 0
 
     # Gear - different message/signal per model
     if self.CP.carFingerprint == CAR.CHANGAN_Z6:
-      can_gear = int(cp.vl["GW_331"]["TCU_GearForDisplay"])  # changan.dbc Z6
+      can_gear = int(sig(cp.vl, "GW_331", ["TCU_GearForDisplay"], sig(cp.vl, "GW_338", ["TCU_GearForDisplay"], 0)))
     elif self.CP.carFingerprint == CAR.CHANGAN_Z6_IDD:
-      can_gear = int(cp.vl["GW_338"]["TCU_GearForDisplay"])  # changan.dbc Z6_IDD
+      can_gear = int(sig(cp.vl, "GW_338", ["TCU_GearForDisplay"], 0))
     else:  # QIYUAN_A05, QIYUAN_A07
-      can_gear = int(cp.vl["GEAR"]["gearShifter"])  # changan_can.dbc
+      can_gear = int(sig(cp.vl, "GEAR", ["gearShifter"], 0))
     ret.gearShifter = self.parse_gear_shifter(self.shifter_values.get(can_gear, None))
     ret.leftBlindspot = False   # 盲区
     ret.rightBlindspot = False  # 盲区
 
     # Lights
-    ret.leftBlinker, ret.rightBlinker = self.update_blinker_from_stalk(200, cp.vl["GW_28B"]["leftBlinker"] == 1, cp.vl["GW_28B"]["rightBlinker"] == 2) # 左转1 右转2 点亮
+    left_blinker = sig(cp.vl, "GW_28B", ["BCM_TurnIndicatorLeft", "leftBlinker"], 0) == 1
+    right_raw = sig(cp.vl, "GW_28B", ["BCM_TurnIndicatorRight", "rightBlinker"], 0)
+    ret.leftBlinker, ret.rightBlinker = self.update_blinker_from_stalk(200, left_blinker, right_raw in (1, 2))
 
     # Steering
     ret.steeringAngleOffsetDeg = 0
-    ret.steeringAngleDeg = cp.vl["GW_180"]["steeringAngleDeg"]   # 转向角度: 16位 (7|16), 范围: [-476, 476] 度 2车一致 OK
+    ret.steeringAngleDeg = sig(cp.vl, "GW_180", ["SAS_SteeringAngle", "steeringAngleDeg"], 0)
     ret.steeringRateDeg = cp.vl["GW_180"]["SAS_SteeringAngleSpeed"] # 转向速率: 8位 (23|8), 范围: [0, 255] 度/秒 2车一致 OK
     ret.steeringTorque = cp.vl["GW_17E"]["EPS_MeasuredTorsionBarTorque"] # 驾驶员扭矩 (扭杆): 12位 (7|12), 范围: [0, 4.095] Nm 2车一致 OK
     ret.steeringTorqueEps = cp.vl["GW_170"]["EPS_ActualTorsionBarTorq"] * self.eps_torque_scale # EPS 实际转矩: 16位 (23|16), 范围: [-5533, 60002] 物理值  需要仔细确认
@@ -142,7 +153,9 @@ class CarState(CarStateBase):
     # ACC 故障：当 ACC 或 IACC/HWA 模式为 7 时，判定为系统故障
     ret.accFaulted = cp_cam.vl["GW_244"]["ACC_ACCMode"] == 7 or cp_cam.vl["GW_31A"]["ACC_IACCHWAMode"] == 7
     # 转向临时故障：EPS 的横向控制可用性状态。正常应为 1，若为 0 或 2 则判定为故障
-    ret.steerFaultTemporary = cp.vl["GW_17E"]["EPS_LatCtrlAvailabilityStatus"] != 1
+    eps_failed = sig(cp.vl, "GW_24F", ["EPS_EPSFailed"], 0) != 0
+    lat_ctrl_unavailable = sig(cp.vl, "GW_17E", ["EPS_LatCtrlAvailabilityStatus"], 1) == 2
+    ret.steerFaultTemporary = eps_failed or lat_ctrl_unavailable
     ret.steerFaultPermanent = False
 
     # 原车 ADAS 状态透传
@@ -159,10 +172,10 @@ class CarState(CarStateBase):
 
     # 滚动计数器提取 (用于在控制器中步进及同步序列号)
     self.counter_244 = cp_cam.vl["GW_244"]["ACC_RollingCounter_24E"]
-    self.counter_1ba = cp_cam.vl["GW_1BA"]["Counter_1BA"]
+    self.counter_1ba = sig(cp_cam.vl, "GW_1BA", ["ACC_RollingCounter_1BA", "Counter_1BA"], 0)
     self.counter_17e = cp.vl["GW_17E"]["EPS_RollingCounter_17E"]
-    self.counter_307 = cp_cam.vl["GW_307"]["Counter_35E"]
-    self.counter_31a = cp_cam.vl["GW_31A"]["Counter_36D"]
+    self.counter_307 = sig(cp_cam.vl, "GW_307", ["ACC_RollingCounter_35E", "Counter_35E"], 0)
+    self.counter_31a = sig(cp_cam.vl, "GW_31A", ["ACC_RollingCounter_36D", "Counter_36D"], 0)
 
     # 跟车距离按钮状态采集与追踪
     self.prev_distance_button = self.distance_button
@@ -186,21 +199,35 @@ class CarState(CarStateBase):
     # - Z6_IDD uses GW_338 with TCU_GearForDisplay (in changan.dbc)
     # - A05/A07 use GEAR with gearShifter (in changan_can.dbc)
     if CP.carFingerprint == CAR.CHANGAN_Z6:
-      pt_messages += [("GW_331", 10)]  # TCU_GearForDisplay in changan.dbc Z6
+      pt_messages += [
+        ("GW_331", 10),  # TCU_GearForDisplay in changan.dbc Z6
+        ("GW_338", 10),  # fallback for DBC variants that map enum on GW_338
+      ]
     elif CP.carFingerprint == CAR.CHANGAN_Z6_IDD:
-      pt_messages += [("GW_338", 10)]  # TCU_GearForDisplay in changan.dbc Z6_IDD
+      pt_messages += [
+        ("GW_338", 10),  # TCU_GearForDisplay in changan.dbc Z6_IDD
+        ("GW_17A", 100),
+      ]
     else:  # QIYUAN_A05, QIYUAN_A07
-      pt_messages += [("GEAR", 10)]  # gearShifter in changan_can.dbc
+      pt_messages += [
+        ("GEAR", 10),      # gearShifter in changan_can.dbc
+        ("buttonEvents", 25),
+      ]
 
     if CP.carFingerprint == CAR.CHANGAN_Z6_IDD:
       pt_messages += [
-        ("SPEED", 100),
         ("GW_1A6", 100),
+        ("GW_1C6", 100),
       ]
     else: #Z6, A05, A07
       pt_messages += [
-        ("GW_187", 100), #Z6 车速
+        ("GW_187", 100), # Z6/A05 车速
         ("GW_196", 100), #Z6 踏板
+      ]
+
+    if CP.carFingerprint in (CAR.QIYUAN_A05, CAR.QIYUAN_A07):
+      pt_messages += [
+        ("SPEED", 100),
       ]
 
     cam_messages = [
