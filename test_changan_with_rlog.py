@@ -219,7 +219,6 @@ class ChanganRLogTester:
         # Get platform config
         platform = car_fingerprint
         ret.carFingerprint = str(car_fingerprint)
-        ret.carName = platform.config.car_docs[0].name if platform.config.car_docs else "Unknown"
 
         # Set basic specs from platform config
         ret.mass = platform.config.specs.mass
