@@ -261,6 +261,16 @@ def test_gm_ascm_int_stock_cam_f1_rx_pinning():
   assert not safety.safety_config_valid()
 
 
+def test_gm_ascm_int_long_no_accel_pos_uses_stock_cam_rx_checks():
+  safety = libsafety_py.libsafety
+  safety.set_safety_hooks(CarParams.SafetyModel.gm, GMSafetyFlags.HW_CAM | GMSafetyFlags.HW_CAM_LONG |
+                          GMSafetyFlags.HW_ASCM_INT | GMSafetyFlags.FLAG_GM_FORCE_BRAKE_C9)
+  safety.init_tests()
+
+  _prime_gm_ascm_int_stock_cam_rx_checks(safety, 0)
+  assert safety.safety_config_valid()
+
+
 class TestGmCameraEVSafety(GmCameraAccEVRegenMixin, TestGmCameraSafety, TestGmEVSafetyBase):
   pass
 

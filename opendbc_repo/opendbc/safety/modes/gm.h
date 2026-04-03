@@ -697,6 +697,7 @@ static safety_config gm_init(uint16_t param) {
   gm_cam_long = GET_FLAG(param, GM_PARAM_HW_CAM_LONG) && !gm_cc_long;
   gm_pcm_cruise = (gm_hw == GM_CAM || gm_sdgm) && !gm_cam_long && !gm_force_ascm && !gm_pedal_long;
   const bool gm_ascm_int_stock_cam = gm_ascm_int && (gm_hw == GM_CAM) && gm_pcm_cruise && !gm_cam_long && !gm_pedal_long && !gm_cc_long;
+  const bool gm_ascm_int_no_accel_pos = gm_ascm_int && (gm_hw == GM_CAM) && gm_force_brake_c9;
   gm_steer_limits = GET_FLAG(param, GM_PARAM_BOLT_2017) ? &GM_BOLT_2017_STEERING_LIMITS : &GM_STEERING_LIMITS;
 
   if ((gm_hw == GM_ASCM && !gm_sdgm) || gm_ascm_int || gm_force_ascm) {
@@ -740,7 +741,7 @@ static safety_config gm_init(uint16_t param) {
     SET_RX_CHECKS(gm_ev_rx_checks, ret);
   }
 
-  if (gm_ascm_int_stock_cam) {
+  if (gm_ascm_int_stock_cam || gm_ascm_int_no_accel_pos) {
     SET_RX_CHECKS(gm_ascm_int_stock_cam_rx_checks, ret);
   }
 

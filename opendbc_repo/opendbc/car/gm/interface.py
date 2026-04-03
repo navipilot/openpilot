@@ -300,6 +300,9 @@ class CarInterface(CarInterfaceBase):
       ret.minSteerSpeed = 7 * CV.MPH_TO_MS
       ret.safetyConfigs[0].safetyParam |= GMSafetyFlags.HW_CAM.value
       ret.safetyConfigs[0].safetyParam |= GMSafetyFlags.HW_ASCM_INT.value
+      if ACCELERATOR_POS_MSG not in fingerprint[CanBus.POWERTRAIN]:
+        ret.flags |= GMFlags.FORCE_BRAKE_C9.value
+        ret.safetyConfigs[0].safetyParam |= GMSafetyFlags.FLAG_GM_FORCE_BRAKE_C9.value
 
       ret.longitudinalTuning.kiV = [0.5, 0.5] if candidate in kaofui_cars else [0.5, 0.5, 0.5]
       ret.stoppingDecelRate = 1.0
