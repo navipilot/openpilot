@@ -30,28 +30,28 @@ class StarPilotWheelLayout(StarPilotPanel):
         "type": "toggle",
         "get_state": lambda: self._params.get_bool("RemapCancelToDistance"),
         "set_state": self._set_cancel_remap_state,
-        "color": "#786088",
+        "color": "#64748B",
       },
       {
         "title": tr_noop("Distance Button"),
         "type": "value",
         "get_value": lambda: self._get_action_name("DistanceButtonControl"),
         "on_click": lambda: self._show_action_picker("DistanceButtonControl"),
-        "color": "#786088",
+        "color": "#64748B",
       },
       {
         "title": tr_noop("Distance (Long Press)"),
         "type": "value",
         "get_value": lambda: self._get_action_name("LongDistanceButtonControl"),
         "on_click": lambda: self._show_action_picker("LongDistanceButtonControl"),
-        "color": "#786088",
+        "color": "#64748B",
       },
       {
         "title": tr_noop("Distance (Very Long)"),
         "type": "value",
         "get_value": lambda: self._get_action_name("VeryLongDistanceButtonControl"),
         "on_click": lambda: self._show_action_picker("VeryLongDistanceButtonControl"),
-        "color": "#786088",
+        "color": "#64748B",
       },
       {
         "title": tr_noop("LKAS Button"),
@@ -60,7 +60,7 @@ class StarPilotWheelLayout(StarPilotPanel):
         "on_click": lambda: self._show_action_picker("LKASButtonControl"),
         "is_enabled": lambda: not self._lkas_locked(),
         "key": "LKASButtonControl",
-        "color": "#786088",
+        "color": "#64748B",
       },
     ]
     self._rebuild_grid()

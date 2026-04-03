@@ -105,34 +105,34 @@ class StarPilotVehicleSettingsLayout(StarPilotPanel):
         "type": "value",
         "get_value": lambda: self._params.get("CarMake", encoding='utf-8') or tr("None"),
         "on_click": self._on_select_make,
-        "color": "#786088",
+        "color": "#64748B",
       },
       {
         "title": tr_noop("Car Model"),
         "type": "value",
         "get_value": lambda: self._params.get("CarModelName", encoding='utf-8') or tr("None"),
         "on_click": self._on_select_model,
-        "color": "#786088",
+        "color": "#64748B",
       },
       {
         "title": tr_noop("Disable Fingerprinting"),
         "type": "toggle",
         "get_state": lambda: self._params.get_bool("ForceFingerprint"),
         "set_state": lambda s: self._params.put_bool("ForceFingerprint", s),
-        "color": "#786088",
+        "color": "#64748B",
       },
       {
         "title": tr_noop("Disable openpilot Long"),
         "type": "toggle",
         "get_state": lambda: self._params.get_bool("DisableOpenpilotLongitudinal"),
         "set_state": self._on_disable_long,
-        "color": "#786088",
+        "color": "#64748B",
       },
-      {"title": tr_noop("GM Settings"), "panel": "gm", "icon": "toggle_icons/icon_vehicle.png", "color": "#786088", "key": "gm"},
-      {"title": tr_noop("HKG Settings"), "panel": "hkg", "icon": "toggle_icons/icon_vehicle.png", "color": "#786088", "key": "hkg"},
-      {"title": tr_noop("Subaru Settings"), "panel": "subaru", "icon": "toggle_icons/icon_vehicle.png", "color": "#786088", "key": "subaru"},
-      {"title": tr_noop("Toyota Settings"), "panel": "toyota", "icon": "toggle_icons/icon_vehicle.png", "color": "#786088", "key": "toyota"},
-      {"title": tr_noop("Vehicle Info"), "panel": "info", "icon": "toggle_icons/icon_vehicle.png", "color": "#786088"},
+      {"title": tr_noop("GM Settings"), "panel": "gm", "icon": "toggle_icons/icon_vehicle.png", "color": "#64748B", "key": "gm"},
+      {"title": tr_noop("HKG Settings"), "panel": "hkg", "icon": "toggle_icons/icon_vehicle.png", "color": "#64748B", "key": "hkg"},
+      {"title": tr_noop("Subaru Settings"), "panel": "subaru", "icon": "toggle_icons/icon_vehicle.png", "color": "#64748B", "key": "subaru"},
+      {"title": tr_noop("Toyota Settings"), "panel": "toyota", "icon": "toggle_icons/icon_vehicle.png", "color": "#64748B", "key": "toyota"},
+      {"title": tr_noop("Vehicle Info"), "panel": "info", "icon": "toggle_icons/icon_vehicle.png", "color": "#64748B"},
     ]
 
     for name, panel in self._sub_panels.items():
@@ -248,7 +248,7 @@ class StarPilotGMVehicleLayout(StarPilotPanel):
         "type": "toggle",
         "get_state": lambda: self._params.get_bool("GMPedalLongitudinal"),
         "set_state": lambda s: self._params.put_bool("GMPedalLongitudinal", s),
-        "color": "#786088",
+        "color": "#64748B",
         "key": "GMPedalLongitudinal",
       },
       {
@@ -256,7 +256,7 @@ class StarPilotGMVehicleLayout(StarPilotPanel):
         "type": "toggle",
         "get_state": lambda: self._params.get_bool("LongPitch"),
         "set_state": lambda s: self._params.put_bool("LongPitch", s),
-        "color": "#786088",
+        "color": "#64748B",
         "key": "LongPitch",
       },
       {
@@ -264,14 +264,14 @@ class StarPilotGMVehicleLayout(StarPilotPanel):
         "type": "toggle",
         "get_state": lambda: self._params.get_bool("RemoteStartBootsComma"),
         "set_state": lambda s: self._params.put_bool("RemoteStartBootsComma", s),
-        "color": "#786088",
+        "color": "#64748B",
       },
       {
         "title": tr_noop("Volt SNG Hack"),
         "type": "toggle",
         "get_state": lambda: self._params.get_bool("VoltSNG"),
         "set_state": lambda s: self._params.put_bool("VoltSNG", s),
-        "color": "#786088",
+        "color": "#64748B",
         "key": "VoltSNG",
       },
     ]
@@ -310,7 +310,7 @@ class StarPilotHKGVehicleLayout(StarPilotPanel):
         "type": "toggle",
         "get_state": lambda: self._params.get_bool("TacoTuneHacks"),
         "set_state": lambda s: self._params.put_bool("TacoTuneHacks", s),
-        "color": "#786088",
+        "color": "#64748B",
         "key": "TacoTuneHacks",
       },
     ]
@@ -347,7 +347,7 @@ class StarPilotSubaruVehicleLayout(StarPilotPanel):
         "type": "toggle",
         "get_state": lambda: self._params.get_bool("SubaruSNG"),
         "set_state": lambda s: self._params.put_bool("SubaruSNG", s),
-        "color": "#786088",
+        "color": "#64748B",
       },
     ]
     self._rebuild_grid()
@@ -362,35 +362,35 @@ class StarPilotToyotaVehicleLayout(StarPilotPanel):
         "type": "toggle",
         "get_state": lambda: self._params.get_bool("LockDoors"),
         "set_state": lambda s: self._params.put_bool("LockDoors", s),
-        "color": "#786088",
+        "color": "#64748B",
       },
       {
         "title": tr_noop("Auto Unlock Doors"),
         "type": "toggle",
         "get_state": lambda: self._params.get_bool("UnlockDoors"),
         "set_state": lambda s: self._params.put_bool("UnlockDoors", s),
-        "color": "#786088",
+        "color": "#64748B",
       },
       {
         "title": tr_noop("Lock Doors Timer"),
         "type": "value",
         "get_value": lambda: _lock_doors_timer_labels().get(self._params.get_int('LockDoorsTimer'), f"{self._params.get_int('LockDoorsTimer')}s"),
         "on_click": self._show_lock_timer_selector,
-        "color": "#786088",
+        "color": "#64748B",
       },
       {
         "title": tr_noop("Dashboard Speed Offset"),
         "type": "value",
         "get_value": lambda: f"{self._params.get_float('ClusterOffset'):.3f}x",
         "on_click": self._show_offset_selector,
-        "color": "#786088",
+        "color": "#64748B",
       },
       {
         "title": tr_noop("Stop-and-Go Hack"),
         "type": "toggle",
         "get_state": lambda: self._params.get_bool("SNGHack"),
         "set_state": lambda s: self._params.put_bool("SNGHack", s),
-        "color": "#786088",
+        "color": "#64748B",
         "key": "SNGHack",
       },
       {
@@ -398,7 +398,7 @@ class StarPilotToyotaVehicleLayout(StarPilotPanel):
         "type": "toggle",
         "get_state": lambda: self._params.get_bool("FrogsGoMoosTweak"),
         "set_state": lambda s: self._params.put_bool("FrogsGoMoosTweak", s),
-        "color": "#786088",
+        "color": "#64748B",
         "key": "FrogsGoMoosTweak",
       },
     ]
@@ -441,7 +441,7 @@ class StarPilotToyotaVehicleLayout(StarPilotPanel):
         self._rebuild_grid()
 
     gui_app.set_modal_overlay(
-      AetherSliderDialog(tr("Lock Doors Timer"), 0, 300, 5, self._params.get_int("LockDoorsTimer"), on_close, labels=_lock_doors_timer_labels(), color="#786088")
+      AetherSliderDialog(tr("Lock Doors Timer"), 0, 300, 5, self._params.get_int("LockDoorsTimer"), on_close, labels=_lock_doors_timer_labels(), color="#64748B")
     )
 
   def _show_offset_selector(self):
@@ -451,7 +451,7 @@ class StarPilotToyotaVehicleLayout(StarPilotPanel):
         self._rebuild_grid()
 
     gui_app.set_modal_overlay(
-      AetherSliderDialog(tr("Dashboard Speed Offset"), 1.000, 1.050, 0.001, self._params.get_float("ClusterOffset"), on_close, unit="x", color="#786088")
+      AetherSliderDialog(tr("Dashboard Speed Offset"), 1.000, 1.050, 0.001, self._params.get_float("ClusterOffset"), on_close, unit="x", color="#64748B")
     )
 
 
@@ -464,21 +464,21 @@ class StarPilotVehicleInfoLayout(StarPilotPanel):
         "type": "value",
         "get_value": lambda: tr("Yes") if starpilot_state.car_state.hasRadar else tr("No"),
         "on_click": lambda: None,
-        "color": "#786088",
+        "color": "#64748B",
       },
       {
         "title": tr_noop("Longitudinal Support"),
         "type": "value",
         "get_value": lambda: tr("Yes") if starpilot_state.car_state.hasOpenpilotLongitudinal else tr("No"),
         "on_click": lambda: None,
-        "color": "#786088",
+        "color": "#64748B",
       },
       {
         "title": tr_noop("Blind Spot Support"),
         "type": "value",
         "get_value": lambda: tr("Yes") if starpilot_state.car_state.hasBSM else tr("No"),
         "on_click": lambda: None,
-        "color": "#786088",
+        "color": "#64748B",
       },
       {
         "title": tr_noop("Hardware Detected"),
@@ -498,28 +498,28 @@ class StarPilotVehicleInfoLayout(StarPilotPanel):
           or tr("None")
         ),
         "on_click": lambda: None,
-        "color": "#786088",
+        "color": "#64748B",
       },
       {
         "title": tr_noop("Pedal Support"),
         "type": "value",
         "get_value": lambda: tr("Yes") if starpilot_state.car_state.canUsePedal else tr("No"),
         "on_click": lambda: None,
-        "color": "#786088",
+        "color": "#64748B",
       },
       {
         "title": tr_noop("SDSU Support"),
         "type": "value",
         "get_value": lambda: tr("Yes") if starpilot_state.car_state.canUseSDSU else tr("No"),
         "on_click": lambda: None,
-        "color": "#786088",
+        "color": "#64748B",
       },
       {
         "title": tr_noop("SNG Support"),
         "type": "value",
         "get_value": lambda: tr("Yes") if starpilot_state.car_state.hasSNG else tr("No"),
         "on_click": lambda: None,
-        "color": "#786088",
+        "color": "#64748B",
       },
     ]
     self._rebuild_grid()

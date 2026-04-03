@@ -48,14 +48,14 @@ class StarPilotSoundsLayout(StarPilotPanel):
         "panel": "volume_control",
         "desc": tr_noop("Adjust volume levels for different alert types."),
         "icon": "toggle_icons/icon_mute.png",
-        "color": "#F57371"
+        "color": "#E63956"
       },
       {
         "title": tr_noop("StarPilot Alerts"),
         "panel": "custom_alerts",
         "desc": tr_noop("Enable or disable specific StarPilot-only alerts."),
         "icon": "toggle_icons/icon_green_light.png",
-        "color": "#F57371"
+        "color": "#E63956"
       },
     ]
 
@@ -110,7 +110,7 @@ class StarPilotVolumeControlLayout(StarPilotPanel):
         "get_value": get_val,
         "on_click": on_click,
         "icon": info["icon"],
-        "color": "#F57371"
+        "color": "#E63956"
       })
 
     def get_cooldown_val():
@@ -127,7 +127,7 @@ class StarPilotVolumeControlLayout(StarPilotPanel):
       "get_value": get_cooldown_val,
       "on_click": self._show_cooldown_selector,
       "icon": self.COOLDOWN_INFO["icon"],
-      "color": "#F57371"
+      "color": "#E63956"
     })
 
     self._rebuild_grid()
@@ -146,7 +146,7 @@ class StarPilotVolumeControlLayout(StarPilotPanel):
 
     gui_app.set_modal_overlay(AetherSliderDialog(
       tr(info["title"]), 0, 101, 1, current_v, on_close,
-      unit="%", labels={0: tr("Muted"), 101: tr("Auto")}, color="#F57371"
+      unit="%", labels={0: tr("Muted"), 101: tr("Auto")}, color="#E63956"
     ))
 
   def _show_cooldown_selector(self):
@@ -159,7 +159,7 @@ class StarPilotVolumeControlLayout(StarPilotPanel):
 
     gui_app.set_modal_overlay(AetherSliderDialog(
       tr(self.COOLDOWN_INFO["title"]), 0, self.COOLDOWN_INFO["max"], 1, current_v, on_close,
-      unit=" min", labels={0: tr("Off")}, color="#F57371"
+      unit=" min", labels={0: tr("Off")}, color="#E63956"
     ))
 
   @classmethod
@@ -226,7 +226,7 @@ class StarPilotCustomAlertsLayout(StarPilotPanel):
         "get_state": lambda k=key: self._params.get_bool(k),
         "set_state": lambda s, k=key: self._params.put_bool(k, s),
         "icon": info["icon"],
-        "color": "#F57371",
+        "color": "#E63956",
         "key": key # Store for visibility check
       })
     self._rebuild_grid()

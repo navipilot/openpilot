@@ -21,59 +21,42 @@ def hex_to_color(hex_str: str) -> rl.Color:
   return rl.Color(int(hex_str[0:2], 16), int(hex_str[2:4], 16), int(hex_str[4:6], 16), 255)
 
 
-def rgb_to_hsl(r: int, g: int, b: int) -> tuple[float, float, float]:
-  rf, gf, bf = r / 255.0, g / 255.0, b / 255.0
-  mx, mn = max(rf, gf, bf), min(rf, gf, bf)
-  l = (mx + mn) / 2.0
-  if mx == mn:
-    return 0.0, 0.0, l
-  d = mx - mn
-  s = d / (2.0 - mx - mn) if l > 0.5 else d / (mx + mn)
-  if mx == rf:
-    h = (gf - bf) / d + (6.0 if gf < bf else 0.0)
-  elif mx == gf:
-    h = (bf - rf) / d + 2.0
-  else:
-    h = (rf - gf) / d + 4.0
-  return h * 60.0, s, l
+_SURFACE_MAP = {
+  "#E63956": hex_to_color("#E63956"),
+  "#3B82F6": hex_to_color("#3B82F6"),
+  "#10B981": hex_to_color("#10B981"),
+  "#D946EF": hex_to_color("#D946EF"),
+  "#8B5CF6": hex_to_color("#8B5CF6"),
+  "#64748B": hex_to_color("#64748B"),
+}
 
+_SUBSTRATE_MAP = {
+  "#E63956": hex_to_color("#5A0B1A"),
+  "#3B82F6": hex_to_color("#0B1C4A"),
+  "#10B981": hex_to_color("#033326"),
+  "#D946EF": hex_to_color("#4A052E"),
+  "#8B5CF6": hex_to_color("#1E0A4D"),
+  "#64748B": hex_to_color("#252A33"),
+}
 
-def hsl_to_rgb(h: float, s: float, l: float) -> tuple[int, int, int]:
-  if s == 0.0:
-    v = int(l * 255)
-    return v, v, v
-
-  def hue_to_rgb(p: float, q: float, t: float) -> float:
-    if t < 0: t += 1
-    if t > 1: t -= 1
-    if t < 1 / 6: return p + (q - p) * 6 * t
-    if t < 1 / 2: return q
-    if t < 2 / 3: return p + (q - p) * (2 / 3 - t) * 6
-    return p
-
-  q = l * (1 + s) if l < 0.5 else l + s - l * s
-  p = 2 * l - q
-  h = (h % 360) / 360.0
-  r = max(0, min(255, int(round(hue_to_rgb(p, q, h + 1 / 3) * 255))))
-  g = max(0, min(255, int(round(hue_to_rgb(p, q, h) * 255))))
-  b = max(0, min(255, int(round(hue_to_rgb(p, q, h - 1 / 3) * 255))))
-  return r, g, b
-
-
-def derive_substrate(base: rl.Color) -> rl.Color:
-  h, s, l = rgb_to_hsl(base.r, base.g, base.b)
-  l = max(0.0, l * 0.4)
-  s = min(1.0, s + 0.20)
-  r, g, b = hsl_to_rgb(h, s, l)
-  return rl.Color(r, g, b, 255)
+_DEFAULT_SUBSTRATE = hex_to_color("#1E0A4D")
 
 
 class AetherTile(Widget):
-  def __init__(self, bg_color: rl.Color | str = rl.Color(54, 77, 239, 255), on_click: Callable | None = None):
+  def __init__(self, surface_color: rl.Color | str | None = None, substrate_color: rl.Color | str | None = None, on_click: Callable | None = None):
     super().__init__()
-    self.bg_color = hex_to_color(bg_color) if isinstance(bg_color, str) else bg_color
+    if isinstance(surface_color, str):
+      self.surface_color = hex_to_color(surface_color)
+      self.substrate_color = _SUBSTRATE_MAP.get(surface_color, _DEFAULT_SUBSTRATE)
+    elif surface_color:
+      self.surface_color = surface_color
+      self.substrate_color = substrate_color or _DEFAULT_SUBSTRATE
+    else:
+      self.surface_color = hex_to_color("#3B82F6")
+      self.substrate_color = hex_to_color("#0B1C4A")
+    if isinstance(self.substrate_color, str):
+      self.substrate_color = hex_to_color(self.substrate_color)
     self.on_click = on_click
-    self._substrate_color = derive_substrate(self.bg_color)
     self._plate_offset: float = 0.0
     self._plate_target: float = 0.0
 
@@ -114,29 +97,30 @@ class AetherTile(Widget):
     self.set_rect(rect)
 
     extrusion_alpha = int(255 * (1.0 - 0.9 * self._plate_offset))
-    substrate = rl.Color(self._substrate_color.r, self._substrate_color.g, self._substrate_color.b, extrusion_alpha)
+    substrate = rl.Color(self.substrate_color.r, self.substrate_color.g, self.substrate_color.b, extrusion_alpha)
     rl.draw_rectangle_rounded(rl.Rectangle(rect.x + GEOMETRY_OFFSET, rect.y + GEOMETRY_OFFSET, rect.width, rect.height), radius, segments, substrate)
 
     face_x = rect.x + GEOMETRY_OFFSET * self._plate_offset
     face_y = rect.y + GEOMETRY_OFFSET * self._plate_offset
-    face_rect = rl.Rectangle(face_x, face_y, rect.width, rect.height)
-    surface = self.bg_color
-    rl.draw_rectangle_rounded(face_rect, radius, segments, surface)
-    rl.draw_rectangle_rounded_lines_ex(face_rect, radius, segments, 2, rl.Color(255, 255, 255, 60))
 
-    pill_w = rect.width * 0.85
-    pill_h = rect.height * 0.12
-    pill_r = pill_h / 2
-    pill_x = face_x + (rect.width - pill_w) / 2
-    pill_y = face_y + rect.height * 0.08
-    rl.draw_rectangle_rounded(rl.Rectangle(pill_x, pill_y, pill_w, pill_h), 1.0, max(4, int(pill_r)), rl.Color(255, 255, 255, 38))
+    shadow_rect = rl.Rectangle(face_x, face_y, rect.width, rect.height)
+    rl.draw_rectangle_rounded(shadow_rect, radius, segments, rl.Color(0, 0, 0, 80))
 
-    return face_rect
+    hl_rect = rl.Rectangle(face_x, face_y, rect.width - 1.5, rect.height - 1.5)
+    rl.draw_rectangle_rounded(hl_rect, radius, segments, rl.Color(255, 255, 255, 110))
+
+    surf_rect = rl.Rectangle(face_x + 1.5, face_y + 1.5, rect.width - 3, rect.height - 3)
+    rl.draw_rectangle_rounded(surf_rect, radius, segments, self.surface_color)
+
+    glare_rect = rl.Rectangle(surf_rect.x, surf_rect.y, surf_rect.width, surf_rect.height * 0.45)
+    rl.draw_rectangle_rounded(glare_rect, radius, segments, rl.Color(255, 255, 255, 15))
+
+    return surf_rect
 
   def _draw_text_fit(self, font: rl.Font, text: str, pos: rl.Vector2, max_width: float, font_size: float, align_center: bool = False, align_right: bool = False, letter_spacing: float = 0, uppercase: bool = False):
     if uppercase:
       text = text.upper()
-    spacing = letter_spacing if letter_spacing > 0 else font_size * 0.2
+    spacing = letter_spacing if letter_spacing > 0 else font_size * 0.15
     size = measure_text_cached(font, text, int(font_size), spacing=spacing)
     actual_font_size = font_size
     if size.x > max_width:
@@ -150,8 +134,8 @@ class AetherTile(Widget):
       draw_x = pos.x + (max_width - render_width) / 2
     elif align_right:
       draw_x = pos.x + max_width - render_width
-    shadow_pos = rl.Vector2(draw_x + 3, pos.y + nudge_y + 4)
-    rl.draw_text_ex(font, text, shadow_pos, actual_font_size, spacing, rl.Color(0, 0, 0, 128))
+    shadow_pos = rl.Vector2(draw_x + 1, pos.y + nudge_y + 2)
+    rl.draw_text_ex(font, text, shadow_pos, actual_font_size, spacing, rl.Color(0, 0, 0, 90))
     rl.draw_text_ex(font, text, rl.Vector2(draw_x, pos.y + nudge_y), actual_font_size, spacing, rl.WHITE)
 
   def _centered_content(self, face: rl.Rectangle, icon: rl.Texture2D | None, icon_scale: float, title_font_size: float, text_lines: int, line_heights: list[float]):
@@ -164,7 +148,7 @@ class AetherTile(Widget):
     group_top = face.y + (face.height - total_h) / 2
     if icon:
       ix = face.x + (face.width - icon_w) / 2
-      rl.draw_texture_pro(icon, rl.Rectangle(0, 0, icon.width, icon.height), rl.Rectangle(ix + 3, group_top + 4, icon_w, icon_h), rl.Vector2(0, 0), 0, rl.Color(0, 0, 0, 128))
+      rl.draw_texture_pro(icon, rl.Rectangle(0, 0, icon.width, icon.height), rl.Rectangle(ix + 1, group_top + 2, icon_w, icon_h), rl.Vector2(0, 0), 0, rl.Color(0, 0, 0, 90))
       rl.draw_texture_pro(icon, rl.Rectangle(0, 0, icon.width, icon.height), rl.Rectangle(ix, group_top, icon_w, icon_h), rl.Vector2(0, 0), 0, rl.WHITE)
       ty = group_top + icon_h + line_spacing
     else:
@@ -172,7 +156,7 @@ class AetherTile(Widget):
     return face, ty
 
   def _wrap_text(self, font: rl.Font, text: str, max_width: float, font_size: float, max_lines: int = 2) -> list[str]:
-    spacing = font_size * 0.2
+    spacing = font_size * 0.15
     words = text.upper().split()
     lines: list[str] = []
     current = ""
@@ -197,7 +181,7 @@ class AetherTile(Widget):
 class HubTile(AetherTile):
   def __init__(self, title: str, desc: str, icon_path: str, on_click: Callable | None = None, starpilot_icon: bool = False, bg_color: rl.Color | str | None = None):
     if bg_color:
-      super().__init__(bg_color=bg_color, on_click=on_click)
+      super().__init__(surface_color=bg_color, on_click=on_click)
     else:
       super().__init__(on_click=on_click)
     self.title = title
@@ -206,34 +190,34 @@ class HubTile(AetherTile):
       if starpilot_icon: self._icon = gui_app.starpilot_texture(icon_path, 100, 100)
       else: self._icon = gui_app.texture(icon_path, 100, 100)
     else: self._icon = None
-    self._font_title = gui_app.font(FontWeight.BLACK)
+    self._font_title = gui_app.font(FontWeight.BOLD)
     self._font_desc = gui_app.font(FontWeight.NORMAL)
 
   def _render(self, rect: rl.Rectangle):
     face = self._render_layers(rect)
-    max_w = face.width - 60
-    lines = self._wrap_text(self._font_title, self.title, max_w, 38)
-    line_heights = [38] * len(lines)
-    _, ty = self._centered_content(face, self._icon, 0.50, 38, len(line_heights), line_heights)
-    line_h = 38
+    max_w = face.width - 40
+    lines = self._wrap_text(self._font_title, self.title, max_w, 30)
+    line_heights = [30] * len(lines)
+    _, ty = self._centered_content(face, self._icon, 0.75, 30, len(line_heights), line_heights)
+    line_h = 30
     line_spacing = 8
     for i, line in enumerate(lines):
-      self._draw_text_fit(self._font_title, line, rl.Vector2(face.x + 30, ty + i * (line_h + line_spacing)), max_w, line_h, align_center=True)
+      self._draw_text_fit(self._font_title, line, rl.Vector2(face.x + 20, ty + i * (line_h + line_spacing)), max_w, line_h, align_center=True)
 
 
 class ToggleTile(AetherTile):
   def __init__(self, title: str, get_state: Callable[[], bool], set_state: Callable[[bool], None], icon_path: str | None = None,
                bg_color: rl.Color | str | None = None, desc: str = ""):
-    if bg_color: super().__init__(bg_color=bg_color)
-    else: super().__init__(bg_color=rl.Color(0, 163, 0, 255))
+    if bg_color: super().__init__(surface_color=bg_color)
+    else: super().__init__(surface_color=rl.Color(0, 163, 0, 255))
     self.title = title
     self.desc = desc
     self.get_state = get_state
     self.set_state = set_state
     self._icon = gui_app.starpilot_texture(icon_path, 80, 80) if icon_path else None
-    self._font = gui_app.font(FontWeight.BLACK)
+    self._font = gui_app.font(FontWeight.BOLD)
     self._font_desc = gui_app.font(FontWeight.NORMAL)
-    self._active_color = self.bg_color
+    self._active_color = self.surface_color
     self._inactive_color = rl.Color(120, 120, 120, 255)
 
   def _handle_mouse_release(self, mouse_pos: MousePos):
@@ -245,45 +229,43 @@ class ToggleTile(AetherTile):
 
   def _render(self, rect: rl.Rectangle):
     active = self.get_state()
-    self.bg_color = self._active_color if active else self._inactive_color
-    self._substrate_color = derive_substrate(self.bg_color)
+    self.surface_color = self._active_color if active else self._inactive_color
     face = self._render_layers(rect)
-    line_heights = [32, 30]
-    _, ty = self._centered_content(face, self._icon, 0.50, 32, len(line_heights), line_heights)
-    max_w = face.width - 60
-    self._draw_text_fit(self._font, self.title, rl.Vector2(face.x + 30, ty), max_w, 32, align_center=True, uppercase=True)
+    line_heights = [28, 30]
+    _, ty = self._centered_content(face, self._icon, 0.75, 28, len(line_heights), line_heights)
+    max_w = face.width - 40
+    self._draw_text_fit(self._font, self.title, rl.Vector2(face.x + 20, ty), max_w, 28, align_center=True, uppercase=True)
     state_text = tr("ON") if active else tr("OFF")
-    self._draw_text_fit(self._font, state_text, rl.Vector2(face.x + 30, ty + 32 + 8), max_w, 30, align_center=True, uppercase=True)
+    self._draw_text_fit(self._font, state_text, rl.Vector2(face.x + 20, ty + 28 + 8), max_w, 30, align_center=True, uppercase=True)
 
 
 class ValueTile(AetherTile):
   def __init__(self, title: str, get_value: Callable[[], str], on_click: Callable, icon_path: str | None = None,
                bg_color: rl.Color | str | None = None, is_enabled: Callable[[], bool] | None = None, desc: str = ""):
-    super().__init__(bg_color=bg_color, on_click=on_click)
+    super().__init__(surface_color=bg_color, on_click=on_click)
     self.title = title
     self.desc = desc
     self.get_value = get_value
     self._enabled = is_enabled or (lambda: True)
     self._icon = gui_app.starpilot_texture(icon_path, 80, 80) if icon_path else None
-    self._font = gui_app.font(FontWeight.BLACK)
+    self._font = gui_app.font(FontWeight.BOLD)
     self._font_desc = gui_app.font(FontWeight.NORMAL)
-    self._active_color = self.bg_color
+    self._active_color = self.surface_color
     self._disabled_color = rl.Color(120, 120, 120, 255)
 
   def _render(self, rect: rl.Rectangle):
     enabled = self.enabled
-    self.bg_color = self._active_color if enabled else self._disabled_color
-    self._substrate_color = derive_substrate(self.bg_color)
+    self.surface_color = self._active_color if enabled else self._disabled_color
     if not enabled:
       self._plate_offset = 0.0
       self._plate_target = 0.0
     face = self._render_layers(rect)
-    line_heights = [32, 32]
-    _, ty = self._centered_content(face, self._icon, 0.50, 32, len(line_heights), line_heights)
-    max_w = face.width - 60
-    self._draw_text_fit(self._font, self.title, rl.Vector2(face.x + 30, ty), max_w, 32, align_center=True, uppercase=True)
+    line_heights = [28, 28]
+    _, ty = self._centered_content(face, self._icon, 0.75, 28, len(line_heights), line_heights)
+    max_w = face.width - 40
+    self._draw_text_fit(self._font, self.title, rl.Vector2(face.x + 20, ty), max_w, 28, align_center=True, uppercase=True)
     val_text = self.get_value()
-    self._draw_text_fit(self._font, val_text, rl.Vector2(face.x + 30, ty + 32 + 8), max_w, 32, align_center=True, uppercase=True)
+    self._draw_text_fit(self._font, val_text, rl.Vector2(face.x + 20, ty + 28 + 8), max_w, 28, align_center=True, uppercase=True)
 
 
 class AetherSlider(Widget):
@@ -324,10 +306,11 @@ class AetherSlider(Widget):
     face_rect = rl.Rectangle(face_x, face_y, rect.width, rect.height)
     btn_color = rl.Color(80, 80, 80, 255)
     rl.draw_rectangle_rounded(face_rect, 0.2, 10, btn_color)
-    rl.draw_rectangle_rounded_lines_ex(face_rect, 0.2, 10, 2, rl.Color(255, 255, 255, 60))
+    rl.draw_rectangle_rounded(rl.Rectangle(face_rect.x + 1, face_rect.y + 1, face_rect.width - 2, face_rect.height - 2), 0.2, 10, rl.Color(0, 0, 0, 80))
+    rl.draw_rectangle_rounded(rl.Rectangle(face_rect.x, face_rect.y, face_rect.width - 1.5, face_rect.height - 1.5), 0.2, 10, rl.Color(255, 255, 255, 110))
     ts = measure_text_cached(self._font, label, 35)
     label_pos = rl.Vector2(face_x + (rect.width - ts.x) / 2, face_y + (rect.height - ts.y) / 2)
-    rl.draw_text_ex(self._font, label, rl.Vector2(label_pos.x + 3, label_pos.y + 4), 35, 0, rl.Color(0, 0, 0, 128))
+    rl.draw_text_ex(self._font, label, rl.Vector2(label_pos.x + 2, label_pos.y + 2), 35, 0, rl.Color(0, 0, 0, 70))
     rl.draw_text_ex(self._font, label, label_pos, 35, 0, rl.WHITE)
 
   def _render(self, rect: rl.Rectangle):
@@ -364,11 +347,12 @@ class AetherSlider(Widget):
     rl.draw_rectangle_rounded(rl.Rectangle(thumb_x + GEOMETRY_OFFSET, thumb_y + GEOMETRY_OFFSET, thumb_w, thumb_h), 0.2, 10, t_substrate)
     t_face_rect = rl.Rectangle(thumb_x + thumb_offset, thumb_y + thumb_offset, thumb_w, thumb_h)
     rl.draw_rectangle_rounded(t_face_rect, 0.2, 10, rl.WHITE)
-    rl.draw_rectangle_rounded_lines_ex(t_face_rect, 0.2, 10, 2, rl.Color(255, 255, 255, 60))
+    rl.draw_rectangle_rounded(rl.Rectangle(t_face_rect.x + 1, t_face_rect.y + 1, t_face_rect.width - 2, t_face_rect.height - 2), 0.2, 10, rl.Color(0, 0, 0, 80))
+    rl.draw_rectangle_rounded(rl.Rectangle(t_face_rect.x, t_face_rect.y, t_face_rect.width - 1.5, t_face_rect.height - 1.5), 0.2, 10, rl.Color(255, 255, 255, 110))
     val_str = self.labels.get(self.current_val, f"{self.current_val:.2f}".rstrip('0').rstrip('.') + self.unit)
     ts = measure_text_cached(self._font, val_str, 35)
     val_pos = rl.Vector2(thumb_x + (thumb_w - ts.x) / 2, thumb_y - 45)
-    rl.draw_text_ex(self._font, val_str, rl.Vector2(val_pos.x + 3, val_pos.y + 4), 35, 0, rl.Color(0, 0, 0, 128))
+    rl.draw_text_ex(self._font, val_str, rl.Vector2(val_pos.x + 2, val_pos.y + 2), 35, 0, rl.Color(0, 0, 0, 70))
     rl.draw_text_ex(self._font, val_str, val_pos, 35, 0, rl.WHITE)
 
   def _handle_mouse_press(self, mouse_pos: MousePos):
@@ -488,29 +472,29 @@ class AetherSliderDialog(Widget):
     rl.draw_text_ex(self._font_title, self.title, rl.Vector2(dx + (dialog_w - ts.x) / 2, dy + 40), 50, 0, rl.WHITE)
     slider_rect = rl.Rectangle(dx + 100, dy + 200, dialog_w - 200, 100)
     self._slider.render(slider_rect)
-    cancel_substrate = derive_substrate(rl.Color(80, 80, 80, 255))
     c_shadow_alpha = int(255 * (1.0 - 0.9 * self._cancel_offset))
-    rl.draw_rectangle_rounded(rl.Rectangle(self._cancel_rect.x + GEOMETRY_OFFSET, self._cancel_rect.y + GEOMETRY_OFFSET, 350, 80), 0.2, 10, rl.Color(cancel_substrate.r, cancel_substrate.g, cancel_substrate.b, c_shadow_alpha))
+    rl.draw_rectangle_rounded(rl.Rectangle(self._cancel_rect.x + GEOMETRY_OFFSET, self._cancel_rect.y + GEOMETRY_OFFSET, 350, 80), 0.2, 10, rl.Color(30, 30, 30, c_shadow_alpha))
     c_face_x = self._cancel_rect.x + GEOMETRY_OFFSET * self._cancel_offset
     c_face_y = self._cancel_rect.y + GEOMETRY_OFFSET * self._cancel_offset
     c_face = rl.Rectangle(c_face_x, c_face_y, 350, 80)
     rl.draw_rectangle_rounded(c_face, 0.2, 10, rl.Color(80, 80, 80, 255))
-    rl.draw_rectangle_rounded_lines_ex(c_face, 0.2, 10, 2, rl.Color(255, 255, 255, 60))
+    rl.draw_rectangle_rounded(rl.Rectangle(c_face.x + 1, c_face.y + 1, c_face.width - 2, c_face.height - 2), 0.2, 10, rl.Color(0, 0, 0, 80))
+    rl.draw_rectangle_rounded(rl.Rectangle(c_face.x, c_face.y, c_face.width - 1.5, c_face.height - 1.5), 0.2, 10, rl.Color(255, 255, 255, 110))
     cts = measure_text_cached(self._font_btn, tr("CANCEL"), 35)
     cancel_text_pos = rl.Vector2(c_face_x + (350 - cts.x) / 2, c_face_y + (80 - cts.y) / 2)
-    rl.draw_text_ex(self._font_btn, tr("CANCEL"), rl.Vector2(cancel_text_pos.x + 3, cancel_text_pos.y + 4), 35, 0, rl.Color(0, 0, 0, 128))
+    rl.draw_text_ex(self._font_btn, tr("CANCEL"), rl.Vector2(cancel_text_pos.x + 1, cancel_text_pos.y + 2), 35, 0, rl.Color(0, 0, 0, 90))
     rl.draw_text_ex(self._font_btn, tr("CANCEL"), cancel_text_pos, 35, 0, rl.WHITE)
-    ok_substrate = derive_substrate(self._color)
     o_shadow_alpha = int(255 * (1.0 - 0.9 * self._ok_offset))
-    rl.draw_rectangle_rounded(rl.Rectangle(self._ok_rect.x + GEOMETRY_OFFSET, self._ok_rect.y + GEOMETRY_OFFSET, 350, 80), 0.2, 10, rl.Color(ok_substrate.r, ok_substrate.g, ok_substrate.b, o_shadow_alpha))
+    rl.draw_rectangle_rounded(rl.Rectangle(self._ok_rect.x + GEOMETRY_OFFSET, self._ok_rect.y + GEOMETRY_OFFSET, 350, 80), 0.2, 10, rl.Color(self._color.r, self._color.g, self._color.b, int(o_shadow_alpha * 0.4)))
     o_face_x = self._ok_rect.x + GEOMETRY_OFFSET * self._ok_offset
     o_face_y = self._ok_rect.y + GEOMETRY_OFFSET * self._ok_offset
     o_face = rl.Rectangle(o_face_x, o_face_y, 350, 80)
     rl.draw_rectangle_rounded(o_face, 0.2, 10, self._color)
-    rl.draw_rectangle_rounded_lines_ex(o_face, 0.2, 10, 2, rl.Color(255, 255, 255, 60))
+    rl.draw_rectangle_rounded(rl.Rectangle(o_face.x + 1, o_face.y + 1, o_face.width - 2, o_face.height - 2), 0.2, 10, rl.Color(0, 0, 0, 80))
+    rl.draw_rectangle_rounded(rl.Rectangle(o_face.x, o_face.y, o_face.width - 1.5, o_face.height - 1.5), 0.2, 10, rl.Color(255, 255, 255, 110))
     ots = measure_text_cached(self._font_btn, tr("OK"), 35)
     ok_text_pos = rl.Vector2(o_face_x + (350 - ots.x) / 2, o_face_y + (80 - ots.y) / 2)
-    rl.draw_text_ex(self._font_btn, tr("OK"), rl.Vector2(ok_text_pos.x + 3, ok_text_pos.y + 4), 35, 0, rl.Color(0, 0, 0, 128))
+    rl.draw_text_ex(self._font_btn, tr("OK"), rl.Vector2(ok_text_pos.x + 1, ok_text_pos.y + 2), 35, 0, rl.Color(0, 0, 0, 90))
     rl.draw_text_ex(self._font_btn, tr("OK"), ok_text_pos, 35, 0, rl.WHITE)
     return DialogResult.NO_ACTION
 
@@ -519,7 +503,7 @@ class RadioTileGroup(Widget):
   def __init__(self, title: str, options: list[str], current_index: int, on_change: Callable):
     super().__init__()
     self.title, self.options, self.current_index, self.on_change = title, options, current_index, on_change
-    self._font, self._font_title = gui_app.font(FontWeight.BLACK), gui_app.font(FontWeight.NORMAL)
+    self._font, self._font_title = gui_app.font(FontWeight.BOLD), gui_app.font(FontWeight.NORMAL)
     self._active_color, self._inactive_color = rl.Color(54, 77, 239, 255), rl.Color(80, 80, 80, 255)
     self._pressed_index = -1
     self._option_rects: list[rl.Rectangle] = []
@@ -567,18 +551,18 @@ class RadioTileGroup(Widget):
       self._option_rects.append(r)
       is_active = i == self.current_index
       color = self._active_color if is_active else self._inactive_color
-      substrate = derive_substrate(color)
       offset = self._option_offsets[i] if i < len(self._option_offsets) else 0.0
       extrusion_alpha = int(255 * (1.0 - 0.9 * offset))
-      rl.draw_rectangle_rounded(rl.Rectangle(r.x + GEOMETRY_OFFSET, r.y + GEOMETRY_OFFSET, r.width, r.height), TILE_RADIUS, 10, rl.Color(substrate.r, substrate.g, substrate.b, extrusion_alpha))
+      rl.draw_rectangle_rounded(rl.Rectangle(r.x + GEOMETRY_OFFSET, r.y + GEOMETRY_OFFSET, r.width, r.height), TILE_RADIUS, 10, rl.Color(30, 30, 30, extrusion_alpha))
       face_x = r.x + GEOMETRY_OFFSET * offset
       face_y = r.y + GEOMETRY_OFFSET * offset
       face_rect = rl.Rectangle(face_x, face_y, r.width, r.height)
       rl.draw_rectangle_rounded(face_rect, TILE_RADIUS, 10, color)
-      rl.draw_rectangle_rounded_lines_ex(face_rect, TILE_RADIUS, 10, 2, rl.Color(255, 255, 255, 60))
+      rl.draw_rectangle_rounded(rl.Rectangle(face_rect.x + 1, face_rect.y + 1, face_rect.width - 2, face_rect.height - 2), TILE_RADIUS, 10, rl.Color(0, 0, 0, 80))
+      rl.draw_rectangle_rounded(rl.Rectangle(face_rect.x, face_rect.y, face_rect.width - 1.5, face_rect.height - 1.5), TILE_RADIUS, 10, rl.Color(255, 255, 255, 110))
       ts = measure_text_cached(self._font, opt.upper(), 35)
       text_pos = rl.Vector2(face_x + (r.width - ts.x) / 2, face_y + (r.height - ts.y) / 2)
-      rl.draw_text_ex(self._font, opt.upper(), rl.Vector2(text_pos.x + 3, text_pos.y + 4), 35, 0, rl.Color(0, 0, 0, 128))
+      rl.draw_text_ex(self._font, opt.upper(), rl.Vector2(text_pos.x + 1, text_pos.y + 2), 35, 0, rl.Color(0, 0, 0, 90))
       rl.draw_text_ex(self._font, opt.upper(), text_pos, 35, 0, rl.WHITE)
 
 
