@@ -41,7 +41,7 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument("--latest", type=int, default=1, help="How many latest sessions to import when no session ids are provided.")
   parser.add_argument("--mode", choices=("symlink", "copy"), default="symlink", help="How to place snapshots into the workspace review/images directory.")
   parser.add_argument("--force", action="store_true", help="Overwrite snapshot links/files if they already exist.")
-  parser.add_argument("--events", nargs="+", default=["bookmark", "auto_bookmark", "publish", "candidate"], help="Event types to include in the manifest.")
+  parser.add_argument("--events", nargs="+", default=["bookmark", "auto_bookmark", "training_candidate", "publish", "candidate"], help="Event types to include in the manifest.")
   return parser.parse_args()
 
 

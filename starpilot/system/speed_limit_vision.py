@@ -31,6 +31,9 @@ PUBLISHED_REVERT_CONFIDENCE = 0.97
 AUTO_BOOKMARK_CONFIRM_DELAY_SECONDS = 0.9
 AUTO_BOOKMARK_COOLDOWN_SECONDS = 8.0
 AUTO_BOOKMARK_MIN_CONFIDENCE = 0.62
+TRAINING_COLLECTOR_CONFIRM_DELAY_SECONDS = 0.7
+TRAINING_COLLECTOR_COOLDOWN_SECONDS = 2.5
+TRAINING_COLLECTOR_MIN_CONFIDENCE = 0.40
 MODEL_PROPOSAL_MIN_CONFIDENCE = 0.0001
 MODEL_PROPOSAL_MAX_COUNT = 16
 MODEL_PROPOSAL_MAX_AREA_RATIO = 0.18
@@ -223,6 +226,9 @@ class SpeedLimitVisionDaemon:
     self.last_auto_bookmark_speed_limit_mph = 0
     self.last_auto_bookmark_publish_at = 0.0
     self.pending_auto_bookmark = None
+    self.last_training_capture_at = 0.0
+    self.last_training_capture_speed_limit_mph = 0
+    self.pending_training_capture = None
     self.ignore_next_user_bookmark = False
     self.current_frame_bgr = None
 
@@ -366,6 +372,24 @@ class SpeedLimitVisionDaemon:
       bookmarkCount=self.debug_bookmark_count,
     )
 
+  def _record_training_candidate(self, speed_limit_mph, confidence, source_confidence, source_event):
+    if not self.use_runtime or self.params_memory is None or not self.debug_log_path:
+      return
+
+    self._write_debug_event(
+      "training_candidate",
+      frame_bgr=self.current_frame_bgr,
+      snapshot_prefix=f"training_candidate_{speed_limit_mph:03d}",
+      candidateSpeedLimitMph=self.last_candidate_speed_limit_mph,
+      candidateConfidence=round(self.last_candidate_confidence, 4),
+      publishedSpeedLimitMph=self.published_speed_limit_mph,
+      publishedConfidence=round(self.published_confidence, 4),
+      speedLimitMph=speed_limit_mph,
+      confidence=round(confidence, 4),
+      sourceConfidence=round(source_confidence, 4),
+      sourceEvent=source_event,
+    )
+
   def _schedule_auto_bookmark(self, speed_limit_mph, confidence, published_at):
     if not self.use_runtime or self.params is None:
       return
@@ -379,6 +403,34 @@ class SpeedLimitVisionDaemon:
     self.pending_auto_bookmark = {
       "due_at": published_at + AUTO_BOOKMARK_CONFIRM_DELAY_SECONDS,
       "published_at": published_at,
+      "speed_limit_mph": speed_limit_mph,
+      "confidence": confidence,
+    }
+
+  def _schedule_training_capture(self, speed_limit_mph, confidence, detected_at):
+    if not self.use_runtime or self.params is None:
+      return
+    if not self.params.get_bool("VisionSpeedLimitTrainingCollector", default=True):
+      self.pending_training_capture = None
+      return
+    if confidence < TRAINING_COLLECTOR_MIN_CONFIDENCE:
+      return
+    if detected_at - self.last_training_capture_at < TRAINING_COLLECTOR_COOLDOWN_SECONDS and speed_limit_mph == self.last_training_capture_speed_limit_mph:
+      return
+
+    pending = self.pending_training_capture
+    if pending is not None:
+      if pending["speed_limit_mph"] == speed_limit_mph:
+        pending["confidence"] = max(float(pending["confidence"]), confidence)
+        pending["last_seen_at"] = detected_at
+        return
+      if detected_at < pending["due_at"] and confidence <= float(pending["confidence"]) + 0.08:
+        return
+
+    self.pending_training_capture = {
+      "due_at": detected_at + TRAINING_COLLECTOR_CONFIRM_DELAY_SECONDS,
+      "detected_at": detected_at,
+      "last_seen_at": detected_at,
       "speed_limit_mph": speed_limit_mph,
       "confidence": confidence,
     }
@@ -417,6 +469,39 @@ class SpeedLimitVisionDaemon:
 
     if self.params is not None and self.params.get_bool("VisionSpeedLimitAutoPreserveSegment"):
       self._emit_preserve_bookmark()
+
+  def _maybe_commit_training_capture(self, now):
+    pending = self.pending_training_capture
+    if pending is None or now < pending["due_at"]:
+      return
+    if self.params is not None and not self.params.get_bool("VisionSpeedLimitTrainingCollector", default=True):
+      self.pending_training_capture = None
+      return
+
+    self.pending_training_capture = None
+    if self.current_frame_bgr is None:
+      return
+
+    speed_limit_mph = int(pending["speed_limit_mph"])
+    source_confidence = float(pending["confidence"])
+    if now - self.last_candidate_at > FOLLOWUP_WINDOW_SECONDS and self.published_speed_limit_mph != speed_limit_mph:
+      return
+
+    confidence = source_confidence
+    source_event = "candidate"
+    if self.last_candidate_speed_limit_mph == speed_limit_mph:
+      confidence = max(confidence, self.last_candidate_confidence)
+    if self.published_speed_limit_mph == speed_limit_mph:
+      confidence = max(confidence, self.published_confidence)
+      source_event = "publish"
+    if confidence < TRAINING_COLLECTOR_MIN_CONFIDENCE:
+      return
+    if now - self.last_training_capture_at < TRAINING_COLLECTOR_COOLDOWN_SECONDS and speed_limit_mph == self.last_training_capture_speed_limit_mph:
+      return
+
+    self.last_training_capture_at = now
+    self.last_training_capture_speed_limit_mph = speed_limit_mph
+    self._record_training_candidate(speed_limit_mph, confidence, source_confidence, source_event)
 
   def _published_detection_stale(self, now):
     return self.published_speed_limit_mph > 0 and now - self.last_detection_at > PUBLISHED_HOLD_SECONDS
@@ -1336,6 +1421,7 @@ class SpeedLimitVisionDaemon:
     self.history.clear()
     self.followup_until = 0.0
     self.pending_auto_bookmark = None
+    self.pending_training_capture = None
     self.previous_published_speed_limit_mph = self.published_speed_limit_mph
     self.published_speed_limit_mph = 0
     self.published_confidence = 0.0
@@ -1406,6 +1492,7 @@ class SpeedLimitVisionDaemon:
     self.last_candidate_speed_limit_mph = detection.speed_limit_mph
     self.last_candidate_confidence = detection.confidence
     self.last_candidate_at = now
+    self._schedule_training_capture(detection.speed_limit_mph, detection.confidence, now)
 
     candidate_signature = (detection.speed_limit_mph, round(detection.confidence, 2))
     if candidate_signature != self.last_logged_candidate:
@@ -1529,6 +1616,7 @@ class SpeedLimitVisionDaemon:
         self._publish_status(f"Scanning {self.stream_name}", clear_speed=False)
 
       self._maybe_commit_auto_bookmark(now)
+      self._maybe_commit_training_capture(now)
 
       ratekeeper.keep_time()
 

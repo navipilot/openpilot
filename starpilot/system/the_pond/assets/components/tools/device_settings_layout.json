@@ -1160,6 +1160,14 @@
         "parent_key": "VisionSpeedLimitDetection"
       },
       {
+        "key": "VisionSpeedLimitTrainingCollector",
+        "label": "Collect Extra Vision Training Samples",
+        "description": "Save lower-threshold vision sign candidates into the debug session for later training import without showing or applying them live. Leave this on if you want to help improve the model.",
+        "data_type": "bool",
+        "ui_type": "toggle",
+        "parent_key": "VisionSpeedLimitDetection"
+      },
+      {
         "key": "VisionSpeedLimitAutoPreserveSegment",
         "label": "Preserve Auto-Bookmarked Segments",
         "description": "Also send a real bookmark for confirmed auto-bookmarks so loggerd preserves the route segment. Leave this off unless you specifically want the extra storage usage.",
