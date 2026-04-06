@@ -14,11 +14,13 @@ from openpilot.common.swaglog import cloudlog
 from openpilot.common.simple_kalman import KF1D
 from openpilot.selfdrive.controls.lib.desire_helper import LaneChangeDirection, LaneChangeState
 
+from openpilot.starpilot.common.testing_grounds import testing_ground
 from openpilot.starpilot.common.starpilot_variables import THRESHOLD, get_starpilot_toggles
 
 
 # Default lead acceleration decay set to 50% at 1s
 _LEAD_ACCEL_TAU = 0.6
+RADAR_ONLY_FAR_LEAD_MIN_DISTANCE = 35.0  # m
 
 # radar tracks
 SPEED, ACCEL = 0, 1     # Kalman filter states enum
@@ -220,7 +222,10 @@ def get_lead(v_ego: float, ready: bool, tracks: dict[int, Track], lead_msg: capn
         lead_dict = closest_track.get_RadarState()
 
     if not lead_dict['status'] and len(tracks) > 0:
-      far_lead_tracks = [c for c in tracks.values() if c.potential_far_lead(standstill, model_data) and c.radarfulFilter.x >= THRESHOLD]
+      radar_only_far_lead_min_distance = RADAR_ONLY_FAR_LEAD_MIN_DISTANCE if testing_ground.use_2 else 0.0
+      far_lead_tracks = [c for c in tracks.values()
+                         if c.dRel >= radar_only_far_lead_min_distance and
+                         c.potential_far_lead(standstill, model_data) and c.radarfulFilter.x >= THRESHOLD]
       if len(far_lead_tracks) > 0:
         closest_track = min(far_lead_tracks, key=lambda c: c.dRel)
         lead_dict = closest_track.get_RadarState()

@@ -21,6 +21,7 @@ from openpilot.selfdrive.modeld.modeld import LAT_SMOOTH_SECONDS
 from openpilot.selfdrive.locationd.helpers import PoseCalibrator, Pose
 
 from openpilot.starpilot.common.starpilot_variables import get_starpilot_toggles
+from openpilot.starpilot.common.testing_grounds import testing_ground
 from openpilot.starpilot.controls.lib.neural_network_feedforward import LatControlNNFF
 
 State = log.SelfdriveState.OpenpilotState
@@ -131,6 +132,14 @@ class Controls:
 
     # accel PID loop
     pid_accel_limits = self.CI.get_pid_accel_limits(self.CP, CS.vEgo, CS.vCruise * CV.KPH_TO_MS)
+    if testing_ground.use_2:
+      # Keep the actuator loop inside the planner's envelope so Eco/custom accel caps
+      # constrain the real GM output instead of only the planner target.
+      pid_accel_limits = [
+        max(pid_accel_limits[0], self.sm['starpilotPlan'].minAcceleration),
+        min(pid_accel_limits[1], self.sm['starpilotPlan'].maxAcceleration, self.starpilot_toggles.max_desired_acceleration),
+      ]
+      pid_accel_limits[1] = max(pid_accel_limits[0], pid_accel_limits[1])
     self.LoC.experimental_mode = bool(self.sm['selfdriveState'].experimentalMode)
     actuators.accel = float(min(self.LoC.update(CC.longActive, CS, long_plan.aTarget, long_plan.shouldStop, pid_accel_limits, self.starpilot_toggles), self.starpilot_toggles.max_desired_acceleration))
 
