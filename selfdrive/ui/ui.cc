@@ -274,7 +274,9 @@ void Device::updateWakefulness(const UIState &s, const StarPilotUIState &fs) {
     emit interactiveTimeout();
   }
 
-  setAwake(s.scene.ignition || interactive_timeout > 0);
+  // Power the display from filtered onroad state rather than raw ignition so
+  // brief ignition-line glitches do not blank the screen immediately.
+  setAwake(s.scene.started || interactive_timeout > 0);
 }
 
 UIState *uiState() {
