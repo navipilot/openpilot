@@ -31,6 +31,30 @@ function formatAgeSeconds(value) {
   return `${Math.round(hr)}h ago`
 }
 
+function normalizeStatusPayload(payload) {
+  const normalized = payload && typeof payload === "object" ? { ...payload } : {}
+  normalized.support = normalized.support && typeof normalized.support === "object" ? normalized.support : {}
+  normalized.caveats = Array.isArray(normalized.caveats) ? normalized.caveats : []
+  normalized.skippedManeuvers = Array.isArray(normalized.skippedManeuvers) ? normalized.skippedManeuvers : []
+  normalized.history = Array.isArray(normalized.history) ? normalized.history : []
+  return normalized
+}
+
+function getSupportValue(key) {
+  const data = state.data && typeof state.data === "object" ? state.data : {}
+  const support = data.support && typeof data.support === "object" ? data.support : {}
+  return support[key]
+}
+
+function formatSupportBool(key) {
+  return getSupportValue(key) ? "Yes" : "No"
+}
+
+function formatSupportNumber(key, unit) {
+  const value = Number(getSupportValue(key))
+  return Number.isFinite(value) ? `${value.toFixed(2)} ${unit}` : "n/a"
+}
+
 async function fetchStatus() {
   try {
     const response = await fetch("/api/longitudinal_maneuvers/status")
@@ -39,7 +63,7 @@ async function fetchStatus() {
       throw new Error(payload.error || response.statusText || "Failed to load maneuver status")
     }
 
-    state.data = payload
+    state.data = normalizeStatusPayload(payload)
     state.error = ""
   } catch (error) {
     state.error = error?.message || "Failed to load maneuver status"
@@ -86,7 +110,7 @@ async function runAction(action) {
       throw new Error(payload.error || response.statusText || `Failed to ${action} maneuvers`)
     }
 
-    state.data = payload
+    state.data = normalizeStatusPayload(payload)
     state.error = ""
     showSnackbar(payload.message || "Action complete.")
   } catch (error) {
@@ -157,13 +181,13 @@ export function LongitudinalManeuvers() {
           </div>
 
           <div class="longManeuverStatusGrid">
-            ${statusLine("openpilot Long", state.data.support?.openpilotLongitudinalControl ? "Yes" : "No")}
-            ${statusLine("Full Stop + Go", state.data.support?.fullStopAndGo ? "Yes" : "No")}
-            ${statusLine("Auto Resume", state.data.support?.autoResumeFromStop ? "Yes" : "No")}
-            ${statusLine("Resume Assist", state.data.support?.requiresResumeAssist ? "Yes" : "No")}
-            ${statusLine("Expected Zero", state.data.support?.expectedToReachZero ? "Yes" : "No")}
-            ${statusLine("Min Enable", Number.isFinite(Number(state.data.support?.minEnableSpeed)) ? `${Number(state.data.support.minEnableSpeed).toFixed(2)} m/s` : "n/a")}
-            ${statusLine("Stop Accel", Number.isFinite(Number(state.data.support?.stopAccel)) ? `${Number(state.data.support.stopAccel).toFixed(2)} m/s²` : "n/a")}
+            ${statusLine("openpilot Long", formatSupportBool("openpilotLongitudinalControl"))}
+            ${statusLine("Full Stop + Go", formatSupportBool("fullStopAndGo"))}
+            ${statusLine("Auto Resume", formatSupportBool("autoResumeFromStop"))}
+            ${statusLine("Resume Assist", formatSupportBool("requiresResumeAssist"))}
+            ${statusLine("Expected Zero", formatSupportBool("expectedToReachZero"))}
+            ${statusLine("Min Enable", formatSupportNumber("minEnableSpeed", "m/s"))}
+            ${statusLine("Stop Accel", formatSupportNumber("stopAccel", "m/s^2"))}
           </div>
 
           ${(state.data.caveats || []).length ? html`
