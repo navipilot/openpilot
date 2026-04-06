@@ -4778,6 +4778,44 @@ def setup(app):
         return jsonify({"error": error}), 400
 
       save_checklist = json.loads(form_data.get("saveChecklist", "{}"))
+      selected_theme_sources = json.loads(form_data.get("selectedThemeSources", "{}"))
+
+      theme_param_map = {
+        "colors": "ColorScheme",
+        "distance_icons": "DistanceIconPack",
+        "icons": "IconPack",
+        "sounds": "SoundPack",
+        "turn_signals": "SignalAnimation",
+        "steering_wheel": "WheelIcon",
+      }
+
+      def get_selected_theme_value(asset_type):
+        source = selected_theme_sources.get(asset_type)
+        if not isinstance(source, dict):
+          return None
+
+        source_type = str(source.get("type") or "").strip().lower()
+        source_path = str(source.get("path") or "").strip()
+        if not source_path:
+          return None
+
+        if source_type == "stock":
+          return "stock"
+        if source_type == "stock_none":
+          return "none"
+        if source_path == "__stock__":
+          return "stock"
+        if source_path == "__stock_none__":
+          return "none"
+        if asset_type == "steering_wheel":
+          return Path(source_path).stem
+        return source_path
+
+      for asset_type, param_key in theme_param_map.items():
+        if save_checklist.get(asset_type):
+          selected_value = get_selected_theme_value(asset_type)
+          if selected_value is not None:
+            params.put(param_key, selected_value)
 
       if save_checklist.get("colors") and temp_path is not None:
         asset_location = temp_path / "colors"
@@ -4850,6 +4888,13 @@ def setup(app):
       return stock_asset_path
 
     stock_fallbacks = {
+      "icons/button_home.png": STOCK_THEME_PATH.parents[2] / "selfdrive" / "assets" / "images" / "button_home.png",
+      "icons/button_settings.png": STOCK_THEME_PATH.parents[2] / "selfdrive" / "assets" / "images" / "button_settings.png",
+      "sounds/disengage.wav": STOCK_THEME_PATH.parents[2] / "selfdrive" / "assets" / "sounds" / "disengage.wav",
+      "sounds/engage.wav": STOCK_THEME_PATH.parents[2] / "selfdrive" / "assets" / "sounds" / "engage.wav",
+      "sounds/prompt.wav": STOCK_THEME_PATH.parents[2] / "selfdrive" / "assets" / "sounds" / "prompt.wav",
+      # Stock openpilot has no dedicated startup clip; runtime falls back to engage.
+      "sounds/startup.wav": STOCK_THEME_PATH.parents[2] / "selfdrive" / "assets" / "sounds" / "engage.wav",
       "steering_wheel/wheel.png": STOCK_THEME_PATH.parents[2] / "selfdrive" / "assets" / "icons" / "chffr_wheel.png",
     }
 
@@ -5116,6 +5161,13 @@ def setup(app):
               "path": f"icons/{filename}"
             }
             break
+    elif theme_type == "stock" or theme_path == "__stock__":
+      for filename, response_key in [("button_home.png", "homeButton"), ("button_settings.png", "settingsButton")]:
+        if _resolve_stock_theme_asset_path(f"icons/{filename}").exists():
+          response_data["images"][response_key] = {
+            "filename": filename,
+            "path": f"icons/{filename}",
+          }
 
     distance_dir = theme_dir / "distance_icons"
     if distance_dir.exists():
@@ -5175,6 +5227,13 @@ def setup(app):
       for name in ["engage", "disengage", "startup", "prompt"]:
         file_path = sounds_dir / f"{name}.wav"
         if file_path.exists():
+          response_data["sounds"][name] = {
+            "filename": f"{name}.wav",
+            "path": f"sounds/{name}.wav"
+          }
+    elif theme_type == "stock" or theme_path == "__stock__":
+      for name in ["engage", "disengage", "startup", "prompt"]:
+        if _resolve_stock_theme_asset_path(f"sounds/{name}.wav").exists():
           response_data["sounds"][name] = {
             "filename": f"{name}.wav",
             "path": f"sounds/{name}.wav"

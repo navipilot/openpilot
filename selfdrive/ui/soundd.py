@@ -101,11 +101,31 @@ class Soundd:
     self.auto_volume = 0
 
     self.previous_sound_pack = None
+    self.previous_sound_source_signature = None
 
     self.error_log = ERROR_LOGS_PATH / "error.txt"
     self.random_events_directory = RANDOM_EVENTS_PATH / "sounds"
 
     self.update_starpilot_sounds()
+
+  def get_sound_source_signature(self):
+    try:
+      resolved_path = self.sound_directory.resolve()
+    except OSError:
+      resolved_path = self.sound_directory
+
+    sound_files = ()
+    try:
+      if self.sound_directory.exists():
+        sound_files = tuple(sorted(
+          (entry.name, entry.stat().st_mtime_ns)
+          for entry in self.sound_directory.iterdir()
+          if entry.is_file()
+        ))
+    except OSError:
+      sound_files = ()
+
+    return str(resolved_path), sound_files
 
   def load_sounds(self):
     self.loaded_sounds: dict[int, np.ndarray] = {}
@@ -268,6 +288,8 @@ class Soundd:
           self.starpilot_toggles = starpilot_toggles
 
           stream = self.update_starpilot_sounds(sd, stream)
+        elif rk.frame % 5 == 0:
+          stream = self.update_starpilot_sounds(sd, stream)
 
   def update_starpilot_sounds(self, sd=None, stream=None):
     self.volume_map = {
@@ -295,10 +317,15 @@ class Soundd:
     else:
       self.sound_directory = Path(BASEDIR) / "selfdrive" / "assets" / "sounds"
 
-    if self.starpilot_toggles.sound_pack != self.previous_sound_pack:
+    sound_source_signature = self.get_sound_source_signature()
+    should_reload = self.starpilot_toggles.sound_pack != self.previous_sound_pack
+    should_reload |= sound_source_signature != self.previous_sound_source_signature
+
+    if should_reload:
       self.load_sounds()
 
       self.previous_sound_pack = self.starpilot_toggles.sound_pack
+      self.previous_sound_source_signature = sound_source_signature
 
       if stream is not None:
         stream.close()

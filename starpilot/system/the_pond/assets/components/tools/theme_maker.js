@@ -42,6 +42,15 @@ const BUILTIN_THEME_OPTIONS = {
   turn_signals: { name: "None (Stock)", path: "__stock_none__", type: "stock_none", builtin: true },
 };
 
+const PARAM_KEY_BY_ASSET_TYPE = {
+  colors: "ColorScheme",
+  distance_icons: "DistanceIconPack",
+  icons: "IconPack",
+  sounds: "SoundPack",
+  turn_signals: "SignalAnimation",
+  steering_wheel: "WheelIcon",
+};
+
 const fileStore = {
   images: { distanceIcons: {} },
   sounds: {},
@@ -107,6 +116,14 @@ const state = reactive({
   themeToDelete: null,
   themes: [],
   activeTab: "colors",
+  selectedThemeSources: {
+    colors: null,
+    distance_icons: null,
+    icons: null,
+    sounds: null,
+    turn_signals: null,
+    steering_wheel: null,
+  },
   fetched: false,
 });
 
@@ -190,6 +207,7 @@ function handleDrop(e) {
     };
     state.sequentialImages = move(state.sequentialImages, draggedIndex, dropIndex);
     fileStore.sequentialFiles = move(fileStore.sequentialFiles, draggedIndex, dropIndex);
+    state.selectedThemeSources.turn_signals = null;
   }
 
   draggedIndex = -1;
@@ -212,6 +230,20 @@ function handleDragEnd(e) {
 
 const clearAsset = (type, key, subkey = null) => {
   state.themeSubmitted = false;
+  const assetType = key === "turnSignal" || key === "turnSignalBlindspot"
+    ? "turn_signals"
+    : key === "distanceIcons"
+      ? "distance_icons"
+      : key === "homeButton" || key === "settingsButton"
+        ? "icons"
+        : key === "steeringWheel"
+          ? "steering_wheel"
+          : type === "audio"
+            ? "sounds"
+            : null;
+  if (assetType) {
+    state.selectedThemeSources[assetType] = null;
+  }
   if (key === "turnSignal") {
     if (state.turnSignalType === "Sequential") {
       fileStore.sequentialFiles = [];
@@ -243,6 +275,7 @@ const onClearClick = (e, type, key, subkey = null) => {
 };
 
 const clearAssetType = (assetType) => {
+  state.selectedThemeSources[assetType] = null;
   if (assetType === "colors") {
     state.colors = { ...defaultColors };
   }
@@ -526,6 +559,20 @@ export function ThemeMaker() {
     }
 
     state.themeSubmitted = false;
+    const assetType = key === "turnSignal" || key === "turnSignalBlindspot"
+      ? "turn_signals"
+      : key === "distanceIcons"
+        ? "distance_icons"
+        : key === "homeButton" || key === "settingsButton"
+          ? "icons"
+          : key === "steeringWheel"
+            ? "steering_wheel"
+            : type === "audio"
+              ? "sounds"
+              : null;
+    if (assetType) {
+      state.selectedThemeSources[assetType] = null;
+    }
 
     if (key === "turnSignal" && state.turnSignalType === "Sequential") {
       fileStore.sequentialFiles.push(...files);
@@ -555,6 +602,7 @@ export function ThemeMaker() {
       alpha: 255,
     };
     state.themeSubmitted = false;
+    state.selectedThemeSources.colors = null;
   };
 
   const validateTurnSignalLength = (e) => {
@@ -562,21 +610,30 @@ export function ThemeMaker() {
     const clampedValue = isNaN(value) ? 25 : Math.max(25, Math.min(1000, value));
     state.turnSignalLength = clampedValue;
     e.target.value = clampedValue;
+    state.selectedThemeSources.turn_signals = null;
   };
 
   const toggleTurnSignalType = (type) => {
     state.turnSignalType = type;
     state.themeSubmitted = false;
+    state.selectedThemeSources.turn_signals = null;
     state.sequentialImages = [];
     fileStore.sequentialFiles = [];
     fileStore.images.turnSignal = undefined;
     state.imageFileNames.turnSignal = "";
   };
 
+  const setTurnSignalStyle = (style) => {
+    state.turnSignalStyle = style;
+    state.themeSubmitted = false;
+    state.selectedThemeSources.turn_signals = null;
+  };
+
   const getFormData = () => {
     const formData = new FormData();
     formData.append("themeName", state.themeName);
     formData.append("saveChecklist", JSON.stringify(state.saveChecklist));
+    formData.append("selectedThemeSources", JSON.stringify(state.selectedThemeSources));
 
     if (state.discordUsername && state.discordUsername.trim()) {
       formData.append("discordUsername", state.discordUsername.trim());
@@ -644,6 +701,48 @@ export function ThemeMaker() {
       showSnackbar(`An error occurred: ${errorMessage} (${e.message})`, "error");
       return { ok: false };
     }
+  };
+
+  const persistThemeSelection = async (theme, assetType) => {
+    const paramKey = PARAM_KEY_BY_ASSET_TYPE[assetType];
+    if (!paramKey) {
+      return true;
+    }
+
+    let value = theme?.path || "";
+    if (theme?.type === "stock") {
+      value = "stock";
+    } else if (theme?.type === "stock_none") {
+      value = "none";
+    } else if (assetType === "steering_wheel" && value) {
+      value = value.replace(/\.[^.]+$/, "");
+    }
+
+    const customThemesResult = await performApiAction(
+      "/api/params",
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "CustomThemes", value: "true" }),
+      },
+      "",
+      "Failed to enable custom themes."
+    );
+    if (!customThemesResult.ok) {
+      return false;
+    }
+
+    const result = await performApiAction(
+      "/api/params",
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: paramKey, value }),
+      },
+      "",
+      `Failed to update ${assetType.replace("_", " ")}.`
+    );
+    return result.ok;
   };
 
   const applyTheme = async () => {
@@ -996,6 +1095,11 @@ export function ThemeMaker() {
         }
       }
 
+      state.selectedThemeSources[assetType] = {
+        path: theme.path,
+        type: theme.type,
+      };
+
       showSnackbar(`Loaded ${assetType.replace("_", " ")} from "${theme.name}"!`);
     } catch (err) {
       console.error("Failed to load theme asset:", err);
@@ -1013,10 +1117,17 @@ export function ThemeMaker() {
     state.turnSignalStyle = "Traditional";
     state.imageFileNames.turnSignal = "None";
     state.imageFileNames.turnSignalBlindspot = "";
+    state.selectedThemeSources.turn_signals = {
+      path: "__stock_none__",
+      type: "stock_none",
+    };
     showSnackbar('Loaded stock turn signals.');
   };
 
   const loadSelectableThemeAsset = async (theme, assetType) => {
+    const persisted = await persistThemeSelection(theme, assetType);
+    if (!persisted) return;
+
     if (theme?.type === "stock_none" && assetType === "turn_signals") {
       loadBuiltinTurnSignals();
       return;
@@ -1225,9 +1336,9 @@ export function ThemeMaker() {
                   </label>
                   <div class="signal-type-toggle">
                     <button class="${() => `toggle-button ${state.turnSignalStyle === "Static" ? "active" : ""}`}"
-                      @click="${() => state.turnSignalStyle = "Static"}">Static</button>
+                      @click="${() => setTurnSignalStyle("Static")}">Static</button>
                     <button class="${() => `toggle-button ${state.turnSignalStyle === "Traditional" ? "active" : ""}`}"
-                      @click="${() => state.turnSignalStyle = "Traditional"}">Traditional</button>
+                      @click="${() => setTurnSignalStyle("Traditional")}">Traditional</button>
                   </div>
                   ${() => state.showTurnSignalHelp && html`<div class="turn-signal-help-text">
                       <p><strong>Static</strong> - The turn signal animation appears next to the current speed.</p>
