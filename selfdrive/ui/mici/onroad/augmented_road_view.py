@@ -2,6 +2,7 @@ import time
 import numpy as np
 import pyray as rl
 from cereal import messaging, car, log
+from opendbc.car import structs
 from msgq.visionipc import VisionStreamType
 from openpilot.common.constants import CV
 from openpilot.selfdrive.ui.ui_state import ui_state
@@ -32,6 +33,7 @@ CALIBRATED = log.LiveCalibrationData.Status.calibrated
 ROAD_CAM = VisionStreamType.VISION_STREAM_ROAD
 WIDE_CAM = VisionStreamType.VISION_STREAM_WIDE_ROAD
 DRIVER_CAM = VisionStreamType.VISION_STREAM_DRIVER
+GEAR_SHIFTER_REVERSE = structs.CarState.GearShifter.reverse
 DEFAULT_DEVICE_CAMERA = DEVICE_CAMERAS["tici", "ar0231"]
 
 CAMERA_VIEW_AUTO = 0
@@ -49,6 +51,7 @@ WIDE_CAM_MAX_SPEED = 10.0  # m/s
 ROAD_CAM_MIN_SPEED = 15.0  # m/s
 
 CAM_Y_OFFSET = 20
+REVERSE_DRIVER_CAMERA_DELAY_FRAMES = max(1, int(round(gui_app.target_fps * 0.5)))
 
 
 class BookmarkIcon(Widget):
@@ -367,6 +370,13 @@ class StandstillTimerOverlay:
     rl.draw_text_ex(font, text, shadow_pos, font_size, 0, rl.Color(0, 0, 0, 170))
     rl.draw_text_ex(font, text, text_pos, font_size, 0, color)
 
+  @staticmethod
+  def _fit_font_size(font: rl.Font, text: str, initial_size: int, max_width: float, minimum_size: int) -> int:
+    font_size = max(initial_size, minimum_size)
+    while font_size > minimum_size and rl.measure_text_ex(font, text, font_size, 0).x > max_width:
+      font_size -= 2
+    return font_size
+
   def render(self, rect: rl.Rectangle, in_reverse: bool) -> bool:
     self._update_state(in_reverse)
     if self._standstill_duration == 0:
@@ -374,8 +384,11 @@ class StandstillTimerOverlay:
 
     minute_text, second_text = self._format_duration_text(self._standstill_duration)
     duration_color = self._get_duration_color()
-    self._draw_centered_text(rect, minute_text, 210, self._font_bold, 176, duration_color)
-    self._draw_centered_text(rect, second_text, 290, self._font_medium, 66, rl.Color(255, 255, 255, 242))
+    max_text_width = max(rect.width - 36, 120)
+    minute_font_size = self._fit_font_size(self._font_bold, minute_text, int(rect.height * 0.34), max_text_width, 28)
+    second_font_size = self._fit_font_size(self._font_medium, second_text, int(rect.height * 0.15), max_text_width, 16)
+    self._draw_centered_text(rect, minute_text, rect.height * 0.42, self._font_bold, minute_font_size, duration_color)
+    self._draw_centered_text(rect, second_text, rect.height * 0.62, self._font_medium, second_font_size, rl.Color(255, 255, 255, 242))
     return True
 
 
@@ -395,6 +408,8 @@ class AugmentedRoadView(CameraView):
     self._cached_matrix: np.ndarray | None = None
     self._content_rect = rl.Rectangle()
     self._last_click_time = 0.0
+    self._reverse_driver_camera_frames = 0
+    self._reverse_driver_camera_active = False
 
     # Bookmark icon with swipe gesture
     self._bookmark_icon = BookmarkIcon(bookmark_callback)
@@ -420,6 +435,17 @@ class AugmentedRoadView(CameraView):
   @staticmethod
   def _controls_ready() -> bool:
     return ui_state.sm.recv_frame["selfdriveState"] >= ui_state.started_frame
+
+  def _update_reverse_driver_camera_state(self) -> bool:
+    should_force_driver = ui_state.started and ui_state.params.get_bool("DriverCamera") and self._is_in_reverse()
+    if not should_force_driver:
+      self._reverse_driver_camera_frames = 0
+      self._reverse_driver_camera_active = False
+      return False
+
+    self._reverse_driver_camera_frames = min(self._reverse_driver_camera_frames + 1, REVERSE_DRIVER_CAMERA_DELAY_FRAMES)
+    self._reverse_driver_camera_active = self._reverse_driver_camera_frames >= REVERSE_DRIVER_CAMERA_DELAY_FRAMES
+    return self._reverse_driver_camera_active
 
   def is_swiping_left(self) -> bool:
     """Check if currently swiping left (for scroller to disable)."""
@@ -503,7 +529,7 @@ class AugmentedRoadView(CameraView):
     )
     self._driver_state_renderer.set_should_draw(should_draw_dmoji)
     self._driver_state_renderer.set_position(self._rect.x + 16, self._rect.y + 10)
-    if not in_reverse:
+    if is_driver_stream or not in_reverse:
       self._driver_state_renderer.render()
 
     self._hud_renderer.set_can_draw_top_icons((not in_reverse) and (not is_driver_stream) and (alert_to_render is None))
@@ -529,7 +555,7 @@ class AugmentedRoadView(CameraView):
     # Use self._content_rect for positioning within camera bounds
     if not in_reverse and not is_driver_stream:
       self._confidence_ball.render(self.rect)
-    if not in_reverse:
+    if is_driver_stream or not in_reverse:
       self._draw_border()
 
     self._bookmark_icon.render(self.rect)
@@ -557,21 +583,33 @@ class AugmentedRoadView(CameraView):
 
   @staticmethod
   def _is_in_reverse() -> bool:
+    if ui_state.sm.recv_frame["carState"] < ui_state.started_frame:
+      return False
+
     try:
       gear = ui_state.sm["carState"].gearShifter
     except Exception:
       return False
 
+    if gear == GEAR_SHIFTER_REVERSE:
+      return True
+
     reverse_enum = getattr(car.CarState.GearShifter, "reverse", None)
     if reverse_enum is not None and gear == reverse_enum:
       return True
 
-    return str(gear).lower().endswith("reverse")
+    return str(gear).split(".")[-1].lower() == "reverse"
 
   def is_in_reverse(self) -> bool:
     return self._is_in_reverse()
 
   def _switch_stream_if_needed(self, sm):
+    if self._update_reverse_driver_camera_state():
+      target = DRIVER_CAM
+      if self.stream_type != target:
+        self.switch_stream(target)
+      return
+
     camera_view = ui_state.params.get_int("CameraView", return_default=True, default=CAMERA_VIEW_WIDE)
     if camera_view not in (CAMERA_VIEW_AUTO, CAMERA_VIEW_DRIVER, CAMERA_VIEW_STANDARD, CAMERA_VIEW_WIDE):
       camera_view = CAMERA_VIEW_WIDE

@@ -64,6 +64,14 @@ runtime_artifacts=(
   "msgq/ipc_pyx.so"
   "msgq/visionipc/visionipc_pyx.so"
   "common/transformations/transformations.so"
+  "selfdrive/pandad/pandad_api_impl.so"
+  "selfdrive/pandad/pandad_api_impl.o"
+  "selfdrive/pandad/can_list_to_can_capnp.o"
+  "selfdrive/pandad/libcan_list_to_can_capnp.a"
+  "selfdrive/controls/lib/lateral_mpc_lib/c_generated_code/acados_ocp_solver_pyx.so"
+  "selfdrive/controls/lib/lateral_mpc_lib/c_generated_code/libacados_ocp_solver_lat.dylib"
+  "selfdrive/controls/lib/longitudinal_mpc_lib/c_generated_code/acados_ocp_solver_pyx.so"
+  "selfdrive/controls/lib/longitudinal_mpc_lib/c_generated_code/libacados_ocp_solver_long.dylib"
 )
 
 collect_tracked_dirty() {
@@ -181,16 +189,27 @@ prepare_msgq_host_artifacts() {
   fi
 }
 
+prepare_pandad_host_artifacts() {
+  remove_if_elf "selfdrive/pandad/pandad_api_impl.so"
+  remove_if_elf "selfdrive/pandad/pandad_api_impl.o"
+  remove_if_elf "selfdrive/pandad/can_list_to_can_capnp.o"
+
+  # Host builds always regenerate this small archive locally. Device-built
+  # variants are not reusable across platforms and can poison the link step.
+  rm -f "${ROOT_DIR}/selfdrive/pandad/libcan_list_to_can_capnp.a"
+}
+
 python_ui_runtime_ok() {
   "${PY_BIN}" - <<'PY'
 import pyray  # noqa: F401
 import openpilot.common.params_pyx  # noqa: F401
 import openpilot.common.transformations.transformations  # noqa: F401
+import openpilot.selfdrive.pandad.pandad_api_impl  # noqa: F401
 import msgq.ipc_pyx  # noqa: F401
 import msgq.visionipc.visionipc_pyx  # noqa: F401
+import openpilot.selfdrive.controls.lib.lateral_mpc_lib.c_generated_code.acados_ocp_solver_pyx  # noqa: F401
+import openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.c_generated_code.acados_ocp_solver_pyx  # noqa: F401
 PY
-  [[ -f "${ROOT_DIR}/selfdrive/controls/lib/lateral_mpc_lib/c_generated_code/acados_ocp_solver_pyx.so" ]] &&
-  [[ -f "${ROOT_DIR}/selfdrive/controls/lib/longitudinal_mpc_lib/c_generated_code/acados_ocp_solver_pyx.so" ]]
 }
 
 sync_deps() {
@@ -253,17 +272,21 @@ if ! python_ui_runtime_ok >/dev/null 2>&1; then
   sync_raylib
   prepare_common_host_artifacts
   prepare_msgq_host_artifacts
+  prepare_pandad_host_artifacts
   remove_if_elf "common/params_pyx.so"
   remove_if_elf "common/transformations/transformations.so"
   remove_if_elf "msgq/ipc_pyx.so"
   remove_if_elf "msgq/visionipc/visionipc_pyx.so"
+  remove_if_elf "selfdrive/controls/lib/lateral_mpc_lib/c_generated_code/acados_ocp_solver_pyx.so"
+  remove_if_elf "selfdrive/controls/lib/longitudinal_mpc_lib/c_generated_code/acados_ocp_solver_pyx.so"
 
   run_scons "${jobs}" common/params_pyx.so common/transformations/transformations.so
+  # Building the Cython module pulls in the platform-specific acados solver
+  # library via SCons dependencies, so the host path does not need to name the
+  # solver shared library extension explicitly.
   run_scons "${jobs}" \
     selfdrive/controls/lib/lateral_mpc_lib/c_generated_code/acados_ocp_solver_pyx.so \
-    selfdrive/controls/lib/lateral_mpc_lib/c_generated_code/libacados_ocp_solver_lat.so \
-    selfdrive/controls/lib/longitudinal_mpc_lib/c_generated_code/acados_ocp_solver_pyx.so \
-    selfdrive/controls/lib/longitudinal_mpc_lib/c_generated_code/libacados_ocp_solver_long.so
+    selfdrive/controls/lib/longitudinal_mpc_lib/c_generated_code/acados_ocp_solver_pyx.so
   (
     cd "${ROOT_DIR}/msgq_repo"
     local_scons_bin="${ROOT_DIR}/.venv/bin/scons"

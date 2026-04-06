@@ -6,7 +6,6 @@ from openpilot.selfdrive.ui.mici.layouts.home import MiciHomeLayout
 from openpilot.selfdrive.ui.mici.layouts.settings.settings import SettingsLayout
 from openpilot.selfdrive.ui.mici.layouts.offroad_alerts import MiciOffroadAlerts
 from openpilot.selfdrive.ui.mici.onroad.augmented_road_view import AugmentedRoadView
-from openpilot.selfdrive.ui.mici.onroad.driver_camera_dialog import DriverCameraDialog
 from openpilot.selfdrive.ui.ui_state import device, ui_state
 from openpilot.selfdrive.ui.mici.layouts.onboarding import OnboardingWindow
 from openpilot.system.ui.widgets import Widget
@@ -15,7 +14,6 @@ from openpilot.system.ui.lib.application import gui_app
 
 
 ONROAD_DELAY = 2.5  # seconds
-REVERSE_DRIVER_CAMERA_DELAY = 0.5  # seconds
 
 
 class MainState(IntEnum):
@@ -33,8 +31,6 @@ class MiciMainLayout(Widget):
     self._prev_onroad = False
     self._prev_standstill = False
     self._onroad_time_delay: float | None = None
-    self._reverse_started_time: float | None = None
-    self._reverse_driver_camera: DriverCameraDialog | None = None
     self._setup = False
 
     # Initialize widgets
@@ -65,7 +61,6 @@ class MiciMainLayout(Widget):
 
     # Set callbacks
     self._setup_callbacks()
-    gui_app.set_modal_overlay_tick(self._modal_overlay_tick)
 
     # Skip onboarding on desktop; keep normal flow on device.
     self._onboarding_window = None
@@ -88,8 +83,6 @@ class MiciMainLayout(Widget):
     # Initial show event
     if self._current_mode is None:
       self._set_mode(MainState.MAIN)
-
-    self._update_reverse_driver_camera()
 
     if not self._setup:
       if self._alerts_layout.active_alerts() > 0:
@@ -115,8 +108,6 @@ class MiciMainLayout(Widget):
       self._current_mode = mode
 
   def _handle_transitions(self):
-    self._update_reverse_driver_camera()
-
     if ui_state.started != self._prev_onroad:
       self._prev_onroad = ui_state.started
 
@@ -159,38 +150,3 @@ class MiciMainLayout(Widget):
     user_bookmark = messaging.new_message('bookmarkButton')
     user_bookmark.valid = True
     self._pm.send('bookmarkButton', user_bookmark)
-
-  def _modal_overlay_tick(self):
-    self._update_reverse_driver_camera()
-
-  def _update_reverse_driver_camera(self):
-    current_overlay = gui_app._modal_overlay.overlay
-    reverse_overlay = self._reverse_driver_camera
-    should_show = ui_state.started and ui_state.params.get_bool("DriverCamera") and self._onroad_layout.is_in_reverse()
-
-    if not should_show:
-      self._reverse_started_time = None
-      if current_overlay is reverse_overlay:
-        gui_app.set_modal_overlay(None)
-      self._reverse_driver_camera = None
-      return
-
-    now = rl.get_time()
-    if self._reverse_started_time is None:
-      self._reverse_started_time = now
-      return
-
-    if now - self._reverse_started_time < REVERSE_DRIVER_CAMERA_DELAY:
-      return
-
-    if current_overlay is reverse_overlay:
-      return
-
-    if current_overlay is not None:
-      return
-
-    if reverse_overlay is None:
-      self._reverse_driver_camera = DriverCameraDialog(no_escape=True)
-      reverse_overlay = self._reverse_driver_camera
-
-    gui_app.set_modal_overlay(reverse_overlay)
