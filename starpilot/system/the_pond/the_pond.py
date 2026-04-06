@@ -3,6 +3,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 
 import importlib
+import math
+import numbers
 import os
 import sys
 import tarfile
@@ -377,6 +379,32 @@ def _normalize_default_value(value):
       return value.decode("utf-8")
     except Exception:
       return value
+  return value
+
+def _sanitize_json_value(value):
+  if value is None or isinstance(value, bool):
+    return value
+
+  if isinstance(value, dict):
+    return {key: _sanitize_json_value(inner_value) for key, inner_value in value.items()}
+
+  if isinstance(value, (list, tuple)):
+    return [_sanitize_json_value(item) for item in value]
+
+  if isinstance(value, bytes):
+    try:
+      return value.decode("utf-8")
+    except Exception:
+      return value.decode("utf-8", errors="replace")
+
+  if isinstance(value, numbers.Integral):
+    return int(value)
+
+  # Flask emits invalid JSON for NaN/inf, so normalize them before jsonify.
+  if isinstance(value, numbers.Real):
+    numeric_value = float(value)
+    return numeric_value if math.isfinite(numeric_value) else None
+
   return value
 
 def _build_default_params():
@@ -1791,13 +1819,15 @@ def _has_runtime_default_value(key, raw_value):
   if _is_blank_param_raw(raw_value):
     return False
 
-  if key in _RUNTIME_DEFAULT_ZERO_OK_KEYS:
-    return True
-
   try:
     if isinstance(raw_value, bytes):
       raw_value = raw_value.decode("utf-8", errors="replace")
-    return float(str(raw_value).strip()) != 0.0
+    numeric_value = float(str(raw_value).strip())
+    if not math.isfinite(numeric_value):
+      return False
+    if key in _RUNTIME_DEFAULT_ZERO_OK_KEYS:
+      return True
+    return numeric_value != 0.0
   except Exception:
     return True
 
@@ -1831,7 +1861,10 @@ def _get_runtime_default_param_overrides():
         for key, value in car_param_defaults.items():
           if key in overrides or value is None:
             continue
-          if key not in _RUNTIME_DEFAULT_ZERO_OK_KEYS and float(value) == 0.0:
+          numeric_value = float(value)
+          if not math.isfinite(numeric_value):
+            continue
+          if key not in _RUNTIME_DEFAULT_ZERO_OK_KEYS and numeric_value == 0.0:
             continue
           overrides[key] = value
     except Exception:
@@ -2354,9 +2387,9 @@ def _build_troubleshoot_section_payload(section_definition, value_types, default
     items.append({
       "key": key,
       "label": label,
-      "value": current_value,
-      "defaultValue": default_value,
-      "learnedValue": learned_values.get(key),
+      "value": _sanitize_json_value(current_value),
+      "defaultValue": _sanitize_json_value(default_value),
+      "learnedValue": _sanitize_json_value(learned_values.get(key)),
     })
 
   return {
@@ -2407,12 +2440,12 @@ def _build_troubleshoot_payload():
     for section_definition in _TROUBLESHOOT_SECTION_DEFINITIONS
   ]
 
-  return {
+  return _sanitize_json_value({
     "vehicleStatus": _build_vehicle_fault_status(),
     "snapshot": snapshot_items,
     "sections": sections,
     "isOnroad": params.get_bool("IsOnroad"),
-  }
+  })
 
 def _reset_troubleshoot_section(section_id):
   section_definition = _TROUBLESHOOT_SECTION_BY_ID.get(str(section_id or "").strip())
@@ -3332,7 +3365,7 @@ def setup(app):
       except Exception:
         result[key] = None
 
-    return jsonify(result), 200
+    return jsonify(_sanitize_json_value(result)), 200
 
   @app.route("/api/params/defaults", methods=["GET"])
   def get_default_params():
@@ -3363,7 +3396,7 @@ def setup(app):
       except Exception:
         result[key] = None
 
-    return jsonify(result), 200
+    return jsonify(_sanitize_json_value(result)), 200
 
   @app.route("/api/troubleshoot", methods=["GET"])
   def get_troubleshoot_data():

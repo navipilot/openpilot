@@ -418,14 +418,26 @@ class StarPilotVariables:
     except (TypeError, ValueError):
       return
 
+    # Angle-control placeholder torque params can be NaN; never persist them.
+    if not math.isfinite(live_value):
+      if not math.isfinite(self.params.get_float(stock_key)):
+        self.params.remove(stock_key)
+      if not math.isfinite(self.params.get_float(key)):
+        self.params.remove(key)
+      return
+
     if math.isclose(live_value, 0.0, abs_tol=1e-6):
       return
 
     current_stock = self.params.get_float(stock_key)
+    if not math.isfinite(current_stock):
+      current_stock = 0.0
     if math.isclose(current_stock, live_value, abs_tol=1e-6):
       return
 
     current_value = self.params.get_float(key)
+    if not math.isfinite(current_value):
+      current_value = 0.0
     if math.isclose(current_value, current_stock, abs_tol=1e-6) or math.isclose(current_stock, 0.0, abs_tol=1e-6):
       self.params.put_float(key, live_value)
 
@@ -462,6 +474,8 @@ class StarPilotVariables:
     toggle.car_model = CP.carFingerprint
     toggle.disable_openpilot_long = self.get_value("DisableOpenpilotLongitudinal", condition=not alpha_longitudinal)
     friction = CP.lateralTuning.torque.friction
+    if not math.isfinite(friction):
+      friction = 0.0
     has_bsm = CP.enableBsm
     toggle.has_cc_long = toggle.car_make == "gm" and bool(CP.flags & GMFlags.CC_LONG.value)
     toggle.has_sascm = toggle.car_make == "gm" and bool(CP.flags & GMFlags.SASCM.value)
@@ -473,6 +487,8 @@ class StarPilotVariables:
     toggle.has_zss = toggle.car_make == "toyota" and bool(FPCP.flags & ToyotaStarPilotFlags.ZSS.value)
     is_angle_car = CP.steerControlType == car.CarParams.SteerControlType.angle
     latAccelFactor = CP.lateralTuning.torque.latAccelFactor
+    if not math.isfinite(latAccelFactor):
+      latAccelFactor = 0.0
     toggle.lkas_allowed_for_aol = toggle.car_make == "hyundai" and bool(CP.flags & HyundaiFlags.CANFD or CP.flags & HyundaiFlags.HAS_LDA_BUTTON)
     longitudinalActuatorDelay = CP.longitudinalActuatorDelay
     toggle.openpilot_longitudinal = CP.openpilotLongitudinalControl and not toggle.disable_openpilot_long
