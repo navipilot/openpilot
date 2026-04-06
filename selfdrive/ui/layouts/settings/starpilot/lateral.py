@@ -12,14 +12,15 @@ class StarPilotAdvancedLateralLayout(StarPilotPanel):
   def __init__(self):
     super().__init__()
     self.CATEGORIES = [
+      {"title": tr_noop("Advanced Lateral Tuning"), "type": "toggle", "get_state": lambda: self._params.get_bool("AdvancedLateralTune"), "set_state": lambda x: self._params.put_bool("AdvancedLateralTune", x), "icon": "toggle_icons/icon_advanced_lateral_tune.png", "color": "#597497"},
       {"title": tr_noop("Actuator Delay"), "type": "value", "get_value": lambda: f"{self._params.get_float('SteerDelay'):.2f}s", "on_click": lambda: self._show_float_selector("SteerDelay", 0.0, 0.5, 0.01, "s"), "icon": "toggle_icons/icon_advanced_lateral_tune.png", "color": "#597497"},
       {"title": tr_noop("Friction"), "type": "value", "get_value": lambda: f"{self._params.get_float('SteerFriction'):.3f}", "on_click": lambda: self._show_float_selector("SteerFriction", 0.0, 0.5, 0.005), "icon": "toggle_icons/icon_advanced_lateral_tune.png", "color": "#597497"},
       {"title": tr_noop("Kp Factor"), "type": "value", "get_value": lambda: f"{self._params.get_float('SteerKP'):.2f}", "on_click": lambda: self._show_float_selector("SteerKP", 0.5, 2.5, 0.01), "icon": "toggle_icons/icon_advanced_lateral_tune.png", "color": "#597497"},
       {"title": tr_noop("Lateral Accel"), "type": "value", "get_value": lambda: f"{self._params.get_float('SteerLatAccel'):.2f}", "on_click": lambda: self._show_float_selector("SteerLatAccel", 0.5, 5.0, 0.01), "icon": "toggle_icons/icon_advanced_lateral_tune.png", "color": "#597497"},
       {"title": tr_noop("Steer Ratio"), "type": "value", "get_value": lambda: f"{self._params.get_float('SteerRatio'):.2f}", "on_click": lambda: self._show_float_selector("SteerRatio", 5.0, 25.0, 0.01), "icon": "toggle_icons/icon_advanced_lateral_tune.png", "color": "#597497"},
-      {"title": tr_noop("Force Auto-Tune On"), "type": "toggle", "get_state": lambda: self._params.get_bool("ForceAutoTune"), "set_state": lambda x: self._params.put_bool("ForceAutoTune", x), "icon": "toggle_icons/icon_tuning.png", "color": "#597497"},
-      {"title": tr_noop("Force Auto-Tune Off"), "type": "toggle", "get_state": lambda: self._params.get_bool("ForceAutoTuneOff"), "set_state": lambda x: self._params.put_bool("ForceAutoTuneOff", x), "icon": "toggle_icons/icon_tuning.png", "color": "#597497"},
-      {"title": tr_noop("Force Torque Controller"), "type": "toggle", "get_state": lambda: self._params.get_bool("ForceTorqueController"), "set_state": lambda x: self._on_reboot_toggle("ForceTorqueController", x), "icon": "toggle_icons/icon_advanced_lateral_tune.png", "color": "#597497"},
+      {"title": tr_noop("Force Auto-Tune On"), "type": "toggle", "get_state": lambda: self._params.get_bool("ForceAutoTune"), "set_state": lambda x: self._params.put_bool("ForceAutoTune", x), "icon": "toggle_icons/icon_tuning.png", "color": "#597497", "visible": lambda: self._params.get_bool("AdvancedLateralTune")},
+      {"title": tr_noop("Force Auto-Tune Off"), "type": "toggle", "get_state": lambda: self._params.get_bool("ForceAutoTuneOff"), "set_state": lambda x: self._params.put_bool("ForceAutoTuneOff", x), "icon": "toggle_icons/icon_tuning.png", "color": "#597497", "visible": lambda: self._params.get_bool("AdvancedLateralTune")},
+      {"title": tr_noop("Force Torque Controller"), "type": "toggle", "get_state": lambda: self._params.get_bool("ForceTorqueController"), "set_state": lambda x: self._on_reboot_toggle("ForceTorqueController", x), "icon": "toggle_icons/icon_advanced_lateral_tune.png", "color": "#597497", "visible": lambda: self._params.get_bool("AdvancedLateralTune")},
     ]
     self._rebuild_grid()
 
@@ -42,8 +43,8 @@ class StarPilotAlwaysOnLateralLayout(StarPilotPanel):
     super().__init__()
     self.CATEGORIES = [
       {"title": tr_noop("Always On Lateral"), "type": "toggle", "get_state": lambda: self._params.get_bool("AlwaysOnLateral"), "set_state": lambda x: self._on_reboot_toggle("AlwaysOnLateral", x), "icon": "toggle_icons/icon_always_on_lateral.png", "color": "#597497"},
-      {"title": tr_noop("Enable With LKAS"), "type": "toggle", "get_state": lambda: self._params.get_bool("AlwaysOnLateralLKAS"), "set_state": lambda x: self._params.put_bool("AlwaysOnLateralLKAS", x), "icon": "toggle_icons/icon_always_on_lateral.png", "color": "#597497"},
-      {"title": tr_noop("Pause Below"), "type": "value", "get_value": lambda: f"{self._params.get_int('PauseAOLOnBrake')} mph", "on_click": lambda: self._show_speed_selector("PauseAOLOnBrake"), "icon": "toggle_icons/icon_always_on_lateral.png", "color": "#597497"},
+      {"title": tr_noop("Enable With LKAS"), "type": "toggle", "get_state": lambda: self._params.get_bool("AlwaysOnLateralLKAS"), "set_state": lambda x: self._params.put_bool("AlwaysOnLateralLKAS", x), "icon": "toggle_icons/icon_always_on_lateral.png", "color": "#597497", "visible": lambda: self._params.get_bool("AlwaysOnLateral")},
+      {"title": tr_noop("Pause Below"), "type": "value", "get_value": lambda: f"{self._params.get_int('PauseAOLOnBrake')} mph", "on_click": lambda: self._show_speed_selector("PauseAOLOnBrake"), "icon": "toggle_icons/icon_always_on_lateral.png", "color": "#597497", "visible": lambda: self._params.get_bool("AlwaysOnLateral")},
     ]
     self._rebuild_grid()
 
@@ -65,11 +66,11 @@ class StarPilotLaneChangesLayout(StarPilotPanel):
     super().__init__()
     self.CATEGORIES = [
       {"title": tr_noop("Lane Changes"), "type": "toggle", "get_state": lambda: self._params.get_bool("LaneChanges"), "set_state": lambda s: self._params.put_bool("LaneChanges", s), "icon": "toggle_icons/icon_lane.png", "color": "#597497"},
-      {"title": tr_noop("Automatic Lane Changes"), "type": "toggle", "get_state": lambda: self._params.get_bool("NudgelessLaneChange"), "set_state": lambda s: self._params.put_bool("NudgelessLaneChange", s), "icon": "toggle_icons/icon_lane.png", "color": "#597497"},
-      {"title": tr_noop("Lane Change Delay"), "type": "value", "get_value": lambda: f"{self._params.get_float('LaneChangeTime'):.1f}s", "on_click": lambda: self._show_float_selector("LaneChangeTime", 0.0, 5.0, 0.1, "s"), "icon": "toggle_icons/icon_lane.png", "color": "#597497"},
-      {"title": tr_noop("Min Lane Change Speed"), "type": "value", "get_value": lambda: f"{self._params.get_int('MinimumLaneChangeSpeed')} mph", "on_click": lambda: self._show_speed_selector("MinimumLaneChangeSpeed"), "icon": "toggle_icons/icon_lane.png", "color": "#597497"},
-      {"title": tr_noop("Minimum Lane Width"), "type": "value", "get_value": lambda: f"{self._params.get_float('LaneDetectionWidth'):.1f} ft", "on_click": lambda: self._show_float_selector("LaneDetectionWidth", 0.0, 15.0, 0.1, " ft"), "icon": "toggle_icons/icon_lane.png", "color": "#597497"},
-      {"title": tr_noop("One Lane Change Per Signal"), "type": "toggle", "get_state": lambda: self._params.get_bool("OneLaneChange"), "set_state": lambda s: self._params.put_bool("OneLaneChange", s), "icon": "toggle_icons/icon_lane.png", "color": "#597497"},
+      {"title": tr_noop("Automatic Lane Changes"), "type": "toggle", "get_state": lambda: self._params.get_bool("NudgelessLaneChange"), "set_state": lambda s: self._params.put_bool("NudgelessLaneChange", s), "icon": "toggle_icons/icon_lane.png", "color": "#597497", "visible": lambda: self._params.get_bool("LaneChanges")},
+      {"title": tr_noop("Lane Change Delay"), "type": "value", "get_value": lambda: f"{self._params.get_float('LaneChangeTime'):.1f}s", "on_click": lambda: self._show_float_selector("LaneChangeTime", 0.0, 5.0, 0.1, "s"), "icon": "toggle_icons/icon_lane.png", "color": "#597497", "visible": lambda: self._params.get_bool("LaneChanges")},
+      {"title": tr_noop("Min Lane Change Speed"), "type": "value", "get_value": lambda: f"{self._params.get_int('MinimumLaneChangeSpeed')} mph", "on_click": lambda: self._show_speed_selector("MinimumLaneChangeSpeed"), "icon": "toggle_icons/icon_lane.png", "color": "#597497", "visible": lambda: self._params.get_bool("LaneChanges")},
+      {"title": tr_noop("Minimum Lane Width"), "type": "value", "get_value": lambda: f"{self._params.get_float('LaneDetectionWidth'):.1f} ft", "on_click": lambda: self._show_float_selector("LaneDetectionWidth", 0.0, 15.0, 0.1, " ft"), "icon": "toggle_icons/icon_lane.png", "color": "#597497", "visible": lambda: self._params.get_bool("LaneChanges")},
+      {"title": tr_noop("One Lane Change Per Signal"), "type": "toggle", "get_state": lambda: self._params.get_bool("OneLaneChange"), "set_state": lambda s: self._params.put_bool("OneLaneChange", s), "icon": "toggle_icons/icon_lane.png", "color": "#597497", "visible": lambda: self._params.get_bool("LaneChanges")},
     ]
     self._rebuild_grid()
 
@@ -91,9 +92,10 @@ class StarPilotLateralTuneLayout(StarPilotPanel):
   def __init__(self):
     super().__init__()
     self.CATEGORIES = [
-      {"title": tr_noop("Force Turn Desires"), "type": "toggle", "get_state": lambda: self._params.get_bool("TurnDesires"), "set_state": lambda x: self._params.put_bool("TurnDesires", x), "icon": "toggle_icons/icon_lateral_tune.png", "color": "#597497"},
-      {"title": tr_noop("NNFF"), "type": "toggle", "get_state": lambda: self._params.get_bool("NNFF"), "set_state": lambda x: self._on_reboot_toggle("NNFF", x), "icon": "toggle_icons/icon_lateral_tune.png", "color": "#597497"},
-      {"title": tr_noop("NNFF Lite"), "type": "toggle", "get_state": lambda: self._params.get_bool("NNFFLite"), "set_state": lambda x: self._on_reboot_toggle("NNFFLite", x), "icon": "toggle_icons/icon_lateral_tune.png", "color": "#597497"},
+      {"title": tr_noop("Lateral Tuning"), "type": "toggle", "get_state": lambda: self._params.get_bool("LateralTune"), "set_state": lambda x: self._params.put_bool("LateralTune", x), "icon": "toggle_icons/icon_lateral_tune.png", "color": "#597497"},
+      {"title": tr_noop("Force Turn Desires"), "type": "toggle", "get_state": lambda: self._params.get_bool("TurnDesires"), "set_state": lambda x: self._params.put_bool("TurnDesires", x), "icon": "toggle_icons/icon_lateral_tune.png", "color": "#597497", "visible": lambda: self._params.get_bool("LateralTune")},
+      {"title": tr_noop("NNFF"), "type": "toggle", "get_state": lambda: self._params.get_bool("NNFF"), "set_state": lambda x: self._on_reboot_toggle("NNFF", x), "icon": "toggle_icons/icon_lateral_tune.png", "color": "#597497", "visible": lambda: self._params.get_bool("LateralTune")},
+      {"title": tr_noop("NNFF Lite"), "type": "toggle", "get_state": lambda: self._params.get_bool("NNFFLite"), "set_state": lambda x: self._on_reboot_toggle("NNFFLite", x), "icon": "toggle_icons/icon_lateral_tune.png", "color": "#597497", "visible": lambda: self._params.get_bool("LateralTune")},
     ]
     self._rebuild_grid()
 
@@ -107,7 +109,8 @@ class StarPilotLateralQOLLayout(StarPilotPanel):
   def __init__(self):
     super().__init__()
     self.CATEGORIES = [
-      {"title": tr_noop("Pause Steering Below"), "type": "value", "get_value": lambda: f"{self._params.get_int('PauseLateralSpeed')} mph", "on_click": lambda: self._show_speed_selector("PauseLateralSpeed"), "icon": "toggle_icons/icon_quality_of_life.png", "color": "#597497"}
+      {"title": tr_noop("Quality of Life"), "type": "toggle", "get_state": lambda: self._params.get_bool("QOLLateral"), "set_state": lambda x: self._params.put_bool("QOLLateral", x), "icon": "toggle_icons/icon_quality_of_life.png", "color": "#597497"},
+      {"title": tr_noop("Pause Steering Below"), "type": "value", "get_value": lambda: f"{self._params.get_int('PauseLateralSpeed')} mph", "on_click": lambda: self._show_speed_selector("PauseLateralSpeed"), "icon": "toggle_icons/icon_quality_of_life.png", "color": "#597497", "visible": lambda: self._params.get_bool("QOLLateral")}
     ]
     self._rebuild_grid()
 

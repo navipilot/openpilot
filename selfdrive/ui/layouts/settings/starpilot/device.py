@@ -130,11 +130,20 @@ class StarPilotScreenLayout(StarPilotPanel):
     super().__init__()
     self.CATEGORIES = [
       {
+        "title": tr_noop("Screen Settings"),
+        "type": "toggle",
+        "get_state": lambda: self._params.get_bool("ScreenManagement"),
+        "set_state": lambda s: self._params.put_bool("ScreenManagement", s),
+        "icon": "toggle_icons/icon_light.png",
+        "color": "#D43D8A",
+      },
+      {
         "title": tr_noop("Brightness (Offroad)"),
         "type": "value",
         "get_value": lambda: self._get_brightness("ScreenBrightness"),
         "on_click": lambda: self._show_brightness_selector("ScreenBrightness"),
         "color": "#D43D8A",
+        "visible": lambda: self._params.get_bool("ScreenManagement"),
       },
       {
         "title": tr_noop("Brightness (Onroad)"),
@@ -142,6 +151,7 @@ class StarPilotScreenLayout(StarPilotPanel):
         "get_value": lambda: self._get_brightness("ScreenBrightnessOnroad"),
         "on_click": lambda: self._show_brightness_selector("ScreenBrightnessOnroad"),
         "color": "#D43D8A",
+        "visible": lambda: self._params.get_bool("ScreenManagement"),
       },
       {
         "title": tr_noop("Timeout (Offroad)"),
@@ -149,6 +159,7 @@ class StarPilotScreenLayout(StarPilotPanel):
         "get_value": lambda: f"{self._params.get_int('ScreenTimeout')}s",
         "on_click": lambda: self._show_timeout_selector("ScreenTimeout"),
         "color": "#D43D8A",
+        "visible": lambda: self._params.get_bool("ScreenManagement"),
       },
       {
         "title": tr_noop("Timeout (Onroad)"),
@@ -156,6 +167,7 @@ class StarPilotScreenLayout(StarPilotPanel):
         "get_value": lambda: f"{self._params.get_int('ScreenTimeoutOnroad')}s",
         "on_click": lambda: self._show_timeout_selector("ScreenTimeoutOnroad"),
         "color": "#D43D8A",
+        "visible": lambda: self._params.get_bool("ScreenManagement"),
       },
       {
         "title": tr_noop("Standby Mode"),
@@ -163,6 +175,7 @@ class StarPilotScreenLayout(StarPilotPanel):
         "get_state": lambda: self._params.get_bool("StandbyMode"),
         "set_state": lambda s: self._params.put_bool("StandbyMode", s),
         "color": "#D43D8A",
+        "visible": lambda: self._params.get_bool("ScreenManagement"),
       },
     ]
     self._rebuild_grid()
@@ -211,11 +224,20 @@ class StarPilotDeviceManagementLayout(StarPilotPanel):
     super().__init__()
     self.CATEGORIES = [
       {
+        "title": tr_noop("Device Settings"),
+        "type": "toggle",
+        "get_state": lambda: self._params.get_bool("DeviceManagement"),
+        "set_state": lambda s: self._params.put_bool("DeviceManagement", s),
+        "icon": "toggle_icons/icon_device.png",
+        "color": "#D43D8A",
+      },
+      {
         "title": tr_noop("Low-Voltage Cutoff"),
         "type": "value",
         "get_value": lambda: f"{self._params.get_float('LowVoltageShutdown'):.1f}V",
         "on_click": self._show_voltage_selector,
         "color": "#D43D8A",
+        "visible": lambda: self._params.get_bool("DeviceManagement"),
       },
       {
         "title": tr_noop("Raise Temp Limits"),
@@ -223,6 +245,7 @@ class StarPilotDeviceManagementLayout(StarPilotPanel):
         "get_state": lambda: self._params.get_bool("IncreaseThermalLimits"),
         "set_state": lambda s: self._params.put_bool("IncreaseThermalLimits", s),
         "color": "#D43D8A",
+        "visible": lambda: self._params.get_bool("DeviceManagement"),
       },
       {
         "title": tr_noop("Use Konik Server"),
@@ -230,6 +253,7 @@ class StarPilotDeviceManagementLayout(StarPilotPanel):
         "get_state": lambda: self._get_konik_state(),
         "set_state": lambda s: self._on_konik_toggle(s),
         "color": "#D43D8A",
+        "visible": lambda: self._params.get_bool("DeviceManagement"),
       },
     ]
     self._rebuild_grid()

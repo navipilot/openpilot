@@ -1,4 +1,5 @@
 import pyray as rl
+import time
 from msgq.visionipc import VisionStreamType
 from openpilot.common.params import Params
 from openpilot.selfdrive.ui import UI_BORDER_SIZE
@@ -11,7 +12,7 @@ from openpilot.selfdrive.ui.onroad.starpilot.slc_speed_limit import (
   SET_SPEED_WIDTH_IMP, SET_SPEED_WIDTH_MET, SET_SPEED_HEIGHT, SIGN_MARGIN,
 )
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
-from openpilot.system.ui.lib.application import MousePos, gui_app
+from openpilot.system.ui.lib.application import MousePos, gui_app, FontWeight
 
 AOL_COLOR = rl.Color(10, 186, 181, 255)
 
@@ -22,6 +23,9 @@ class StarPilotOnroadView(AugmentedRoadView):
     self._params = Params()
 
     self._personality_button = PersonalityButton()
+    self._font_bold = gui_app.font(FontWeight.BOLD)
+    self._font_medium = gui_app.font(FontWeight.MEDIUM)
+    self._standstill_started_at = 0.0
 
   def _render(self, rect: rl.Rectangle):
     super()._render(rect)
@@ -48,6 +52,8 @@ class StarPilotOnroadView(AugmentedRoadView):
   def _render_overlays(self):
     self._position_personality_button()
     self._personality_button.render()
+    self._render_road_name()
+    self._render_standstill_timer()
 
   def _render_path_features(self, rect: rl.Rectangle):
     """Render path-related features (adjacent paths, blind spot, path edges)."""
@@ -89,6 +95,82 @@ class StarPilotOnroadView(AugmentedRoadView):
       x = dm.position_x + BTN_SIZE
 
     self._personality_button.set_position(x, y)
+
+  def _render_road_name(self):
+    if not self._params.get_bool("RoadNameUI"):
+      return
+    if not ui_state.sm.valid.get("mapdOut", False):
+      return
+
+    road_name = getattr(ui_state.sm["mapdOut"], "roadName", "")
+    if not road_name:
+      return
+
+    text_size = rl.measure_text_ex(self._font_bold, road_name, 52, 0)
+    pad_x, pad_y = 28, 18
+    box_w = int(text_size.x + pad_x * 2)
+    box_h = int(text_size.y + pad_y * 2)
+    x = int((gui_app.width - box_w) / 2)
+    y = int(gui_app.height - box_h - 22)
+
+    rect = rl.Rectangle(x, y, box_w, box_h)
+    rl.draw_rectangle_rounded(rect, 0.35, 10, rl.Color(0, 0, 0, 166))
+    rl.draw_rectangle_rounded_lines_ex(rect, 0.35, 10, 3, rl.Color(255, 255, 255, 50))
+    rl.draw_text_ex(
+      self._font_bold,
+      road_name,
+      rl.Vector2(x + (box_w - text_size.x) / 2, y + (box_h - text_size.y) / 2),
+      52,
+      0,
+      rl.WHITE,
+    )
+
+  def _render_standstill_timer(self):
+    if not self._params.get_bool("stopped_timer"):
+      self._standstill_started_at = 0.0
+      return
+    if not ui_state.sm.valid.get("carState", False):
+      return
+
+    car_state = ui_state.sm["carState"]
+    if getattr(car_state, "standstill", False):
+      if self._standstill_started_at == 0.0:
+        self._standstill_started_at = time.monotonic()
+    else:
+      self._standstill_started_at = 0.0
+      return
+
+    if self._standstill_started_at == 0.0:
+      return
+
+    duration = int(time.monotonic() - self._standstill_started_at)
+    if duration < 60:
+      return
+
+    minutes = duration // 60
+    seconds = duration % 60
+    minute_text = f"{minutes} minute{'s' if minutes != 1 else ''}"
+    second_text = f"{seconds} second{'s' if seconds != 1 else ''}"
+    minute_size = rl.measure_text_ex(self._font_bold, minute_text, 176, 0)
+    second_size = rl.measure_text_ex(self._font_medium, second_text, 66, 0)
+
+    x = gui_app.width / 2
+    rl.draw_text_ex(
+      self._font_bold,
+      minute_text,
+      rl.Vector2(x - minute_size.x / 2, 210 - minute_size.y / 2),
+      176,
+      0,
+      rl.Color(255, 255, 255, 255),
+    )
+    rl.draw_text_ex(
+      self._font_medium,
+      second_text,
+      rl.Vector2(x - second_size.x / 2, 290 - second_size.y / 2),
+      66,
+      0,
+      rl.Color(255, 255, 255, 255),
+    )
 
   def _draw_border(self, rect: rl.Rectangle):
     rl.draw_rectangle_lines_ex(rect, UI_BORDER_SIZE, rl.BLACK)

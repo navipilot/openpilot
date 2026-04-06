@@ -62,11 +62,20 @@ class StarPilotAdvancedLongitudinalLayout(StarPilotPanel):
     super().__init__()
     self.CATEGORIES = [
       {
+        "title": tr_noop("Advanced Longitudinal Tuning"),
+        "type": "toggle",
+        "get_state": lambda: self._params.get_bool("AdvancedLongitudinalTune"),
+        "set_state": lambda s: self._params.put_bool("AdvancedLongitudinalTune", s),
+        "icon": "toggle_icons/icon_advanced_longitudinal_tune.png",
+        "color": "#597497",
+      },
+      {
         "title": tr_noop("EV Tuning"),
         "type": "toggle",
         "get_state": lambda: self._params.get_bool("EVTuning"),
         "set_state": lambda s: self._params.put_bool("EVTuning", s),
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("AdvancedLongitudinalTune"),
       },
       {
         "title": tr_noop("Truck Tuning"),
@@ -74,6 +83,7 @@ class StarPilotAdvancedLongitudinalLayout(StarPilotPanel):
         "get_state": lambda: self._params.get_bool("TruckTuning"),
         "set_state": lambda s: self._params.put_bool("TruckTuning", s),
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("AdvancedLongitudinalTune"),
       },
       {
         "title": tr_noop("Actuator Delay"),
@@ -81,6 +91,7 @@ class StarPilotAdvancedLongitudinalLayout(StarPilotPanel):
         "get_value": lambda: f"{self._params.get_float('LongitudinalActuatorDelay'):.2f}s",
         "on_click": lambda: self._show_float_selector("LongitudinalActuatorDelay", 0.0, 1.0, 0.01, "s"),
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("AdvancedLongitudinalTune"),
       },
       {
         "title": tr_noop("Max Acceleration"),
@@ -88,6 +99,7 @@ class StarPilotAdvancedLongitudinalLayout(StarPilotPanel):
         "get_value": lambda: f"{self._params.get_float('MaxDesiredAcceleration'):.1f}m/s²",
         "on_click": lambda: self._show_float_selector("MaxDesiredAcceleration", 0.1, 4.0, 0.1, "m/s²"),
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("AdvancedLongitudinalTune"),
       },
       {
         "title": tr_noop("Start Accel"),
@@ -95,6 +107,7 @@ class StarPilotAdvancedLongitudinalLayout(StarPilotPanel):
         "get_value": lambda: f"{self._params.get_float('StartAccel'):.2f}m/s²",
         "on_click": lambda: self._show_float_selector("StartAccel", 0.0, 4.0, 0.01, "m/s²"),
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("AdvancedLongitudinalTune"),
       },
       {
         "title": tr_noop("Stop Accel"),
@@ -102,6 +115,7 @@ class StarPilotAdvancedLongitudinalLayout(StarPilotPanel):
         "get_value": lambda: f"{self._params.get_float('StopAccel'):.2f}m/s²",
         "on_click": lambda: self._show_float_selector("StopAccel", -4.0, 0.0, 0.01, "m/s²"),
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("AdvancedLongitudinalTune"),
       },
       {
         "title": tr_noop("Stopping Rate"),
@@ -109,6 +123,7 @@ class StarPilotAdvancedLongitudinalLayout(StarPilotPanel):
         "get_value": lambda: f"{self._params.get_float('StoppingDecelRate'):.3f}m/s²",
         "on_click": lambda: self._show_float_selector("StoppingDecelRate", 0.001, 1.0, 0.001, "m/s²"),
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("AdvancedLongitudinalTune"),
       },
       {
         "title": tr_noop("VEgo Starting"),
@@ -116,6 +131,7 @@ class StarPilotAdvancedLongitudinalLayout(StarPilotPanel):
         "get_value": lambda: f"{self._params.get_float('VEgoStarting'):.2f}m/s",
         "on_click": lambda: self._show_float_selector("VEgoStarting", 0.01, 1.0, 0.01, "m/s"),
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("AdvancedLongitudinalTune"),
       },
       {
         "title": tr_noop("VEgo Stopping"),
@@ -123,6 +139,7 @@ class StarPilotAdvancedLongitudinalLayout(StarPilotPanel):
         "get_value": lambda: f"{self._params.get_float('VEgoStopping'):.2f}m/s",
         "on_click": lambda: self._show_float_selector("VEgoStopping", 0.01, 1.0, 0.01, "m/s"),
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("AdvancedLongitudinalTune"),
       },
     ]
     self._rebuild_grid()
@@ -141,7 +158,7 @@ class StarPilotConditionalExperimentalLayout(StarPilotPanel):
     super().__init__()
     self.CATEGORIES = [
       {
-        "title": tr_noop("Conditional Experimental"),
+        "title": tr_noop("Conditional Experimental Mode"),
         "type": "toggle",
         "get_state": lambda: self._params.get_bool("ConditionalExperimental"),
         "set_state": lambda s: self._params.put_bool("ConditionalExperimental", s),
@@ -149,11 +166,21 @@ class StarPilotConditionalExperimentalLayout(StarPilotPanel):
         "color": "#597497",
       },
       {
+        "title": tr_noop("Conditional Experimental"),
+        "type": "toggle",
+        "get_state": lambda: self._params.get_bool("ConditionalExperimental"),
+        "set_state": lambda s: self._params.put_bool("ConditionalExperimental", s),
+        "icon": "toggle_icons/icon_conditional.png",
+        "color": "#597497",
+        "visible": lambda: self._params.get_bool("ConditionalExperimental"),
+      },
+      {
         "title": tr_noop("Below Speed"),
         "type": "value",
         "get_value": lambda: f"{self._params.get_int('CESpeed')} mph",
         "on_click": lambda: self._show_speed_selector("CESpeed"),
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("ConditionalExperimental"),
       },
       {
         "title": tr_noop("Curves"),
@@ -161,6 +188,7 @@ class StarPilotConditionalExperimentalLayout(StarPilotPanel):
         "get_state": lambda: self._params.get_bool("CECurves"),
         "set_state": lambda s: self._params.put_bool("CECurves", s),
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("ConditionalExperimental"),
       },
       {
         "title": tr_noop("Curves Lead"),
@@ -176,6 +204,7 @@ class StarPilotConditionalExperimentalLayout(StarPilotPanel):
         "get_state": lambda: self._params.get_bool("CEStopLights"),
         "set_state": lambda s: self._params.put_bool("CEStopLights", s),
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("ConditionalExperimental"),
       },
       {
         "title": tr_noop("Lead Detected"),
@@ -183,6 +212,7 @@ class StarPilotConditionalExperimentalLayout(StarPilotPanel):
         "get_state": lambda: self._params.get_bool("CELead"),
         "set_state": lambda s: self._params.put_bool("CELead", s),
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("ConditionalExperimental"),
       },
       {
         "title": tr_noop("Slower Lead"),
@@ -190,6 +220,7 @@ class StarPilotConditionalExperimentalLayout(StarPilotPanel):
         "get_state": lambda: self._params.get_bool("CESlowerLead"),
         "set_state": lambda s: self._params.put_bool("CESlowerLead", s),
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("ConditionalExperimental") and self._params.get_bool("CELead"),
       },
       {
         "title": tr_noop("Stopped Lead"),
@@ -197,6 +228,7 @@ class StarPilotConditionalExperimentalLayout(StarPilotPanel):
         "get_state": lambda: self._params.get_bool("CEStoppedLead"),
         "set_state": lambda s: self._params.put_bool("CEStoppedLead", s),
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("ConditionalExperimental") and self._params.get_bool("CELead"),
       },
       {
         "title": tr_noop("Predicted Stop"),
@@ -204,6 +236,7 @@ class StarPilotConditionalExperimentalLayout(StarPilotPanel):
         "get_value": lambda: f"{self._params.get_int('CEModelStopTime')}s",
         "on_click": lambda: self._show_int_selector("CEModelStopTime", 0, 10, "s"),
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("ConditionalExperimental"),
       },
       {
         "title": tr_noop("Signal Below"),
@@ -211,6 +244,7 @@ class StarPilotConditionalExperimentalLayout(StarPilotPanel):
         "get_value": lambda: f"{self._params.get_int('CESignalSpeed')} mph",
         "on_click": lambda: self._show_speed_selector("CESignalSpeed"),
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("ConditionalExperimental"),
       },
       {
         "title": tr_noop("Speed Lead"),
@@ -218,6 +252,7 @@ class StarPilotConditionalExperimentalLayout(StarPilotPanel):
         "get_value": lambda: f"{self._params.get_int('CESpeedLead')} mph",
         "on_click": lambda: self._show_speed_selector("CESpeedLead"),
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("ConditionalExperimental"),
       },
       {
         "title": tr_noop("Signal Lane Detection"),
@@ -233,6 +268,7 @@ class StarPilotConditionalExperimentalLayout(StarPilotPanel):
         "get_state": lambda: self._params.get_bool("ShowCEMStatus"),
         "set_state": lambda s: self._params.put_bool("ShowCEMStatus", s),
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("ConditionalExperimental"),
       },
     ]
     self._rebuild_grid()
@@ -260,12 +296,21 @@ class StarPilotCurveSpeedLayout(StarPilotPanel):
     self.CATEGORIES = [
       {
         "title": tr_noop("Curve Speed Controller"),
+        "type": "toggle",
+        "get_state": lambda: self._params.get_bool("CurveSpeedController"),
+        "set_state": lambda s: self._params.put_bool("CurveSpeedController", s),
+        "icon": "toggle_icons/icon_speed_map.png",
+        "color": "#597497",
+      },
+      {
+        "title": tr_noop("Curve Speed Controller"),
         "desc": tr_noop("Automatically slow down for upcoming curves using data learned from your driving style."),
         "type": "toggle",
         "get_state": lambda: self._params.get_bool("CurveSpeedController"),
         "set_state": lambda s: self._params.put_bool("CurveSpeedController", s),
         "icon": "toggle_icons/icon_speed_map.png",
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("CurveSpeedController"),
       },
       {
         "title": tr_noop("Status Widget"),
@@ -274,6 +319,7 @@ class StarPilotCurveSpeedLayout(StarPilotPanel):
         "get_state": lambda: self._params.get_bool("ShowCSCStatus"),
         "set_state": lambda s: self._params.put_bool("ShowCSCStatus", s),
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("CurveSpeedController"),
       },
       {
         "title": tr_noop("Calibrated Lateral Accel"),
@@ -282,6 +328,7 @@ class StarPilotCurveSpeedLayout(StarPilotPanel):
         "get_value": lambda: f"{self._params_memory.get_float('CalibratedLateralAcceleration'):.2f} m/s²",
         "on_click": lambda: None,
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("CurveSpeedController"),
       },
       {
         "title": tr_noop("Calibration Progress"),
@@ -290,6 +337,7 @@ class StarPilotCurveSpeedLayout(StarPilotPanel):
         "get_value": lambda: f"{self._params_memory.get_float('CalibrationProgress'):.2f}%",
         "on_click": lambda: None,
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("CurveSpeedController"),
       },
       {
         "title": tr_noop("Reset Curve Data"),
@@ -297,6 +345,7 @@ class StarPilotCurveSpeedLayout(StarPilotPanel):
         "type": "hub",
         "on_click": lambda: self._reset_curve_data(),
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("CurveSpeedController"),
       },
     ]
     self._rebuild_grid()
@@ -316,6 +365,14 @@ class StarPilotPersonalitiesLayout(StarPilotPanel):
   def __init__(self):
     super().__init__()
     self.CATEGORIES = [
+      {
+        "title": tr_noop("Driving Personalities"),
+        "type": "toggle",
+        "get_state": lambda: self._params.get_bool("CustomPersonalities"),
+        "set_state": lambda s: self._params.put_bool("CustomPersonalities", s),
+        "icon": "toggle_icons/icon_personality.png",
+        "color": "#597497",
+      },
       {"title": tr_noop("Traffic"), "panel": "traffic_personality", "icon": "toggle_icons/icon_personality.png", "color": "#597497"},
       {"title": tr_noop("Aggressive"), "panel": "aggressive_personality", "icon": "toggle_icons/icon_personality.png", "color": "#597497"},
       {"title": tr_noop("Standard"), "panel": "standard_personality", "icon": "toggle_icons/icon_personality.png", "color": "#597497"},
@@ -421,11 +478,20 @@ class StarPilotLongitudinalTuneLayout(StarPilotPanel):
     super().__init__()
     self.CATEGORIES = [
       {
+        "title": tr_noop("Longitudinal Tuning"),
+        "type": "toggle",
+        "get_state": lambda: self._params.get_bool("LongitudinalTune"),
+        "set_state": lambda s: self._params.put_bool("LongitudinalTune", s),
+        "icon": "toggle_icons/icon_longitudinal_tune.png",
+        "color": "#597497",
+      },
+      {
         "title": tr_noop("Acceleration Profile"),
         "type": "value",
         "get_value": lambda: self._params.get("AccelerationProfile", encoding='utf-8') or "Standard",
         "on_click": lambda: self._show_selection("AccelerationProfile", ["Standard", "Eco", "Sport", "Sport+"]),
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("LongitudinalTune"),
       },
       {
         "title": tr_noop("Deceleration Profile"),
@@ -433,6 +499,7 @@ class StarPilotLongitudinalTuneLayout(StarPilotPanel):
         "get_value": lambda: self._params.get("DecelerationProfile", encoding='utf-8') or "Standard",
         "on_click": lambda: self._show_selection("DecelerationProfile", ["Standard", "Eco", "Sport"]),
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("LongitudinalTune"),
       },
       {
         "title": tr_noop("Human Acceleration"),
@@ -440,6 +507,7 @@ class StarPilotLongitudinalTuneLayout(StarPilotPanel):
         "get_state": lambda: self._params.get_bool("HumanAcceleration"),
         "set_state": lambda s: self._params.put_bool("HumanAcceleration", s),
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("LongitudinalTune"),
       },
       {
         "title": tr_noop("Human Following"),
@@ -447,6 +515,7 @@ class StarPilotLongitudinalTuneLayout(StarPilotPanel):
         "get_state": lambda: self._params.get_bool("HumanFollowing"),
         "set_state": lambda s: self._params.put_bool("HumanFollowing", s),
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("LongitudinalTune"),
       },
       {
         "title": tr_noop("Human Lane Changes"),
@@ -454,6 +523,7 @@ class StarPilotLongitudinalTuneLayout(StarPilotPanel):
         "get_state": lambda: self._params.get_bool("HumanLaneChanges"),
         "set_state": lambda s: self._params.put_bool("HumanLaneChanges", s),
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("LongitudinalTune"),
       },
       {
         "title": tr_noop("Lead Detection"),
@@ -461,6 +531,7 @@ class StarPilotLongitudinalTuneLayout(StarPilotPanel):
         "get_value": lambda: f"{self._params.get_int('LeadDetectionThreshold')}%",
         "on_click": lambda: self._show_int_selector("LeadDetectionThreshold", 25, 50, "%"),
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("LongitudinalTune"),
       },
       {
         "title": tr_noop("Taco Tune"),
@@ -468,6 +539,7 @@ class StarPilotLongitudinalTuneLayout(StarPilotPanel):
         "get_state": lambda: self._params.get_bool("TacoTune"),
         "set_state": lambda s: self._params.put_bool("TacoTune", s),
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("LongitudinalTune"),
       },
     ]
     self._rebuild_grid()
@@ -494,11 +566,20 @@ class StarPilotLongitudinalQOLLayout(StarPilotPanel):
     super().__init__()
     self.CATEGORIES = [
       {
+        "title": tr_noop("Quality of Life"),
+        "type": "toggle",
+        "get_state": lambda: self._params.get_bool("QOLLongitudinal"),
+        "set_state": lambda s: self._params.put_bool("QOLLongitudinal", s),
+        "icon": "toggle_icons/icon_quality_of_life.png",
+        "color": "#597497",
+      },
+      {
         "title": tr_noop("Cruise Interval"),
         "type": "value",
         "get_value": lambda: f"{self._params.get_int('CustomCruise')} mph",
         "on_click": lambda: self._show_speed_selector("CustomCruise"),
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("QOLLongitudinal"),
       },
       {
         "title": tr_noop("Cruise Long"),
@@ -506,6 +587,7 @@ class StarPilotLongitudinalQOLLayout(StarPilotPanel):
         "get_value": lambda: f"{self._params.get_int('CustomCruiseLong')} mph",
         "on_click": lambda: self._show_speed_selector("CustomCruiseLong"),
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("QOLLongitudinal"),
       },
       {
         "title": tr_noop("Reverse Cruise"),
@@ -513,6 +595,7 @@ class StarPilotLongitudinalQOLLayout(StarPilotPanel):
         "get_state": lambda: self._params.get_bool("ReverseCruise"),
         "set_state": lambda s: self._params.put_bool("ReverseCruise", s),
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("QOLLongitudinal"),
       },
       {
         "title": tr_noop("Force Stops"),
@@ -520,6 +603,7 @@ class StarPilotLongitudinalQOLLayout(StarPilotPanel):
         "get_state": lambda: self._params.get_bool("ForceStops"),
         "set_state": lambda s: self._params.put_bool("ForceStops", s),
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("QOLLongitudinal"),
       },
       {
         "title": tr_noop("Force Standstill State"),
@@ -527,6 +611,7 @@ class StarPilotLongitudinalQOLLayout(StarPilotPanel):
         "get_state": lambda: self._params.get_bool("ForceStandstill"),
         "set_state": lambda s: self._params.put_bool("ForceStandstill", s),
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("QOLLongitudinal"),
       },
       {
         "title": tr_noop("Stopped Distance"),
@@ -534,6 +619,7 @@ class StarPilotLongitudinalQOLLayout(StarPilotPanel):
         "get_value": lambda: f"{self._params.get_int('IncreasedStoppedDistance')} ft",
         "on_click": lambda: self._show_int_selector("IncreasedStoppedDistance", 0, 10, " ft"),
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("QOLLongitudinal"),
       },
       {
         "title": tr_noop("Set Speed Offset"),
@@ -541,6 +627,7 @@ class StarPilotLongitudinalQOLLayout(StarPilotPanel):
         "get_value": lambda: f"+{self._params.get_int('SetSpeedOffset')} mph",
         "on_click": lambda: self._show_int_selector("SetSpeedOffset", 0, 99, " mph"),
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("QOLLongitudinal"),
       },
       {
         "title": tr_noop("Map Gears"),
@@ -548,6 +635,7 @@ class StarPilotLongitudinalQOLLayout(StarPilotPanel):
         "get_state": lambda: self._params.get_bool("MapGears"),
         "set_state": lambda s: self._params.put_bool("MapGears", s),
         "color": "#597497",
+        "visible": lambda: self._params.get_bool("QOLLongitudinal"),
       },
       {
         "title": tr_noop("Map Acceleration"),

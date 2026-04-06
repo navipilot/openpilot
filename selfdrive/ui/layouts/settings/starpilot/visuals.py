@@ -113,6 +113,14 @@ class StarPilotAdvancedVisualsLayout(StarPilotPanel):
     super().__init__()
     self.CATEGORIES = [
       {
+        "title": tr_noop("Advanced UI Controls"),
+        "type": "toggle",
+        "get_state": lambda: self._params.get_bool("AdvancedCustomUI"),
+        "set_state": lambda s: self._params.put_bool("AdvancedCustomUI", s),
+        "icon": "toggle_icons/icon_advanced_device.png",
+        "color": "#8B5CF6",
+      },
+      {
         "title": tr_noop("Hide Speed"),
         "type": "toggle",
         "key": "HideSpeed",
@@ -120,6 +128,7 @@ class StarPilotAdvancedVisualsLayout(StarPilotPanel):
         "set_state": lambda s: self._params.put_bool("HideSpeed", s),
         "icon": "toggle_icons/icon_display.png",
         "color": "#8B5CF6",
+        "visible": lambda: self._params.get_bool("AdvancedCustomUI"),
       },
       {
         "title": tr_noop("Hide Lead Marker"),
@@ -129,6 +138,7 @@ class StarPilotAdvancedVisualsLayout(StarPilotPanel):
         "set_state": lambda s: self._params.put_bool("HideLeadMarker", s),
         "icon": "toggle_icons/icon_display.png",
         "color": "#8B5CF6",
+        "visible": lambda: self._params.get_bool("AdvancedCustomUI"),
       },
       {
         "title": tr_noop("Hide Max Speed"),
@@ -138,6 +148,7 @@ class StarPilotAdvancedVisualsLayout(StarPilotPanel):
         "set_state": lambda s: self._params.put_bool("HideMaxSpeed", s),
         "icon": "toggle_icons/icon_display.png",
         "color": "#8B5CF6",
+        "visible": lambda: self._params.get_bool("AdvancedCustomUI"),
       },
       {
         "title": tr_noop("Hide Alerts"),
@@ -147,6 +158,7 @@ class StarPilotAdvancedVisualsLayout(StarPilotPanel):
         "set_state": lambda s: self._params.put_bool("HideAlerts", s),
         "icon": "toggle_icons/icon_display.png",
         "color": "#8B5CF6",
+        "visible": lambda: self._params.get_bool("AdvancedCustomUI"),
       },
       {
         "title": tr_noop("Hide Speed Limit"),
@@ -156,6 +168,7 @@ class StarPilotAdvancedVisualsLayout(StarPilotPanel):
         "set_state": lambda s: self._params.put_bool("HideSpeedLimit", s),
         "icon": "toggle_icons/icon_display.png",
         "color": "#8B5CF6",
+        "visible": lambda: self._params.get_bool("AdvancedCustomUI"),
       },
       {
         "title": tr_noop("Wheel Speed"),
@@ -165,6 +178,7 @@ class StarPilotAdvancedVisualsLayout(StarPilotPanel):
         "set_state": lambda s: self._params.put_bool("WheelSpeed", s),
         "icon": "toggle_icons/icon_display.png",
         "color": "#8B5CF6",
+        "visible": lambda: self._params.get_bool("AdvancedCustomUI"),
       },
     ]
     self._rebuild_grid()
@@ -195,6 +209,14 @@ class StarPilotVisualWidgetsLayout(StarPilotPanel):
     super().__init__()
     self.CATEGORIES = [
       {
+        "title": tr_noop("Driving Screen Widgets"),
+        "type": "toggle",
+        "get_state": lambda: self._params.get_bool("CustomUI"),
+        "set_state": lambda s: self._params.put_bool("CustomUI", s),
+        "icon": "toggle_icons/icon_display.png",
+        "color": "#8B5CF6",
+      },
+      {
         "title": tr_noop("Acceleration Path"),
         "type": "toggle",
         "key": "AccelerationPath",
@@ -202,6 +224,7 @@ class StarPilotVisualWidgetsLayout(StarPilotPanel):
         "set_state": lambda s: self._params.put_bool("AccelerationPath", s),
         "icon": "toggle_icons/icon_road.png",
         "color": "#8B5CF6",
+        "visible": lambda: self._params.get_bool("CustomUI"),
       },
       {
         "title": tr_noop("Adjacent Lanes"),
@@ -211,6 +234,7 @@ class StarPilotVisualWidgetsLayout(StarPilotPanel):
         "set_state": lambda s: self._params.put_bool("AdjacentPath", s),
         "icon": "toggle_icons/icon_road.png",
         "color": "#8B5CF6",
+        "visible": lambda: self._params.get_bool("CustomUI"),
       },
       {
         "title": tr_noop("Adjacent Lane Metrics"),
@@ -220,6 +244,7 @@ class StarPilotVisualWidgetsLayout(StarPilotPanel):
         "set_state": lambda s: self._params.put_bool("AdjacentPathMetrics", s),
         "icon": "toggle_icons/icon_road.png",
         "color": "#8B5CF6",
+        "visible": lambda: self._params.get_bool("CustomUI"),
       },
       {
         "title": tr_noop("Blind Spot Path"),
@@ -229,6 +254,7 @@ class StarPilotVisualWidgetsLayout(StarPilotPanel):
         "set_state": lambda s: self._params.put_bool("BlindSpotPath", s),
         "icon": "toggle_icons/icon_road.png",
         "color": "#8B5CF6",
+        "visible": lambda: self._params.get_bool("CustomUI"),
       },
       {
         "title": tr_noop("Compass"),
@@ -238,6 +264,7 @@ class StarPilotVisualWidgetsLayout(StarPilotPanel):
         "set_state": lambda s: self._params.put_bool("Compass", s),
         "icon": "toggle_icons/icon_navigate.png",
         "color": "#8B5CF6",
+        "visible": lambda: self._params.get_bool("CustomUI"),
       },
       {
         "title": tr_noop("Personality Button"),
@@ -247,6 +274,7 @@ class StarPilotVisualWidgetsLayout(StarPilotPanel):
         "set_state": lambda s: self._params.put_bool("OnroadDistanceButton", s),
         "icon": "toggle_icons/icon_personality.png",
         "color": "#8B5CF6",
+        "visible": lambda: self._params.get_bool("CustomUI"),
       },
       {
         "title": tr_noop("Pedal Indicators"),
@@ -256,6 +284,7 @@ class StarPilotVisualWidgetsLayout(StarPilotPanel):
         "set_state": lambda s: self._params.put_bool("PedalsOnUI", s),
         "icon": "toggle_icons/icon_display.png",
         "color": "#8B5CF6",
+        "visible": lambda: self._params.get_bool("CustomUI"),
       },
       {
         "title": tr_noop("Dynamic Pedals"),
@@ -265,6 +294,7 @@ class StarPilotVisualWidgetsLayout(StarPilotPanel):
         "set_state": lambda s: self._set_exclusive_pedal("DynamicPedalsOnUI", "StaticPedalsOnUI", s),
         "icon": "toggle_icons/icon_display.png",
         "color": "#8B5CF6",
+        "visible": lambda: self._params.get_bool("CustomUI") and self._params.get_bool("PedalsOnUI"),
       },
       {
         "title": tr_noop("Static Pedals"),
@@ -274,6 +304,7 @@ class StarPilotVisualWidgetsLayout(StarPilotPanel):
         "set_state": lambda s: self._set_exclusive_pedal("StaticPedalsOnUI", "DynamicPedalsOnUI", s),
         "icon": "toggle_icons/icon_display.png",
         "color": "#8B5CF6",
+        "visible": lambda: self._params.get_bool("CustomUI") and self._params.get_bool("PedalsOnUI"),
       },
       {
         "title": tr_noop("Rotating Wheel"),
@@ -283,6 +314,7 @@ class StarPilotVisualWidgetsLayout(StarPilotPanel):
         "set_state": lambda s: self._params.put_bool("RotatingWheel", s),
         "icon": "toggle_icons/icon_steering.png",
         "color": "#8B5CF6",
+        "visible": lambda: self._params.get_bool("CustomUI"),
       },
     ]
     self._rebuild_grid()
@@ -329,6 +361,14 @@ class StarPilotModelUILayout(StarPilotPanel):
     super().__init__()
     self.CATEGORIES = [
       {
+        "title": tr_noop("Model UI"),
+        "type": "toggle",
+        "get_state": lambda: self._params.get_bool("ModelUI"),
+        "set_state": lambda s: self._params.put_bool("ModelUI", s),
+        "icon": "toggle_icons/icon_road.png",
+        "color": "#8B5CF6",
+      },
+      {
         "title": tr_noop("Dynamic Path"),
         "type": "toggle",
         "key": "DynamicPathWidth",
@@ -336,6 +376,7 @@ class StarPilotModelUILayout(StarPilotPanel):
         "set_state": lambda s: self._params.put_bool("DynamicPathWidth", s),
         "icon": "toggle_icons/icon_road.png",
         "color": "#8B5CF6",
+        "visible": lambda: self._params.get_bool("ModelUI"),
       },
       {
         "title": tr_noop("Lane Line Width"),
@@ -345,6 +386,7 @@ class StarPilotModelUILayout(StarPilotPanel):
         "on_click": lambda: self._show_int_selector("LaneLinesWidth", 0, 24, self._get_lane_lines_unit()),
         "icon": "toggle_icons/icon_road.png",
         "color": "#8B5CF6",
+        "visible": lambda: self._params.get_bool("ModelUI"),
       },
       {
         "title": tr_noop("Lane Line Color"),
@@ -354,6 +396,7 @@ class StarPilotModelUILayout(StarPilotPanel):
         "on_click": lambda: self._show_color_selector("LaneLinesColor"),
         "icon": "toggle_icons/icon_road.png",
         "color": "#8B5CF6",
+        "visible": lambda: self._params.get_bool("ModelUI"),
       },
       {
         "title": tr_noop("Path Edge Width"),
@@ -363,6 +406,7 @@ class StarPilotModelUILayout(StarPilotPanel):
         "on_click": lambda: self._show_int_selector("PathEdgeWidth", 0, 100, "%"),
         "icon": "toggle_icons/icon_road.png",
         "color": "#8B5CF6",
+        "visible": lambda: self._params.get_bool("ModelUI"),
       },
       {
         "title": tr_noop("Path Edge Color"),
@@ -372,6 +416,7 @@ class StarPilotModelUILayout(StarPilotPanel):
         "on_click": lambda: self._show_color_selector("PathEdgesColor"),
         "icon": "toggle_icons/icon_road.png",
         "color": "#8B5CF6",
+        "visible": lambda: self._params.get_bool("ModelUI"),
       },
       {
         "title": tr_noop("Path Width"),
@@ -381,6 +426,7 @@ class StarPilotModelUILayout(StarPilotPanel):
         "on_click": lambda: self._show_path_width_selector(),
         "icon": "toggle_icons/icon_road.png",
         "color": "#8B5CF6",
+        "visible": lambda: self._params.get_bool("ModelUI"),
       },
       {
         "title": tr_noop("Path Color"),
@@ -390,6 +436,7 @@ class StarPilotModelUILayout(StarPilotPanel):
         "on_click": lambda: self._show_color_selector("PathColor"),
         "icon": "toggle_icons/icon_road.png",
         "color": "#8B5CF6",
+        "visible": lambda: self._params.get_bool("ModelUI"),
       },
       {
         "title": tr_noop("Road Edge Width"),
@@ -399,6 +446,7 @@ class StarPilotModelUILayout(StarPilotPanel):
         "on_click": lambda: self._show_int_selector("RoadEdgesWidth", 0, 24, self._get_road_edges_unit()),
         "icon": "toggle_icons/icon_road.png",
         "color": "#8B5CF6",
+        "visible": lambda: self._params.get_bool("ModelUI"),
       },
     ]
     self._rebuild_grid()
@@ -485,12 +533,21 @@ class StarPilotNavigationVisualsLayout(StarPilotPanel):
     super().__init__()
     self.CATEGORIES = [
       {
+        "title": tr_noop("Navigation Widgets"),
+        "type": "toggle",
+        "get_state": lambda: self._params.get_bool("NavigationUI"),
+        "set_state": lambda s: self._params.put_bool("NavigationUI", s),
+        "icon": "toggle_icons/icon_map.png",
+        "color": "#8B5CF6",
+      },
+      {
         "title": tr_noop("Road Name"),
         "type": "toggle",
         "get_state": lambda: self._params.get_bool("RoadNameUI"),
         "set_state": lambda s: self._params.put_bool("RoadNameUI", s),
         "icon": "toggle_icons/icon_navigate.png",
         "color": "#8B5CF6",
+        "visible": lambda: self._params.get_bool("NavigationUI"),
       },
       {
         "title": tr_noop("Speed Limits"),
@@ -499,6 +556,7 @@ class StarPilotNavigationVisualsLayout(StarPilotPanel):
         "set_state": lambda s: self._params.put_bool("ShowSpeedLimits", s),
         "icon": "toggle_icons/icon_speed_limit.png",
         "color": "#8B5CF6",
+        "visible": lambda: self._params.get_bool("NavigationUI"),
       },
       {
         "title": tr_noop("Mapbox Limits"),
@@ -507,6 +565,7 @@ class StarPilotNavigationVisualsLayout(StarPilotPanel):
         "set_state": lambda s: self._params.put_bool("SLCMapboxFiller", s),
         "icon": "toggle_icons/icon_speed_limit.png",
         "color": "#8B5CF6",
+        "visible": lambda: self._params.get_bool("NavigationUI") and self._params.get_bool("ShowSpeedLimits"),
       },
       {
         "title": tr_noop("Vienna Signs"),
@@ -515,6 +574,7 @@ class StarPilotNavigationVisualsLayout(StarPilotPanel):
         "set_state": lambda s: self._params.put_bool("UseVienna", s),
         "icon": "toggle_icons/icon_speed_limit.png",
         "color": "#8B5CF6",
+        "visible": lambda: self._params.get_bool("NavigationUI"),
       },
     ]
     self._rebuild_grid()
@@ -526,6 +586,14 @@ class StarPilotVisualQOLLayout(StarPilotPanel):
     self.CAMERA_VIEWS = ["Auto", "Driver", "Standard", "Wide"]
     self.CATEGORIES = [
       {
+        "title": tr_noop("Quality of Life"),
+        "type": "toggle",
+        "get_state": lambda: self._params.get_bool("QOLVisuals"),
+        "set_state": lambda s: self._params.put_bool("QOLVisuals", s),
+        "icon": "toggle_icons/icon_quality_of_life.png",
+        "color": "#8B5CF6",
+      },
+      {
         "title": tr_noop("Camera View"),
         "type": "value",
         "key": "CameraView",
@@ -533,6 +601,7 @@ class StarPilotVisualQOLLayout(StarPilotPanel):
         "on_click": lambda: self._show_camera_view_selector(),
         "icon": "toggle_icons/icon_display.png",
         "color": "#8B5CF6",
+        "visible": lambda: self._params.get_bool("QOLVisuals"),
       },
       {
         "title": tr_noop("Driver Camera"),
@@ -541,6 +610,7 @@ class StarPilotVisualQOLLayout(StarPilotPanel):
         "set_state": lambda s: self._params.put_bool("DriverCamera", s),
         "icon": "toggle_icons/icon_display.png",
         "color": "#8B5CF6",
+        "visible": lambda: self._params.get_bool("QOLVisuals"),
       },
       {
         "title": tr_noop("Stopped Timer"),
@@ -549,6 +619,7 @@ class StarPilotVisualQOLLayout(StarPilotPanel):
         "set_state": lambda s: self._params.put_bool("StoppedTimer", s),
         "icon": "toggle_icons/icon_display.png",
         "color": "#8B5CF6",
+        "visible": lambda: self._params.get_bool("QOLVisuals"),
       },
     ]
     self._rebuild_grid()

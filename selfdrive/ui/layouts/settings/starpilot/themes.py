@@ -92,6 +92,14 @@ class StarPilotThemesLayout(StarPilotPanel):
 
     self.CATEGORIES = [
       {
+        "title": tr_noop("Custom Themes"),
+        "type": "toggle",
+        "get_state": lambda: self._params.get_bool("CustomThemes"),
+        "set_state": lambda s: self._params.put_bool("CustomThemes", s),
+        "icon": "toggle_icons/icon_frog.png",
+        "color": "#542A71",
+      },
+      {
         "title": tr_noop("Personalize openpilot"),
         "panel": "personalize",
         "icon": "toggle_icons/icon_frog.png",
@@ -129,6 +137,7 @@ class StarPilotThemesLayout(StarPilotPanel):
         "set_state": lambda s: self._params.put_bool("RandomThemes", s),
         "icon": "toggle_icons/icon_random_themes.png",
         "color": "#542A71",
+        "visible": lambda: self._params.get_bool("CustomThemes"),
       },
       {"title": tr_noop("Startup Alert"), "type": "hub", "on_click": self._on_startup_alert, "color": "#542A71"},
     ]
@@ -171,11 +180,19 @@ class StarPilotPersonalizeLayout(StarPilotPanel):
     super().__init__()
     self.CATEGORIES = [
       {
+        "title": tr_noop("Custom Themes"),
+        "type": "toggle",
+        "get_state": lambda: self._params.get_bool("CustomThemes"),
+        "set_state": lambda s: self._params.put_bool("CustomThemes", s),
+        "color": "#542A71",
+      },
+      {
         "title": tr_noop("Boot Logo"),
         "type": "value",
         "get_value": lambda: self._get_theme_value("BootLogo"),
         "on_click": lambda: self._show_theme_selector("BootLogo"),
         "color": "#542A71",
+        "visible": lambda: self._params.get_bool("CustomThemes"),
       },
       {
         "title": tr_noop("Color Scheme"),
@@ -183,6 +200,7 @@ class StarPilotPersonalizeLayout(StarPilotPanel):
         "get_value": lambda: self._get_theme_value("ColorScheme"),
         "on_click": lambda: self._show_theme_selector("ColorScheme"),
         "color": "#542A71",
+        "visible": lambda: self._params.get_bool("CustomThemes"),
       },
       {
         "title": tr_noop("Distance Icons"),
@@ -190,6 +208,7 @@ class StarPilotPersonalizeLayout(StarPilotPanel):
         "get_value": lambda: self._get_theme_value("DistanceIconPack"),
         "on_click": lambda: self._show_theme_selector("DistanceIconPack"),
         "color": "#542A71",
+        "visible": lambda: self._params.get_bool("CustomThemes"),
       },
       {
         "title": tr_noop("Icon Pack"),
@@ -197,6 +216,7 @@ class StarPilotPersonalizeLayout(StarPilotPanel):
         "get_value": lambda: self._get_theme_value("IconPack"),
         "on_click": lambda: self._show_theme_selector("IconPack"),
         "color": "#542A71",
+        "visible": lambda: self._params.get_bool("CustomThemes"),
       },
       {
         "title": tr_noop("Turn Signals"),
@@ -204,6 +224,7 @@ class StarPilotPersonalizeLayout(StarPilotPanel):
         "get_value": lambda: self._get_theme_value("SignalAnimation"),
         "on_click": lambda: self._show_theme_selector("SignalAnimation"),
         "color": "#542A71",
+        "visible": lambda: self._params.get_bool("CustomThemes"),
       },
       {
         "title": tr_noop("Sound Pack"),
@@ -211,6 +232,7 @@ class StarPilotPersonalizeLayout(StarPilotPanel):
         "get_value": lambda: self._get_theme_value("SoundPack"),
         "on_click": lambda: self._show_theme_selector("SoundPack"),
         "color": "#542A71",
+        "visible": lambda: self._params.get_bool("CustomThemes"),
       },
       {
         "title": tr_noop("Steering Wheel"),
@@ -218,6 +240,7 @@ class StarPilotPersonalizeLayout(StarPilotPanel):
         "get_value": lambda: self._get_theme_value("WheelIcon"),
         "on_click": lambda: self._show_theme_selector("WheelIcon"),
         "color": "#542A71",
+        "visible": lambda: self._params.get_bool("CustomThemes"),
       },
     ]
     self._rebuild_grid()

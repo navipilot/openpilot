@@ -204,6 +204,12 @@ class HubTile(AetherTile):
     for i, line in enumerate(lines):
       self._draw_text_fit(self._font_title, line, rl.Vector2(face.x + 20, ty + i * (line_h + line_spacing)), max_w, line_h, align_center=True)
 
+    if self.desc:
+      desc_lines = self._wrap_text(self._font_desc, self.desc, max_w, 18, max_lines=3)
+      desc_y = ty + len(lines) * (line_h + line_spacing) + 18
+      for i, line in enumerate(desc_lines):
+        self._draw_text_fit(self._font_desc, line, rl.Vector2(face.x + 20, desc_y + i * 20), max_w, 18, align_center=True)
+
 
 class ToggleTile(AetherTile):
   def __init__(self, title: str, get_state: Callable[[], bool], set_state: Callable[[bool], None], icon_path: str | None = None,
@@ -238,6 +244,9 @@ class ToggleTile(AetherTile):
     state_text = tr("ON") if active else tr("OFF")
     self._draw_text_fit(self._font, state_text, rl.Vector2(face.x + 20, ty + 28 + 8), max_w, 30, align_center=True, uppercase=True)
 
+    if self.desc:
+      self._draw_text_fit(self._font_desc, self.desc, rl.Vector2(face.x + 20, ty + 28 + 8 + 34), max_w, 18, align_center=True)
+
 
 class ValueTile(AetherTile):
   def __init__(self, title: str, get_value: Callable[[], str], on_click: Callable, icon_path: str | None = None,
@@ -266,6 +275,9 @@ class ValueTile(AetherTile):
     self._draw_text_fit(self._font, self.title, rl.Vector2(face.x + 20, ty), max_w, 28, align_center=True, uppercase=True)
     val_text = self.get_value()
     self._draw_text_fit(self._font, val_text, rl.Vector2(face.x + 20, ty + 28 + 8), max_w, 28, align_center=True, uppercase=True)
+
+    if self.desc:
+      self._draw_text_fit(self._font_desc, self.desc, rl.Vector2(face.x + 20, ty + 28 + 8 + 34), max_w, 18, align_center=True)
 
 
 class AetherSlider(Widget):

@@ -13,6 +13,7 @@ from openpilot.system.ui.widgets import DialogResult
 from openpilot.system.ui.widgets.confirm_dialog import ConfirmDialog, alert_dialog
 from openpilot.system.ui.widgets.selection_dialog import SelectionDialog
 from openpilot.selfdrive.ui.layouts.settings.starpilot.panel import StarPilotPanel
+from openpilot.selfdrive.ui.layouts.settings.starpilot.aethergrid import AetherSliderDialog
 
 class StarPilotDrivingModelLayout(StarPilotPanel):
   def __init__(self):
@@ -41,6 +42,7 @@ class StarPilotDrivingModelLayout(StarPilotPanel):
         "icon": "toggle_icons/icon_steering.png",
         "on_click": self._on_select_model_clicked,
         "get_value": lambda: self._current_model_name,
+        "visible": lambda: not self._params.get_bool("ModelRandomizer"),
         "color": "#597497"
       },
       {
@@ -66,6 +68,24 @@ class StarPilotDrivingModelLayout(StarPilotPanel):
         "color": "#597497"
       },
       {
+        "title": tr_noop("Recovery Power"),
+        "type": "value",
+        "icon": "toggle_icons/icon_road.png",
+        "get_value": lambda: f"{self._params.get_float('RecoveryPower'):.1f}",
+        "on_click": self._on_recovery_power_clicked,
+        "visible": lambda: self._params.get_int("TuningLevel") == 3,
+        "color": "#597497"
+      },
+      {
+        "title": tr_noop("Stop Distance"),
+        "type": "value",
+        "icon": "toggle_icons/icon_road.png",
+        "get_value": lambda: f"{self._params.get_float('StopDistance'):.1f}m",
+        "on_click": self._on_stop_distance_clicked,
+        "visible": lambda: self._params.get_int("TuningLevel") == 3,
+        "color": "#597497"
+      },
+      {
         "title": tr_noop("Auto Download"),
         "type": "toggle",
         "icon": "toggle_icons/icon_system.png",
@@ -78,6 +98,7 @@ class StarPilotDrivingModelLayout(StarPilotPanel):
         "type": "hub",
         "icon": "toggle_icons/icon_system.png",
         "on_click": self._on_blacklist_clicked,
+        "visible": lambda: self._params.get_bool("ModelRandomizer"),
         "color": "#597497"
       },
       {
@@ -85,6 +106,7 @@ class StarPilotDrivingModelLayout(StarPilotPanel):
         "type": "hub",
         "icon": "toggle_icons/icon_system.png",
         "on_click": self._on_scores_clicked,
+        "visible": lambda: self._params.get_bool("ModelRandomizer"),
         "color": "#597497"
       },
     ]
@@ -219,6 +241,22 @@ class StarPilotDrivingModelLayout(StarPilotPanel):
         gui_app.set_modal_overlay(ConfirmDialog(tr("Reboot required. Reboot now?"), tr("Reboot"), tr("Cancel"), on_close=lambda res: HARDWARE.reboot() if res == DialogResult.CONFIRM else None))
 
     self._show_selection_dialog(tr("Select Driving Model"), installed_models, self._current_model_name, _on_confirm)
+
+  def _on_recovery_power_clicked(self):
+    def on_close(res, val):
+      if res == DialogResult.CONFIRM:
+        self._params.put_float("RecoveryPower", float(val))
+        self._rebuild_grid()
+
+    gui_app.set_modal_overlay(AetherSliderDialog(tr("Recovery Power"), 0.5, 2.0, 0.1, self._params.get_float("RecoveryPower"), on_close, unit="x", color="#597497"))
+
+  def _on_stop_distance_clicked(self):
+    def on_close(res, val):
+      if res == DialogResult.CONFIRM:
+        self._params.put_float("StopDistance", float(val))
+        self._rebuild_grid()
+
+    gui_app.set_modal_overlay(AetherSliderDialog(tr("Stop Distance"), 4.0, 10.0, 0.1, self._params.get_float("StopDistance"), on_close, unit="m", color="#597497"))
 
   def _on_download_clicked(self):
     is_downloading = self._params_memory.get("ModelToDownload") or self._params_memory.get_bool("DownloadAllModels")
