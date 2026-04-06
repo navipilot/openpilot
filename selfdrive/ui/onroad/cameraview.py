@@ -37,32 +37,30 @@ void main() {
 }
 """
 
-# Choose fragment shader based on platform capabilities
-if TICI:
-  FRAME_FRAGMENT_SHADER = """
-    #version 300 es
-    #extension GL_OES_EGL_image_external_essl3 : enable
-    precision mediump float;
-    in vec2 fragTexCoord;
-    uniform samplerExternalOES texture0;
-    out vec4 fragColor;
-    void main() {
-      vec4 color = texture(texture0, fragTexCoord);
-      fragColor = vec4(pow(color.rgb, vec3(1.0/1.28)), color.a);
-    }
-    """
-else:
-  FRAME_FRAGMENT_SHADER = VERSION + """
-    in vec2 fragTexCoord;
-    uniform sampler2D texture0;
-    uniform sampler2D texture1;
-    out vec4 fragColor;
-    void main() {
-      float y = texture(texture0, fragTexCoord).r;
-      vec2 uv = texture(texture1, fragTexCoord).ra - 0.5;
-      fragColor = vec4(y + 1.402*uv.y, y - 0.344*uv.x - 0.714*uv.y, y + 1.772*uv.x, 1.0);
-    }
-    """
+FRAME_FRAGMENT_SHADER_EGL = """
+  #version 300 es
+  #extension GL_OES_EGL_image_external_essl3 : enable
+  precision mediump float;
+  in vec2 fragTexCoord;
+  uniform samplerExternalOES texture0;
+  out vec4 fragColor;
+  void main() {
+    vec4 color = texture(texture0, fragTexCoord);
+    fragColor = vec4(pow(color.rgb, vec3(1.0/1.28)), color.a);
+  }
+  """
+
+FRAME_FRAGMENT_SHADER_TEXTURES = VERSION + """
+  in vec2 fragTexCoord;
+  uniform sampler2D texture0;
+  uniform sampler2D texture1;
+  out vec4 fragColor;
+  void main() {
+    float y = texture(texture0, fragTexCoord).r;
+    vec2 uv = texture(texture1, fragTexCoord).ra - 0.5;
+    fragColor = vec4(y + 1.402*uv.y, y - 0.344*uv.x - 0.714*uv.y, y + 1.772*uv.x, 1.0);
+  }
+  """
 
 
 class CameraView(Widget):
@@ -81,8 +79,6 @@ class CameraView(Widget):
 
     self._texture_needs_update = True
     self.last_connection_attempt: float = 0.0
-    self.shader = rl.load_shader_from_memory(VERTEX_SHADER, FRAME_FRAGMENT_SHADER)
-    self._texture1_loc: int = rl.get_shader_location(self.shader, "texture1") if not TICI else -1
 
     self.frame: VisionBuf | None = None
     self.texture_y: rl.Texture | None = None
@@ -93,12 +89,16 @@ class CameraView(Widget):
     self.egl_texture: rl.Texture | None = None
 
     self._placeholder_color: rl.Color | None = None
+    self._use_egl = TICI and init_egl()
 
-    # Initialize EGL for zero-copy rendering on TICI
-    if TICI:
-      if not init_egl():
-        raise RuntimeError("Failed to initialize EGL")
+    fragment_shader = FRAME_FRAGMENT_SHADER_EGL if self._use_egl else FRAME_FRAGMENT_SHADER_TEXTURES
+    self.shader = rl.load_shader_from_memory(VERTEX_SHADER, fragment_shader)
+    self._texture1_loc: int = rl.get_shader_location(self.shader, "texture1") if not self._use_egl else -1
 
+    # Keep the UI alive if EGL cannot be used on device startup.
+    if TICI and not self._use_egl:
+      cloudlog.warning(f"Failed to initialize EGL for {self._name}; falling back to texture rendering")
+    elif self._use_egl:
       # Create a 1x1 pixel placeholder texture for EGL image binding
       temp_image = rl.gen_image_color(1, 1, rl.BLACK)
       self.egl_texture = rl.load_texture_from_image(temp_image)
@@ -146,7 +146,7 @@ class CameraView(Widget):
     self._clear_textures()
 
     # Clean up EGL texture
-    if TICI and self.egl_texture:
+    if self.egl_texture:
       rl.unload_texture(self.egl_texture)
       self.egl_texture = None
 
@@ -220,7 +220,7 @@ class CameraView(Widget):
     dst_rect = rl.Rectangle(x_offset, y_offset, scale_x, scale_y)
 
     # Render with appropriate method
-    if TICI:
+    if self._use_egl:
       self._render_egl(src_rect, dst_rect)
     else:
       self._render_textures(src_rect, dst_rect)
@@ -337,7 +337,7 @@ class CameraView(Widget):
 
   def _initialize_textures(self):
     self._clear_textures()
-    if not TICI:
+    if not self._use_egl:
       self.texture_y = rl.load_texture_from_image(rl.Image(None, int(self.client.stride),
         int(self.client.height), 1, rl.PixelFormat.PIXELFORMAT_UNCOMPRESSED_GRAYSCALE))
       self.texture_uv = rl.load_texture_from_image(rl.Image(None, int(self.client.stride // 2),
@@ -353,7 +353,7 @@ class CameraView(Widget):
       self.texture_uv = None
 
     # Clean up EGL resources
-    if TICI:
+    if self._use_egl:
       for data in self.egl_images.values():
         destroy_egl_image(data)
       self.egl_images = {}

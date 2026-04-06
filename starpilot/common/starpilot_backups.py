@@ -26,7 +26,7 @@ def backup_starpilot(build_metadata, params):
           delete_file(backup, report=False)
 
   _, _, free = shutil.disk_usage(STARPILOT_BACKUPS)
-  minimum_backup_size = params.get("MinimumBackupSize")
+  minimum_backup_size = params.get_int("MinimumBackupSize", return_default=True, default=0)
   if free > minimum_backup_size * maximum_backups:
     destination = STARPILOT_BACKUPS / f"{build_metadata.openpilot.git_commit}_{build_metadata.channel}_auto"
     create_backup(Path(BASEDIR), destination, "Successfully backed up StarPilot!", "Failed to backup StarPilot...", params, minimum_backup_size, compressed=True)
