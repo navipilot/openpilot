@@ -2,6 +2,7 @@ from parameterized import parameterized
 from types import SimpleNamespace
 
 from cereal import car, custom, log
+import openpilot.selfdrive.controls.lib.latcontrol_torque as latcontrol_torque
 from opendbc.car.car_helpers import interfaces
 from opendbc.car.honda.values import CAR as HONDA
 from opendbc.car.toyota.values import CAR as TOYOTA
@@ -22,6 +23,28 @@ from openpilot.selfdrive.controls.lib.latcontrol_torque import (
 
 
 class TestLatControl:
+
+  @staticmethod
+  def _build_torque_controller(car_name):
+    CarInterface = interfaces[car_name]
+    CP = CarInterface.get_non_essential_params(car_name)
+    CI = CarInterface(CP, custom.StarPilotCarParams.new_message())
+    controller = LatControlTorque(CP.as_reader(), CI, DT_CTRL)
+    VM = VehicleModel(CP)
+
+    CS = car.CarState.new_message()
+    CS.vEgo = 22
+    CS.steeringPressed = False
+    CS.steeringAngleDeg = 1.0
+
+    params = log.LiveParametersData.new_message()
+    params.steerRatio = CP.steerRatio
+    params.stiffnessFactor = 1.0
+    params.roll = 0.0
+    params.angleOffsetDeg = 0.0
+
+    starpilot_toggles = SimpleNamespace()
+    return controller, VM, CS, params, starpilot_toggles
 
   def test_bolt_2017_testing_ground_scale_curve(self):
     assert get_bolt_2017_torque_scale(0.1) == 1.0
@@ -45,6 +68,22 @@ class TestLatControl:
     assert mid > get_friction_threshold(10.0)
     assert high > get_friction_threshold(30.0)
     assert (low - get_friction_threshold(2.0)) > (mid - get_friction_threshold(10.0)) > (high - get_friction_threshold(30.0))
+
+  def test_bolt_2017_testing_ground_update_path(self, monkeypatch):
+    controller, VM, CS, params, starpilot_toggles = self._build_torque_controller(GM.CHEVROLET_BOLT_CC_2017)
+    monkeypatch.setattr(latcontrol_torque, "bolt_2017_lateral_testing_ground_active", lambda: True)
+
+    _, _, lac_log = controller.update(True, CS, VM, params, False, 0.0025, False, 0.2, None, None, starpilot_toggles)
+
+    assert lac_log.active
+
+  def test_bolt_2018_2021_testing_ground_update_path(self, monkeypatch):
+    controller, VM, CS, params, starpilot_toggles = self._build_torque_controller(GM.CHEVROLET_BOLT_CC_2018_2021)
+    monkeypatch.setattr(latcontrol_torque, "bolt_2018_2021_lateral_testing_ground_active", lambda: True)
+
+    _, _, lac_log = controller.update(True, CS, VM, params, False, 0.0025, False, 0.2, None, None, starpilot_toggles)
+
+    assert lac_log.active
 
   @parameterized.expand([(HONDA.HONDA_CIVIC, LatControlPID), (TOYOTA.TOYOTA_RAV4, LatControlTorque),
                          (NISSAN.NISSAN_LEAF, LatControlAngle), (GM.CHEVROLET_BOLT_ACC_2022_2023, LatControlTorque)])

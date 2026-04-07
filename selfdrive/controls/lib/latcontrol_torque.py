@@ -151,8 +151,6 @@ class LatControlTorque(LatControl):
     self.torque_ff_scale_neg = 1.0
     self.torque_deadzone_boost = float(getattr(self.torque_params, "kfDEPRECATED", 0.0))
     self.torque_ki_mult = 1.0
-    self.bolt_2018_2021_test_active = self.is_bolt_2018_2021 and bolt_2018_2021_lateral_testing_ground_active()
-
     if self.is_bolt:
       kp_scale = getattr(self.torque_params, "kp", getattr(self.torque_params, "kpDEPRECATED", 1.0))
       ki_scale = getattr(self.torque_params, "ki", getattr(self.torque_params, "kiDEPRECATED", 1.0))
@@ -227,14 +225,13 @@ class LatControlTorque(LatControl):
         ff_scale = np.interp(ff, [-FF_SCALE_BLEND_LAT_ACCEL, 0.0, FF_SCALE_BLEND_LAT_ACCEL],
                              [self.torque_ff_scale_neg, 1.0, self.torque_ff_scale_pos])
         ff *= ff_scale
+      bolt_2018_2021_test_active = self.is_bolt_2018_2021 and bolt_2018_2021_lateral_testing_ground_active()
       friction_threshold = get_friction_threshold(CS.vEgo)
-      if self.bolt_2018_2021_test_active:
+      friction_scale = 1.0
+      if bolt_2018_2021_test_active:
         friction_threshold = get_bolt_2018_2021_friction_threshold(CS.vEgo)
-        effective_friction = self.torque_params.as_builder()
-        effective_friction.friction *= BOLT_2018_2021_FRICTION_MULT
-      else:
-        effective_friction = self.torque_params
-      ff += get_friction(error_with_lsf + JERK_GAIN * desired_lateral_jerk, lateral_accel_deadzone, friction_threshold, effective_friction)
+        friction_scale = BOLT_2018_2021_FRICTION_MULT
+      ff += friction_scale * get_friction(error_with_lsf + JERK_GAIN * desired_lateral_jerk, lateral_accel_deadzone, friction_threshold, self.torque_params)
       deadzone_boost_active = False
       if self.torque_deadzone_boost > 0.0 and abs(gravity_adjusted_future_lateral_accel) < DEADZONE_BOOST_LAT_ACCEL:
         boost_scale = np.interp(abs(gravity_adjusted_future_lateral_accel), [0.0, DEADZONE_BOOST_LAT_ACCEL], [1.0, 0.0])
@@ -249,7 +246,7 @@ class LatControlTorque(LatControl):
       output_torque = self.torque_from_lateral_accel(output_lataccel, self.torque_params)
       if self.is_bolt_2017 and bolt_2017_lateral_testing_ground_active():
         output_torque *= get_bolt_2017_torque_scale(setpoint)
-      elif self.bolt_2018_2021_test_active:
+      elif bolt_2018_2021_test_active:
         output_torque *= get_bolt_2018_2021_dynamic_torque_scale(setpoint, desired_lateral_jerk)
 
       pid_log.active = True
