@@ -30,6 +30,14 @@ class CarState(CarStateBase):
 
     self.lkas_button = 0
 
+  @staticmethod
+  def get_lkas_button(pt_signals, is_ram: bool) -> bool:
+    if is_ram:
+      return bool(pt_signals.get("Center_Stack_1", {}).get("LKAS_Button", 0) or
+                  pt_signals.get("Center_Stack_2", {}).get("LKAS_Button", 0))
+
+    return pt_signals.get("TRACTION_BUTTON", {}).get("TOGGLE_LKAS", 0) == 1
+
   def update(self, can_parsers, starpilot_toggles) -> structs.CarState:
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
@@ -106,10 +114,7 @@ class CarState(CarStateBase):
     fp_ret = custom.StarPilotCarState.new_message()
 
     self.prev_lkas_button = self.lkas_button
-    if self.CP.carFingerprint in RAM_CARS:
-      self.lkas_button = cp.vl["Center_Stack_1"]["LKAS_Button"] or cp.vl["Center_Stack_2"]["LKAS_Button"]
-    else:
-      self.lkas_button = cp.vl["TRACTION_BUTTON"]["TOGGLE_LKAS"] == 1
+    self.lkas_button = self.get_lkas_button(cp.vl, self.CP.carFingerprint in RAM_CARS)
 
     buttonEvents += [
       *create_button_events(self.lkas_button, self.prev_lkas_button, {1: ButtonType.lkas}),

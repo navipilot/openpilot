@@ -8,6 +8,7 @@ from typing import Any
 
 from opendbc.car import DT_CTRL, CanData, structs
 from opendbc.car.car_helpers import interfaces
+from opendbc.car.chrysler.carstate import CarState as ChryslerCarState
 from opendbc.car.fingerprints import FW_VERSIONS
 from opendbc.car.fw_versions import FW_QUERY_CONFIGS
 from opendbc.car.gm.values import CAR as GM_CAR, CanBus as GMCanBus, GMSafetyFlags
@@ -58,6 +59,14 @@ def get_fuzzy_car_interface(car_name: str, draw: DrawType) -> CarInterfaceBase:
 
 
 class TestCarInterfaces:
+  def test_chrysler_missing_lkas_signal_defaults_unpressed(self):
+    assert not ChryslerCarState.get_lkas_button({"TRACTION_BUTTON": {"TRACTION_OFF": 1}}, is_ram=False)
+    assert ChryslerCarState.get_lkas_button({"TRACTION_BUTTON": {"TOGGLE_LKAS": 1}}, is_ram=False)
+    assert ChryslerCarState.get_lkas_button({
+      "Center_Stack_1": {"LKAS_Button": 0},
+      "Center_Stack_2": {"LKAS_Button": 1},
+    }, is_ram=True)
+
   def test_gm_bolt_gen2_pedal_safety_flags(self):
     CarInterface = interfaces[GM_CAR.CHEVROLET_BOLT_ACC_2022_2023_PEDAL]
 
