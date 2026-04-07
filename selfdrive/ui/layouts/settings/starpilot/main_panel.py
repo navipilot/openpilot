@@ -16,6 +16,7 @@ from openpilot.selfdrive.ui.layouts.settings.starpilot.maps import StarPilotMaps
 from openpilot.selfdrive.ui.layouts.settings.starpilot.navigation import StarPilotNavigationLayout
 from openpilot.selfdrive.ui.layouts.settings.starpilot.data import StarPilotDataLayout
 from openpilot.selfdrive.ui.layouts.settings.starpilot.device import StarPilotDeviceLayout
+from openpilot.selfdrive.ui.layouts.settings.starpilot.system_settings import StarPilotSystemLayout
 from openpilot.selfdrive.ui.layouts.settings.starpilot.utilities import StarPilotUtilitiesLayout
 from openpilot.selfdrive.ui.layouts.settings.starpilot.visuals import StarPilotVisualsLayout
 from openpilot.selfdrive.ui.layouts.settings.starpilot.themes import StarPilotThemesLayout
@@ -52,8 +53,8 @@ class StarPilotLayout(Widget):
     {
       "title": "System Settings",
       "icon": "icon_system.png",
-      "desc": "Manage backups, device settings, screen options, storage, and tools to keep StarPilot running smoothly.",
-      "buttons": [("DATA", "DATA", 0), ("DEVICE CONTROLS", "DEVICE", 0), ("UTILITIES", "UTILITIES", 0)],
+      "desc": "Adjust device behavior, manage storage and backups, and access maintenance tools from one touch-friendly settings page.",
+      "buttons": [("MANAGE", "SYSTEM", 0)],
       "color": "#D946EF",
     },
     {
@@ -87,6 +88,7 @@ class StarPilotLayout(Widget):
     self._panels = {
       StarPilotPanelType.MAIN: StarPilotPanelInfo("", None),
       StarPilotPanelType.SOUNDS: StarPilotPanelInfo(tr_noop("Sounds"), StarPilotSoundsLayout()),
+      StarPilotPanelType.SYSTEM: StarPilotPanelInfo(tr_noop("System Settings"), StarPilotSystemLayout()),
       StarPilotPanelType.DRIVING_MODEL: StarPilotPanelInfo(tr_noop("Driving Model"), StarPilotDrivingModelLayout()),
       StarPilotPanelType.LONGITUDINAL: StarPilotPanelInfo(tr_noop("Gas / Brake"), StarPilotLongitudinalLayout()),
       StarPilotPanelType.LATERAL: StarPilotPanelInfo(tr_noop("Steering"), StarPilotLateralLayout()),
@@ -101,11 +103,14 @@ class StarPilotLayout(Widget):
       StarPilotPanelType.WHEEL: StarPilotPanelInfo(tr_noop("Wheel Controls"), StarPilotWheelLayout()),
     }
 
-    self._setup_longitudinal_sub_panels()
-    self._setup_sounds_sub_panels()
-    self._setup_lateral_sub_panels()
-    self._setup_navigation_sub_panels()
-    self._setup_maps_sub_panels()
+    self._setup_sub_panels(
+      StarPilotPanelType.LONGITUDINAL,
+      StarPilotPanelType.SOUNDS,
+      StarPilotPanelType.SYSTEM,
+      StarPilotPanelType.LATERAL,
+      StarPilotPanelType.NAVIGATION,
+      StarPilotPanelType.MAPS,
+    )
 
     self._main_grid = TileGrid(columns=None, padding=20)
     self._rebuild_grid()
@@ -162,66 +167,28 @@ class StarPilotLayout(Widget):
     self._update_depth()
 
   def _update_sub_panel_visibility(self):
-    if self._current_panel == StarPilotPanelType.LONGITUDINAL:
-      longitudinal = self._panels[StarPilotPanelType.LONGITUDINAL].instance
-      if longitudinal:
-        current_sub = self._get_current_sub_panel()
-        if hasattr(longitudinal, 'set_current_sub_panel'):
-          longitudinal.set_current_sub_panel(current_sub)
-    elif self._current_panel == StarPilotPanelType.SOUNDS:
-      sounds = self._panels[StarPilotPanelType.SOUNDS].instance
-      if sounds:
-        current_sub = self._get_current_sub_panel()
-        if hasattr(sounds, '_navigate_to'):
-          sounds._current_sub_panel = current_sub
-    elif self._current_panel == StarPilotPanelType.NAVIGATION:
-      nav = self._panels[StarPilotPanelType.NAVIGATION].instance
-      if nav:
-        current_sub = self._get_current_sub_panel()
-        if hasattr(nav, '_navigate_to'):
-          nav._current_sub_panel = current_sub
-    elif self._current_panel == StarPilotPanelType.MAPS:
-      maps = self._panels[StarPilotPanelType.MAPS].instance
-      if maps:
-        current_sub = self._get_current_sub_panel()
-        if hasattr(maps, '_navigate_to'):
-          maps._current_sub_panel = current_sub
+    panel = self._panels[self._current_panel].instance
+    current_sub = self._get_current_sub_panel()
+    if panel and hasattr(panel, 'set_current_sub_panel'):
+      panel.set_current_sub_panel(current_sub)
 
   def _get_current_sub_panel(self) -> str:
     if self._panel_stack and self._panel_stack[-1][0] == self._current_panel:
       return self._panel_stack[-1][1]
     return ""
 
-  def _setup_longitudinal_sub_panels(self):
-    longitudinal = self._panels[StarPilotPanelType.LONGITUDINAL].instance
-    if longitudinal and hasattr(longitudinal, 'set_navigate_callback'):
-      longitudinal.set_navigate_callback(self._push_sub_panel)
-
-  def _setup_sounds_sub_panels(self):
-    sounds = self._panels[StarPilotPanelType.SOUNDS].instance
-    if sounds and hasattr(sounds, 'set_navigate_callback'):
-      sounds.set_navigate_callback(self._push_sub_panel)
-
-  def _setup_lateral_sub_panels(self):
-    lateral = self._panels[StarPilotPanelType.LATERAL].instance
-    if lateral and hasattr(lateral, 'set_navigate_callback'):
-      lateral.set_navigate_callback(self._push_sub_panel)
-
-  def _setup_navigation_sub_panels(self):
-    nav = self._panels[StarPilotPanelType.NAVIGATION].instance
-    if nav and hasattr(nav, 'set_navigate_callback'):
-      nav.set_navigate_callback(self._push_sub_panel)
-
-  def _setup_maps_sub_panels(self):
-    maps = self._panels[StarPilotPanelType.MAPS].instance
-    if maps and hasattr(maps, 'set_navigate_callback'):
-      maps.set_navigate_callback(self._push_sub_panel)
+  def _setup_sub_panels(self, *panel_types: StarPilotPanelType):
+    for panel_type in panel_types:
+      panel = self._panels[panel_type].instance
+      if panel and hasattr(panel, 'set_navigate_callback'):
+        panel.set_navigate_callback(self._push_sub_panel)
 
   def _rebuild_grid(self):
     self._main_grid.clear()
     
     panel_type_map = {
       "SOUNDS": StarPilotPanelType.SOUNDS,
+      "SYSTEM": StarPilotPanelType.SYSTEM,
       "DRIVING_MODEL": StarPilotPanelType.DRIVING_MODEL,
       "LONGITUDINAL": StarPilotPanelType.LONGITUDINAL,
       "LATERAL": StarPilotPanelType.LATERAL,

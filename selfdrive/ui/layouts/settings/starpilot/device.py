@@ -9,7 +9,7 @@ from openpilot.system.ui.widgets import DialogResult
 from openpilot.system.ui.widgets.confirm_dialog import ConfirmDialog
 from openpilot.system.ui.widgets.selection_dialog import SelectionDialog
 from openpilot.selfdrive.ui.layouts.settings.starpilot.panel import StarPilotPanel
-from openpilot.selfdrive.ui.layouts.settings.starpilot.aethergrid import AetherSliderDialog
+from openpilot.selfdrive.ui.layouts.settings.starpilot.aethergrid import AetherSliderDialog, TileGrid
 
 
 class StarPilotDeviceLayout(StarPilotPanel):
@@ -61,6 +61,7 @@ class StarPilotDeviceLayout(StarPilotPanel):
       "screen": StarPilotScreenLayout(),
       "device_settings": StarPilotDeviceManagementLayout(),
     }
+    self._tile_grid = TileGrid(columns=2, padding=20, uniform_width=True)
 
     for name, panel in self._sub_panels.items():
       if hasattr(panel, 'set_navigate_callback'):
@@ -128,6 +129,7 @@ class StarPilotDeviceLayout(StarPilotPanel):
 class StarPilotScreenLayout(StarPilotPanel):
   def __init__(self):
     super().__init__()
+    self._tile_grid = TileGrid(columns=2, padding=20, uniform_width=True)
     self.CATEGORIES = [
       {
         "title": tr_noop("Screen Settings"),
@@ -222,6 +224,7 @@ class StarPilotScreenLayout(StarPilotPanel):
 class StarPilotDeviceManagementLayout(StarPilotPanel):
   def __init__(self):
     super().__init__()
+    self._tile_grid = TileGrid(columns=2, padding=20, uniform_width=True)
     self.CATEGORIES = [
       {
         "title": tr_noop("Device Settings"),

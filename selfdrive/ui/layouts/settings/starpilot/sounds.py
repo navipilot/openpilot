@@ -2,16 +2,17 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pyray as rl
+
 from openpilot.common.basedir import BASEDIR
 from openpilot.starpilot.common.starpilot_variables import ACTIVE_THEME_PATH
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.lib.multilang import tr, tr_noop
 from openpilot.system.ui.widgets import DialogResult
-from openpilot.system.ui.widgets.selection_dialog import SelectionDialog
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.selfdrive.ui.lib.starpilot_state import starpilot_state
 from openpilot.selfdrive.ui.layouts.settings.starpilot.panel import StarPilotPanel
-from openpilot.selfdrive.ui.layouts.settings.starpilot.aethergrid import TileGrid, ToggleTile, AetherSliderDialog
+from openpilot.selfdrive.ui.layouts.settings.starpilot.aethergrid import TileGrid, ToggleTile, AetherSliderDialog, RadioTileGroup
 
 class StarPilotSoundsLayout(StarPilotPanel):
   COOLDOWN_KEY = "SwitchbackModeCooldown"
@@ -36,41 +37,73 @@ class StarPilotSoundsLayout(StarPilotPanel):
 
   def __init__(self):
     super().__init__()
-
+    self._section_names = ["volume_control", "custom_alerts"]
+    self._active_section = self._section_names[0]
     self._sub_panels = {
       "volume_control": StarPilotVolumeControlLayout(),
       "custom_alerts": StarPilotCustomAlertsLayout(),
     }
-
-    self.CATEGORIES = [
-      {
-        "title": tr_noop("Alert Volume Controller"),
-        "panel": "volume_control",
-        "desc": tr_noop("Adjust volume levels for different alert types."),
-        "icon": "toggle_icons/icon_mute.png",
-        "color": "#E63956"
-      },
-      {
-        "title": tr_noop("StarPilot Alerts"),
-        "panel": "custom_alerts",
-        "desc": tr_noop("Enable or disable specific StarPilot-only alerts."),
-        "icon": "toggle_icons/icon_green_light.png",
-        "color": "#E63956"
-      },
-    ]
+    self._section_tabs = RadioTileGroup(
+      "",
+      [tr("Volumes"), tr("Alerts")],
+      0,
+      self._on_section_change,
+    )
 
     for name, panel in self._sub_panels.items():
       if hasattr(panel, 'set_navigate_callback'):
-        panel.set_navigate_callback(self._navigate_to)
+        panel.set_navigate_callback(lambda sub_panel, section_name=name: self._navigate_to_child(section_name, sub_panel))
       if hasattr(panel, 'set_back_callback'):
         panel.set_back_callback(self._go_back)
 
-    self._rebuild_grid()
+  def _on_section_change(self, index: int):
+    if 0 <= index < len(self._section_names):
+      self._set_active_section(self._section_names[index])
 
-  def refresh_visibility(self):
-    for panel in self._sub_panels.values():
-      if hasattr(panel, 'refresh_visibility'):
-        panel.refresh_visibility()
+  def _set_active_section(self, section_name: str, child_panel: str = ""):
+    if section_name not in self._sub_panels:
+      return
+
+    if section_name != self._active_section:
+      self._sub_panels[self._active_section].hide_event()
+      self._active_section = section_name
+      self._sub_panels[self._active_section].show_event()
+
+    self._section_tabs.set_index(self._section_names.index(section_name))
+    panel = self._sub_panels[section_name]
+    if hasattr(panel, 'set_current_sub_panel'):
+      panel.set_current_sub_panel(child_panel)
+
+  def _navigate_to_child(self, section_name: str, child_panel: str):
+    self._set_active_section(section_name, child_panel)
+    if self._navigate_callback:
+      self._navigate_callback(f"{section_name}:{child_panel}")
+
+  def set_current_sub_panel(self, sub_panel: str):
+    super().set_current_sub_panel(sub_panel)
+    if not sub_panel:
+      self._set_active_section(self._active_section, "")
+      return
+
+    if ":" in sub_panel:
+      section_name, child_panel = sub_panel.split(":", 1)
+      self._set_active_section(section_name, child_panel)
+    elif sub_panel in self._section_names:
+      self._set_active_section(sub_panel)
+
+  def _render(self, rect):
+    tab_rect = rl.Rectangle(rect.x, rect.y, rect.width, 110)
+    panel_rect = rl.Rectangle(rect.x, rect.y + 140, rect.width, rect.height - 140)
+    self._section_tabs.render(tab_rect)
+    self._sub_panels[self._active_section].render(panel_rect)
+
+  def show_event(self):
+    super().show_event()
+    self._sub_panels[self._active_section].show_event()
+
+  def hide_event(self):
+    super().hide_event()
+    self._sub_panels[self._active_section].hide_event()
 
 class StarPilotVolumeControlLayout(StarPilotPanel):
   COOLDOWN_INFO = {"title": tr_noop("Switchback Mode Cooldown"), "icon": "toggle_icons/icon_mute.png", "min": 0, "max": 30}
@@ -90,6 +123,7 @@ class StarPilotVolumeControlLayout(StarPilotPanel):
   def __init__(self):
     super().__init__()
     self._init_sound_player()
+    self._tile_grid = TileGrid(columns=2, padding=20, uniform_width=True)
     
     self.CATEGORIES = []
     for key in StarPilotSoundsLayout.VOLUME_KEYS:
@@ -217,6 +251,7 @@ class StarPilotCustomAlertsLayout(StarPilotPanel):
 
   def __init__(self):
     super().__init__()
+    self._tile_grid = TileGrid(columns=2, padding=20, uniform_width=True)
     self.CATEGORIES = []
     for key in StarPilotSoundsLayout.CUSTOM_ALERTS_KEYS:
       info = self.ALERT_INFO[key]
@@ -231,32 +266,32 @@ class StarPilotCustomAlertsLayout(StarPilotPanel):
       })
     self._rebuild_grid()
 
-  def refresh_visibility(self):
-    self._rebuild_grid()
-
   def _rebuild_grid(self):
-    # Override to add custom BSM/SLC visibility logic
-    if not self.CATEGORIES: return
-    if self._tile_grid is None: self._tile_grid = TileGrid(columns=None, padding=20)
+    if not self.CATEGORIES:
+      return
     self._tile_grid.clear()
 
     for cat in self.CATEGORIES:
       key = cat.get("key")
-      visible = True
+      is_enabled = lambda: True
+      disabled_label = ""
 
       if key == "LoudBlindspotAlert":
-        visible &= starpilot_state.car_state.hasBSM
+        is_enabled = lambda: starpilot_state.car_state.hasBSM
+        disabled_label = tr_noop("Needs BSM")
       elif key == "SpeedLimitChangedAlert":
-        visible &= self._params.get_bool("ShowSpeedLimits") or (
+        is_enabled = lambda: self._params.get_bool("ShowSpeedLimits") or (
           starpilot_state.car_state.hasOpenpilotLongitudinal and self._params.get_bool("SpeedLimitController")
         )
+        disabled_label = tr_noop("Needs Speed Limits")
 
-      if not visible: continue
-
-      tile = ToggleTile(        title=tr(cat["title"]),
+      tile = ToggleTile(
+        title=tr(cat["title"]),
         get_state=cat["get_state"],
         set_state=cat["set_state"],
         icon_path=cat.get("icon"),
-        bg_color=cat.get("color")
+        bg_color=cat.get("color"),
+        is_enabled=is_enabled,
+        disabled_label=tr(disabled_label) if disabled_label else "",
       )
       self._tile_grid.add_tile(tile)

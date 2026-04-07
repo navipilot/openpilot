@@ -13,6 +13,7 @@ from openpilot.system.ui.widgets.confirm_dialog import ConfirmDialog, alert_dial
 from openpilot.system.ui.widgets.selection_dialog import SelectionDialog
 from openpilot.system.ui.widgets.input_dialog import InputDialog
 from openpilot.selfdrive.ui.layouts.settings.starpilot.panel import StarPilotPanel
+from openpilot.selfdrive.ui.layouts.settings.starpilot.aethergrid import TileGrid
 
 LEGACY_STARPILOT_PARAM_RENAMES = {
   "FrogPilotApiToken": "StarPilotApiToken",
@@ -51,6 +52,7 @@ class StarPilotDataLayout(StarPilotPanel):
       "toggle_backups": StarPilotToggleBackupsLayout(),
       "storage": StarPilotStorageLayout(),
     }
+    self._tile_grid = TileGrid(columns=2, padding=20, uniform_width=True)
 
     for name, panel in self._sub_panels.items():
       if hasattr(panel, 'set_navigate_callback'):
@@ -91,6 +93,7 @@ class StarPilotDataLayout(StarPilotPanel):
 class StarPilotBackupsLayout(StarPilotPanel):
   def __init__(self):
     super().__init__()
+    self._tile_grid = TileGrid(columns=2, padding=20, uniform_width=True)
     self.CATEGORIES = [
       {"title": tr_noop("Create Backup"), "type": "hub", "on_click": self._on_create_backup, "color": "#D43D8A"},
       {"title": tr_noop("Restore Backup"), "type": "hub", "on_click": self._on_restore_backup, "color": "#D43D8A"},
@@ -158,6 +161,7 @@ class StarPilotBackupsLayout(StarPilotPanel):
 class StarPilotToggleBackupsLayout(StarPilotPanel):
   def __init__(self):
     super().__init__()
+    self._tile_grid = TileGrid(columns=2, padding=20, uniform_width=True)
     self.CATEGORIES = [
       {"title": tr_noop("Create Toggle Backup"), "type": "hub", "on_click": self._on_create, "color": "#D43D8A"},
       {"title": tr_noop("Restore Toggle Backup"), "type": "hub", "on_click": self._on_restore, "color": "#D43D8A"},
@@ -232,8 +236,9 @@ class StarPilotToggleBackupsLayout(StarPilotPanel):
 class StarPilotStorageLayout(StarPilotPanel):
   def __init__(self):
     super().__init__()
+    self._tile_grid = TileGrid(columns=2, padding=20, uniform_width=True)
     self.CATEGORIES = [
-      {"title": tr_noop("Driving Data"), "type": "value", "get_value": self._get_storage, "on_click": lambda: None, "color": "#D43D8A"},
+      {"title": tr_noop("Driving Data"), "type": "value", "get_value": self._get_storage, "on_click": lambda: None, "color": "#D43D8A", "is_enabled": lambda: False},
     ]
     self._rebuild_grid()
 

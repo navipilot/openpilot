@@ -83,8 +83,7 @@ class AetherTile(Widget):
       self._is_pressed = False
 
   def _handle_mouse_event(self, mouse_event):
-    if self._is_pressed and not rl.check_collision_point_rec(mouse_event.pos, self._hit_rect):
-      self._is_pressed = False
+    if not rl.check_collision_point_rec(mouse_event.pos, self._hit_rect):
       self._plate_target = 0.0
 
   def _animate_plate(self, dt: float):
@@ -216,35 +215,47 @@ class HubTile(AetherTile):
 
 class ToggleTile(AetherTile):
   def __init__(self, title: str, get_state: Callable[[], bool], set_state: Callable[[bool], None], icon_path: str | None = None,
-               bg_color: rl.Color | str | None = None, desc: str = ""):
+               bg_color: rl.Color | str | None = None, desc: str = "", is_enabled: Callable[[], bool] | None = None, disabled_label: str = ""):
     if bg_color: super().__init__(surface_color=bg_color)
     else: super().__init__(surface_color=rl.Color(0, 163, 0, 255))
     self.title = title
     self.desc = desc
     self.get_state = get_state
     self.set_state = set_state
+    self.set_enabled(is_enabled or True)
     self._icon = gui_app.starpilot_texture(icon_path, 80, 80) if icon_path else None
     self._font = gui_app.font(FontWeight.BOLD)
     self._font_desc = gui_app.font(FontWeight.NORMAL)
     self._active_color = self.surface_color
     self._inactive_color = rl.Color(120, 120, 120, 255)
+    self._disabled_color = rl.Color(75, 75, 75, 255)
+    self._disabled_label = disabled_label
 
   def _handle_mouse_release(self, mouse_pos: MousePos):
     if self._is_pressed:
-      if rl.check_collision_point_rec(mouse_pos, self._hit_rect):
+      if rl.check_collision_point_rec(mouse_pos, self._hit_rect) and self.enabled:
         self.set_state(not self.get_state())
       self._plate_target = 0.0
       self._is_pressed = False
 
   def _render(self, rect: rl.Rectangle):
+    enabled = self.enabled
     active = self.get_state()
-    self.surface_color = self._active_color if active else self._inactive_color
+    if enabled:
+      self.surface_color = self._active_color if active else self._inactive_color
+    else:
+      self.surface_color = self._disabled_color
+      self._plate_offset = 0.0
+      self._plate_target = 0.0
     face = self._render_layers(rect)
     line_heights = [28, 30]
     _, ty = self._centered_content(face, self._icon, 0.75, 28, len(line_heights), line_heights)
     max_w = face.width - 40
     self._draw_text_fit(self._font, self.title, rl.Vector2(face.x + 20, ty), max_w, 28, align_center=True, uppercase=True)
-    state_text = tr("ON") if active else tr("OFF")
+    if enabled:
+      state_text = tr("ON") if active else tr("OFF")
+    else:
+      state_text = tr(self._disabled_label) if self._disabled_label else tr("LOCKED")
     self._draw_text_fit(self._font, state_text, rl.Vector2(face.x + 20, ty + 28 + 8), max_w, 30, align_center=True, uppercase=True)
 
     if self.desc:
@@ -557,10 +568,15 @@ class RadioTileGroup(Widget):
       self._option_targets.append(0.0)
     for i in range(len(self._option_offsets)):
       self._option_offsets[i] += (self._option_targets[i] - self._option_offsets[i]) * (1 - math.exp(-dt / PLATE_TAU))
-    title_size = measure_text_cached(self._font_title, self.title, 40)
-    rl.draw_text_ex(self._font_title, self.title, rl.Vector2(round(rect.x), round(rect.y + (rect.height - title_size.y) / 2)), 40, 0, rl.WHITE)
-    padding, option_w = 20, 200
-    start_x = rect.x + rect.width - (len(self.options) * (option_w + padding))
+    padding = 20
+    option_w = 240 if len(self.options) <= 3 else 200
+    total_width = len(self.options) * option_w + max(0, len(self.options) - 1) * padding
+    if self.title:
+      title_size = measure_text_cached(self._font_title, self.title, 40)
+      rl.draw_text_ex(self._font_title, self.title, rl.Vector2(round(rect.x), round(rect.y + (rect.height - title_size.y) / 2)), 40, 0, rl.WHITE)
+      start_x = rect.x + rect.width - total_width
+    else:
+      start_x = rect.x + (rect.width - total_width) / 2
     for i, opt in enumerate(self.options):
       r = rl.Rectangle(start_x + i * (option_w + padding), rect.y, option_w, rect.height)
       self._option_rects.append(r)
@@ -582,9 +598,10 @@ class RadioTileGroup(Widget):
 
 
 class TileGrid(Widget):
-  def __init__(self, columns: int | None = None, padding: int = 20):
+  def __init__(self, columns: int | None = None, padding: int = 20, uniform_width: bool = False):
     super().__init__()
     self._columns, self.padding, self.tiles = columns, padding, []
+    self._uniform_width = uniform_width
 
   def add_tile(self, tile: Widget): self.tiles.append(tile)
 
@@ -607,13 +624,20 @@ class TileGrid(Widget):
       else: cols = 4
     rows = (count + cols - 1) // cols
     tile_h = (rect.height - (self.padding * (rows - 1))) / rows
+    uniform_tile_w = (rect.width - (self.padding * (cols - 1))) / cols if self._uniform_width else 0
     tile_idx = 0
     for r in range(rows):
       remaining = count - tile_idx
       if remaining <= 0: break
       items_in_row = min(cols, remaining)
-      row_tile_w = (rect.width - (self.padding * (items_in_row - 1))) / items_in_row
+      if self._uniform_width:
+        row_tile_w = uniform_tile_w
+        row_width = (row_tile_w * items_in_row) + (self.padding * (items_in_row - 1))
+        row_x = rect.x + (rect.width - row_width) / 2
+      else:
+        row_tile_w = (rect.width - (self.padding * (items_in_row - 1))) / items_in_row
+        row_x = rect.x
       for c in range(items_in_row):
         tile = tiles_to_render[tile_idx]
-        tile.render(rl.Rectangle(rect.x + c * (row_tile_w + self.padding), rect.y + r * (tile_h + self.padding), row_tile_w, tile_h))
+        tile.render(rl.Rectangle(row_x + c * (row_tile_w + self.padding), rect.y + r * (tile_h + self.padding), row_tile_w, tile_h))
         tile_idx += 1

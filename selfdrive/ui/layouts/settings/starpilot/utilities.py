@@ -8,6 +8,7 @@ from openpilot.system.ui.widgets.confirm_dialog import ConfirmDialog, alert_dial
 from openpilot.system.ui.widgets.selection_dialog import SelectionDialog
 from openpilot.system.ui.widgets.input_dialog import InputDialog
 from openpilot.selfdrive.ui.layouts.settings.starpilot.panel import StarPilotPanel
+from openpilot.selfdrive.ui.layouts.settings.starpilot.aethergrid import TileGrid
 
 EXCLUDED_KEYS = {
   "AvailableModels",
@@ -38,6 +39,7 @@ REPORT_CATEGORIES = [
 class StarPilotUtilitiesLayout(StarPilotPanel):
   def __init__(self):
     super().__init__()
+    self._tile_grid = TileGrid(columns=2, padding=20, uniform_width=True)
     self.CATEGORIES = [
       {
         "title": tr_noop("Debug Mode"),

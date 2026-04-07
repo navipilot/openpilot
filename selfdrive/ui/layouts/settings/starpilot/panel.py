@@ -25,6 +25,7 @@ class StarPilotPanelType(IntEnum):
   THEMES = 11
   VEHICLE = 12
   WHEEL = 13
+  SYSTEM = 14
 
 
 @dataclass
@@ -55,6 +56,9 @@ class StarPilotPanel(Widget):
   def set_back_callback(self, callback: Callable):
     self._back_callback = callback
 
+  def set_current_sub_panel(self, sub_panel: str):
+    self._current_sub_panel = sub_panel
+
   def _rebuild_grid(self):
     if not self.CATEGORIES:
       return
@@ -84,9 +88,9 @@ class StarPilotPanel(Widget):
           bg_color=cat.get("color"),
         )
       elif tile_type == "toggle":
-        tile = ToggleTile(title=tr(cat["title"]), get_state=cat["get_state"], set_state=cat["set_state"], icon_path=cat.get("icon"), bg_color=cat.get("color"), desc=tr(cat.get("desc", "")))
+        tile = ToggleTile(title=tr(cat["title"]), get_state=cat["get_state"], set_state=cat["set_state"], icon_path=cat.get("icon"), bg_color=cat.get("color"), desc=tr(cat.get("desc", "")), is_enabled=cat.get("is_enabled"), disabled_label=cat.get("disabled_label", ""))
       elif tile_type == "value":
-        tile = ValueTile(title=tr(cat["title"]), get_value=cat["get_value"], on_click=cat["on_click"], icon_path=cat.get("icon"), bg_color=cat.get("color"), desc=tr(cat.get("desc", "")))
+        tile = ValueTile(title=tr(cat["title"]), get_value=cat["get_value"], on_click=cat["on_click"], icon_path=cat.get("icon"), bg_color=cat.get("color"), is_enabled=cat.get("is_enabled"), desc=tr(cat.get("desc", "")))
       else:
         continue
 
