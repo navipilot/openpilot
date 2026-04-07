@@ -135,18 +135,22 @@ procs = [
 ]
 
 # StarPilot variables
+procs += [
+  PythonProcess("the_pond", "starpilot.system.the_pond.the_pond", always_run, nice=19),
+  PythonProcess("galaxy", "starpilot.system.galaxy.galaxy", always_run, nice=19),
+]
+
 device_type = HARDWARE.get_device_type()
 if device_type in ("tici", "tizi"):
   procs.append(NativeProcess("ui", "selfdrive/ui", ["./ui"], always_run, watchdog_max_dt=UI_WATCHDOG_MAX_DT))
 else:
   # C4 (mici) runs the Python raylib UI path.
   procs.append(PythonProcess("ui", "selfdrive.ui.ui", always_run, watchdog_max_dt=UI_WATCHDOG_MAX_DT))
+
 procs += [
   PythonProcess("device_syncd", "starpilot.system.device_syncd", always_run),
   PythonProcess("starpilot_process", "starpilot.starpilot_process", always_run),
   PythonProcess("mapd", "starpilot.navigation.mapd_wrapper", always_run),
-  PythonProcess("the_pond", "starpilot.system.the_pond.the_pond", always_run, nice=19),
-  PythonProcess("galaxy", "starpilot.system.galaxy.galaxy", always_run, nice=19),
   PythonProcess("speed_limit_filler", "starpilot.system.speed_limit_filler", run_speed_limit_filler),
   PythonProcess("speed_limit_vision", "starpilot.system.speed_limit_vision", run_speed_limit_vision, nice=19),
 ]

@@ -89,6 +89,13 @@ class TestManager:
   def test_duplicate_procs(self):
     assert len(procs) == len(managed_processes), "Duplicate process names"
 
+  def test_remote_access_procs_start_before_ui(self):
+    names = [p.name for p in procs]
+    ui_idx = names.index("ui")
+
+    assert names.index("the_pond") < ui_idx
+    assert names.index("galaxy") < ui_idx
+
   def test_blacklisted_procs(self):
     # TODO: ensure there are blacklisted procs until we have a dedicated test
     assert len(BLACKLIST_PROCS), "No blacklisted procs to test not_run"
