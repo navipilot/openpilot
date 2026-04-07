@@ -15,6 +15,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INPUT_ROOT = Path("/data/openpilot/uncompiledmodels")
 DEFAULT_OUTPUT_ROOT = Path("/data/openpilot/compiledmodels")
 COMPILE_SCRIPT = REPO_ROOT / "tinygrad_repo/examples/openpilot/compile3.py"
+DM_MODEL_KEY = "dm"
+DM_MODEL_NAME = "dmonitoring_model"
+DM_TARGET_ALIASES = {DM_MODEL_KEY, "dmonitoring", DM_MODEL_NAME}
+DM_INPUT_CANDIDATES = ("dmonitoring_model.onnx", "dmonitoring.onnx", "dm.onnx")
 
 COMPONENT_ALIASES = {
   "driving_off_policy": ("driving_off_policy", "off_policy", "offpolicy"),
@@ -30,6 +34,7 @@ def parse_args() -> argparse.Namespace:
     description="Compile staged ONNX driving models into tinygrad pkls without touching selfdrive/modeld/models.",
   )
   parser.add_argument("--model", help="Output model key, for example sc2.")
+  parser.add_argument("--dm", action="store_true", help="Compile the driver monitoring model into dmonitoring_model_tinygrad.pkl.")
   parser.add_argument("--input-dir", type=Path, default=DEFAULT_INPUT_ROOT, help="Directory containing staged ONNX files. Flat root files like driving_policy.onnx are preferred.")
   parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_ROOT, help="Directory for compiled tinygrad pkls and metadata.")
   parser.add_argument("--list", action="store_true", help="List detected staged models and exit.")
@@ -45,6 +50,11 @@ def parse_args() -> argparse.Namespace:
   if args.model and dynamic_model_flags and args.model != dynamic_model_flags[0]:
     parser.error("Use either --model sc2 or --sc2, not both with different values.")
   args.model = args.model or (dynamic_model_flags[0] if dynamic_model_flags else None)
+  if args.model and args.model.strip().lower() in DM_TARGET_ALIASES:
+    args.dm = True
+    args.model = None
+  if args.dm and args.model:
+    parser.error("Use either --dm or a driving model key, not both.")
   return args
 
 
@@ -62,6 +72,26 @@ def normalize_model_files(model_files: dict[str, Path]) -> dict[str, Path]:
   if on_policy_path is not None and "driving_policy" not in normalized and "driving_off_policy" in normalized:
     normalized["driving_policy"] = on_policy_path
   return normalized
+
+
+def find_staged_dm(input_root: Path) -> Path | None:
+  if not input_root.is_dir():
+    return None
+
+  for candidate in DM_INPUT_CANDIDATES:
+    path = input_root / candidate
+    if path.is_file():
+      return path
+
+  for child in sorted(input_root.iterdir()):
+    if not child.is_dir():
+      continue
+    for candidate in DM_INPUT_CANDIDATES:
+      path = child / candidate
+      if path.is_file():
+        return path
+
+  return None
 
 
 def find_staged_models(input_root: Path) -> dict[str, dict[str, Path]]:
@@ -183,7 +213,8 @@ def clear_existing_outputs(output_dir: Path) -> list[Path]:
 
 
 def list_models(staged: dict[str, dict[str, Path]], input_root: Path) -> int:
-  if not staged:
+  dm_path = find_staged_dm(input_root)
+  if not staged and dm_path is None:
     print(f"No staged models found in {input_root}")
     return 0
 
@@ -191,6 +222,10 @@ def list_models(staged: dict[str, dict[str, Path]], input_root: Path) -> int:
     print(model_key)
     for component, path in sorted(files.items()):
       print(f"  {component}: {path}")
+
+  if dm_path is not None:
+    print(DM_MODEL_KEY)
+    print(f"  {DM_MODEL_NAME}: {dm_path}")
   return 0
 
 
@@ -201,9 +236,36 @@ def main() -> int:
   if args.list:
     return list_models(staged, args.input_dir)
 
+  if args.dm:
+    onnx_path = find_staged_dm(args.input_dir)
+    if onnx_path is None:
+      raise SystemExit(
+        f"No staged ONNX file found for {DM_MODEL_NAME} in {args.input_dir}. "
+        f"Use one of: {', '.join(str(args.input_dir / candidate) for candidate in DM_INPUT_CANDIDATES)}"
+      )
+
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    print(f"Compiling {DM_MODEL_NAME} from {onnx_path} -> {args.output_dir}")
+
+    removed = clear_existing_outputs(args.output_dir)
+    if removed:
+      print(f"  cleared {len(removed)} existing output entries")
+
+    output_pkl = args.output_dir / f"{DM_MODEL_NAME}_tinygrad.pkl"
+    output_metadata = args.output_dir / f"{DM_MODEL_NAME}_metadata.pkl"
+
+    compile_component(onnx_path, output_pkl)
+    write_metadata(onnx_path, output_metadata)
+    print(f"  saved {output_pkl.name}")
+    print(f"  saved {output_metadata.name}")
+    print("Done.")
+    return 0
+
   if not args.model:
     available = ", ".join(sorted(k for k in staged if k != "_root"))
-    raise SystemExit(f"Choose a model key, for example ./models --sc2. Available staged models: {available or 'none'}")
+    if find_staged_dm(args.input_dir) is not None:
+      available = f"{available}, {DM_MODEL_KEY}" if available else DM_MODEL_KEY
+    raise SystemExit(f"Choose a model key, for example ./models --sc2 or ./models --dm. Available staged models: {available or 'none'}")
 
   model_key = args.model.strip()
   files = resolve_model_files(args.input_dir, model_key)
