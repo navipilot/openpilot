@@ -18,6 +18,7 @@ COMPILE_SCRIPT = REPO_ROOT / "tinygrad_repo/examples/openpilot/compile3.py"
 
 COMPONENT_ALIASES = {
   "driving_off_policy": ("driving_off_policy", "off_policy", "offpolicy"),
+  "driving_on_policy": ("driving_on_policy", "on_policy", "onpolicy"),
   "driving_policy": ("driving_policy", "policy"),
   "driving_vision": ("driving_vision", "vision"),
 }
@@ -55,6 +56,14 @@ def detect_component(path: Path) -> str | None:
   return None
 
 
+def normalize_model_files(model_files: dict[str, Path]) -> dict[str, Path]:
+  normalized = dict(model_files)
+  on_policy_path = normalized.pop("driving_on_policy", None)
+  if on_policy_path is not None and "driving_policy" not in normalized and "driving_off_policy" in normalized:
+    normalized["driving_policy"] = on_policy_path
+  return normalized
+
+
 def find_staged_models(input_root: Path) -> dict[str, dict[str, Path]]:
   found: dict[str, dict[str, Path]] = {}
   if not input_root.is_dir():
@@ -68,6 +77,7 @@ def find_staged_models(input_root: Path) -> dict[str, dict[str, Path]]:
       component = detect_component(onnx_file)
       if component:
         model_files[component] = onnx_file
+    model_files = normalize_model_files(model_files)
     if model_files:
       found[child.name] = model_files
 
@@ -97,7 +107,7 @@ def find_staged_models(input_root: Path) -> dict[str, dict[str, Path]]:
       flat_root_files[component] = onnx_file
 
   if flat_root_files:
-    found["_root"] = flat_root_files
+    found["_root"] = normalize_model_files(flat_root_files)
 
   return found
 
@@ -116,7 +126,7 @@ def resolve_model_files(input_root: Path, model_key: str) -> dict[str, Path]:
     component = detect_component(onnx_file)
     if component:
       prefixed_files[component] = onnx_file
-  return prefixed_files
+  return normalize_model_files(prefixed_files)
 
 
 def get_metadata_value_by_name(model, name: str):
@@ -201,6 +211,7 @@ def main() -> int:
     raise SystemExit(
       f"No staged ONNX files found for {model_key} in {args.input_dir}. "
       f"Use {args.input_dir}/driving_policy.onnx and {args.input_dir}/driving_vision.onnx, "
+      f"or {args.input_dir}/driving_on_policy.onnx with {args.input_dir}/driving_off_policy.onnx, "
       f"or optionally {args.input_dir / model_key}/*.onnx"
     )
 
