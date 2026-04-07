@@ -96,11 +96,11 @@ function isModeActive(mode) {
 
 function getSelectedMode() {
   const selectedSlot = getSelectedSlot()
-  if (!selectedSlot) return "A"
+  if (!selectedSlot) return "Not active"
   if (String(state.data?.activeSlot || "").trim() === String(state.selectedSlot || "").trim()) {
     return String(state.data?.activeVariant || "").trim().toUpperCase() || getDefaultMode(selectedSlot)
   }
-  return getDefaultMode(selectedSlot)
+  return "Not active"
 }
 
 function modeButtonClass(mode) {
@@ -188,19 +188,8 @@ async function selectMode(mode) {
 
 async function selectSlot(slotValue) {
   const normalizedSlot = String(slotValue || "").trim()
-  state.selectedSlot = normalizedSlot
   if (!normalizedSlot || state.busy) return
-
-  const activeSlot = String(state.data?.activeSlot || "").trim()
-  if (normalizedSlot === activeSlot) return
-
-  const success = await applySelection(normalizedSlot, "A", false)
-  if (!success) {
-    state.selectedSlot = activeSlot
-    if (state.error) {
-      showSnackbar(state.error, "error")
-    }
-  }
+  state.selectedSlot = normalizedSlot
 }
 
 function initialize() {
@@ -252,6 +241,10 @@ export function TestingGround() {
               }
             </select>
           </div>
+
+          <p class="testingGroundHint">
+            Only one Testing Ground can be active at a time. Switching slots only changes what you're viewing, and the active test stays enabled until you explicitly choose another mode.
+          </p>
 
           ${() => getSelectedSlot() ? html`
             <div class="testingGroundDetails">

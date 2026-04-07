@@ -1,7 +1,7 @@
 from parameterized import parameterized
 from types import SimpleNamespace
 
-from cereal import car, log
+from cereal import car, custom, log
 from opendbc.car.car_helpers import interfaces
 from opendbc.car.honda.values import CAR as HONDA
 from opendbc.car.toyota.values import CAR as TOYOTA
@@ -9,19 +9,49 @@ from opendbc.car.nissan.values import CAR as NISSAN
 from opendbc.car.gm.values import CAR as GM
 from opendbc.car.vehicle_model import VehicleModel
 from openpilot.common.realtime import DT_CTRL
-from openpilot.selfdrive.controls.lib.latcontrol_pid import LatControlPID
-from openpilot.selfdrive.controls.lib.latcontrol_torque import LatControlTorque
 from openpilot.selfdrive.controls.lib.latcontrol_angle import LatControlAngle
+from openpilot.selfdrive.controls.lib.latcontrol_pid import LatControlPID
+from openpilot.selfdrive.controls.lib.latcontrol_torque import (
+  LatControlTorque,
+  get_friction_threshold,
+  get_bolt_2017_torque_scale,
+  get_bolt_2018_2021_dynamic_torque_scale,
+  get_bolt_2018_2021_friction_threshold,
+  get_bolt_2018_2021_torque_scale,
+)
 
 
 class TestLatControl:
+
+  def test_bolt_2017_testing_ground_scale_curve(self):
+    assert get_bolt_2017_torque_scale(0.1) == 1.0
+    assert get_bolt_2017_torque_scale(-0.1) == 1.0
+    assert get_bolt_2017_torque_scale(0.5) > get_bolt_2017_torque_scale(-0.5)
+    assert 1.0 < get_bolt_2017_torque_scale(1.2) < get_bolt_2017_torque_scale(0.5)
+    assert get_bolt_2017_torque_scale(-2.5) == 1.0
+
+  def test_bolt_2018_2021_testing_ground_scale_curve(self):
+    assert get_bolt_2018_2021_torque_scale(0.0) == 1.0
+    assert get_bolt_2018_2021_torque_scale(0.2) > get_bolt_2018_2021_torque_scale(0.08)
+    assert get_bolt_2018_2021_torque_scale(0.4) > get_bolt_2018_2021_torque_scale(-0.4)
+    assert get_bolt_2018_2021_torque_scale(2.0) < get_bolt_2018_2021_torque_scale(0.8)
+    assert get_bolt_2018_2021_dynamic_torque_scale(0.4, 0.8) < get_bolt_2018_2021_dynamic_torque_scale(0.4, 0.1)
+
+  def test_bolt_2018_2021_friction_threshold_curve(self):
+    low = get_bolt_2018_2021_friction_threshold(2.0)
+    mid = get_bolt_2018_2021_friction_threshold(10.0)
+    high = get_bolt_2018_2021_friction_threshold(30.0)
+    assert low > get_friction_threshold(2.0)
+    assert mid > get_friction_threshold(10.0)
+    assert high > get_friction_threshold(30.0)
+    assert (low - get_friction_threshold(2.0)) > (mid - get_friction_threshold(10.0)) > (high - get_friction_threshold(30.0))
 
   @parameterized.expand([(HONDA.HONDA_CIVIC, LatControlPID), (TOYOTA.TOYOTA_RAV4, LatControlTorque),
                          (NISSAN.NISSAN_LEAF, LatControlAngle), (GM.CHEVROLET_BOLT_ACC_2022_2023, LatControlTorque)])
   def test_saturation(self, car_name, controller):
     CarInterface = interfaces[car_name]
     CP = CarInterface.get_non_essential_params(car_name)
-    CI = CarInterface(CP)
+    CI = CarInterface(CP, custom.StarPilotCarParams.new_message())
     VM = VehicleModel(CP)
 
     controller = controller(CP.as_reader(), CI, DT_CTRL)

@@ -10,12 +10,19 @@ from openpilot.common.realtime import config_realtime_process, DT_CTRL, Priority
 from openpilot.common.swaglog import cloudlog
 
 from opendbc.car.car_helpers import interfaces
+from opendbc.car.gm.values import CAR as GM_CAR
 from opendbc.car.vehicle_model import VehicleModel
 from openpilot.selfdrive.controls.lib.drive_helpers import clip_curvature
 from openpilot.selfdrive.controls.lib.latcontrol import LatControl
 from openpilot.selfdrive.controls.lib.latcontrol_pid import LatControlPID
 from openpilot.selfdrive.controls.lib.latcontrol_angle import LatControlAngle, STEER_ANGLE_SATURATION_THRESHOLD
-from openpilot.selfdrive.controls.lib.latcontrol_torque import LatControlTorque
+from openpilot.selfdrive.controls.lib.latcontrol_torque import (
+  BOLT_2018_2021_STEER_RATIO_TEST_SCALE,
+  BOLT_2017_STEER_RATIO_TEST_SCALE,
+  LatControlTorque,
+  bolt_2018_2021_lateral_testing_ground_active,
+  bolt_2017_lateral_testing_ground_active,
+)
 from openpilot.selfdrive.controls.lib.longcontrol import LongControl
 from openpilot.selfdrive.modeld.modeld import LAT_SMOOTH_SECONDS
 from openpilot.selfdrive.locationd.helpers import PoseCalibrator, Pose
@@ -92,6 +99,10 @@ class Controls:
     lp = self.sm['liveParameters']
     x = max(lp.stiffnessFactor, 0.1)
     sr = max(lp.steerRatio, 0.1)
+    if self.CP.carFingerprint == GM_CAR.CHEVROLET_BOLT_CC_2017 and bolt_2017_lateral_testing_ground_active():
+      sr *= BOLT_2017_STEER_RATIO_TEST_SCALE
+    elif self.CP.carFingerprint == GM_CAR.CHEVROLET_BOLT_CC_2018_2021 and bolt_2018_2021_lateral_testing_ground_active():
+      sr *= BOLT_2018_2021_STEER_RATIO_TEST_SCALE
     self.VM.update_params(x, sr)
 
     steer_angle_without_offset = math.radians(CS.steeringAngleDeg - lp.angleOffsetDeg)

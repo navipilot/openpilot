@@ -10,6 +10,7 @@ from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.pid import PIDController
 from openpilot.selfdrive.controls.lib.drive_helpers import MIN_SPEED
 from openpilot.selfdrive.controls.lib.latcontrol import LatControl
+from openpilot.starpilot.common.testing_grounds import testing_ground
 
 # At higher speeds (25+mph) we can assume:
 # Lateral acceleration achieved by a specific car correlates to
@@ -57,10 +58,66 @@ BOLT_2017_CARS = (
 )
 BOLT_CARS = BOLT_2022_2023_CARS + BOLT_2018_2021_CARS + BOLT_2017_CARS
 
+BOLT_2017_LATERAL_TESTING_GROUND_ID = testing_ground.id_3
+BOLT_2017_STEER_RATIO_TEST_SCALE = 1.045
+BOLT_2017_TORQUE_SCALE_BP = [0.0, 0.2, 0.5, 1.0, 1.5, 2.5]
+BOLT_2017_TORQUE_SCALE_LEFT = [1.0, 1.0, 1.05, 1.04, 1.03, 1.02]
+BOLT_2017_TORQUE_SCALE_RIGHT = [1.0, 1.0, 1.04, 1.03, 1.01, 1.0]
+
+BOLT_2018_2021_LATERAL_TESTING_GROUND_ID = testing_ground.id_4
+BOLT_2018_2021_STEER_RATIO_TEST_SCALE = 1.01
+BOLT_2018_2021_TORQUE_GAIN_LEFT = 0.10
+BOLT_2018_2021_TORQUE_GAIN_RIGHT = 0.065
+BOLT_2018_2021_TORQUE_RISE = 0.24
+BOLT_2018_2021_TORQUE_FALL = 1.8
+BOLT_2018_2021_JERK_TAPER_CUTOFF = 0.55
+BOLT_2018_2021_FRICTION_MULT = 1.11
+BOLT_2018_2021_FRICTION_THRESHOLD_BUMP = 0.018
+BOLT_2018_2021_FRICTION_THRESHOLD_SPEED = 8.0
+
 
 def get_friction_threshold(v_ego: float) -> float:
   # Keep the speed-scaled friction threshold behavior.
   return float(np.interp(v_ego, [1 * CV.MPH_TO_MS, 20 * CV.MPH_TO_MS, 75 * CV.MPH_TO_MS], [0.16, 0.19, 0.27]))
+
+
+def bolt_2017_lateral_testing_ground_active() -> bool:
+  return testing_ground.use(BOLT_2017_LATERAL_TESTING_GROUND_ID)
+
+
+def get_bolt_2017_torque_scale(desired_lateral_accel: float) -> float:
+  if desired_lateral_accel == 0.0:
+    return 1.0
+
+  scale_values = BOLT_2017_TORQUE_SCALE_LEFT if desired_lateral_accel > 0.0 else BOLT_2017_TORQUE_SCALE_RIGHT
+  return float(np.interp(abs(desired_lateral_accel), BOLT_2017_TORQUE_SCALE_BP, scale_values))
+
+
+def bolt_2018_2021_lateral_testing_ground_active() -> bool:
+  return testing_ground.use(BOLT_2018_2021_LATERAL_TESTING_GROUND_ID)
+
+
+def get_bolt_2018_2021_torque_scale(desired_lateral_accel: float) -> float:
+  if desired_lateral_accel == 0.0:
+    return 1.0
+
+  gain = BOLT_2018_2021_TORQUE_GAIN_LEFT if desired_lateral_accel > 0.0 else BOLT_2018_2021_TORQUE_GAIN_RIGHT
+  abs_lateral_accel = abs(desired_lateral_accel)
+  mid_corner_bump = (1.0 - math.exp(-abs_lateral_accel / BOLT_2018_2021_TORQUE_RISE)) * math.exp(-abs_lateral_accel / BOLT_2018_2021_TORQUE_FALL)
+  return 1.0 + gain * mid_corner_bump
+
+
+def get_bolt_2018_2021_dynamic_torque_scale(desired_lateral_accel: float, desired_lateral_jerk: float) -> float:
+  base_scale = get_bolt_2018_2021_torque_scale(desired_lateral_accel)
+  extra_scale = max(base_scale - 1.0, 0.0)
+  jerk_taper = 1.0 / (1.0 + (abs(desired_lateral_jerk) / BOLT_2018_2021_JERK_TAPER_CUTOFF) ** 2)
+  return 1.0 + (extra_scale * jerk_taper)
+
+
+def get_bolt_2018_2021_friction_threshold(v_ego: float) -> float:
+  base_threshold = get_friction_threshold(v_ego)
+  low_speed_bump = BOLT_2018_2021_FRICTION_THRESHOLD_BUMP / (1.0 + (max(v_ego, 0.0) / BOLT_2018_2021_FRICTION_THRESHOLD_SPEED) ** 2)
+  return base_threshold + low_speed_bump
 
 
 class LatControlTorque(LatControl):
@@ -94,6 +151,7 @@ class LatControlTorque(LatControl):
     self.torque_ff_scale_neg = 1.0
     self.torque_deadzone_boost = float(getattr(self.torque_params, "kfDEPRECATED", 0.0))
     self.torque_ki_mult = 1.0
+    self.bolt_2018_2021_test_active = self.is_bolt_2018_2021 and bolt_2018_2021_lateral_testing_ground_active()
 
     if self.is_bolt:
       kp_scale = getattr(self.torque_params, "kp", getattr(self.torque_params, "kpDEPRECATED", 1.0))
@@ -169,7 +227,14 @@ class LatControlTorque(LatControl):
         ff_scale = np.interp(ff, [-FF_SCALE_BLEND_LAT_ACCEL, 0.0, FF_SCALE_BLEND_LAT_ACCEL],
                              [self.torque_ff_scale_neg, 1.0, self.torque_ff_scale_pos])
         ff *= ff_scale
-      ff += get_friction(error_with_lsf + JERK_GAIN * desired_lateral_jerk, lateral_accel_deadzone, get_friction_threshold(CS.vEgo), self.torque_params)
+      friction_threshold = get_friction_threshold(CS.vEgo)
+      if self.bolt_2018_2021_test_active:
+        friction_threshold = get_bolt_2018_2021_friction_threshold(CS.vEgo)
+        effective_friction = self.torque_params.as_builder()
+        effective_friction.friction *= BOLT_2018_2021_FRICTION_MULT
+      else:
+        effective_friction = self.torque_params
+      ff += get_friction(error_with_lsf + JERK_GAIN * desired_lateral_jerk, lateral_accel_deadzone, friction_threshold, effective_friction)
       deadzone_boost_active = False
       if self.torque_deadzone_boost > 0.0 and abs(gravity_adjusted_future_lateral_accel) < DEADZONE_BOOST_LAT_ACCEL:
         boost_scale = np.interp(abs(gravity_adjusted_future_lateral_accel), [0.0, DEADZONE_BOOST_LAT_ACCEL], [1.0, 0.0])
@@ -182,6 +247,10 @@ class LatControlTorque(LatControl):
                            CS.vEgo < self.low_speed_reset_threshold or unwind_detected)
       output_lataccel = self.pid.update(pid_log.error, error_rate=-measurement_rate, speed=CS.vEgo, feedforward=ff, freeze_integrator=freeze_integrator)
       output_torque = self.torque_from_lateral_accel(output_lataccel, self.torque_params)
+      if self.is_bolt_2017 and bolt_2017_lateral_testing_ground_active():
+        output_torque *= get_bolt_2017_torque_scale(setpoint)
+      elif self.bolt_2018_2021_test_active:
+        output_torque *= get_bolt_2018_2021_dynamic_torque_scale(setpoint, desired_lateral_jerk)
 
       pid_log.active = True
       pid_log.p = float(self.pid.p)
