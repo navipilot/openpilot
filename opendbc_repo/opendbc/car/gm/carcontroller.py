@@ -27,6 +27,12 @@ def get_stock_cc_active_for_cancel(CP, CS):
   return stock_cc_active
 
 
+def use_interceptor_sng_launch(CP, CS):
+  # Restrict the fixed standstill-launch gas to actual near-zero motion
+  # so higher accel requests can take over once the car has started moving.
+  return CS.out.cruiseState.standstill and (CS.out.standstill or CS.out.vEgo < max(CP.vEgoStarting, 0.3))
+
+
 class CarController(CarControllerBase):
   def __init__(self, dbc_names, CP):
     super().__init__(dbc_names, CP)
@@ -439,7 +445,7 @@ class CarController(CarControllerBase):
             # gas interceptor only used for full long control on cars without ACC
             interceptor_gas_cmd, press_regen_paddle = self.calc_pedal_command(actuators.accel, CC.longActive, CS.out.vEgo)
 
-        if self.CP.enableGasInterceptorDEPRECATED and self.apply_gas > self.params.INACTIVE_REGEN and CS.out.cruiseState.standstill:
+        if self.CP.enableGasInterceptorDEPRECATED and self.apply_gas > self.params.INACTIVE_REGEN and use_interceptor_sng_launch(self.CP, CS):
           interceptor_gas_cmd = self.params.SNG_INTERCEPTOR_GAS
           self.apply_brake = 0
           self.apply_gas = self.params.INACTIVE_REGEN
