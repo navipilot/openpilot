@@ -576,7 +576,7 @@ class StarPilotLongitudinalQOLLayout(StarPilotPanel):
       {
         "title": tr_noop("Cruise Interval"),
         "type": "value",
-        "get_value": lambda: f"{self._params.get_int('CustomCruise')} mph",
+        "get_value": lambda: f"{max(1, self._params.get_int('CustomCruise'))} mph",
         "on_click": lambda: self._show_speed_selector("CustomCruise"),
         "color": "#597497",
         "visible": lambda: self._params.get_bool("QOLLongitudinal"),
@@ -584,7 +584,7 @@ class StarPilotLongitudinalQOLLayout(StarPilotPanel):
       {
         "title": tr_noop("Cruise Long"),
         "type": "value",
-        "get_value": lambda: f"{self._params.get_int('CustomCruiseLong')} mph",
+        "get_value": lambda: f"{max(1, self._params.get_int('CustomCruiseLong'))} mph",
         "on_click": lambda: self._show_speed_selector("CustomCruiseLong"),
         "color": "#597497",
         "visible": lambda: self._params.get_bool("QOLLongitudinal"),
@@ -662,7 +662,8 @@ class StarPilotLongitudinalQOLLayout(StarPilotPanel):
         self._params.put_int(key, int(val))
         self._rebuild_grid()
 
-    gui_app.set_modal_overlay(AetherSliderDialog(tr(key), 0, 100, 1, self._params.get_int(key), on_close, unit=" mph", color="#597497"))
+    current = max(1, self._params.get_int(key))
+    gui_app.set_modal_overlay(AetherSliderDialog(tr(key), 1, 100, 1, current, on_close, unit=" mph", color="#597497"))
 
   def _show_int_selector(self, key, min_v, max_v, unit=""):
     def on_close(res, val):

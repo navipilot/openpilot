@@ -1,7 +1,21 @@
 #include "selfdrive/ui/ui.h"
 
 #include <algorithm>
+#include <atomic>
+#include <cerrno>
 #include <cmath>
+#include <chrono>
+#include <csignal>
+#include <cstdio>
+#include <cstdlib>
+#include <execinfo.h>
+#include <fcntl.h>
+#include <mutex>
+#include <pthread.h>
+#include <sys/syscall.h>
+#include <sys/types.h>
+#include <thread>
+#include <unistd.h>
 
 #include <QtConcurrent>
 
@@ -13,6 +27,178 @@
 
 #define BACKLIGHT_DT 0.05
 #define BACKLIGHT_TS 10.00
+
+namespace {
+
+enum class UIStallPhase {
+  INIT = 0,
+  UPDATE_START,
+  AFTER_SOCKETS,
+  AFTER_STATE,
+  AFTER_STATUS,
+  AFTER_WATCHDOG,
+  AFTER_EMIT,
+  AFTER_FS_UPDATE,
+  IDLE,
+};
+
+std::atomic<uint64_t> ui_stall_last_progress_ns{0};
+std::atomic<int> ui_stall_phase{static_cast<int>(UIStallPhase::INIT)};
+std::atomic<uint64_t> ui_stall_frame{0};
+std::atomic<bool> ui_stall_reported{false};
+std::atomic<uint64_t> ui_stall_reported_ns{0};
+std::atomic<int> ui_stall_reported_phase{static_cast<int>(UIStallPhase::INIT)};
+std::atomic<int> ui_stall_dump_fd{-1};
+pthread_t ui_main_thread{};
+
+double read_env_double(const char *name, double default_value) {
+  const char *value = std::getenv(name);
+  if (value == nullptr || *value == '\0') {
+    return default_value;
+  }
+
+  char *end = nullptr;
+  double parsed = std::strtod(value, &end);
+  if (end == value || (end != nullptr && *end != '\0') || parsed <= 0.0) {
+    return default_value;
+  }
+  return parsed;
+}
+
+const char *ui_stall_phase_name(UIStallPhase phase) {
+  switch (phase) {
+    case UIStallPhase::INIT: return "init";
+    case UIStallPhase::UPDATE_START: return "update_start";
+    case UIStallPhase::AFTER_SOCKETS: return "after_sockets";
+    case UIStallPhase::AFTER_STATE: return "after_state";
+    case UIStallPhase::AFTER_STATUS: return "after_status";
+    case UIStallPhase::AFTER_WATCHDOG: return "after_watchdog";
+    case UIStallPhase::AFTER_EMIT: return "after_emit";
+    case UIStallPhase::AFTER_FS_UPDATE: return "after_fs_update";
+    case UIStallPhase::IDLE: return "idle";
+  }
+  return "unknown";
+}
+
+std::string ui_stall_dump_dir() {
+  return access("/data/log", W_OK) == 0 ? "/data/log" : "/tmp";
+}
+
+void ui_stall_signal_handler(int sig) {
+  const int fd = ui_stall_dump_fd.load(std::memory_order_relaxed);
+  if (fd < 0) {
+    return;
+  }
+
+  char header[256];
+  const pid_t tid = static_cast<pid_t>(syscall(SYS_gettid));
+  const int header_len = std::snprintf(header, sizeof(header),
+                                       "=== UI stall backtrace (signal=%d pid=%d tid=%d) ===\n",
+                                       sig, getpid(), tid);
+  if (header_len > 0) {
+    write(fd, header, header_len);
+  }
+
+  void *frames[128];
+  const int frame_count = backtrace(frames, 128);
+  backtrace_symbols_fd(frames, frame_count, fd);
+  write(fd, "\n", 1);
+}
+
+void ui_stall_progress(UIStallPhase phase, uint64_t frame = 0) {
+  const uint64_t now = nanos_since_boot();
+  ui_stall_phase.store(static_cast<int>(phase), std::memory_order_relaxed);
+  ui_stall_frame.store(frame, std::memory_order_relaxed);
+  ui_stall_last_progress_ns.store(now, std::memory_order_relaxed);
+
+  if (ui_stall_reported.exchange(false, std::memory_order_relaxed)) {
+    const uint64_t stall_started = ui_stall_reported_ns.load(std::memory_order_relaxed);
+    const UIStallPhase stalled_phase = static_cast<UIStallPhase>(ui_stall_reported_phase.load(std::memory_order_relaxed));
+    const double stalled_for_s = stall_started == 0 ? 0.0 : (now - stall_started) / 1e9;
+    LOGW("UI stall recovered after %.1fs (stalled_phase=%s current_phase=%s frame=%llu)",
+         stalled_for_s,
+         ui_stall_phase_name(stalled_phase),
+         ui_stall_phase_name(phase),
+         static_cast<unsigned long long>(frame));
+  }
+}
+
+void start_ui_stall_monitor() {
+  static std::once_flag once;
+  std::call_once(once, [] {
+    ui_main_thread = pthread_self();
+    std::signal(SIGUSR1, ui_stall_signal_handler);
+    ui_stall_progress(UIStallPhase::INIT, 0);
+
+    const double stall_probe_dt = read_env_double("UI_STALL_PROBE_MAX_DT", 5.0);
+    if (stall_probe_dt <= 0.0) {
+      return;
+    }
+
+    std::thread([stall_probe_dt]() {
+      using namespace std::chrono_literals;
+      constexpr auto poll_interval = 250ms;
+
+      while (true) {
+        std::this_thread::sleep_for(poll_interval);
+
+        const uint64_t now = nanos_since_boot();
+        const uint64_t last_progress = ui_stall_last_progress_ns.load(std::memory_order_relaxed);
+        if (last_progress == 0) {
+          continue;
+        }
+
+        const double stalled_for_s = (now - last_progress) / 1e9;
+        if (stalled_for_s < stall_probe_dt) {
+          continue;
+        }
+
+        bool expected = false;
+        if (!ui_stall_reported.compare_exchange_strong(expected, true, std::memory_order_relaxed)) {
+          continue;
+        }
+
+        const UIStallPhase phase = static_cast<UIStallPhase>(ui_stall_phase.load(std::memory_order_relaxed));
+        const uint64_t frame = ui_stall_frame.load(std::memory_order_relaxed);
+        ui_stall_reported_ns.store(now, std::memory_order_relaxed);
+        ui_stall_reported_phase.store(static_cast<int>(phase), std::memory_order_relaxed);
+
+        const std::string path = ui_stall_dump_dir() + "/qt_ui_stall_" + std::to_string(getpid()) + "_" + std::to_string(now) + ".log";
+        int fd = open(path.c_str(), O_CREAT | O_WRONLY | O_TRUNC | O_CLOEXEC, 0644);
+        if (fd >= 0) {
+          char header[256];
+          const int header_len = std::snprintf(header, sizeof(header),
+                                               "phase=%s frame=%llu stalled_for_s=%.3f\n",
+                                               ui_stall_phase_name(phase),
+                                               static_cast<unsigned long long>(frame),
+                                               stalled_for_s);
+          if (header_len > 0) {
+            write(fd, header, header_len);
+          }
+
+          ui_stall_dump_fd.store(fd, std::memory_order_relaxed);
+          pthread_kill(ui_main_thread, SIGUSR1);
+          std::this_thread::sleep_for(50ms);
+          ui_stall_dump_fd.store(-1, std::memory_order_relaxed);
+          close(fd);
+          LOGE("UI main thread stalled for %.1fs (phase=%s frame=%llu dump=%s)",
+               stalled_for_s,
+               ui_stall_phase_name(phase),
+               static_cast<unsigned long long>(frame),
+               path.c_str());
+        } else {
+          LOGE("UI main thread stalled for %.1fs (phase=%s frame=%llu dump_open_failed errno=%d)",
+               stalled_for_s,
+               ui_stall_phase_name(phase),
+               static_cast<unsigned long long>(frame),
+               errno);
+        }
+      }
+    }).detach();
+  });
+}
+
+}  // namespace
 
 static void update_sockets(UIState *s) {
   s->sm->update(0);
@@ -144,6 +330,7 @@ void UIState::updateStatus(StarPilotUIState *fs) {
 }
 
 UIState::UIState(QObject *parent) : QObject(parent) {
+  start_ui_stall_monitor();
   sm = std::make_unique<SubMaster>(std::vector<const char*>{
     "modelV2", "controlsState", "liveCalibration", "radarState", "deviceState",
     "pandaStates", "carParams", "driverMonitoringState", "carState", "driverStateV2",
@@ -156,17 +343,26 @@ UIState::UIState(QObject *parent) : QObject(parent) {
   timer = new QTimer(this);
   QObject::connect(timer, &QTimer::timeout, this, &UIState::update);
   timer->start(1000 / UI_FREQ);
+  ui_stall_progress(UIStallPhase::IDLE, sm->frame);
 }
 
 void UIState::update() {
+  ui_stall_progress(UIStallPhase::UPDATE_START, sm->frame);
   update_sockets(this);
+  ui_stall_progress(UIStallPhase::AFTER_SOCKETS, sm->frame);
   update_state(this, starpilotUIState());
+  ui_stall_progress(UIStallPhase::AFTER_STATE, sm->frame);
   updateStatus(starpilotUIState());
+  ui_stall_progress(UIStallPhase::AFTER_STATUS, sm->frame);
 
   if (sm->frame % UI_FREQ == 0) {
-    watchdog_kick(nanos_since_boot());
+    if (!watchdog_kick(nanos_since_boot())) {
+      LOGE("UI watchdog kick failed at frame %llu", static_cast<unsigned long long>(sm->frame));
+    }
   }
+  ui_stall_progress(UIStallPhase::AFTER_WATCHDOG, sm->frame);
   emit uiUpdate(*this, *starpilotUIState());
+  ui_stall_progress(UIStallPhase::AFTER_EMIT, sm->frame);
 
   StarPilotUIState *fs = starpilotUIState();
   StarPilotUIScene &starpilot_scene = fs->starpilot_scene;
@@ -177,6 +373,8 @@ void UIState::update() {
   }
 
   fs->update();
+  ui_stall_progress(UIStallPhase::AFTER_FS_UPDATE, sm->frame);
+  ui_stall_progress(UIStallPhase::IDLE, sm->frame);
 }
 
 Device::Device(QObject *parent) : brightness_filter(BACKLIGHT_OFFROAD, BACKLIGHT_TS, BACKLIGHT_DT), QObject(parent) {

@@ -50,14 +50,6 @@ class VCruiseHelper:
   def _get_cruise_delta_interval(interval: float | None) -> float:
     return interval if isinstance(interval, (int, float)) and interval > 0 else 1.0
 
-  def _normalize_initialized_v_cruise(self, v_cruise_kph: float, starpilot_toggles: SimpleNamespace) -> float:
-    cruise_increase = self._get_cruise_delta_interval(starpilot_toggles.cruise_increase)
-    if cruise_increase % 5 != 0:
-      return v_cruise_kph
-
-    v_cruise_delta = self._get_short_press_delta(starpilot_toggles.is_metric, starpilot_toggles)
-    return round(round(v_cruise_kph / v_cruise_delta) * v_cruise_delta, 1)
-
   @property
   def v_cruise_initialized(self):
     return self.v_cruise_kph != V_CRUISE_UNSET
@@ -162,7 +154,9 @@ class VCruiseHelper:
       and self.v_cruise_initialized or (self.gm_cc_only and resume_prev_button)):
       self.v_cruise_kph = self.v_cruise_kph_last
     elif desired_speed_limit > 0 and getattr(starpilot_toggles, "set_speed_limit", False):
-      initialized_speed_limit_kph = self._normalize_initialized_v_cruise(desired_speed_limit * CV.MS_TO_KPH, starpilot_toggles)
+      # Respect the exact SLC limit+offset on engage instead of snapping upward to
+      # the custom cruise-button interval.
+      initialized_speed_limit_kph = round(desired_speed_limit * CV.MS_TO_KPH, 1)
       self.v_cruise_kph = float(np.clip(initialized_speed_limit_kph, V_CRUISE_MIN, V_CRUISE_MAX))
     else:
       self.v_cruise_kph = int(round(np.clip(CS.vEgo * CV.MS_TO_KPH, engage_floor_kph, V_CRUISE_MAX)))

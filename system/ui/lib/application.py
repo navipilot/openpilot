@@ -224,6 +224,7 @@ class GuiApplication:
     self._frame = 0
     self._window_close_requested = False
     self._trace_log_callback = None
+    self._progress_hook: Callable[[str], None] | None = None
     self._modal_overlay = ModalOverlay()
     self._modal_overlay_shown = False
     self._modal_overlay_tick: Callable[[], None] | None = None
@@ -260,6 +261,18 @@ class GuiApplication:
 
   def request_close(self):
     self._window_close_requested = True
+
+  def set_progress_hook(self, hook: Callable[[str], None] | None):
+    self._progress_hook = hook
+
+  def _mark_progress(self, phase: str):
+    if self._progress_hook is None:
+      return
+
+    try:
+      self._progress_hook(phase)
+    except Exception:
+      pass
 
   def init_window(self, title: str, fps: int = _DEFAULT_FPS):
     with self._startup_profile_context():
@@ -536,6 +549,7 @@ class GuiApplication:
         self._render_profiler.enable()
 
       while not (self._window_close_requested or rl.window_should_close()):
+        self._mark_progress("gui_app.loop_start")
         if PC:
           # Thread is not used on PC, need to manually add mouse events
           self._mouse._handle_mouse_event()
@@ -547,6 +561,7 @@ class GuiApplication:
 
         # Skip rendering when screen is off
         if not self._should_render:
+          self._mark_progress("gui_app.skip_render")
           if PC:
             rl.poll_input_events()
           time.sleep(1 / self._target_fps)
@@ -554,25 +569,32 @@ class GuiApplication:
           continue
 
         if self._render_texture:
+          self._mark_progress("gui_app.begin_texture_mode")
           rl.begin_texture_mode(self._render_texture)
           rl.clear_background(rl.BLACK)
         else:
+          self._mark_progress("gui_app.begin_drawing")
           rl.begin_drawing()
           rl.clear_background(rl.BLACK)
 
         # Handle modal overlay rendering and input processing
         if self._render_nav_stack():
+          self._mark_progress("gui_app.nav_stack")
           yield False
         elif self._handle_modal_overlay():
           # Allow a Widget to still run a function while overlay is shown
           if self._modal_overlay_tick is not None:
             self._modal_overlay_tick()
+          self._mark_progress("gui_app.modal_overlay")
           yield False
         else:
+          self._mark_progress("gui_app.frame_ready")
           yield True
 
         if self._render_texture:
+          self._mark_progress("gui_app.end_texture_mode")
           rl.end_texture_mode()
+          self._mark_progress("gui_app.begin_present")
           rl.begin_drawing()
           rl.clear_background(rl.BLACK)
           src_rect = rl.Rectangle(0, 0, float(self._width), -float(self._height))
@@ -595,7 +617,9 @@ class GuiApplication:
         if self._grid_size > 0:
           self._draw_grid()
 
+        self._mark_progress("gui_app.end_drawing")
         rl.end_drawing()
+        self._mark_progress("gui_app.after_end_drawing")
 
         if RECORD:
           image = rl.load_image_from_texture(self._render_texture.texture)
@@ -607,6 +631,7 @@ class GuiApplication:
 
         self._monitor_fps()
         self._frame += 1
+        self._mark_progress("gui_app.frame_complete")
 
         if self._profile_render_frames > 0 and self._frame >= self._profile_render_frames:
           self._output_render_profile()

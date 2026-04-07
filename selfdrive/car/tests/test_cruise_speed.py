@@ -207,6 +207,22 @@ class TestVCruiseHelper:
 
     assert self.v_cruise_helper.v_cruise_kph == pytest.approx(55 * CV.MPH_TO_KPH)
 
+  def test_initialize_v_cruise_keeps_exact_speed_limit_offset(self):
+    self.reset_cruise_speed_state()
+    self.starpilot_toggles.set_speed_limit = True
+    self.starpilot_toggles.cruise_increase = 5
+
+    desired_speed_limit = 38 * CV.MPH_TO_MS
+    self.v_cruise_helper.initialize_v_cruise(
+      car.CarState(vEgo=70 * CV.MPH_TO_MS),
+      experimental_mode=False,
+      resume_prev_button=False,
+      starpilot_toggles=self.starpilot_toggles,
+      desired_speed_limit=desired_speed_limit,
+    )
+
+    assert self.v_cruise_helper.v_cruise_kph == pytest.approx(38 * CV.MPH_TO_KPH)
+
   def test_speed_limit_confirmation_does_not_adjust_cruise(self):
     self.enable(V_CRUISE_INITIAL * CV.KPH_TO_MS, False)
     initial_v_cruise_kph = self.v_cruise_helper.v_cruise_kph
@@ -238,6 +254,34 @@ class TestVCruiseHelper:
     initial_v_cruise_kph = self.v_cruise_helper.v_cruise_kph
     self.starpilot_toggles.cruise_increase = None
     self.starpilot_toggles.cruise_increase_long = None
+
+    pressed_cs = car.CarState(cruiseState={"available": True})
+    pressed_cs.buttonEvents = [ButtonEvent(type=ButtonType.accelCruise, pressed=True)]
+    self.v_cruise_helper.update_v_cruise(
+      pressed_cs,
+      enabled=True,
+      is_metric=False,
+      speed_limit_changed=False,
+      starpilot_toggles=self.starpilot_toggles,
+    )
+
+    released_cs = car.CarState(cruiseState={"available": True})
+    released_cs.buttonEvents = [ButtonEvent(type=ButtonType.accelCruise, pressed=False)]
+    self.v_cruise_helper.update_v_cruise(
+      released_cs,
+      enabled=True,
+      is_metric=False,
+      speed_limit_changed=False,
+      starpilot_toggles=self.starpilot_toggles,
+    )
+
+    assert self.v_cruise_helper.v_cruise_kph == pytest.approx(initial_v_cruise_kph + IMPERIAL_INCREMENT)
+
+  def test_zero_custom_cruise_toggles_fall_back_to_single_step(self):
+    self.enable(V_CRUISE_INITIAL * CV.KPH_TO_MS, False)
+    initial_v_cruise_kph = self.v_cruise_helper.v_cruise_kph
+    self.starpilot_toggles.cruise_increase = 0
+    self.starpilot_toggles.cruise_increase_long = 0
 
     pressed_cs = car.CarState(cruiseState={"available": True})
     pressed_cs.buttonEvents = [ButtonEvent(type=ButtonType.accelCruise, pressed=True)]
