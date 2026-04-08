@@ -51,6 +51,7 @@ def summarize_control_samples(samples: list[ControlSample]) -> None:
   torque_cmd = np.array([s.torque_cmd for s in samples])
 
   base = lat_active & (~steering_pressed) & (v > 8.0)
+  transition_base = lat_active & (~steering_pressed) & (v > 4.0) & (~saturated)
   masks = (
     ("all", base),
     ("all_non_sat", base & (~saturated)),
@@ -59,6 +60,9 @@ def summarize_control_samples(samples: list[ControlSample]) -> None:
     ("center", base & (~saturated) & (np.abs(desired) < 0.1)),
     ("steady_left", base & (~saturated) & (desired >= 0.1) & (np.abs(jerk) < 0.2)),
     ("steady_right", base & (~saturated) & (desired <= -0.1) & (np.abs(jerk) < 0.2)),
+    ("low_speed_sharp", transition_base & (v < 14.0) & (np.abs(desired) >= 0.4) & (np.abs(jerk) >= 0.35)),
+    ("turn_in", transition_base & (v < 14.0) & (np.abs(desired) >= 0.4) & (np.abs(jerk) >= 0.35) & ((desired * jerk) > 0.0)),
+    ("unwind", transition_base & (v < 14.0) & (np.abs(desired) >= 0.4) & (np.abs(jerk) >= 0.35) & ((desired * jerk) < 0.0)),
   )
 
   print("\nControlsState tracking:")

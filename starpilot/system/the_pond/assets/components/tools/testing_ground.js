@@ -10,6 +10,34 @@ const state = reactive({
 
 let initialized = false
 
+function getApiUrl(path) {
+  const normalizedPath = String(path || "").replace(/^\/+/, "")
+  const currentUrl = new URL(window.location.href)
+  currentUrl.hash = ""
+  currentUrl.search = ""
+  currentUrl.pathname = currentUrl.pathname.replace(/\/+$/, "") || "/"
+  return new URL(normalizedPath, currentUrl).toString()
+}
+
+async function parseApiPayload(response, fallbackMessage) {
+  const contentType = String(response.headers.get("content-type") || "").toLowerCase()
+
+  if (contentType.includes("application/json")) {
+    const payload = await response.json()
+    return {
+      payload,
+      message: payload?.error || payload?.message || fallbackMessage,
+    }
+  }
+
+  const text = (await response.text()).trim()
+  const cleaned = text.replace(/\s+/g, " ").slice(0, 200)
+  return {
+    payload: null,
+    message: cleaned || fallbackMessage,
+  }
+}
+
 function slotId(slot) {
   return String(slot?.id || "").trim()
 }
@@ -98,7 +126,8 @@ function getSelectedMode() {
   const selectedSlot = getSelectedSlot()
   if (!selectedSlot) return "Not active"
   if (String(state.data?.activeSlot || "").trim() === String(state.selectedSlot || "").trim()) {
-    return String(state.data?.activeVariant || "").trim().toUpperCase() || getDefaultMode(selectedSlot)
+    const activeMode = String(state.data?.activeVariant || "").trim().toUpperCase() || getDefaultMode(selectedSlot)
+    return String(state.data?.activeVariantLabel || "").trim() || toModeLabel(selectedSlot, activeMode)
   }
   return "Not active"
 }
@@ -114,10 +143,13 @@ function modeButtonClass(mode) {
 
 async function fetchTestingGrounds() {
   try {
-    const response = await fetch("/api/testing_grounds")
-    const payload = await response.json()
+    const response = await fetch(getApiUrl("api/testing_grounds"))
+    const { payload, message } = await parseApiPayload(response, "Failed to load testing grounds")
     if (!response.ok) {
-      throw new Error(payload.error || response.statusText || "Failed to load testing grounds")
+      throw new Error(message || response.statusText || "Failed to load testing grounds")
+    }
+    if (!payload || typeof payload !== "object") {
+      throw new Error(message || "Failed to load testing grounds")
     }
 
     state.data = payload
@@ -144,21 +176,28 @@ async function applySelection(slotValue, mode, showToast = true) {
 
   state.busy = true
   try {
-    const response = await fetch("/api/testing_grounds/select", {
+    const response = await fetch(getApiUrl("api/testing_grounds/select"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ slotId: normalizedSlot, variant: normalizedMode }),
     })
-    const payload = await response.json()
+    const { payload, message } = await parseApiPayload(response, "Failed to update testing ground mode")
     if (!response.ok) {
-      throw new Error(payload.error || response.statusText || "Failed to update testing ground mode")
+      throw new Error(message || response.statusText || "Failed to update testing ground mode")
+    }
+    if (!payload || typeof payload !== "object") {
+      throw new Error(message || "Failed to update testing ground mode")
     }
 
     state.data = payload
     state.error = ""
     state.selectedSlot = normalizedSlot
     if (showToast) {
-      showSnackbar(payload.message || `Testing Ground ${normalizedSlot} set to ${normalizedMode}.`)
+      const selectedSlot = Array.isArray(payload.slots)
+        ? payload.slots.find((slot) => slotId(slot) === normalizedSlot)
+        : null
+      const selectedLabel = String(payload.activeVariantLabel || "").trim() || toModeLabel(selectedSlot, normalizedMode)
+      showSnackbar(payload.message || `Testing Ground ${normalizedSlot} set to ${selectedLabel}.`)
     }
     return true
   } catch (error) {
@@ -271,7 +310,7 @@ export function TestingGround() {
 
           ${() => getActiveSlot() ? html`
             <p class="testingGroundActiveSummary">
-              Currently active: <strong>${getActiveSlot().id}. ${getActiveSlot().name}</strong> in mode <strong>${state.data?.activeVariant || "A"}</strong>.
+              Currently active: <strong>${getActiveSlot().id}. ${getActiveSlot().name}</strong> in mode <strong>${state.data?.activeVariantLabel || toModeLabel(getActiveSlot(), state.data?.activeVariant || "A")}</strong>.
             </p>
           ` : ""}
         </div>

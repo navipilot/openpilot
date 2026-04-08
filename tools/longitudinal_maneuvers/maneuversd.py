@@ -143,6 +143,15 @@ def build_maneuvers():
   ]
 
 
+def should_force_stop_maneuver(maneuver: Maneuver | None, support, v_ego: float, CP) -> bool:
+  if maneuver is None or maneuver.description != "come to stop" or not support.expectedToReachZero:
+    return False
+
+  # Hand off to the stopping state near the end of the run so EV creep / hold
+  # behavior does not leave the suite hovering just above zero forever.
+  return v_ego <= max(CP.vEgoStarting + 0.1, 1.5)
+
+
 def main():
   config_realtime_process(5, Priority.CTRL_LOW)
 
@@ -195,7 +204,7 @@ def main():
     pm.send('alertDebug', alert_msg)
 
     longitudinalPlan.aTarget = accel
-    longitudinalPlan.shouldStop = v_ego < CP.vEgoStopping and accel < 1e-2
+    longitudinalPlan.shouldStop = should_force_stop_maneuver(maneuver, support, v_ego, CP) or (v_ego < CP.vEgoStopping and accel < 1e-2)
     longitudinalPlan.modelMonoTime = sm.logMonoTime['modelV2']
     longitudinalPlan.processingDelay = (plan_send.logMonoTime / 1e9) - sm.logMonoTime['modelV2']
 

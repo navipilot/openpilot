@@ -6,6 +6,7 @@ from openpilot.common.pid import PIDController
 from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.common.filter_simple import FirstOrderFilter
 from opendbc.car.gm.values import CarControllerParams, GMFlags
+from openpilot.starpilot.common.testing_grounds import testing_ground
 
 CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
 clip = np.clip
@@ -117,6 +118,9 @@ class LongControl:
     self.is_gm_pedal_long = bool(
       CP.brand == "gm" and CP.enableGasInterceptorDEPRECATED and (CP.flags & GMFlags.PEDAL_LONG.value)
     )
+    self.is_volt_interceptor = bool(
+      CP.brand == "gm" and CP.enableGasInterceptorDEPRECATED and str(CP.carFingerprint).startswith("CHEVROLET_VOLT")
+    )
 
   def update_mpc_mode(self, experimental_mode):
     new_mode = 'blended' if experimental_mode else 'acc'
@@ -173,6 +177,15 @@ class LongControl:
 
     return self.integrator_hold_frames > 0 or sat_pushing_lower or sat_pushing_upper
 
+  def _shape_volt_test_tune_integrator(self, error, v_ego):
+    if not (self.is_volt_interceptor and testing_ground.use_2):
+      return
+
+    # Bleed stale I quickly when the target reverses against stored integrator.
+    if self.pid.i * error < 0.0 and abs(error) > 0.05:
+      bleed = interp(v_ego, [0.0, 4.0, 12.0, 25.0], [0.86, 0.90, 0.94, 0.97])
+      self.pid.i *= bleed
+
   def update(self, active, CS, a_target, should_stop, accel_limits, starpilot_toggles):
     """Update longitudinal control. This updates the state machine and runs a PID loop"""
     self.pid.neg_limit = accel_limits[0]
@@ -199,6 +212,7 @@ class LongControl:
     else:  # LongCtrlState.pid
       error = a_target - CS.aEgo
       self.update_mpc_mode(self.experimental_mode)
+      self._shape_volt_test_tune_integrator(error, CS.vEgo)
       feedforward = a_target * self.feedforward_gain
       freeze_integrator = self._get_pedal_long_freeze(a_target, error, CS.vEgo, accel_limits)
       raw_output_accel = self.pid.update(error, speed=CS.vEgo, feedforward=feedforward,

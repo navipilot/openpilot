@@ -17,6 +17,7 @@ from openpilot.selfdrive.controls.lib.latcontrol_torque import (
   get_friction_threshold,
   get_bolt_2017_torque_scale,
   get_bolt_2018_2021_dynamic_torque_scale,
+  get_bolt_2018_2021_friction_scale,
   get_bolt_2018_2021_friction_threshold,
   get_bolt_2018_2021_torque_scale,
 )
@@ -58,16 +59,22 @@ class TestLatControl:
     assert get_bolt_2018_2021_torque_scale(0.2) > get_bolt_2018_2021_torque_scale(0.08)
     assert get_bolt_2018_2021_torque_scale(0.4) > get_bolt_2018_2021_torque_scale(-0.4)
     assert get_bolt_2018_2021_torque_scale(2.0) < get_bolt_2018_2021_torque_scale(0.8)
-    assert get_bolt_2018_2021_dynamic_torque_scale(0.4, 0.8) < get_bolt_2018_2021_dynamic_torque_scale(0.4, 0.1)
+    assert get_bolt_2018_2021_dynamic_torque_scale(0.4, 0.8, 20.0) < get_bolt_2018_2021_dynamic_torque_scale(0.4, 0.1, 20.0)
+    assert get_bolt_2018_2021_dynamic_torque_scale(0.6, -0.6, 8.0) < get_bolt_2018_2021_dynamic_torque_scale(0.6, 0.6, 8.0)
 
   def test_bolt_2018_2021_friction_threshold_curve(self):
-    low = get_bolt_2018_2021_friction_threshold(2.0)
-    mid = get_bolt_2018_2021_friction_threshold(10.0)
-    high = get_bolt_2018_2021_friction_threshold(30.0)
-    assert low > get_friction_threshold(2.0)
-    assert mid > get_friction_threshold(10.0)
-    assert high > get_friction_threshold(30.0)
-    assert (low - get_friction_threshold(2.0)) > (mid - get_friction_threshold(10.0)) > (high - get_friction_threshold(30.0))
+    base = get_friction_threshold(6.0)
+    turn_in = get_bolt_2018_2021_friction_threshold(6.0, 0.7, 0.8)
+    unwind = get_bolt_2018_2021_friction_threshold(6.0, 0.7, -0.8)
+    assert turn_in < base < unwind
+    assert get_bolt_2018_2021_friction_threshold(25.0, 0.7, 0.8) > turn_in
+
+  def test_bolt_2018_2021_friction_scale_curve(self):
+    base = get_bolt_2018_2021_friction_scale(25.0, 0.7, 0.8)
+    turn_in = get_bolt_2018_2021_friction_scale(6.0, 0.7, 0.8)
+    unwind = get_bolt_2018_2021_friction_scale(6.0, 0.7, -0.8)
+    assert turn_in > base
+    assert unwind < turn_in
 
   def test_bolt_2017_testing_ground_update_path(self, monkeypatch):
     controller, VM, CS, params, starpilot_toggles = self._build_torque_controller(GM.CHEVROLET_BOLT_CC_2017)

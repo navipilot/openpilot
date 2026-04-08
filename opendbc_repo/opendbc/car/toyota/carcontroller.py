@@ -43,14 +43,17 @@ UNLOCK_CMD = b"\x40\x05\x30\x11\x00\x40\x00\x00"
 
 
 def get_long_tune(CP, params):
-  if CP.carFingerprint in TSS2_CAR:
-    kiBP = [2., 5.]
-    kiV = [0.5, 0.25]
-  else:
+  kiBP = [2., 5.]
+  kiV = [0.5, 0.25]
+  k_f = 1.0
+
+  if CP.carFingerprint == CAR.TOYOTA_PRIUS:
+    k_f = 0.0
+  elif CP.carFingerprint not in TSS2_CAR:
     kiBP = [0., 5., 35.]
     kiV = [3.6, 2.4, 1.5]
 
-  return PIDController(0.0, (kiBP, kiV), k_f=1.0,
+  return PIDController(0.0, (kiBP, kiV), k_f=k_f,
                        pos_limit=params.ACCEL_MAX, neg_limit=params.ACCEL_MIN,
                        rate=1 / (DT_CTRL * 3))
 

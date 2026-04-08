@@ -43,6 +43,7 @@ TESTING_GROUNDS_SLOT_DEFINITIONS = (
     "name": "volt test tune",
     "description": "Volt longitudinal tuning sandbox.",
     "aLabel": "A - Installed tune",
+    "bLabel": "B - Test Tune",
   },
   {
     "id": TESTING_GROUND_3,

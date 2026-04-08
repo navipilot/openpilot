@@ -4,6 +4,7 @@ import signal
 import struct
 import time
 import subprocess
+from pathlib import Path
 from collections.abc import Callable, ValuesView
 from abc import ABC, abstractmethod
 from multiprocessing import Process
@@ -20,6 +21,25 @@ from openpilot.common.swaglog import cloudlog
 from openpilot.common.watchdog import WATCHDOG_FN
 
 ENABLE_WATCHDOG = os.getenv("NO_WATCHDOG") is None
+
+
+def _debug_dump_dir() -> Path:
+  for candidate in (Path("/data/log"), Path("/tmp")):
+    if candidate.is_dir() and os.access(candidate, os.W_OK):
+      return candidate
+  return Path.cwd()
+
+
+def _read_text_file(path: Path, max_bytes: int = 16384) -> str:
+  try:
+    data = path.read_bytes()
+  except OSError as e:
+    return f"<read failed: {e}>"
+
+  if len(data) > max_bytes:
+    data = data[:max_bytes] + b"\n<truncated>\n"
+
+  return data.decode("utf-8", errors="replace")
 
 
 def launcher(proc: str, name: str, nice: int | None = None) -> None:
@@ -95,6 +115,73 @@ class ManagerProcess(ABC):
     self.stop(sig=signal.SIGKILL)
     self.start()
 
+  def capture_watchdog_debug_dump(self, reason: str, dt: float) -> None:
+    if self.proc is None or self.proc.pid is None:
+      return
+
+    pid = self.proc.pid
+    proc_dir = Path(f"/proc/{pid}")
+    if not proc_dir.exists():
+      cloudlog.error(f"watchdog debug dump skipped for {self.name}: /proc/{pid} no longer exists")
+      return
+
+    dump_path = _debug_dump_dir() / f"{self.name}_watchdog_dump_{pid}_{time.monotonic_ns()}.log"
+    lines = [
+      f"name={self.name}",
+      f"pid={pid}",
+      f"dt={dt:.3f}",
+      f"reason={reason}",
+      f"wall_time={time.strftime('%Y-%m-%dT%H:%M:%S%z')}",
+      f"watchdog_file={WATCHDOG_FN}{pid}",
+      "",
+      "== /proc/status ==",
+      _read_text_file(proc_dir / "status"),
+      "",
+      "== /proc/wchan ==",
+      _read_text_file(proc_dir / "wchan", 1024),
+      "",
+      "== /proc/syscall ==",
+      _read_text_file(proc_dir / "syscall", 2048),
+      "",
+    ]
+
+    task_dir = proc_dir / "task"
+    try:
+      task_entries = sorted(task_dir.iterdir(), key=lambda p: int(p.name))
+    except OSError as e:
+      task_entries = []
+      lines.extend([
+        "== /proc/task ==",
+        f"<read failed: {e}>",
+        "",
+      ])
+
+    for entry in task_entries:
+      lines.extend([
+        f"== thread {entry.name} ==",
+        "-- comm --",
+        _read_text_file(entry / "comm", 1024),
+        "",
+        "-- wchan --",
+        _read_text_file(entry / "wchan", 1024),
+        "",
+        "-- syscall --",
+        _read_text_file(entry / "syscall", 2048),
+        "",
+        "-- status --",
+        _read_text_file(entry / "status"),
+        "",
+        "-- stack --",
+        _read_text_file(entry / "stack"),
+        "",
+      ])
+
+    try:
+      dump_path.write_text("\n".join(lines))
+      cloudlog.error(f"Wrote watchdog debug dump for {self.name} to {dump_path}")
+    except OSError as e:
+      cloudlog.error(f"failed to write watchdog debug dump for {self.name} to {dump_path}: {e}")
+
   def check_watchdog(self, started: bool) -> None:
     if self.watchdog_max_dt is None or self.proc is None:
       return
@@ -110,6 +197,7 @@ class ManagerProcess(ABC):
 
     dt = time.monotonic() - self.last_watchdog_time / 1e9
     if dt > self.watchdog_max_dt and ENABLE_WATCHDOG:
+      self.capture_watchdog_debug_dump(f"watchdog_timeout started={started}", dt)
       cloudlog.error(f"Watchdog timeout for {self.name} (exitcode {self.proc.exitcode}) restarting ({started=})")
       self.restart()
 

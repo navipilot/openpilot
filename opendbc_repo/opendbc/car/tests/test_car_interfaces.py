@@ -1,5 +1,6 @@
 import os
 import math
+from types import SimpleNamespace
 import hypothesis.strategies as st
 import pytest
 from hypothesis import Phase, given, settings
@@ -29,6 +30,23 @@ DLC_TO_LEN = [0, 1, 2, 3, 4, 5, 6, 7, 8, 12, 16, 20, 24, 32, 48, 64]
 MAX_EXAMPLES = int(os.environ.get('MAX_EXAMPLES', '15'))
 
 
+def get_test_starpilot_toggles() -> SimpleNamespace:
+  return SimpleNamespace(
+    car_model="",
+    cluster_offset=1.0,
+    disable_openpilot_long=False,
+    force_fingerprint=False,
+    frogsgomoo_tweak=False,
+    lock_doors=False,
+    reverse_cruise_increase=False,
+    sng_hack=False,
+    subaru_sng=False,
+    unlock_doors=False,
+    vEgoStopping=0.5,
+    volt_sng=False,
+  )
+
+
 def get_fuzzy_car_interface(car_name: str, draw: DrawType) -> CarInterfaceBase:
   # Fuzzy CAN fingerprints and FW versions to test more states of the CarInterface
   fingerprint_strategy = st.fixed_dictionaries({0: st.dictionaries(st.integers(min_value=0, max_value=0x800),
@@ -53,9 +71,14 @@ def get_fuzzy_car_interface(car_name: str, draw: DrawType) -> CarInterfaceBase:
 
   # initialize car interface
   CarInterface = interfaces[car_name]
+  starpilot_toggles = get_test_starpilot_toggles()
   car_params = CarInterface.get_params(car_name, params['fingerprints'], params['car_fw'],
-                                       alpha_long=params['alpha_long'], is_release=False, docs=False)
-  return CarInterface(car_params)
+                                       alpha_long=params['alpha_long'], is_release=False, docs=False,
+                                       starpilot_toggles=starpilot_toggles)
+  fp_car_params = CarInterface.get_starpilot_params(car_name, params['fingerprints'], params['car_fw'], car_params, starpilot_toggles)
+  car_interface = CarInterface(car_params, fp_car_params)
+  car_interface.starpilot_toggles = starpilot_toggles
+  return car_interface
 
 
 class TestCarInterfaces:
@@ -79,6 +102,7 @@ class TestCarInterfaces:
       alpha_long=False,
       is_release=False,
       docs=False,
+      starpilot_toggles=get_test_starpilot_toggles(),
     )
     assert pedal_params.safetyConfigs[0].safetyParam & GMSafetyFlags.FLAG_GM_NO_ACC.value
     assert pedal_params.safetyConfigs[0].safetyParam & GMSafetyFlags.FLAG_GM_BOLT_2022_PEDAL.value
@@ -91,6 +115,7 @@ class TestCarInterfaces:
       alpha_long=False,
       is_release=False,
       docs=False,
+      starpilot_toggles=get_test_starpilot_toggles(),
     )
     assert not (acc_params.safetyConfigs[0].safetyParam & GMSafetyFlags.FLAG_GM_NO_ACC.value)
 
@@ -132,8 +157,8 @@ class TestCarInterfaces:
     now_nanos = 0
     CC = structs.CarControl().as_reader()
     for _ in range(10):
-      car_interface.update([])
-      car_interface.apply(CC, now_nanos)
+      car_interface.update([], car_interface.starpilot_toggles)
+      car_interface.apply(CC, now_nanos, car_interface.starpilot_toggles)
       now_nanos += DT_CTRL * 1e9  # 10 ms
 
     CC = structs.CarControl()
@@ -142,8 +167,8 @@ class TestCarInterfaces:
     CC.longActive = True
     CC = CC.as_reader()
     for _ in range(10):
-      car_interface.update([])
-      car_interface.apply(CC, now_nanos)
+      car_interface.update([], car_interface.starpilot_toggles)
+      car_interface.apply(CC, now_nanos, car_interface.starpilot_toggles)
       now_nanos += DT_CTRL * 1e9  # 10ms
 
     # Test radar interface

@@ -27,10 +27,13 @@ def get_stock_cc_active_for_cancel(CP, CS):
   return stock_cc_active
 
 
-def use_interceptor_sng_launch(CP, CS):
+def use_interceptor_sng_launch(CP, CS, maneuver_mode=False):
   # Restrict the fixed standstill-launch gas to actual near-zero motion
   # so higher accel requests can take over once the car has started moving.
-  return CS.out.cruiseState.standstill and (CS.out.standstill or CS.out.vEgo < max(CP.vEgoStarting, 0.3))
+  launch_speed = max(CP.vEgoStarting, 0.3)
+  if maneuver_mode:
+    launch_speed = max(launch_speed, 2.0)
+  return CS.out.cruiseState.standstill and (CS.out.standstill or CS.out.vEgo < launch_speed)
 
 
 class CarController(CarControllerBase):
@@ -67,6 +70,7 @@ class CarController(CarControllerBase):
     self.pedal_active_last = False
     self.aego = 0.0
     self.maneuver_paddle_mode = "auto"
+    self.longitudinal_maneuver_mode = False
     self.params_ = Params()
 
     self.is_volt = self.CP.carFingerprint in {
@@ -243,6 +247,10 @@ class CarController(CarControllerBase):
         mode = mode.decode("utf-8", errors="replace")
       mode = (mode or "auto").strip().lower()
       self.maneuver_paddle_mode = mode if mode in ("auto", "off", "force") else "auto"
+      try:
+        self.longitudinal_maneuver_mode = self.params_.get_bool("LongitudinalManeuverMode")
+      except UnknownKeyName:
+        self.longitudinal_maneuver_mode = False
 
     kaofui_cars = SDGM_CAR | ASCM_INT | {
       CAR.CHEVROLET_VOLT,
@@ -445,8 +453,11 @@ class CarController(CarControllerBase):
             # gas interceptor only used for full long control on cars without ACC
             interceptor_gas_cmd, press_regen_paddle = self.calc_pedal_command(actuators.accel, CC.longActive, CS.out.vEgo)
 
-        if self.CP.enableGasInterceptorDEPRECATED and self.apply_gas > self.params.INACTIVE_REGEN and use_interceptor_sng_launch(self.CP, CS):
+        maneuver_sng_launch = self.longitudinal_maneuver_mode and self.is_volt
+        if self.CP.enableGasInterceptorDEPRECATED and self.apply_gas > self.params.INACTIVE_REGEN and use_interceptor_sng_launch(self.CP, CS, maneuver_sng_launch):
           interceptor_gas_cmd = self.params.SNG_INTERCEPTOR_GAS
+          if maneuver_sng_launch:
+            interceptor_gas_cmd = max(interceptor_gas_cmd, float(np.interp(actuators.accel, [0.0, 1.0, 2.0], [self.params.SNG_INTERCEPTOR_GAS, 0.11, 0.16])))
           self.apply_brake = 0
           self.apply_gas = self.params.INACTIVE_REGEN
 

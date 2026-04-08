@@ -24,6 +24,7 @@ from opendbc.car.gm.values import (
 from opendbc.car.interfaces import CarInterfaceBase, TorqueFromLateralAccelCallbackType, LateralAccelFromTorqueCallbackType
 from opendbc.safety import ALTERNATIVE_EXPERIENCE
 from openpilot.common.params import Params, UnknownKeyName
+from openpilot.starpilot.common.testing_grounds import testing_ground
 
 TransmissionType = structs.CarParams.TransmissionType
 NetworkLocation = structs.CarParams.NetworkLocation
@@ -74,6 +75,14 @@ VOLT_LIKE_CARS = {
   CAR.CHEVROLET_MALIBU_SDGM,
   CAR.CHEVROLET_MALIBU_CC,
   CAR.CHEVROLET_MALIBU_HYBRID_CC,
+}
+
+VOLT_LONG_TEST_TUNE_CARS = {
+  CAR.CHEVROLET_VOLT,
+  CAR.CHEVROLET_VOLT_2019,
+  CAR.CHEVROLET_VOLT_ASCM,
+  CAR.CHEVROLET_VOLT_CAMERA,
+  CAR.CHEVROLET_VOLT_CC,
 }
 
 BOLT_PEDAL_LONG_CARS = {
@@ -348,6 +357,7 @@ class CarInterface(CarInterfaceBase):
     ret.steerActuatorDelay = 0.1  # Default delay, not measured yet
 
     ret.steerLimitTimer = 0.4
+    ret.radarTimeStepDEPRECATED = 0.0667  # GM radar runs at 15Hz instead of the standard 20Hz
     ret.longitudinalActuatorDelay = 0.5  # large delay to initially start braking
 
     if candidate in (
@@ -556,6 +566,24 @@ class CarInterface(CarInterfaceBase):
       ret.minEnableSpeed = -1
       ret.pcmCruise = False
       ret.openpilotLongitudinalControl = not disable_openpilot_long
+
+    volt_test_tune_active = (
+      testing_ground.use_2 and
+      ret.enableGasInterceptorDEPRECATED and
+      ret.openpilotLongitudinalControl and
+      candidate in VOLT_LONG_TEST_TUNE_CARS
+    )
+    if volt_test_tune_active:
+      # Volt interceptor-long currently falls back to an all-I tune on this path.
+      # The test-ground tune adds a modest P term, reduces I memory, and uses a
+      # dedicated starting state so stop-and-go launches do not wind up the PID.
+      ret.longitudinalTuning.kpBP = [0.0, 4.0, 12.0, 35.0]
+      ret.longitudinalTuning.kpV = [0.10, 0.08, 0.06, 0.045]
+      ret.longitudinalTuning.kiBP = [0.0, 4.0, 12.0, 35.0]
+      ret.longitudinalTuning.kiV = [0.025, 0.035, 0.055, 0.080]
+      ret.startingState = True
+      ret.startAccel = 1.15
+      ret.vEgoStarting = max(ret.vEgoStarting, 0.35)
 
     elif candidate in CC_ONLY_CAR and not ret.enableGasInterceptorDEPRECATED:
       ret.flags |= GMFlags.CC_LONG.value

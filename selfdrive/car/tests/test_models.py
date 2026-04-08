@@ -4,6 +4,7 @@ import pytest
 import random
 import unittest # noqa: TID251
 from collections import defaultdict, Counter
+from types import SimpleNamespace
 import hypothesis.strategies as st
 from hypothesis import Phase, given, settings
 from parameterized import parameterized_class
@@ -33,6 +34,23 @@ INTERNAL_SEG_LIST = os.environ.get("INTERNAL_SEG_LIST", "")
 INTERNAL_SEG_CNT = int(os.environ.get("INTERNAL_SEG_CNT", "0"))
 MAX_EXAMPLES = int(os.environ.get("MAX_EXAMPLES", "300"))
 CI = os.environ.get("CI", None) is not None
+
+
+def get_test_starpilot_toggles() -> SimpleNamespace:
+  return SimpleNamespace(
+    car_model="",
+    cluster_offset=1.0,
+    disable_openpilot_long=False,
+    force_fingerprint=False,
+    frogsgomoo_tweak=False,
+    lock_doors=False,
+    reverse_cruise_increase=False,
+    sng_hack=False,
+    subaru_sng=False,
+    unlock_doors=False,
+    vEgoStopping=0.5,
+    volt_sng=False,
+  )
 
 
 def get_test_cases() -> list[tuple[str, CarTestRoute | None]]:
@@ -149,7 +167,10 @@ class TestCarModelBase(unittest.TestCase):
     cls.openpilot_enabled = cls.car_safety_mode_frame is not None
 
     cls.CarInterface = interfaces[cls.platform]
-    cls.CP = cls.CarInterface.get_params(cls.platform, cls.fingerprint, car_fw, alpha_long, False, docs=False)
+    cls.starpilot_toggles = get_test_starpilot_toggles()
+    cls.CP = cls.CarInterface.get_params(cls.platform, cls.fingerprint, car_fw, alpha_long, False, docs=False,
+                                         starpilot_toggles=cls.starpilot_toggles)
+    cls.FPCP = cls.CarInterface.get_starpilot_params(cls.platform, cls.fingerprint, car_fw, cls.CP, cls.starpilot_toggles)
     assert cls.CP
     assert cls.CP.carFingerprint == cls.platform
 
@@ -160,7 +181,7 @@ class TestCarModelBase(unittest.TestCase):
     del cls.can_msgs
 
   def setUp(self):
-    self.CI = self.CarInterface(self.CP.copy())
+    self.CI = self.CarInterface(self.CP.copy(), self.FPCP)
     assert self.CI
 
     # TODO: check safetyModel is in release panda build
@@ -193,8 +214,8 @@ class TestCarModelBase(unittest.TestCase):
     CC = structs.CarControl().as_reader()
 
     for i, msg in enumerate(self.can_msgs):
-      CS = self.CI.update(msg)
-      self.CI.apply(CC, msg[0])
+      CS, _ = self.CI.update(msg, self.starpilot_toggles)
+      self.CI.apply(CC, msg[0], self.starpilot_toggles)
 
       # wait max of 2s for low frequency msgs to be seen
       if i > 250:
@@ -266,10 +287,10 @@ class TestCarModelBase(unittest.TestCase):
     def test_car_controller(car_control):
       now_nanos = 0
       msgs_sent = 0
-      CI = self.CarInterface(self.CP)
+      CI = self.CarInterface(self.CP, self.FPCP)
       for _ in range(round(10.0 / DT_CTRL)):  # make sure we hit the slowest messages
-        CI.update([])
-        _, sendcan = CI.apply(car_control, now_nanos)
+        CI.update([], self.starpilot_toggles)
+        _, sendcan = CI.apply(car_control, now_nanos, self.starpilot_toggles)
 
         now_nanos += DT_CTRL * 1e9
         msgs_sent += len(sendcan)
@@ -334,7 +355,7 @@ class TestCarModelBase(unittest.TestCase):
       self.safety.safety_rx_hook(to_send)
 
       can = [(int(time.monotonic() * 1e9), [CanData(address=address, dat=dat, src=bus)])]
-      CS = self.CI.update(can)
+      CS, _ = self.CI.update(can, self.starpilot_toggles)
       if n < 5:  # CANParser warmup time
         continue
 
@@ -386,7 +407,7 @@ class TestCarModelBase(unittest.TestCase):
 
     # warm up pass, as initial states may be different
     for can in self.can_msgs[:300]:
-      self.CI.update(can)
+      self.CI.update(can, self.starpilot_toggles)
       for msg in filter(lambda m: m.src < 64, can[1]):
         to_send = libsafety_py.make_CANPacket(msg.address, msg.src % 4, msg.dat)
         self.safety.safety_rx_hook(to_send)
@@ -396,7 +417,8 @@ class TestCarModelBase(unittest.TestCase):
     checks = defaultdict(int)
     vehicle_speed_seen = self.CP.steerControlType == SteerControlType.angle and not self.CP.notCar
     for idx, can in enumerate(self.can_msgs):
-      CS = self.CI.update(can).as_reader()
+      CS, _ = self.CI.update(can, self.starpilot_toggles)
+      CS = CS.as_reader()
       for msg in filter(lambda m: m.src < 64, can[1]):
         to_send = libsafety_py.make_CANPacket(msg.address, msg.src % 4, msg.dat)
         ret = self.safety.safety_rx_hook(to_send)

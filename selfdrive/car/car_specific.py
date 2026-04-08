@@ -148,7 +148,8 @@ class CarSpecificEvents:
         self.CP.networkLocation == NetworkLocation.fwdCamera and
         (self.CP.carFingerprint in GM_STANDSTILL_BRAKE_CAMERA_CARS or self.CP.carFingerprint not in SDGM_CAR)
       )
-      if CS.vEgo < self.CP.minEnableSpeed and not standstill_brake_enable_allowed:
+      below_min_enable_speed = CS.vEgo < self.CP.minEnableSpeed or getattr(CS, "moving_backward", False)
+      if below_min_enable_speed and not standstill_brake_enable_allowed:
         events.add(EventName.belowEngageSpeed)
       if CS.cruiseState.standstill and not self.CP.autoResumeSng:
         events.add(EventName.resumeRequired)

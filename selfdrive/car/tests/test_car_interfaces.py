@@ -35,8 +35,8 @@ class TestCarInterfaces:
     CC = car.CarControl.new_message(**cc_msg)
     CC = CC.as_reader()
     for _ in range(10):
-      car_interface.update([])
-      car_interface.apply(CC, now_nanos)
+      car_interface.update([], car_interface.starpilot_toggles)
+      car_interface.apply(CC, now_nanos, car_interface.starpilot_toggles)
       now_nanos += DT_CTRL * 1e9  # 10 ms
 
     CC = car.CarControl.new_message(**cc_msg)
@@ -45,8 +45,8 @@ class TestCarInterfaces:
     CC.longActive = True
     CC = CC.as_reader()
     for _ in range(10):
-      car_interface.update([])
-      car_interface.apply(CC, now_nanos)
+      car_interface.update([], car_interface.starpilot_toggles)
+      car_interface.apply(CC, now_nanos, car_interface.starpilot_toggles)
       now_nanos += DT_CTRL * 1e9  # 10ms
 
     # Test controller initialization
