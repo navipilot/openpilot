@@ -24,6 +24,7 @@ VisualAlert = structs.CarControl.HUDControl.VisualAlert
 ACCEL_WINDUP_LIMIT = 4.0 * DT_CTRL * 3  # m/s^2 / frame
 ACCEL_WINDDOWN_LIMIT = -4.0 * DT_CTRL * 3  # m/s^2 / frame
 ACCEL_PID_UNWIND = 0.03 * DT_CTRL * 3  # m/s^2 / frame
+PRIUS_INTEGRAL_MISMATCH_UNWIND = 4.0
 
 MAX_PITCH_COMPENSATION = 1.5  # m/s^2
 
@@ -250,7 +251,10 @@ class CarController(CarControllerBase):
 
         if CC.longActive:
           # constantly slowly unwind integral to recover from large temporary errors
-          self.long_pid.i -= ACCEL_PID_UNWIND * float(np.sign(self.long_pid.i))
+          unwind_rate = ACCEL_PID_UNWIND
+          if self.CP.carFingerprint == CAR.TOYOTA_PRIUS and pcm_accel_cmd * self.long_pid.i < 0.0:
+            unwind_rate *= PRIUS_INTEGRAL_MISMATCH_UNWIND
+          self.long_pid.i -= unwind_rate * float(np.sign(self.long_pid.i))
 
           error_future = pcm_accel_cmd - a_ego_future
 
