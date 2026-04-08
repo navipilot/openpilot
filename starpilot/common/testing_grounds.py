@@ -61,10 +61,10 @@ TESTING_GROUNDS_SLOT_DEFINITIONS = (
   },
   {
     "id": TESTING_GROUND_5,
-    "name": "Unused",
-    "description": "",
-    "aLabel": "A",
-    "bLabel": "B",
+    "name": "Bolt 22-23 Lat Tune",
+    "description": "Bolt 2022-2023 lateral torque A/B sandbox.",
+    "aLabel": "A - Installed tune",
+    "bLabel": "B - 2022 lateral test",
   },
   {
     "id": TESTING_GROUND_6,

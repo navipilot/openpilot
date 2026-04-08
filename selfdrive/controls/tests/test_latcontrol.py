@@ -17,6 +17,9 @@ from openpilot.selfdrive.controls.lib.latcontrol_torque import (
   get_friction_threshold,
   get_bolt_2017_base_torque_scale,
   get_bolt_2017_torque_scale,
+  get_bolt_2022_2023_ff_scale,
+  get_bolt_2022_2023_friction_scale,
+  get_bolt_2022_2023_friction_threshold,
   get_bolt_2018_2021_dynamic_torque_scale,
   get_bolt_2018_2021_friction_scale,
   get_bolt_2018_2021_friction_threshold,
@@ -85,6 +88,29 @@ class TestLatControl:
     assert left_turn_in > right_turn_in > base
     assert base > left_unwind > right_unwind
 
+  def test_bolt_2022_2023_ff_scale_curve(self):
+    assert get_bolt_2022_2023_ff_scale(0.0, 0.0, 20.0) == 1.0
+    assert get_bolt_2022_2023_ff_scale(0.5, 0.0, 20.0) > get_bolt_2022_2023_ff_scale(-0.5, 0.0, 20.0)
+    assert get_bolt_2022_2023_ff_scale(-0.6, -0.7, 8.0) > get_bolt_2022_2023_ff_scale(-0.6, 0.0, 8.0)
+    assert get_bolt_2022_2023_ff_scale(0.6, -0.7, 8.0) < get_bolt_2022_2023_ff_scale(0.6, 0.0, 8.0)
+
+  def test_bolt_2022_2023_friction_threshold_curve(self):
+    base = get_friction_threshold(6.0)
+    left_turn_in = get_bolt_2022_2023_friction_threshold(6.0, 0.7, 0.8)
+    right_turn_in = get_bolt_2022_2023_friction_threshold(6.0, -0.7, -0.8)
+    left_unwind = get_bolt_2022_2023_friction_threshold(6.0, 0.7, -0.8)
+    right_unwind = get_bolt_2022_2023_friction_threshold(6.0, -0.7, 0.8)
+    assert right_turn_in < left_turn_in < base < right_unwind < left_unwind
+
+  def test_bolt_2022_2023_friction_scale_curve(self):
+    base = get_bolt_2022_2023_friction_scale(25.0, 0.7, 0.8)
+    left_turn_in = get_bolt_2022_2023_friction_scale(6.0, 0.7, 0.8)
+    right_turn_in = get_bolt_2022_2023_friction_scale(6.0, -0.7, -0.8)
+    left_unwind = get_bolt_2022_2023_friction_scale(6.0, 0.7, -0.8)
+    right_unwind = get_bolt_2022_2023_friction_scale(6.0, -0.7, 0.8)
+    assert right_turn_in > left_turn_in > base
+    assert base > right_unwind > left_unwind
+
   def test_bolt_2017_testing_ground_update_path(self, monkeypatch):
     controller, VM, CS, params, starpilot_toggles = self._build_torque_controller(GM.CHEVROLET_BOLT_CC_2017)
     monkeypatch.setattr(latcontrol_torque, "bolt_2017_lateral_testing_ground_active", lambda: True)
@@ -96,6 +122,14 @@ class TestLatControl:
   def test_bolt_2018_2021_testing_ground_update_path(self, monkeypatch):
     controller, VM, CS, params, starpilot_toggles = self._build_torque_controller(GM.CHEVROLET_BOLT_CC_2018_2021)
     monkeypatch.setattr(latcontrol_torque, "bolt_2018_2021_lateral_testing_ground_active", lambda: True)
+
+    _, _, lac_log = controller.update(True, CS, VM, params, False, 0.0025, False, 0.2, None, None, starpilot_toggles)
+
+    assert lac_log.active
+
+  def test_bolt_2022_2023_testing_ground_update_path(self, monkeypatch):
+    controller, VM, CS, params, starpilot_toggles = self._build_torque_controller(GM.CHEVROLET_BOLT_ACC_2022_2023)
+    monkeypatch.setattr(latcontrol_torque, "bolt_2022_2023_lateral_testing_ground_active", lambda: True)
 
     _, _, lac_log = controller.update(True, CS, VM, params, False, 0.0025, False, 0.2, None, None, starpilot_toggles)
 
