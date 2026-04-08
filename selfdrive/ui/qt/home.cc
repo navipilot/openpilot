@@ -176,22 +176,43 @@ OffroadHome::OffroadHome(QWidget* parent) : QFrame(parent) {
     home_layout->setContentsMargins(0, 0, 0, 0);
     home_layout->setSpacing(30);
 
-    // left: stack of DriveStats / DriveSummary
-    QWidget *left_widget = new QWidget(this);
-    QStackedLayout *left_stack = new QStackedLayout(left_widget);
-    left_stack->setContentsMargins(0, 0, 0, 0);
+    // left: stock prime card in simple mode, StarPilot drive stats otherwise
+    left_widget = new QStackedWidget(this);
 
-    left_stack->addWidget(new DriveStats());
-    StarPilotDriveSummary *drive_summary = new StarPilotDriveSummary(this);
-    left_stack->addWidget(drive_summary);
-
-    QObject::connect(drive_summary, &StarPilotDriveSummary::panelClosed, [left_stack]() {
-      left_stack->setCurrentIndex(0);
+    stock_left_widget = new QStackedWidget(this);
+    QVBoxLayout *left_prime_layout = new QVBoxLayout();
+    left_prime_layout->setContentsMargins(0, 0, 0, 0);
+    QWidget *prime_user = new PrimeUserWidget();
+    prime_user->setStyleSheet(R"(
+    border-radius: 10px;
+    background-color: #333333;
+    )");
+    left_prime_layout->addWidget(prime_user);
+    left_prime_layout->addStretch();
+    stock_left_widget->addWidget(new LayoutWidget(left_prime_layout));
+    stock_left_widget->addWidget(new PrimeAdWidget);
+    stock_left_widget->setStyleSheet("border-radius: 10px;");
+    QObject::connect(uiState()->prime_state, &PrimeState::changed, this, [this]() {
+      stock_left_widget->setCurrentIndex(uiState()->prime_state->isSubscribed() ? 0 : 1);
     });
-    QObject::connect(uiState(), &UIState::offroadTransition, [left_stack](bool offroad) {
+    left_widget->addWidget(stock_left_widget);
+
+    QWidget *custom_left_widget = new QWidget(this);
+    custom_left_stack = new QStackedLayout(custom_left_widget);
+    custom_left_stack->setContentsMargins(0, 0, 0, 0);
+    custom_left_stack->addWidget(new DriveStats());
+    StarPilotDriveSummary *drive_summary = new StarPilotDriveSummary(this);
+    custom_left_stack->addWidget(drive_summary);
+    left_widget->addWidget(custom_left_widget);
+    left_widget->setCurrentIndex(params.getBool("SimpleMode") ? 0 : 1);
+
+    QObject::connect(drive_summary, &StarPilotDriveSummary::panelClosed, [this]() {
+      custom_left_stack->setCurrentIndex(0);
+    });
+    QObject::connect(uiState(), &UIState::offroadTransition, [this](bool offroad) {
       static bool previouslyOnroad = false;
-      if (offroad && previouslyOnroad) {
-        left_stack->setCurrentIndex(1);
+      if (offroad && previouslyOnroad && !params.getBool("SimpleMode")) {
+        custom_left_stack->setCurrentIndex(1);
       }
       previouslyOnroad = !offroad;
     });
@@ -199,7 +220,7 @@ OffroadHome::OffroadHome(QWidget* parent) : QFrame(parent) {
     home_layout->addWidget(left_widget, 1);
 
     // right: ExperimentalModeButton, SetupWidget, Random Events Summary
-    QStackedWidget *right_widget = new QStackedWidget(this);
+    right_widget = new QStackedWidget(this);
     right_widget->setFixedWidth(750);
 
     QWidget *default_right = new QWidget(this);
@@ -224,9 +245,10 @@ OffroadHome::OffroadHome(QWidget* parent) : QFrame(parent) {
     QObject::connect(random_events_summary, &StarPilotDriveSummary::panelClosed, [=]() {
       right_widget->setCurrentIndex(0);
     });
-    QObject::connect(uiState(), &UIState::offroadTransition, [right_widget](bool offroad) {
+    QObject::connect(uiState(), &UIState::offroadTransition, [this](bool offroad) {
       static bool previouslyOnroad = false;
-      if (offroad && previouslyOnroad && starpilotUIState()->starpilot_scene.starpilot_toggles.value("random_events").toBool()) {
+      if (offroad && previouslyOnroad && !params.getBool("SimpleMode") &&
+          starpilotUIState()->starpilot_scene.starpilot_toggles.value("random_events").toBool()) {
         right_widget->setCurrentIndex(1);
       }
       previouslyOnroad = !offroad;
@@ -302,13 +324,25 @@ void OffroadHome::refresh() {
   StarPilotUIState &fs = *starpilotUIState();
   StarPilotUIScene &starpilot_scene = fs.starpilot_scene;
   QJsonObject &starpilot_toggles = starpilot_scene.starpilot_toggles;
+  const bool simple_mode = params.getBool("SimpleMode");
+
+  stock_left_widget->setCurrentIndex(uiState()->prime_state->isSubscribed() ? 0 : 1);
+  left_widget->setCurrentIndex(simple_mode ? 0 : 1);
+  if (simple_mode) {
+    custom_left_stack->setCurrentIndex(0);
+    right_widget->setCurrentIndex(0);
+  }
 
   date->setText(QLocale(uiState()->language.mid(5)).toString(QDateTime::currentDateTime(), "dddd, MMMM d"));
-  date->setVisible(util::system_time_valid());
+  date->setVisible(util::system_time_valid() && !simple_mode);
 
-  QString versionText = getVersion().left(14).trimmed();
-  if (!versionText.startsWith("v", Qt::CaseInsensitive)) {
-    versionText.prepend("v");
+  if (simple_mode) {
+    version->setText(getBrand() + " " + QString::fromStdString(params.get("UpdaterCurrentDescription")));
+  } else {
+    QString versionText = getVersion().left(14).trimmed();
+    if (!versionText.startsWith("v", Qt::CaseInsensitive)) {
+      versionText.prepend("v");
+    }
+    version->setText(getBrand() + " - " + versionText + " - " + cleanModelName(starpilot_toggles.value("model_name").toString()));
   }
-  version->setText(getBrand() + " - " + versionText + " - " + cleanModelName(starpilot_toggles.value("model_name").toString()));
 }

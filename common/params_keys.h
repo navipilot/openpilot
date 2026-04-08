@@ -450,6 +450,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"SignalAnimation", {PERSISTENT, STRING, "frog", "stock", 0}},
     {"SignalMetrics", {PERSISTENT, BOOL, "0", "0", 3}},
     {"SignalToDownload", {CLEAR_ON_MANAGER_START, STRING, "", ""}},
+    {"SimpleMode", {PERSISTENT, BOOL, "0", "0", 0}},
     {"SLCConfirmation", {PERSISTENT, BOOL, "0", "0", 0}},
     {"SLCConfirmationHigher", {PERSISTENT, BOOL, "0", "0", 0}},
     {"SLCConfirmationLower", {PERSISTENT, BOOL, "0", "0", 0}},

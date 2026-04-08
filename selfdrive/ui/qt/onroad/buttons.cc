@@ -93,7 +93,9 @@ void ExperimentalButton::showEvent(QShowEvent *event) {
 }
 
 void ExperimentalButton::updateBackgroundColor() {
-  if (isDown() || !engageable) {
+  if (starpilot_toggles.value("simple_mode").toBool()) {
+    background_color = QColor(0, 0, 0, 166);
+  } else if (isDown() || !engageable) {
     background_color = QColor(0, 0, 0, 166);
   } else if (starpilot_scene.switchback_mode_enabled) {
     background_color = bg_colors[STATUS_SWITCHBACK_MODE_ENABLED];

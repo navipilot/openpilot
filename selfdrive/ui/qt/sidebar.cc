@@ -61,19 +61,20 @@ void Sidebar::mousePressEvent(QMouseEvent *event) {
   StarPilotUIState *fs = starpilotUIState();
   StarPilotUIScene &starpilot_scene = fs->starpilot_scene;
   QJsonObject &starpilot_toggles = starpilot_scene.starpilot_toggles;
+  const bool simple_mode = starpilot_toggles.value("simple_mode").toBool();
 
-  if (cpuRect.contains(pos) && starpilot_toggles.value("developer_ui").toBool()) {
+  if (!simple_mode && cpuRect.contains(pos) && starpilot_toggles.value("developer_ui").toBool()) {
     showChip = (showChip + 1) % 3;
 
     params.putBool("ShowCPU", showChip == 1);
     params.putBool("ShowGPU", showChip == 2);
-  } else if (memoryRect.contains(pos) && starpilot_toggles.value("developer_ui").toBool()) {
+  } else if (!simple_mode && memoryRect.contains(pos) && starpilot_toggles.value("developer_ui").toBool()) {
     showMemory = (showMemory + 1) % 4;
 
     params.putBool("ShowMemoryUsage", showMemory == 1);
     params.putBool("ShowStorageLeft", showMemory == 2);
     params.putBool("ShowStorageUsed", showMemory == 3);
-  } else if (tempRect.contains(pos) && starpilot_toggles.value("developer_ui").toBool()) {
+  } else if (!simple_mode && tempRect.contains(pos) && starpilot_toggles.value("developer_ui").toBool()) {
     showTemp = (showTemp + 1) % 3;
 
     params.putBool("Fahrenheit", showTemp == 2);
@@ -118,6 +119,12 @@ void Sidebar::updateState(const UIState &s, const StarPilotUIState &fs) {
 
   const StarPilotUIScene &starpilot_scene = fs.starpilot_scene;
   const QJsonObject &starpilot_toggles = starpilot_scene.starpilot_toggles;
+  const bool simple_mode = starpilot_toggles.value("simple_mode").toBool();
+  static bool previous_simple_mode = simple_mode;
+  if (previous_simple_mode != simple_mode) {
+    updateTheme();
+    previous_simple_mode = simple_mode;
+  }
 
   const SubMaster &fpsm = *(fs.sm);
 
@@ -140,28 +147,29 @@ void Sidebar::updateState(const UIState &s, const StarPilotUIState &fs) {
   ItemStatus connectStatus;
   auto last_ping = deviceState.getLastAthenaPingTime();
   if (desktop_force_online) {
-    connectStatus = ItemStatus{{tr("CONNECT"), tr("ONLINE")}, QColor(starpilot_toggles.value("sidebar_color3").toString())};
+    connectStatus = ItemStatus{{tr("CONNECT"), tr("ONLINE")}, simple_mode ? good_color : QColor(starpilot_toggles.value("sidebar_color3").toString())};
   } else if (last_ping == 0) {
     connectStatus = ItemStatus{{tr("CONNECT"), tr("OFFLINE")}, warning_color};
   } else {
     connectStatus = nanos_since_boot() - last_ping < 80e9
-                        ? ItemStatus{{tr("CONNECT"), tr("ONLINE")}, QColor(starpilot_toggles.value("sidebar_color3").toString())}
+                        ? ItemStatus{{tr("CONNECT"), tr("ONLINE")}, simple_mode ? good_color : QColor(starpilot_toggles.value("sidebar_color3").toString())}
                         : ItemStatus{{tr("CONNECT"), tr("ERROR")}, danger_color};
   }
   setProperty("connectStatus", QVariant::fromValue(connectStatus));
 
   int maxTempC = deviceState.getMaxTempC();
   QString max_temp = starpilot_toggles.value("fahrenheit").toBool() ? QString::number(maxTempC * 9 / 5 + 32) + "°F" : QString::number(maxTempC) + "°C";
-  ItemStatus tempStatus = {{tr("TEMP"), starpilot_toggles.value("numerical_temp").toBool() ? max_temp : tr("HIGH")}, danger_color};
+  ItemStatus tempStatus = {{tr("TEMP"), simple_mode ? tr("HIGH") : (starpilot_toggles.value("numerical_temp").toBool() ? max_temp : tr("HIGH"))}, danger_color};
   auto ts = deviceState.getThermalStatus();
   if (ts == cereal::DeviceState::ThermalStatus::GREEN) {
-    tempStatus = {{tr("TEMP"), starpilot_toggles.value("numerical_temp").toBool() ? max_temp : tr("GOOD")}, QColor(starpilot_toggles.value("sidebar_color1").toString())};
+    tempStatus = {{tr("TEMP"), simple_mode ? tr("GOOD") : (starpilot_toggles.value("numerical_temp").toBool() ? max_temp : tr("GOOD"))},
+                  simple_mode ? good_color : QColor(starpilot_toggles.value("sidebar_color1").toString())};
   } else if (ts == cereal::DeviceState::ThermalStatus::YELLOW) {
-    tempStatus = {{tr("TEMP"), starpilot_toggles.value("numerical_temp").toBool() ? max_temp : tr("OK")}, warning_color};
+    tempStatus = {{tr("TEMP"), simple_mode ? tr("OK") : (starpilot_toggles.value("numerical_temp").toBool() ? max_temp : tr("OK"))}, warning_color};
   }
   setProperty("tempStatus", QVariant::fromValue(tempStatus));
 
-  ItemStatus pandaStatus = {{tr("VEHICLE"), tr("ONLINE")}, QColor(starpilot_toggles.value("sidebar_color2").toString())};
+  ItemStatus pandaStatus = {{tr("VEHICLE"), tr("ONLINE")}, simple_mode ? good_color : QColor(starpilot_toggles.value("sidebar_color2").toString())};
   if (s.scene.pandaType == cereal::PandaState::PandaType::UNKNOWN) {
     pandaStatus = {{tr("NO"), tr("PANDA")}, danger_color};
   }
@@ -169,7 +177,7 @@ void Sidebar::updateState(const UIState &s, const StarPilotUIState &fs) {
 
   setProperty("recordingAudio", s.scene.recording_audio);
 
-  if (starpilot_toggles.value("cpu_metrics").toBool() || starpilot_toggles.value("gpu_metrics").toBool()) {
+  if (!simple_mode && (starpilot_toggles.value("cpu_metrics").toBool() || starpilot_toggles.value("gpu_metrics").toBool())) {
     capnp::List<int8_t>::Reader cpu_loads = deviceState.getCpuUsagePercent();
     int cpu_usage = cpu_loads.size() != 0 ? std::accumulate(cpu_loads.begin(), cpu_loads.end(), 0) / cpu_loads.size() : 0;
     int gpu_usage = deviceState.getGpuUsagePercent();
@@ -186,7 +194,7 @@ void Sidebar::updateState(const UIState &s, const StarPilotUIState &fs) {
     setProperty("chipStatus", QVariant::fromValue(chipStatus));
   }
 
-  if (starpilot_toggles.value("memory_metrics").toBool() || starpilot_toggles.value("storage_left_metrics").toBool() || starpilot_toggles.value("storage_used_metrics").toBool()) {
+  if (!simple_mode && (starpilot_toggles.value("memory_metrics").toBool() || starpilot_toggles.value("storage_left_metrics").toBool() || starpilot_toggles.value("storage_used_metrics").toBool())) {
     int free_space = deviceState.getFreeSpacePercent();
     int memory_usage = deviceState.getMemoryUsagePercent();
     int storage_left = starpilotDeviceState.getFreeSpace();
@@ -240,9 +248,10 @@ void Sidebar::paintEvent(QPaintEvent *event) {
   StarPilotUIState *fs = starpilotUIState();
   StarPilotUIScene &starpilot_scene = fs->starpilot_scene;
   QJsonObject &starpilot_toggles = starpilot_scene.starpilot_toggles;
+  const bool simple_mode = starpilot_toggles.value("simple_mode").toBool();
 
   // network
-  if (starpilot_toggles.value("ip_metrics").toBool()) {
+  if (!simple_mode && starpilot_toggles.value("ip_metrics").toBool()) {
     p.setPen(QColor(0xff, 0xff, 0xff));
     p.save();
     p.setFont(InterFont(30));
@@ -270,7 +279,10 @@ void Sidebar::paintEvent(QPaintEvent *event) {
 
   // metrics
   drawMetric(p, temp_status.first, temp_status.second, 338);
-  if (starpilot_toggles.value("cpu_metrics").toBool() || starpilot_toggles.value("gpu_metrics").toBool()) {
+  if (simple_mode) {
+    drawMetric(p, panda_status.first, panda_status.second, 496);
+    drawMetric(p, connect_status.first, connect_status.second, 654);
+  } else if (starpilot_toggles.value("cpu_metrics").toBool() || starpilot_toggles.value("gpu_metrics").toBool()) {
     drawMetric(p, chip_status.first, chip_status.second, 496);
   } else {
     drawMetric(p, panda_status.first, panda_status.second, 496);
@@ -289,6 +301,24 @@ void Sidebar::showEvent(QShowEvent *event) {
 }
 
 void Sidebar::updateTheme() {
+  auto clearMovie = [](QSharedPointer<QMovie> &movie) {
+    if (!movie.isNull()) {
+      movie->stop();
+      movie.reset();
+    }
+  };
+
+  if (starpilotUIState()->starpilot_scene.starpilot_toggles.value("simple_mode").toBool()) {
+    clearMovie(home_gif);
+    clearMovie(flag_gif);
+    clearMovie(settings_gif);
+
+    home_img = loadPixmap("../assets/images/button_home.png", home_btn.size());
+    flag_img = loadPixmap("../assets/images/button_flag.png", home_btn.size());
+    settings_img = loadPixmap("../assets/images/button_settings.png", settings_btn.size(), Qt::IgnoreAspectRatio);
+    return;
+  }
+
   loadImage("../../starpilot/assets/active_theme/icons/button_home", home_img, home_gif, home_btn.size(), this);
   loadImage("../../starpilot/assets/active_theme/icons/button_flag", flag_img, flag_gif, home_btn.size(), this);
   loadImage("../../starpilot/assets/active_theme/icons/button_settings", settings_img, settings_gif, settings_btn.size(), this);

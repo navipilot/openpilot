@@ -102,6 +102,7 @@ public:
 
 signals:
   void updateMetric(bool metric, bool bootRun=false);
+  void simpleModeChanged(bool enabled);
 
 public slots:
   void expandToggleDescription(const QString &param);

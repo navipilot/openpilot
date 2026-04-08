@@ -530,6 +530,7 @@ class StarPilotVariables:
     toggle.force_offroad = self.params.get_bool("ForceOffroad")
     toggle.force_onroad = self.params.get_bool("ForceOnroad")
     toggle.safe_mode = self.params.get_bool("SafeMode")
+    toggle.simple_mode = self.params.get_bool("SimpleMode")
 
     toggle.is_metric = self.params.get_bool("IsMetric")
     distance_conversion = 1 if toggle.is_metric else CV.FOOT_TO_METER
@@ -970,6 +971,91 @@ class StarPilotVariables:
 
     toggle.startup_alert_top = self.get_value("StartupMessageTop", cast=str, default="")
     toggle.startup_alert_bottom = self.get_value("StartupMessageBottom", cast=str, default="")
+
+    if toggle.simple_mode:
+      toggle.alert_volume_controller = False
+
+      toggle.color_scheme = "stock"
+      toggle.current_holiday_theme = "stock"
+      toggle.holiday_themes = False
+      toggle.distance_icons = "stock"
+      toggle.icon_pack = "stock"
+      toggle.signal_icons = "stock"
+      toggle.sound_pack = "stock"
+      toggle.random_themes = False
+      toggle.wheel_image = "stock"
+
+      toggle.hide_alerts = False
+      toggle.hide_lead_marker = False
+      toggle.hide_max_speed = False
+      toggle.hide_speed = False
+      toggle.hide_speed_limit = False
+      toggle.use_wheel_speed = False
+
+      toggle.acceleration_path = False
+      toggle.adjacent_paths = False
+      toggle.blind_spot_path = False
+      toggle.compass = False
+      toggle.pedals_on_ui = False
+      toggle.dynamic_pedals_on_ui = False
+      toggle.static_pedals_on_ui = False
+      toggle.rotating_wheel = False
+
+      toggle.cem_status = False
+      toggle.csc_status = False
+      toggle.model_ui = False
+      toggle.dynamic_path_width = False
+      toggle.road_name_ui = False
+      toggle.show_speed_limits = False
+      toggle.speed_limit_vienna = False
+      toggle.speed_limit_sources = False
+      toggle.camera_view = 0
+      toggle.driver_camera_in_reverse = False
+      toggle.onroad_distance_button = False
+      toggle.stopped_timer = False
+      toggle.rainbow_path = False
+      toggle.random_events = False
+      toggle.screen_recorder = False
+      toggle.show_speed_limit_offset = False
+
+      toggle.developer_ui = False
+      toggle.blind_spot_metrics = False
+      toggle.signal_metrics = False
+      toggle.steering_metrics = False
+      toggle.show_fps = False
+      toggle.adjacent_path_metrics = False
+      toggle.lead_info = False
+      toggle.numerical_temp = False
+      toggle.fahrenheit = False
+      toggle.cpu_metrics = False
+      toggle.gpu_metrics = False
+      toggle.ip_metrics = False
+      toggle.memory_metrics = False
+      toggle.storage_left_metrics = False
+      toggle.storage_used_metrics = False
+      toggle.use_si_metrics = False
+      toggle.developer_sidebar = False
+      toggle.developer_sidebar_metric1 = None
+      toggle.developer_sidebar_metric2 = None
+      toggle.developer_sidebar_metric3 = None
+      toggle.developer_sidebar_metric4 = None
+      toggle.developer_sidebar_metric5 = None
+      toggle.developer_sidebar_metric6 = None
+      toggle.developer_sidebar_metric7 = None
+      toggle.adjacent_lead_tracking = False
+      toggle.radar_tracks = False
+      toggle.show_stopping_point = False
+      toggle.show_stopping_point_metrics = False
+
+      toggle.goat_scream_alert = False
+      toggle.goat_scream_critical_alerts = False
+      toggle.green_light_alert = False
+      toggle.lead_departing_alert = False
+      toggle.loud_blindspot_alert = False
+      toggle.speed_limit_changed_alert = False
+
+      toggle.startup_alert_top = "Be ready to take over at any time"
+      toggle.startup_alert_bottom = "Always keep hands on wheel and eyes on road"
 
     toggle.subaru_sng = self.get_value("SubaruSNG", condition=toggle.car_make == "subaru" and not (CP.flags & SubaruFlags.GLOBAL_GEN2 or CP.flags & SubaruFlags.HYBRID))
 

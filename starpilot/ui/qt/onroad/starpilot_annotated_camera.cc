@@ -247,6 +247,11 @@ void StarPilotAnnotatedCameraWidget::updateState(const UIState &s, const StarPil
 }
 
 void StarPilotAnnotatedCameraWidget::mousePressEvent(QMouseEvent *mouseEvent) {
+  if (starpilot_toggles.value("simple_mode").toBool()) {
+    mouseEvent->ignore();
+    return;
+  }
+
   if (speedLimitChanged && newSpeedLimitRect.contains(mouseEvent->pos())) {
     params_memory.putBool("SpeedLimitAccepted", true);
     mouseEvent->accept();
@@ -257,6 +262,15 @@ void StarPilotAnnotatedCameraWidget::mousePressEvent(QMouseEvent *mouseEvent) {
 }
 
 void StarPilotAnnotatedCameraWidget::paintStarPilotWidgets(QPainter &p, UIState &s) {
+  if (starpilot_toggles.value("simple_mode").toBool()) {
+    cemStatusPosition = QPoint(0, 0);
+    compassPosition = QPoint(0, 0);
+    lateralPausedPosition = QPoint(0, 0);
+    newSpeedLimitRect = QRect();
+    speedLimitHeight = 0;
+    return;
+  }
+
   if (!hideBottomIcons && starpilot_toggles.value("cem_status").toBool()) {
     paintCEMStatus(p);
   } else {

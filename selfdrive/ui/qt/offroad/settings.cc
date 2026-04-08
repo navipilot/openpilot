@@ -49,6 +49,13 @@ TogglesPanel::TogglesPanel(SettingsWindow *parent) : ListWidget(parent) {
       true,
     },
     {
+      "SimpleMode",
+      tr("Simple Mode"),
+      tr("Use a more stock-like Qt interface by hiding most branch-specific UI, theme, sound, and alert styling. This only changes presentation and does not change driving behavior."),
+      "../assets/icons/settings.png",
+      false,
+    },
+    {
       "DisengageOnAccelerator",
       tr("Disengage on Accelerator Pedal"),
       tr("When enabled, pressing the accelerator pedal will disengage openpilot."),
@@ -122,6 +129,13 @@ TogglesPanel::TogglesPanel(SettingsWindow *parent) : ListWidget(parent) {
       });
     }
 
+    if (param == "SimpleMode") {
+      QObject::connect(toggle, &ParamControl::toggleFlipped, this, [this](bool state) {
+        updateToggles();
+        emit simpleModeChanged(state);
+      });
+    }
+
     addItem(toggle);
     toggles[param.toStdString()] = toggle;
 
@@ -172,6 +186,7 @@ void TogglesPanel::showEvent(QShowEvent *event) {
 void TogglesPanel::updateToggles() {
   const bool showAllToggles = params.getBool("ShowAllToggles");
   const bool safe_mode = params.getBool("SafeMode");
+  const bool simple_mode = params.getBool("SimpleMode");
   if (safe_mode) {
     if (params.getBool("ExperimentalMode")) {
       params.putBool("ExperimentalMode", false);
@@ -251,6 +266,11 @@ void TogglesPanel::updateToggles() {
   experimental_mode_toggle->setVisible(showAllToggles || !starpilot_toggles.value("conditional_experimental_mode").toBool());
   auto record_audio_toggle = toggles["RecordAudio"];
   record_audio_toggle->setVisible(showAllToggles || !starpilot_toggles.value("no_logging").toBool());
+
+  auto safe_mode_toggle = toggles["SafeMode"];
+  if (safe_mode_toggle != nullptr) {
+    safe_mode_toggle->setVisible(!simple_mode);
+  }
 }
 
 GalaxyQRPopup::GalaxyQRPopup(const QString &url, QWidget *parent) : DialogBase(parent) {
@@ -694,6 +714,13 @@ SettingsWindow::SettingsWindow(QWidget *parent) : QFrame(parent) {
   QObject::connect(developerPanel, &DeveloperPanel::showAllTogglesChanged, [this]() {
     updateDeveloperToggle(params.getInt("TuningLevel"));
   });
+  QObject::connect(toggles, &TogglesPanel::simpleModeChanged, [this](bool enabled) {
+    updateDeveloperToggle(params.getInt("TuningLevel"));
+    if (enabled && panel_widget->currentIndex() < nav_btns->buttons().size() &&
+        nav_btns->buttons()[panel_widget->currentIndex()]->text() == tr("StarPilot")) {
+      setCurrentPanel(2);
+    }
+  });
 
   QList<QPair<QString, QWidget *>> panels = {
     {tr("Device"), device},
@@ -831,7 +858,8 @@ void SettingsWindow::updateDeveloperToggle(int tuningLevel) {
   for (QAbstractButton *btn : nav_btns->buttons()) {
     if (btn->text() == tr("Developer")) {
       btn->setVisible(tuningLevel >= 3 || params.getBool("ShowAllToggles"));
-      break;
+    } else if (btn->text() == tr("StarPilot")) {
+      btn->setVisible(!params.getBool("SimpleMode"));
     }
   }
 }

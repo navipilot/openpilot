@@ -4,6 +4,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QStackedLayout>
+#include <QStackedWidget>
 #include <QTimer>
 #include <QWidget>
 
@@ -43,6 +44,10 @@ private:
   QPushButton* update_notif;
 
   ElidedLabel* date;
+  QStackedWidget *left_widget;
+  QStackedWidget *stock_left_widget;
+  QStackedLayout *custom_left_stack;
+  QStackedWidget *right_widget;
 };
 
 class HomeWindow : public QWidget {

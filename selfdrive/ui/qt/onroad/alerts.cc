@@ -109,11 +109,23 @@ void OnroadAlerts::paintEvent(QPaintEvent *event) {
   QRect r = QRect(0 + margin, height() - h + margin, width() - margin*2, h - margin*2);
 
   QPainter p(this);
+  const bool simple_mode = starpilot_toggles.value("simple_mode").toBool();
+  QColor alert_color;
+  if (simple_mode) {
+    cereal::SelfdriveState::AlertStatus status = alert.status;
+    if (status == static_cast<cereal::SelfdriveState::AlertStatus>(cereal::StarPilotSelfdriveState::AlertStatus::STARPILOT)) {
+      status = cereal::SelfdriveState::AlertStatus::NORMAL;
+    }
+    alert_color = alert_colors.value(status, alert_colors.value(cereal::SelfdriveState::AlertStatus::NORMAL));
+  } else {
+    alert_color = starpilot_alert_colors.value(static_cast<cereal::StarPilotSelfdriveState::AlertStatus>(alert.status),
+                                               alert_colors.value(cereal::SelfdriveState::AlertStatus::NORMAL));
+  }
 
   // draw background + gradient
   p.setPen(Qt::NoPen);
   p.setCompositionMode(QPainter::CompositionMode_SourceOver);
-  p.setBrush(QBrush(starpilot_alert_colors[static_cast<cereal::StarPilotSelfdriveState::AlertStatus>(alert.status)]));
+  p.setBrush(QBrush(alert_color));
   p.drawRoundedRect(r, radius, radius);
 
   QLinearGradient g(0, r.y(), 0, r.bottom());

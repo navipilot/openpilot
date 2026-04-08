@@ -1794,6 +1794,14 @@
         "data_type": "bool",
         "ui_type": "toggle",
         "parent_key": "QOLVisuals"
+      },
+      {
+        "key": "SimpleMode",
+        "label": "Simple Mode",
+        "description": "Use a more stock-like presentation by hiding most branch-specific UI, theme, sound, and alert styling. This only changes presentation and does not change driving behavior.",
+        "data_type": "bool",
+        "ui_type": "toggle",
+        "parent_key": "QOLVisuals"
       }
     ]
   },

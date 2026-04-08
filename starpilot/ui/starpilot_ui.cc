@@ -89,6 +89,7 @@ StarPilotUIState::StarPilotUIState(QObject *parent) : QObject(parent) {
     {"sidebar_color1", "#FFFFFFFF"},
     {"sidebar_color2", "#FFFFFFFF"},
     {"sidebar_color3", "#FFFFFFFF"},
+    {"simple_mode", false},
     {"standby_mode", false},
     {"tethering_config", 0},
   };
