@@ -1,6 +1,7 @@
 import importlib
 import os
 import signal
+import stat as statmod
 import struct
 import time
 import subprocess
@@ -22,12 +23,27 @@ from openpilot.common.watchdog import WATCHDOG_FN
 
 ENABLE_WATCHDOG = os.getenv("NO_WATCHDOG") is None
 
+DEBUG_ENV_KEYS = (
+  "XDG_RUNTIME_DIR",
+  "WAYLAND_DISPLAY",
+  "WAYLAND_SOCKET",
+  "QT_QPA_PLATFORM",
+  "QT_WAYLAND_SHELL_INTEGRATION",
+  "QT_WAYLAND_DISABLE_WINDOWDECORATION",
+)
+
 
 def _debug_dump_dir() -> Path:
   for candidate in (Path("/data/log"), Path("/tmp")):
     if candidate.is_dir() and os.access(candidate, os.W_OK):
       return candidate
   return Path.cwd()
+
+
+def _truncate_text(text: str, max_chars: int = 32768) -> str:
+  if len(text) <= max_chars:
+    return text
+  return text[:max_chars] + "\n<truncated>\n"
 
 
 def _read_text_file(path: Path, max_bytes: int = 16384) -> str:
@@ -40,6 +56,283 @@ def _read_text_file(path: Path, max_bytes: int = 16384) -> str:
     data = data[:max_bytes] + b"\n<truncated>\n"
 
   return data.decode("utf-8", errors="replace")
+
+
+def _read_proc_cmdline(proc_dir: Path, max_bytes: int = 4096) -> str:
+  try:
+    data = (proc_dir / "cmdline").read_bytes()
+  except OSError as e:
+    return f"<read failed: {e}>"
+
+  cmdline = data.replace(b"\0", b" ").decode("utf-8", errors="replace").strip()
+  return _truncate_text(cmdline or "<empty>", max_bytes)
+
+
+def _read_proc_environ(proc_dir: Path) -> dict[str, str]:
+  try:
+    data = (proc_dir / "environ").read_bytes()
+  except OSError:
+    return {}
+
+  env = {}
+  for item in data.split(b"\0"):
+    if not item or b"=" not in item:
+      continue
+    key, value = item.split(b"=", 1)
+    env[key.decode("utf-8", errors="replace")] = value.decode("utf-8", errors="replace")
+  return env
+
+
+def _format_env_subset(env: dict[str, str]) -> str:
+  if not env:
+    return "<empty>"
+
+  lines = [f"{key}={env[key]}" for key in DEBUG_ENV_KEYS if key in env]
+  return "\n".join(lines) if lines else "<no relevant keys>"
+
+
+def _coerce_subprocess_output(data) -> str:
+  if data is None:
+    return ""
+  if isinstance(data, bytes):
+    return data.decode("utf-8", errors="replace")
+  return data
+
+
+def _run_debug_command(cmd: str, timeout: float = 1.5, max_chars: int = 32768) -> str:
+  try:
+    result = subprocess.run(["bash", "-lc", cmd], capture_output=True, text=True, timeout=timeout)
+    parts = [f"$ {cmd}", f"<exit {result.returncode}>"]
+    if result.stdout:
+      parts.append(result.stdout.rstrip())
+    if result.stderr:
+      parts.extend(["[stderr]", result.stderr.rstrip()])
+    if len(parts) == 2:
+      parts.append("<no output>")
+    return _truncate_text("\n".join(parts), max_chars)
+  except subprocess.TimeoutExpired as e:
+    stdout = _coerce_subprocess_output(e.stdout).rstrip()
+    stderr = _coerce_subprocess_output(e.stderr).rstrip()
+    parts = [f"$ {cmd}", f"<timed out after {timeout:.1f}s>"]
+    if stdout:
+      parts.append(stdout)
+    if stderr:
+      parts.extend(["[stderr]", stderr])
+    if len(parts) == 2:
+      parts.append("<no output>")
+    return _truncate_text("\n".join(parts), max_chars)
+
+
+def _read_proc_start_wall_time(proc_dir: Path) -> str:
+  try:
+    stat_text = (proc_dir / "stat").read_text()
+    rparen = stat_text.rfind(")")
+    fields = stat_text[rparen + 2:].split()
+    start_ticks = int(fields[19])
+    uptime_s = float(Path("/proc/uptime").read_text().split()[0])
+    hz = os.sysconf("SC_CLK_TCK")
+    start_time_s = time.time() - uptime_s + (start_ticks / hz)
+    return time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime(start_time_s))
+  except Exception as e:
+    return f"<parse failed: {e}>"
+
+
+def _find_process_dirs(match_terms: tuple[str, ...]) -> list[Path]:
+  proc_root = Path("/proc")
+  try:
+    proc_dirs = sorted((p for p in proc_root.iterdir() if p.name.isdigit()), key=lambda p: int(p.name))
+  except OSError:
+    return []
+
+  matches = []
+  for proc_dir in proc_dirs:
+    comm = _read_text_file(proc_dir / "comm", 256).strip()
+    cmdline = _read_proc_cmdline(proc_dir, 2048)
+    haystacks = (comm, cmdline)
+    if any(term in haystack for term in match_terms for haystack in haystacks):
+      matches.append(proc_dir)
+  return matches
+
+
+def _read_symlink(path: Path) -> str:
+  try:
+    return os.readlink(path)
+  except OSError as e:
+    return f"<read failed: {e}>"
+
+
+def _describe_path(path: Path) -> str:
+  try:
+    st = path.stat()
+  except OSError as e:
+    return f"path={path}\n<stat failed: {e}>"
+
+  mode = statmod.filemode(st.st_mode)
+  if statmod.S_ISSOCK(st.st_mode):
+    path_type = "socket"
+  elif statmod.S_ISDIR(st.st_mode):
+    path_type = "dir"
+  elif statmod.S_ISREG(st.st_mode):
+    path_type = "file"
+  else:
+    path_type = "other"
+
+  return "\n".join([
+    f"path={path}",
+    f"type={path_type}",
+    f"mode={mode}",
+    f"inode={st.st_ino}",
+    f"size={st.st_size}",
+    f"mtime={time.strftime('%Y-%m-%dT%H:%M:%S%z', time.localtime(st.st_mtime))}",
+    f"mtime_ns={st.st_mtime_ns}",
+    f"ctime_ns={st.st_ctime_ns}",
+  ])
+
+
+def _proc_net_unix_matches(path: Path) -> str:
+  path_str = str(path)
+  try:
+    rows = [line for line in Path("/proc/net/unix").read_text().splitlines() if path_str in line]
+  except OSError as e:
+    return f"<read failed: {e}>"
+
+  return "\n".join(rows) if rows else "<no matches>"
+
+
+def _resolve_wayland_socket(runtime_dir: Path | None, display: str | None) -> Path | None:
+  if not display:
+    return runtime_dir / "wayland-0" if runtime_dir is not None else None
+
+  socket_path = Path(display)
+  if socket_path.is_absolute():
+    return socket_path
+  if runtime_dir is None:
+    return None
+  return runtime_dir / socket_path
+
+
+def _append_ui_watchdog_context(lines: list[str], ui_proc_dir: Path) -> None:
+  ui_env = _read_proc_environ(ui_proc_dir)
+  weston_procs = _find_process_dirs(("weston",))
+  weston_envs = [_read_proc_environ(proc_dir) for proc_dir in weston_procs]
+
+  lines.extend([
+    "== ui proc cmdline ==",
+    _read_proc_cmdline(ui_proc_dir),
+    "",
+    "== ui proc exe ==",
+    _read_symlink(ui_proc_dir / "exe"),
+    "",
+    "== ui proc env ==",
+    _format_env_subset(ui_env),
+    "",
+  ])
+
+  for proc_dir, env in zip(weston_procs, weston_envs):
+    lines.extend([
+      f"== weston process {proc_dir.name} ==",
+      "-- cmdline --",
+      _read_proc_cmdline(proc_dir),
+      "",
+      "-- exe --",
+      _read_symlink(proc_dir / "exe"),
+      "",
+      "-- start wall time --",
+      _read_proc_start_wall_time(proc_dir),
+      "",
+      "-- status --",
+      _read_text_file(proc_dir / "status"),
+      "",
+      "-- wchan --",
+      _read_text_file(proc_dir / "wchan", 1024),
+      "",
+      "-- syscall --",
+      _read_text_file(proc_dir / "syscall", 2048),
+      "",
+      "-- env --",
+      _format_env_subset(env),
+      "",
+    ])
+
+  runtime_dirs: set[Path] = set()
+  socket_paths: set[Path] = set()
+
+  for env in (ui_env, *weston_envs):
+    runtime_dir = Path(env["XDG_RUNTIME_DIR"]) if env.get("XDG_RUNTIME_DIR") else None
+    if runtime_dir is not None:
+      runtime_dirs.add(runtime_dir)
+    socket_path = _resolve_wayland_socket(runtime_dir, env.get("WAYLAND_DISPLAY"))
+    if socket_path is not None:
+      socket_paths.add(socket_path)
+
+  if not runtime_dirs:
+    for candidate in (Path("/run/user/1000"), Path("/tmp")):
+      if candidate.exists():
+        runtime_dirs.add(candidate)
+
+  for runtime_dir in sorted(runtime_dirs):
+    lines.extend([
+      f"== runtime dir {runtime_dir} ==",
+      _describe_path(runtime_dir),
+      "",
+    ])
+
+    candidates = {path for path in socket_paths if path.parent == runtime_dir}
+    if runtime_dir.exists():
+      candidates.update(runtime_dir.glob("wayland-*"))
+      candidates.update(runtime_dir.glob("weston*"))
+
+    for candidate in sorted(candidates):
+      lines.extend([
+        f"-- wayland path {candidate.name} --",
+        _describe_path(candidate),
+        "-- /proc/net/unix --",
+        _proc_net_unix_matches(candidate),
+        "",
+      ])
+
+  for socket_path in sorted(socket_paths):
+    if socket_path.parent not in runtime_dirs:
+      lines.extend([
+        f"== wayland path {socket_path} ==",
+        _describe_path(socket_path),
+        "-- /proc/net/unix --",
+        _proc_net_unix_matches(socket_path),
+        "",
+      ])
+
+  commands = [
+    (
+      "== systemctl weston ==",
+      "systemctl show weston.service weston-ready.service "
+      "--property=Id,ActiveState,SubState,MainPID,ExecMainStartTimestamp,ExecMainStartTimestampMonotonic,ExecMainStatus "
+      "--no-pager 2>/dev/null || true",
+      1.5,
+    ),
+    (
+      "== journalctl weston ==",
+      "journalctl -u weston.service -u weston-ready.service -n 120 --no-pager 2>&1 || true",
+      1.5,
+    ),
+    (
+      "== recent swaglog weston/ui ==",
+      "grep -RinE 'Watchdog timeout for ui|weston|Wayland|EGL|gbm|drm|GPU|segfault|SIGSEGV|OOM|fatal' "
+      "/data/log/swaglog* 2>/dev/null | tail -n 160 || true",
+      1.5,
+    ),
+    (
+      "== dmesg weston/gpu ==",
+      "dmesg 2>/dev/null | grep -Ei 'drm|gpu|msm|kgsl|weston|wayland|segfault|oom|hang' | tail -n 160 || true",
+      1.5,
+    ),
+  ]
+
+  for title, cmd, timeout in commands:
+    lines.extend([
+      title,
+      _run_debug_command(cmd, timeout=timeout),
+      "",
+    ])
 
 
 def launcher(proc: str, name: str, nice: int | None = None) -> None:
@@ -144,6 +437,16 @@ class ManagerProcess(ABC):
       _read_text_file(proc_dir / "syscall", 2048),
       "",
     ]
+
+    watchdog_file = Path(f"{WATCHDOG_FN}{pid}")
+    lines.extend([
+      "== watchdog file ==",
+      _describe_path(watchdog_file),
+      "",
+    ])
+
+    if self.name == "ui":
+      _append_ui_watchdog_context(lines, proc_dir)
 
     task_dir = proc_dir / "task"
     try:
