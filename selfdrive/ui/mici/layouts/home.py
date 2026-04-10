@@ -16,7 +16,7 @@ from openpilot.starpilot.common.experimental_state import (
 )
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.text import wrap_text
-from openpilot.system.version import training_version, RELEASE_BRANCHES
+from openpilot.system.version import training_version
 from openpilot.system.hardware import PC
 
 HEAD_BUTTON_FONT_SIZE = 40
@@ -293,11 +293,9 @@ class MiciHomeLayout(Widget):
       self._branch_label.set_position(version_pos.x + self._version_label.rect.width + self._date_label.rect.width + 20, version_pos.y)
       self._branch_label.render()
 
-      if self._version_text[1] not in RELEASE_BRANCHES:
-        # 2nd line
-        self._version_commit_label.set_text(self._version_text[2])
-        self._version_commit_label.set_position(version_pos.x, version_pos.y + self._date_label.font_size + 7)
-        self._version_commit_label.render()
+      self._version_commit_label.set_text(self._version_text[2])
+      self._version_commit_label.set_position(version_pos.x, version_pos.y + self._date_label.font_size + 7)
+      self._version_commit_label.render()
     else:
       self._branch_label.set_max_width(gui_app.width - 32)
       self._branch_label.set_text(self._current_model_name)
