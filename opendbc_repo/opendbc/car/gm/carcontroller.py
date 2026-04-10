@@ -50,6 +50,22 @@ def should_spoof_dash_speed(CP, starpilot_toggles):
   return True
 
 
+ECM_CRUISE_SPOOF_CARS = {
+  CAR.CHEVROLET_BOLT_CC_2017,
+  CAR.CHEVROLET_BOLT_CC_2018_2021,
+  CAR.CHEVROLET_BOLT_CC_2022_2023,
+  CAR.CHEVROLET_MALIBU_HYBRID_CC,
+}
+
+
+def should_spoof_ecm_cruise_status(CP):
+  return (
+    bool(CP.flags & GMFlags.PEDAL_LONG.value) and
+    CP.carFingerprint in ECM_CRUISE_SPOOF_CARS and
+    CP.enableGasInterceptorDEPRECATED
+  )
+
+
 class CarController(CarControllerBase):
   def __init__(self, dbc_names, CP):
     super().__init__(dbc_names, CP)
@@ -370,18 +386,7 @@ class CarController(CarControllerBase):
       idx = self.lka_steering_cmd_counter % 4
       can_sends.append(gmcan.create_steering_control(self.packer_pt, CanBus.POWERTRAIN, apply_torque, idx, CC.latActive))
 
-    spoof_ecm_cruise_cars = {
-      CAR.CHEVROLET_BOLT_CC_2017,
-      CAR.CHEVROLET_BOLT_CC_2018_2021,
-      CAR.CHEVROLET_BOLT_CC_2022_2023,
-      CAR.CHEVROLET_MALIBU_HYBRID_CC,
-    }
-    non_acc_pedal_long = (
-      bool(self.CP.flags & GMFlags.PEDAL_LONG.value) and
-      self.CP.carFingerprint in spoof_ecm_cruise_cars and
-      self.CP.enableGasInterceptorDEPRECATED
-    )
-    if non_acc_pedal_long and dash_speed_spoof_active and self.frame % 4 == 0:
+    if should_spoof_ecm_cruise_status(self.CP) and self.frame % 4 == 0:
       can_sends.append(gmcan.create_ecm_cruise_control_command(
         self.packer_pt, CanBus.POWERTRAIN, True, hud_v_cruise * CV.MS_TO_KPH))
 
