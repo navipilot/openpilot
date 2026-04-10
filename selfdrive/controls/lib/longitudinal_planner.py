@@ -2,7 +2,6 @@
 import math
 import numpy as np
 import time
-
 import cereal.messaging as messaging
 from opendbc.car.interfaces import ACCEL_MIN, ACCEL_MAX
 from openpilot.common.constants import CV
@@ -34,12 +33,6 @@ _A_TOTAL_MAX_BP = [20., 40.]
 
 
 def get_longitudinal_personality(sm):
-  controls_state = sm['controlsState']
-  for attr in ('personalityDEPRECATED', 'personality'):
-    try:
-      return getattr(controls_state, attr)
-    except Exception:
-      pass
   return sm['selfdriveState'].personality
 
 

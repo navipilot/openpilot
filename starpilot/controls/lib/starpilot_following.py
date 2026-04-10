@@ -12,12 +12,6 @@ PERSONALITY_BP = [45. * CV.MPH_TO_MS, 70. * CV.MPH_TO_MS]
 
 
 def get_longitudinal_personality(sm):
-  controls_state = sm["controlsState"]
-  for attr in ("personalityDEPRECATED", "personality"):
-    try:
-      return getattr(controls_state, attr)
-    except Exception:
-      pass
   return sm["selfdriveState"].personality
 
 class StarPilotFollowing:
