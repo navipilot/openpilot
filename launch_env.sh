@@ -21,7 +21,7 @@ fi
 export QCOM_PRIORITY=12
 
 if [ -z "$AGNOS_VERSION" ]; then
-  export AGNOS_VERSION="12.8.7"
+  export AGNOS_VERSION="12.8.16"
 fi
 
 export STAGING_ROOT="/data/safe_staging"

@@ -16,6 +16,7 @@ from pathlib import Path
 
 RESET_PATH_IN_IMAGE = "/usr/comma/reset"
 SETUP_PATH_IN_IMAGE = "/usr/comma/setup"
+UPDATER_PATH_IN_IMAGE = "/usr/comma/updater"
 RESET_ENTRY_IN_ZIPAPP = "openpilot/system/ui/reset.py"
 MICI_RESET_ENTRY_IN_ZIPAPP = "openpilot/system/ui/mici_reset.py"
 TICI_RESET_ENTRY_IN_ZIPAPP = "openpilot/system/ui/tici_reset.py"
@@ -24,12 +25,14 @@ WIFI_MANAGER_ENTRY_IN_SETUP_ZIPAPP = "openpilot/system/ui/lib/wifi_manager.py"
 SETUP_ENTRY_IN_SETUP_ZIPAPP = "openpilot/system/ui/setup.py"
 TICI_SETUP_ENTRY_IN_SETUP_ZIPAPP = "openpilot/system/ui/tici_setup.py"
 MICI_SETUP_ENTRY_IN_SETUP_ZIPAPP = "openpilot/system/ui/mici_setup.py"
+UPDATER_ENTRY_IN_ZIPAPP = "openpilot/system/ui/updater.py"
 VERSION_PATH_IN_IMAGE = "/VERSION"
 PATCH_MARKER = "STARPILOT_C4_RESET_LAYOUT_V1"
 MICI_RESET_PATCH_MARKER = "STARPILOT_C4_MICI_RESET_LAYOUT_V1"
 TICI_RESET_PATCH_MARKER = "STARPILOT_C4_TICI_RESET_LAYOUT_V1"
 APP_PATCH_MARKER = "STARPILOT_C4_RESET_APP_DIMENSIONS_V1"
 SETUP_WIFI_PATCH_MARKER = "JEEPNY_AVAILABLE = True"
+SETUP_BRANDING_PATCH_MARKER = "STARPILOT_SETUP_BRANDING_V1"
 SETUP_SSH_RESTORE_PATCH_MARKER = "STARPILOT_SETUP_SSH_RESTORE_V1"
 ANDROID_SPARSE_MAGIC = 0xED26FF3A
 CHUNK_TYPE_RAW = 0xCAC1
@@ -287,6 +290,34 @@ def patch_setup_wifi_manager() -> bytes:
   return data
 
 
+def patch_setup_branding_script(original: bytes, entry_name: str) -> bytes:
+  text = original.decode("utf-8")
+  if SETUP_BRANDING_PATCH_MARKER in text:
+    return text.encode("utf-8")
+
+  text = text.replace(
+    'OPENPILOT_URL = "https://openpilot.comma.ai"',
+    'NETWORK_CHECK_URL = "https://openpilot.comma.ai"\n'
+    'DEFAULT_INSTALLER_URL = "https://installer.comma.ai/firestar5683/StarPilot"\n'
+    f'# {SETUP_BRANDING_PATCH_MARKER}',
+  )
+  text = text.replace("urllib.request.Request(OPENPILOT_URL, method=\"HEAD\")",
+                      "urllib.request.Request(NETWORK_CHECK_URL, method=\"HEAD\")")
+  text = text.replace("urllib.request.urlopen(OPENPILOT_URL, timeout=2)",
+                      "urllib.request.urlopen(NETWORK_CHECK_URL, timeout=2)")
+  text = text.replace("self.download(OPENPILOT_URL)", "self.download(DEFAULT_INSTALLER_URL)")
+
+  if entry_name == MICI_SETUP_ENTRY_IN_SETUP_ZIPAPP:
+    text = text.replace('LargerSlider("slide to use\\nopenpilot"', 'LargerSlider("slide to use\\nstarpilot"')
+  elif entry_name == TICI_SETUP_ENTRY_IN_SETUP_ZIPAPP:
+    text = text.replace('ButtonRadio("openpilot"', 'ButtonRadio("StarPilot"')
+
+  if SETUP_BRANDING_PATCH_MARKER not in text:
+    raise RuntimeError(f"Failed to patch setup branding for {entry_name}")
+
+  return text.encode("utf-8")
+
+
 def patch_setup_module(relative_path: str) -> bytes:
   """
   Replace setup zipapp module with repo version so setup behavior stays in sync.
@@ -345,19 +376,30 @@ def _restore_ssh_after_reset():
 
 def get_setup_replacements() -> dict[str, bytes]:
   """
-  Build the list of setup zipapp entries that must be synced from repo.
+  Keep the reference setup bundle intact and patch only the networking backend.
 
-  This intentionally includes key mici UI modules used by the C4 setup flow.
-  Some reference AGNOS images ship older setup zipapps that do not include all
-  of these entries; patching code adds missing entries when needed.
+  The reference AGNOS setup bundle already contains the correct small-screen
+  selector and matching mici UI modules. Replacing those modules with repo-head
+  versions caused bootstrap incompatibilities. The only setup-side changes we
+  still need are the jeepney fallback plus the StarPilot branding/url strings.
   """
   return {
-    APPLICATION_ENTRY_IN_ZIPAPP: patch_setup_module("system/ui/lib/application.py"),
     WIFI_MANAGER_ENTRY_IN_SETUP_ZIPAPP: patch_setup_wifi_manager(),
-    SETUP_ENTRY_IN_SETUP_ZIPAPP: patch_setup_module("system/ui/setup.py"),
-    TICI_SETUP_ENTRY_IN_SETUP_ZIPAPP: patch_setup_script_with_ssh_restore("system/ui/tici_setup.py"),
-    MICI_SETUP_ENTRY_IN_SETUP_ZIPAPP: patch_setup_script_with_ssh_restore("system/ui/mici_setup.py"),
   }
+
+
+def patch_updater_module() -> bytes:
+  """
+  Replace only the bundled updater selector with the repo version.
+
+  The selector itself carries the small-screen fallback logic; the rest of the
+  reference updater zipapp stays unchanged.
+  """
+  repo_root = Path(__file__).resolve().parents[2]
+  src = repo_root / "system/ui/updater.py"
+  if not src.is_file():
+    raise RuntimeError(f"Unable to find repo updater source: {src}")
+  return src.read_bytes()
 
 
 def patch_reset_script() -> bytes:
@@ -424,7 +466,7 @@ def patch_tici_reset_script() -> bytes:
 
 
 def parse_args() -> argparse.Namespace:
-  p = argparse.ArgumentParser(description="Patch AGNOS system image /usr/comma/reset for C4 tappity reset UI")
+  p = argparse.ArgumentParser(description="Patch AGNOS system image with minimal C4 reset/setup/updater fixes")
   p.add_argument("--manifest", default="system/hardware/tici/agnos.json", help="Path to AGNOS manifest JSON")
   p.add_argument("--work-dir", default=".cache/agnos_reset_patch", help="Working directory")
   p.add_argument("--source-url", default=None, help="Override source raw system image URL")
@@ -725,6 +767,43 @@ def patch_reset_zipapp(original: bytes) -> bytes:
   return shebang + dst_io.getvalue()
 
 
+def patch_updater_zipapp(original: bytes) -> bytes:
+  shebang, zip_payload = split_shebang(original)
+
+  replacement = patch_updater_module()
+  src_io = BytesIO(zip_payload)
+  dst_io = BytesIO()
+  changed = False
+  found_updater = False
+
+  with zipfile.ZipFile(src_io, "r") as src, zipfile.ZipFile(dst_io, "w", compression=zipfile.ZIP_DEFLATED) as dst:
+    for info in src.infolist():
+      payload = src.read(info.filename)
+      if info.filename == UPDATER_ENTRY_IN_ZIPAPP:
+        found_updater = True
+        if payload != replacement:
+          payload = replacement
+          changed = True
+
+      new_info = zipfile.ZipInfo(info.filename, info.date_time)
+      new_info.compress_type = zipfile.ZIP_DEFLATED
+      new_info.external_attr = info.external_attr
+      new_info.create_system = info.create_system
+      dst.writestr(new_info, payload)
+
+    if not found_updater:
+      new_info = zipfile.ZipInfo(UPDATER_ENTRY_IN_ZIPAPP)
+      new_info.compress_type = zipfile.ZIP_DEFLATED
+      new_info.external_attr = 0o100644 << 16
+      new_info.create_system = 3
+      dst.writestr(new_info, replacement)
+      changed = True
+
+  if not changed:
+    return original
+  return shebang + dst_io.getvalue()
+
+
 def patch_setup_zipapp(original: bytes) -> bytes:
   shebang, zip_payload = split_shebang(original)
 
@@ -742,6 +821,11 @@ def patch_setup_zipapp(original: bytes) -> bytes:
       if info.filename in replacements and payload != replacements[info.filename]:
         payload = replacements[info.filename]
         changed = True
+      elif info.filename in (MICI_SETUP_ENTRY_IN_SETUP_ZIPAPP, TICI_SETUP_ENTRY_IN_SETUP_ZIPAPP):
+        patched_payload = patch_setup_branding_script(payload, info.filename)
+        if patched_payload != payload:
+          payload = patched_payload
+          changed = True
 
       new_info = zipfile.ZipInfo(info.filename, info.date_time)
       new_info.compress_type = zipfile.ZIP_DEFLATED
@@ -749,7 +833,6 @@ def patch_setup_zipapp(original: bytes) -> bytes:
       new_info.create_system = info.create_system
       dst.writestr(new_info, payload)
 
-    # Inject missing setup modules required by current StarPilot setup flow.
     default_external_attr = 0o100644 << 16
     for entry, payload in replacements.items():
       if entry in seen_entries:
@@ -792,9 +875,25 @@ def setup_zipapp_has_expected_content(data: bytes) -> bool:
       for entry, payload in replacements.items():
         if z.read(entry) != payload:
           return False
+      for entry in (MICI_SETUP_ENTRY_IN_SETUP_ZIPAPP, TICI_SETUP_ENTRY_IN_SETUP_ZIPAPP):
+        setup_script = z.read(entry)
+        if SETUP_BRANDING_PATCH_MARKER.encode() not in setup_script:
+          return False
+        if b"installer.comma.ai/firestar5683/StarPilot" not in setup_script:
+          return False
     except KeyError:
       return False
   return True
+
+
+def updater_zipapp_has_expected_content(data: bytes) -> bool:
+  _shebang, zip_payload = split_shebang(data)
+  with zipfile.ZipFile(BytesIO(zip_payload), "r") as z:
+    try:
+      updater_script = z.read(UPDATER_ENTRY_IN_ZIPAPP)
+    except KeyError:
+      return False
+  return updater_script == patch_updater_module()
 
 
 def parse_inode(debugfs_output: str) -> int:
@@ -1000,7 +1099,9 @@ def main() -> int:
   original_setup = work_dir / "comma_setup.orig"
   patched_setup = work_dir / "comma_setup.patched"
   verify_setup = work_dir / "comma_setup.verify"
-
+  original_updater = work_dir / "comma_updater.orig"
+  patched_updater = work_dir / "comma_updater.patched"
+  verify_updater = work_dir / "comma_updater.verify"
   print("Extracting /usr/comma/reset from image", flush=True)
   run_debugfs(debugfs, patched_img, f"dump -p {RESET_PATH_IN_IMAGE} {original_reset}", write=False)
 
@@ -1024,7 +1125,7 @@ def main() -> int:
   setup_original_data = original_setup.read_bytes()
   setup_patched_data = patch_setup_zipapp(setup_original_data)
   if setup_patched_data == setup_original_data:
-    print("Setup zipapp already contains jeepney fallback patch; continuing", flush=True)
+    print("Setup zipapp already contains the expected compat patches; continuing", flush=True)
   patched_setup.write_bytes(setup_patched_data)
 
   print("Writing patched /usr/comma/setup back into image", flush=True)
@@ -1034,6 +1135,23 @@ def main() -> int:
   verify_setup_data = verify_setup.read_bytes()
   if not setup_zipapp_has_expected_content(verify_setup_data):
     raise RuntimeError("Setup zipapp verification failed after writing setup file into image")
+
+  print("Extracting /usr/comma/updater from image", flush=True)
+  run_debugfs(debugfs, patched_img, f"dump -p {UPDATER_PATH_IN_IMAGE} {original_updater}", write=False)
+
+  updater_original_data = original_updater.read_bytes()
+  updater_patched_data = patch_updater_zipapp(updater_original_data)
+  if updater_patched_data == updater_original_data:
+    print("Updater zipapp already contains the expected selector patch; continuing", flush=True)
+  patched_updater.write_bytes(updater_patched_data)
+
+  print("Writing patched /usr/comma/updater back into image", flush=True)
+  write_regular_file_to_image(debugfs, patched_img, UPDATER_PATH_IN_IMAGE, patched_updater, "0100775", 0, 0)
+
+  run_debugfs(debugfs, patched_img, f"dump -p {UPDATER_PATH_IN_IMAGE} {verify_updater}", write=False)
+  verify_updater_data = verify_updater.read_bytes()
+  if not updater_zipapp_has_expected_content(verify_updater_data):
+    raise RuntimeError("Updater zipapp verification failed after writing updater file into image")
 
   if args.set_version:
     version_file = work_dir / "VERSION.patched"
