@@ -62,7 +62,7 @@ def get_max_accel_sport(v_ego, ev_tuning=True, truck_tuning=False):
 def get_max_accel_standard(v_ego, ev_tuning=True, truck_tuning=False):
   if ev_tuning or truck_tuning:
     return interpolate_accel_profile(v_ego, get_accel_profile_curve_values(ACCELERATION_PROFILES["STANDARD"], ev_tuning, truck_tuning))
-  return float(get_max_accel(v_ego))
+  return interpolate_accel_profile(v_ego, [1.60, 1.40, 1.20, 1.0666666666666667, 0.9333333333333333, 0.80, 0.60])
 
 def get_max_accel_custom(v_ego, custom_curve, acceleration_profile, ev_tuning=True, truck_tuning=False):
   curve_values = coerce_custom_accel_profile_values(custom_curve, acceleration_profile, ev_tuning, truck_tuning)
