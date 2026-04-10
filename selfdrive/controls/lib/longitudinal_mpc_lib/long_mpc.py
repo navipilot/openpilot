@@ -13,6 +13,7 @@ from openpilot.common.constants import CV
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.realtime import DT_MDL
 from openpilot.common.swaglog import cloudlog
+from openpilot.selfdrive.controls.lib.lead_behavior import get_tracked_lead_catchup_bias
 # WARNING: imports outside of constants will not trigger a rebuild
 from openpilot.selfdrive.modeld.constants import index_function
 
@@ -549,6 +550,10 @@ class LongitudinalMpc:
                                  v_lower,
                                  v_upper)
       cruise_obstacle = np.cumsum(T_DIFFS * v_cruise_clipped) + get_safe_obstacle_distance(v_cruise_clipped, t_follow)
+      if tracking_lead and lead_one.status:
+        desired_gap = desired_follow_distance(v_ego, lead_one.vLead, t_follow)
+        closing_speed = max(0.0, v_ego - lead_one.vLead)
+        cruise_obstacle += get_tracked_lead_catchup_bias(v_ego, lead_one.dRel, desired_gap, closing_speed)
       x_obstacles = np.column_stack([lead_0_obstacle, lead_1_obstacle, cruise_obstacle])
       self.source = SOURCES[np.argmin(x_obstacles[0])]
 
