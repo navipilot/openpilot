@@ -11,24 +11,30 @@
 #define CHANGAN_PEDAL_DATA       0x196 // GW_196 (Petrol Brake/Gas)
 #define CHANGAN_IDD_PEDAL_DATA   0x1A6 // GW_1A6 (IDD Brake/Gas)
 #define CHANGAN_ACC_COMMAND      0x244 // GW_244
-#define CHANGAN_CRUISE_BUTTONS   0x28C // GW_28C (巡航按钮：含MAIN/RESUME/CANCEL)
-#define CHANGAN_ADAS_INFO        0x31A // GW_31A (ACC State Info：含ACC主开关状态)
-// 新增：巡航按钮位定义（需根据实车DBC核对，此处为通用示例）
-#define CHANGAN_BTN_MAIN    (0x01U << 0)  // ACC主开关（1=打开，0=关闭）
-#define CHANGAN_BTN_CANCEL  (0x01U << 1)  // 取消按钮（1=按下）
-#define CHANGAN_BTN_RESUME  (0x01U << 4)  // 恢复按钮（1=按下）
-#define CHANGAN_BTN_SET     (0x01U << 5)  // 设置按钮（1=按下，可选）
+#define CHANGAN_CRUISE_BUTTONS   0x28C // GW_28C
+#define CHANGAN_ADAS_INFO        0x31A // GW_31A (ACC State Info)
+#define CHANGAN_ACC_HUD          0x382 // GW_382 (CANFD 64byte)
+
+// GW_28C MFS巡航按钮信号定义（大端，每个信号2bit，非零即按下）
+// DBC: GW_MFS_Crusie_switch_signal   : 1|2@0+  => byte0 bits[1:0]
+// DBC: GW_MFS_Cancle_switch_signal   : 3|2@0+  => byte0 bits[3:2]
+// DBC: GW_MFS_RESPlus_switch_signal  : 5|2@0+  => byte0 bits[5:4]
+// DBC: GW_MFS_SETReduce_switch_signal: 7|2@0+  => byte0 bits[7:6]
+#define CHANGAN_BTN_MAIN_MASK    0x03U  // byte0 bits[1:0]
+#define CHANGAN_BTN_CANCEL_MASK  0x0CU  // byte0 bits[3:2]
+#define CHANGAN_BTN_RESUME_MASK  0x30U  // byte0 bits[5:4]
+#define CHANGAN_BTN_SET_MASK     0xC0U  // byte0 bits[7:6]
 
 const AngleSteeringLimits CHANGAN_STEER_LIMITS = {
-  .max_angle = 1800,  // 180.0 degrees * 10 (from DAS reference)
+  .max_angle = 1800,          // 180.0 degrees * 10
   .angle_deg_to_can = 10.,
   .angle_rate_up_lookup = {
-    .x = {0, 10, 20},  // Updated from DAS reference
-    .y = {5, 1.4, 0.15},  // Updated from DAS reference
+    .x = {0., 10., 20.},
+    .y = {5., 1.4, 0.15},
   },
   .angle_rate_down_lookup = {
-    .x = {0, 10, 20},  // Updated from DAS reference
-    .y = {5, 1.4, 0.26},  // Updated from DAS reference
+    .x = {0., 10., 20.},
+    .y = {5., 1.4, 0.26},
   },
   .enforce_angle_error = false,
   .inactive_angle_is_zero = false,
@@ -48,21 +54,18 @@ static const uint8_t changan_crc8_tab[256] = {
   0xA1, 0xBC, 0x9B, 0x86, 0xD5, 0xC8, 0xEF, 0xF2, 0x49, 0x54, 0x73, 0x6E, 0x3D, 0x20, 0x07, 0x1A,
   0x6C, 0x71, 0x56, 0x4B, 0x18, 0x05, 0x22, 0x3F, 0x84, 0x99, 0xBE, 0xA3, 0xF0, 0xED, 0xCA, 0xD7,
   0x35, 0x28, 0x0F, 0x12, 0x41, 0x5C, 0x7B, 0x66, 0xDD, 0xC0, 0xE7, 0xFA, 0xA9, 0xB4, 0x93, 0x8E,
-  0xf8, 0xE5, 0xC2, 0xDF, 0x8C, 0x91, 0xB6, 0xAB, 0x10, 0x0D, 0x2A, 0x37, 0x64, 0x79, 0x5E, 0x43,
+  0xF8, 0xE5, 0xC2, 0xDF, 0x8C, 0x91, 0xB6, 0xAB, 0x10, 0x0D, 0x2A, 0x37, 0x64, 0x79, 0x5E, 0x43,
   0xB2, 0xAF, 0x88, 0x95, 0xC6, 0xDB, 0xFC, 0xE1, 0x5A, 0x47, 0x60, 0x7D, 0x2E, 0x33, 0x14, 0x09,
   0x7F, 0x62, 0x45, 0x58, 0x0B, 0x16, 0x31, 0x2C, 0x97, 0x8A, 0xAD, 0xB0, 0xE3, 0xFE, 0xD9, 0xC4
 };
 
-// 修复：重命名变量，避免与全局extern int cruise_button_prev冲突
 static uint8_t changan_cruise_button_prev = 0x00U;
-// 新增：ACC主开关状态（需从ADAS_INFO消息解析，默认关闭）
-static bool changan_acc_main_on = false;
 
 static uint32_t changan_get_checksum(const CANPacket_t *to_push) {
   int addr = GET_ADDR(to_push);
   if (addr == 0x180 || addr == 0x17E || addr == 0x187 || addr == 0x17A ||
       addr == 0x196 || addr == 0x1A6 || addr == 0x244 || addr == 0x28C ||
-      addr == 0x307 || addr == 0x31A || addr == 0x442 || addr == 0x382) {
+      addr == 0x307 || addr == 0x31A || addr == 0x382) {
     return GET_BYTE(to_push, 7);
   }
   return 0;
@@ -72,7 +75,7 @@ static uint32_t changan_compute_checksum(const CANPacket_t *to_push) {
   int addr = GET_ADDR(to_push);
   if (addr == 0x180 || addr == 0x17E || addr == 0x187 || addr == 0x17A ||
       addr == 0x196 || addr == 0x1A6 || addr == 0x244 || addr == 0x28C ||
-      addr == 0x307 || addr == 0x31A || addr == 0x442 || addr == 0x382) {
+      addr == 0x307 || addr == 0x31A || addr == 0x382) {
     uint8_t checksum = 0;
     for (int i = 0; i < 7; i++) {
       checksum = changan_crc8_tab[checksum ^ GET_BYTE(to_push, i)];
@@ -86,7 +89,7 @@ static uint8_t changan_get_counter(const CANPacket_t *to_push) {
   int addr = GET_ADDR(to_push);
   if (addr == 0x180 || addr == 0x17E || addr == 0x187 || addr == 0x17A ||
       addr == 0x196 || addr == 0x1A6 || addr == 0x244 || addr == 0x28C ||
-      addr == 0x307 || addr == 0x31A || addr == 0x442 || addr == 0x382) {
+      addr == 0x307 || addr == 0x31A || addr == 0x382) {
     return (GET_BYTE(to_push, 6) >> 4) & 0xF;
   }
   return 0;
@@ -95,79 +98,78 @@ static uint8_t changan_get_counter(const CANPacket_t *to_push) {
 static void changan_rx_hook(const CANPacket_t *to_push) {
   int addr = GET_ADDR(to_push);
   int bus = GET_BUS(to_push);
-  uint8_t current_button = 0x00U; // 当前巡航按钮状态
 
-  // 1. 解析ACC主开关状态（从ADAS_INFO消息获取，关键前提：主开关打开才允许控制）
-  if (bus == 2 && addr == CHANGAN_ADAS_INFO) {
-    // 注意：需根据实车DBC核对ACC主开关的位定义（示例：字节0的第2位）
-    changan_acc_main_on = (GET_BYTE(to_push, 0) & (0x01U << 2)) != 0U;
-    // 调试输出：确认主开关状态（实际使用时可注释）
-    // printf("[DEBUG] ACC_MAIN_ON: %d\n", changan_acc_main_on);
+  // ── controls_allowed 同步 ──────────────────────────────────────
+  // 从 GW_244 (bus2) 读取 ACC_ACCMode，与 carstate.py 逻辑保持一致：
+  //   ACC_ACCMode==3 => Active => controls_allowed=true
+  //   其他值 (2=Standby, 7=Fault...) => controls_allowed=false
+  //
+  // DBC: ACC_ACCMode : 54|3@0+ in GW_244 (32byte CANFD)
+  //   start_bit=54, 3bits big-endian
+  //   byte6=[55,54,53,52,51,50,49,48]: bit54=byte6 bit6, 3bits => byte6 bits[6:4]
+  //   读取: (GET_BYTE(6) >> 4) & 0x7
+  if (bus == 2 && addr == CHANGAN_ACC_COMMAND) {
+    uint8_t acc_mode = (GET_BYTE(to_push, 6) >> 4) & 0x7U;
+    if (acc_mode == 3U) {
+      controls_allowed = true;
+    } else {
+      controls_allowed = false;
+    }
   }
 
-  // 2. 解析巡航按钮状态（支持bus0和bus2，覆盖汽油版/混动版）
+  // ── 巡航按钮：Cancel 立即撤销控制权 ───────────────────────────
+  // DBC GW_28C: GW_MFS_Cancle_switch_signal : 3|2@0+ => byte0 bits[3:2]
+  // 按下时(非零)立即清除 controls_allowed
   if ((bus == 0 || bus == 2) && addr == CHANGAN_CRUISE_BUTTONS) {
-    // 读取当前按钮状态（字节0存储按钮信号，需根据DBC核对）
-    current_button = GET_BYTE(to_push, 0);
-    // 调试输出：确认按钮原始数据（实际使用时可注释）
-    // printf("[DEBUG] Cruise Button Current: 0x%02X, Previous: 0x%02X\n", current_button, changan_cruise_button_prev);
-
-    // 3. 边缘检测（仅在按钮"按下→释放"时触发，避免持续按压导致状态反复）
-    bool btn_resume_trigger = (current_button & CHANGAN_BTN_RESUME) == 0U &&
-                              (changan_cruise_button_prev & CHANGAN_BTN_RESUME) != 0U;
-    bool btn_set_trigger = (current_button & CHANGAN_BTN_SET) == 0U &&
-                           (changan_cruise_button_prev & CHANGAN_BTN_SET) != 0U;
-    bool btn_cancel_trigger = (current_button & CHANGAN_BTN_CANCEL) != 0U; // 取消按钮按下即触发
-
-    // 4. 控制权限逻辑（符合安全标准：主开关打开+恢复/设置按钮触发才允许控制）
-    if (changan_acc_main_on && (btn_resume_trigger || btn_set_trigger)) {
-      controls_allowed = true;
-      // printf("[DEBUG] Controls Allowed: ON\n"); // 调试输出
-    } else if (btn_cancel_trigger || !changan_acc_main_on) {
+    uint8_t current_button = GET_BYTE(to_push, 0);
+    bool btn_cancel = (current_button & CHANGAN_BTN_CANCEL_MASK) != 0U;
+    if (btn_cancel) {
       controls_allowed = false;
-      // printf("[DEBUG] Controls Allowed: OFF\n"); // 调试输出
     }
-
-    // 5. 保存当前按钮状态为"前一状态"（用于下次边缘检测）
     changan_cruise_button_prev = current_button;
   }
 
-  // 6. 保留原有逻辑：车速、转向角度、踏板数据解析
+  // ── 车速更新 ────────────────────────────────────────────────────
   if (bus == 0) {
-    // Z6汽油版车速更新
+    // GW_187 Petrol: ESP_VehicleSpeed : 36|13@0+
+    //   start_bit=36, 13bit big-endian
+    //   byte4=[39,38,37,36,35,34,33,32]: bit36=byte4 bit4, 5bits in byte4 bits[4:0]
+    //   byte5=[47..40]: 全部8bits (LSB部分)
+    //   读取: ((byte4 & 0x1F) << 8) | byte5, factor=0.05625 km/h
     if (addr == CHANGAN_WHEEL_SPEEDS) {
-      int speed = ((GET_BYTE(to_push, 4) << 8) | GET_BYTE(to_push, 5));
-      UPDATE_VEHICLE_SPEED(speed * 0.05 / 3.6);
+      int speed = (((int)(GET_BYTE(to_push, 4) & 0x1FU)) << 8) | GET_BYTE(to_push, 5);
+      UPDATE_VEHICLE_SPEED(speed * 0.05625 / 3.6);
     }
-
-    // 转向角度更新
+    // 转向角度: GW_180 SAS_SteeringAngle : 7|16@0+ (大端16bit => byte0高8 + byte1低8)
     if (addr == CHANGAN_STEER_ANGLE) {
       int angle_meas_new = (GET_BYTE(to_push, 0) << 8) | GET_BYTE(to_push, 1);
       update_sample(&angle_meas, to_signed(angle_meas_new, 16));
     }
-
-    // Z6汽油版油门刹车状态
+    // GW_196 Petrol Brake/Gas (修复：按照DBC正确bit位提取)
+    // EMS_BrakePedalStatus : 55|2@0+ => byte6 bits[7:6]
+    // EMS_RealAccPedal     :  7|8@0+ => byte0 全部
     if (addr == CHANGAN_PEDAL_DATA) {
-      brake_pressed = (GET_BYTE(to_push, 6) & 0x01U) != 0U;
-      gas_pressed = (GET_BYTE(to_push, 2) & 0x01U) != 0U;
+      brake_pressed = ((GET_BYTE(to_push, 6) >> 6) & 0x3U) != 0U;
+      gas_pressed   = GET_BYTE(to_push, 0) != 0U;
     }
   }
 
   if (bus == 2) {
-    // IDD混动版车速更新
+    // GW_17A IDD: ESP_VehicleSpeed : 36|13@0+ (同GW_187结构相同)
     if (addr == CHANGAN_IDD_WHEEL_SPEEDS) {
-      int speed = ((GET_BYTE(to_push, 4) << 8) | GET_BYTE(to_push, 5));
-      UPDATE_VEHICLE_SPEED(speed * 0.05 / 3.6);
+      int speed = (((int)(GET_BYTE(to_push, 4) & 0x1FU)) << 8) | GET_BYTE(to_push, 5);
+      UPDATE_VEHICLE_SPEED(speed * 0.05625 / 3.6);
     }
-
-    // IDD混动版油门刹车状态
+    // GW_1A6 IDD Brake/Gas (修复：按照DBC正确bit位提取)
+    // EMS_BrakePedalStatus : 35|2@0+ => byte4 bits[3:2]
+    // EMS_AccPedal         : 47|8@0+ => byte5 全部
     if (addr == CHANGAN_IDD_PEDAL_DATA) {
-      brake_pressed = (GET_BYTE(to_push, 6) & 0x01U) != 0U;
-      gas_pressed = (GET_BYTE(to_push, 4) & 0x40U) != 0U;
+      brake_pressed = ((GET_BYTE(to_push, 4) >> 2) & 0x3U) != 0U;
+      gas_pressed   = GET_BYTE(to_push, 5) != 0U;
     }
   }
 
-  // 检测原车ECU消息（保留原有逻辑）
+  // 检测原车ECU转向消息（stock ECU detected on bus2）
   bool stock_ecu_detected = (bus == 2) && (addr == CHANGAN_STEER_COMMAND);
   generic_rx_checks(stock_ecu_detected);
 }
@@ -177,41 +179,53 @@ static bool changan_tx_hook(const CANPacket_t *to_send) {
   bool tx = true;
   bool violation = false;
 
-  // 转向控制消息校验（保留原有逻辑）
+  // ── 转向控制消息 GW_1BA (0x1BA) ────────────────────────────────
+  // DBC: EPS_AngleCmd    : 17|14@0+ (0.1,-720) => Motorola 14bit
+  //   MSB at bit17: byte2=[23,22,21,20,19,18,17,16], bit17=byte2 bit1
+  //   Bit sequence (MSB->LSB): bit17(B2b1), bit16(B2b0),
+  //                            bit15..8(B1全部8bit),
+  //                            bit7..4(B0 bits[7:4])
+  //   Raw = ((byte2 & 0x03) << 12) | (byte1 << 4) | ((byte0 >> 4) & 0x0F)
+  //   Physical = raw * 0.1 - 720  =>  raw = (angle_deg + 720) / 0.1
+  //
+  // DBC: EPS_LatCtrlActive : 35|1@0+ => byte4=[39,38,37,36,35,34,33,32], bit35=byte4 bit3
   if (addr == CHANGAN_STEER_COMMAND) {
-    int desired_angle = ((GET_BYTE(to_send, 2) & 0x7FU) << 8) | GET_BYTE(to_send, 3);
-    bool steer_req = (GET_BYTE(to_send, 2) & 0x80U) != 0U;
+    // 提取 EPS_AngleCmd raw值 (14bit无符号，物理值=raw*0.1-720)
+    int raw_angle = (((int)(GET_BYTE(to_send, 2) & 0x03U)) << 12) |
+                    ((int)GET_BYTE(to_send, 1) << 4) |
+                    (((int)GET_BYTE(to_send, 0) >> 4) & 0x0FU);
+    // 转换为物理角度值（单位：degrees * 10，对应 max_angle=1800）
+    // DBC物理值 = raw * 0.1 - 720, 安全层内部以0.1度为单位 => deg_x10 = raw - 7200
+    int desired_angle = raw_angle - 7200;  // 单位: 0.1度, range: [-7200, 9000+]
+
+    // 提取 EPS_LatCtrlActive (1bit)
+    bool steer_req = ((GET_BYTE(to_send, 4) >> 3) & 0x1U) != 0U;
 
     // 安全检查1: 控制权限
     if (steer_req && !controls_allowed) {
       violation = true;
-      // printf("[DEBUG] TX Blocked: Steer req without permission\n"); // 调试输出
     }
 
-    // 安全检查2: 角度限制
-    if (steer_angle_cmd_checks(to_signed(desired_angle, 16), steer_req, CHANGAN_STEER_LIMITS)) {
+    // 安全检查2: 角度超限（steer_angle_cmd_checks内部会与max_angle=1800比较）
+    if (steer_angle_cmd_checks(desired_angle, steer_req, CHANGAN_STEER_LIMITS)) {
       violation = true;
-      // printf("[DEBUG] TX Blocked: Steer angle out of limit\n"); // 调试输出
     }
   }
 
-  // 纵向控制消息校验（0x244/0x442/0x382，保留原有逻辑）
-  if (addr == CHANGAN_ACC_COMMAND || addr == 0x442 || addr == 0x382) {
+  // ── 纵向控制消息 GW_244 (0x244) 和 GW_382 (0x382) ─────────────
+  // 这些消息在 controls_allowed=false 时禁止发送
+  if (addr == CHANGAN_ACC_COMMAND || addr == CHANGAN_ACC_HUD) {
     if (!controls_allowed) {
       violation = true;
-      // printf("[DEBUG] TX Blocked: Longitudinal req without permission (addr:0x%X)\n", addr); // 调试输出
     }
   }
 
-  // 无需权限的消息（保留原有逻辑）
-  if (addr == 0x307 || addr == 0x31A) {
-    // 这些消息通常不需要controls_allowed检查
-  }
+  // ── HUD 消息 GW_307 (0x307) 和 GW_31A (0x31A) ─────────────────
+  // HUD状态显示消息，不涉及直接控制，无需 controls_allowed 检查
 
   if (violation) {
     tx = false;
   }
-
   return tx;
 }
 
@@ -221,13 +235,12 @@ static int changan_fwd_hook(int bus, int addr) {
     bus_fwd = 2;
   }
   if (bus == 2) {
-    // 屏蔽敏感控制消息，避免原车ECU冲突（保留原有逻辑）
-    bool block = (addr == CHANGAN_STEER_COMMAND) ||
-                 (addr == CHANGAN_ACC_COMMAND) ||
-                 (addr == 0x307) ||
-                 (addr == 0x31A) ||
-                 (addr == 0x442) ||
-                 (addr == 0x382);
+    // 屏蔽由openpilot接管的控制消息，防止原车ECU和openpilot同时发送冲突
+    bool block = (addr == CHANGAN_STEER_COMMAND) ||  // 0x1BA 转向
+                 (addr == CHANGAN_ACC_COMMAND)   ||  // 0x244 纵向ACC
+                 (addr == 0x307)                 ||  // GW_307 巡航速度HUD
+                 (addr == 0x31A)                 ||  // GW_31A ADAS状态HUD
+                 (addr == CHANGAN_ACC_HUD);           // 0x382 GW_382
     if (!block) {
       bus_fwd = 0;
     }
@@ -236,47 +249,50 @@ static int changan_fwd_hook(int bus, int addr) {
 }
 
 static safety_config changan_init(uint16_t param) {
-  // 初始化控制权限和心跳（保留原有逻辑）
   controls_allowed = false;
   heartbeat_engaged = false;
   heartbeat_engaged_mismatches = 0U;
-
-  // 新增：初始化长安专属的巡航按钮状态和ACC主开关（避免野值）
   changan_cruise_button_prev = 0x00U;
-  changan_acc_main_on = false;
 
-  // 完整的TX消息列表（保留原有逻辑，0x442/0x382已在白名单）
+  // TX消息列表
+  // 注意: GW_307(0x307)和GW_31A(0x31A)是64字节CANFD消息
+  //       GW_382(0x382)是64字节CANFD消息
+  //       GW_1BA(0x1BA)和GW_244(0x244)是32字节CANFD消息
+  // 如果panda固件不支持CANFD，需要将len改为8或使用CANFD模式
   static const CanMsg CHANGAN_TX_MSGS[] = {
-    {CHANGAN_STEER_COMMAND, 0, 32},
-    {CHANGAN_ACC_COMMAND, 0, 32},
-    {0x307, 0, 64},
-    {0x31A, 0, 64},
-    {0x442, 0, 32},  // 纵向控制消息（已在白名单）
-    {0x382, 2, 8},   // 纵向控制消息（已在白名单）
+    {CHANGAN_STEER_COMMAND, 0, 32},  // GW_1BA: 转向控制 (32byte CANFD)
+    {CHANGAN_ACC_COMMAND,   0, 32},  // GW_244: 纵向ACC控制 (32byte CANFD)
+    {0x307,                 0, 64},  // GW_307: 巡航速度HUD (64byte CANFD)
+    {0x31A,                 0, 64},  // GW_31A: ADAS状态HUD (64byte CANFD)
+    {CHANGAN_ACC_HUD,       2, 64},  // GW_382: ACC辅助信息 (64byte CANFD, bus2)
   };
 
-  // 临时禁用验证用于调试（建议调试完成后改为false）
   static RxCheck changan_rx_checks[] = {
+    // 转向角度 GW_180 (bus0, 8byte, 100Hz)
     {.msg = {{CHANGAN_STEER_ANGLE, 0, 8, .ignore_checksum = true, .ignore_counter = true, .frequency = 100U}, {0}, {0}}},
-    {.msg = {{CHANGAN_PEDAL_DATA, 0, 8, .ignore_checksum = true, .ignore_counter = true, .frequency = 100U},
+    // 踏板数据: GW_196(Petrol, bus0) 或 GW_1A6(IDD, bus0) 均为100Hz
+    {.msg = {{CHANGAN_PEDAL_DATA,     0, 8, .ignore_checksum = true, .ignore_counter = true, .frequency = 100U},
              {CHANGAN_IDD_PEDAL_DATA, 0, 8, .ignore_checksum = true, .ignore_counter = true, .frequency = 100U}, {0}}},
-    // 新增：添加巡航按钮和ADAS_INFO的Rx检查（确保消息正常接收）
+    // ACC状态 GW_244 (bus2, 32byte CANFD, 50Hz) — 用于同步 controls_allowed
+    {.msg = {{CHANGAN_ACC_COMMAND, 2, 32, .ignore_checksum = true, .ignore_counter = true, .frequency = 50U}, {0}, {0}}},
+    // 巡航按钮 GW_28C (bus0 或 bus2, 8byte, 50Hz)
     {.msg = {{CHANGAN_CRUISE_BUTTONS, 0, 8, .ignore_checksum = true, .ignore_counter = true, .frequency = 50U},
              {CHANGAN_CRUISE_BUTTONS, 2, 8, .ignore_checksum = true, .ignore_counter = true, .frequency = 50U}, {0}}},
-    {.msg = {{CHANGAN_ADAS_INFO, 2, 8, .ignore_checksum = true, .ignore_counter = true, .frequency = 50U}, {0}, {0}}},
+    // 车速: GW_187(Petrol, bus0) 或 GW_17A(IDD, bus2) 均为100Hz，GW_17A是64byte CANFD
+    {.msg = {{CHANGAN_WHEEL_SPEEDS,     0, 8,  .ignore_checksum = true, .ignore_counter = true, .frequency = 100U},
+             {CHANGAN_IDD_WHEEL_SPEEDS, 2, 64, .ignore_checksum = true, .ignore_counter = true, .frequency = 100U}, {0}}},
   };
 
   UNUSED(param);
   return BUILD_SAFETY_CFG(changan_rx_checks, CHANGAN_TX_MSGS);
 }
 
-// 安全钩子注册（保留原有逻辑）
 const safety_hooks changan_hooks = {
-  .init = changan_init,
-  .rx = changan_rx_hook,
-  .tx = changan_tx_hook,
-  .fwd = changan_fwd_hook,
-  .get_checksum = changan_get_checksum,
+  .init             = changan_init,
+  .rx               = changan_rx_hook,
+  .tx               = changan_tx_hook,
+  .fwd              = changan_fwd_hook,
+  .get_checksum     = changan_get_checksum,
   .compute_checksum = changan_compute_checksum,
-  .get_counter = changan_get_counter,
+  .get_counter      = changan_get_counter,
 };
