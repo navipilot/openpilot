@@ -17,7 +17,6 @@ def main():
   config_realtime_process(0, 51)
 
   gui_app.init_window("UI")
-  render_in_gui_app = not gui_app.big_ui()
   if gui_app.big_ui():
     main_layout = MainLayout()
   else:
@@ -34,7 +33,7 @@ def main():
     stall_monitor.progress("ui.after_layout_render")
 
   try:
-    for should_render in gui_app.render(render_callback=render_layout if render_in_gui_app else None):
+    for should_render in gui_app.render(render_callback=render_layout):
       stall_monitor.progress("ui.loop_iteration")
       kick_watchdog()
       stall_monitor.progress("ui.after_watchdog")
