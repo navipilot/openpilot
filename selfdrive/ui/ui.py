@@ -17,7 +17,7 @@ def main():
   config_realtime_process(0, 51)
 
   gui_app.init_window("UI")
-  render_in_gui_app = gui_app.big_ui()
+  render_in_gui_app = not gui_app.big_ui()
   if gui_app.big_ui():
     main_layout = MainLayout()
   else:
