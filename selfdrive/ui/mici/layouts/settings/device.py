@@ -8,7 +8,7 @@ from openpilot.common.basedir import BASEDIR
 from openpilot.common.params import Params
 from openpilot.common.time_helpers import system_time_valid
 from openpilot.system.ui.widgets.scroller import NavRawScrollPanel, NavScroller
-from openpilot.selfdrive.ui.mici.widgets.button import BigButton, BigCircleButton
+from openpilot.selfdrive.ui.mici.widgets.button import BigButton, BigCircleButton, BigParamControl
 from openpilot.selfdrive.ui.mici.widgets.dialog import BigDialog, BigConfirmationDialog
 from openpilot.selfdrive.ui.mici.widgets.pairing_dialog import PairingDialog
 from openpilot.selfdrive.ui.mici.onroad.driver_camera_dialog import DriverCameraDialog
@@ -338,6 +338,8 @@ class DeviceLayoutMici(NavScroller):
     regulatory_btn = BigButton("regulatory info", "", gui_app.texture("icons_mici/settings/device/info.png", 64, 64))
     regulatory_btn.set_click_callback(self._on_regulatory)
 
+    self._simple_mode_btn = BigParamControl("simple mode", "SimpleMode")
+
     driver_cam_btn = BigButton("driver\ncamera preview", "", gui_app.texture("icons_mici/settings/device/cameras.png", 64, 64))
     driver_cam_btn.set_click_callback(lambda: gui_app.push_widget(DriverCameraDialog()))
     driver_cam_btn.set_enabled(lambda: ui_state.is_offroad())
@@ -353,6 +355,7 @@ class DeviceLayoutMici(NavScroller):
       DeviceInfoLayoutMici(),
       UpdateOpenpilotBigButton(),
       PairBigButton(),
+      self._simple_mode_btn,
       review_training_guide_btn,
       driver_cam_btn,
       reset_driver_monitoring_btn,
@@ -363,6 +366,14 @@ class DeviceLayoutMici(NavScroller):
       reboot_btn,
       self._power_off_btn,
     ])
+
+  def show_event(self):
+    super().show_event()
+    self._simple_mode_btn.refresh()
+
+  def _update_state(self):
+    super()._update_state()
+    self._simple_mode_btn.refresh()
 
   def _on_regulatory(self):
     if not self._fcc_dialog:

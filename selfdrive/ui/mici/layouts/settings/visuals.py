@@ -9,7 +9,7 @@ CAMERA_VIEW_LABELS = ["Auto", "Driver", "Standard", "Wide"]
 
 class CameraViewBigButton(BigButton):
   def __init__(self):
-    super().__init__("camera view", "", gui_app.texture("icons_mici/settings/device/cameras.png", 64, 64))
+    super().__init__("camera view", "", gui_app.texture("icons_mici/onroad/eye_fill.png", 64, 64))
     self._params = Params()
     self.set_click_callback(self._show_selector)
     self.refresh()
