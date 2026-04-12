@@ -7,13 +7,14 @@ from hypothesis import Phase, given, settings
 from collections.abc import Callable
 from typing import Any
 
+from cereal import custom
 from opendbc.car import DT_CTRL, CanData, structs
 from opendbc.car.car_helpers import interfaces
 from opendbc.car.chrysler.carstate import CarState as ChryslerCarState
 from opendbc.car.fingerprints import FW_VERSIONS
 from opendbc.car.fw_versions import FW_QUERY_CONFIGS
 from opendbc.car.gm.values import CAR as GM_CAR, CanBus as GMCanBus, GMSafetyFlags
-from opendbc.car.interfaces import CarInterfaceBase, get_interface_attr
+from opendbc.car.interfaces import CarInterfaceBase, CarStateBase, get_interface_attr
 from opendbc.car.mock.values import CAR as MOCK
 from opendbc.car.values import PLATFORMS
 
@@ -28,6 +29,34 @@ ALL_REQUESTS = {tuple(r.request) for config in FW_QUERY_CONFIGS.values() for r i
 DLC_TO_LEN = [0, 1, 2, 3, 4, 5, 6, 7, 8, 12, 16, 20, 24, 32, 48, 64]
 
 MAX_EXAMPLES = int(os.environ.get('MAX_EXAMPLES', '15'))
+
+
+class DummyCarState(CarStateBase):
+  def __init__(self, CP: structs.CarParams, FPCP: custom.StarPilotCarParams):
+    super().__init__(CP, FPCP)
+    self.next_button_events: list[structs.CarState.ButtonEvent] = []
+
+  def update(self, can_parsers, starpilot_toggles):
+    ret = structs.CarState()
+    ret.buttonEvents = list(self.next_button_events)
+    return ret, custom.StarPilotCarState.new_message()
+
+
+class DummyCarController:
+  def __init__(self, dbc_names, CP):
+    self.CP = CP
+
+  def update(self, CC, CS, now_nanos, starpilot_toggles=None):
+    return structs.CarControl.Actuators(), []
+
+
+class DummyCarInterface(CarInterfaceBase):
+  CarState = DummyCarState
+  CarController = DummyCarController
+
+  @staticmethod
+  def _get_params(ret, candidate, fingerprint, car_fw, alpha_long, is_release, docs):
+    return ret
 
 
 def get_test_starpilot_toggles() -> SimpleNamespace:
@@ -82,6 +111,43 @@ def get_fuzzy_car_interface(car_name: str, draw: DrawType) -> CarInterfaceBase:
 
 
 class TestCarInterfaces:
+  def test_distance_button_state_tracks_gap_adjust_edges(self):
+    CP = structs.CarParams()
+    CP.carFingerprint = MOCK.MOCK
+    FPCP = custom.StarPilotCarParams.new_message()
+    car_interface = DummyCarInterface(CP, FPCP)
+
+    pressed_event = structs.CarState.ButtonEvent(pressed=True, type=structs.CarState.ButtonEvent.Type.gapAdjustCruise)
+    released_event = structs.CarState.ButtonEvent(pressed=False, type=structs.CarState.ButtonEvent.Type.gapAdjustCruise)
+
+    car_interface.CS.next_button_events = [pressed_event]
+    _, fp_ret = car_interface.update([], get_test_starpilot_toggles())
+    assert fp_ret.distancePressed
+
+    car_interface.CS.next_button_events = []
+    _, fp_ret = car_interface.update([], get_test_starpilot_toggles())
+    assert fp_ret.distancePressed
+
+    car_interface.CS.next_button_events = [released_event]
+    _, fp_ret = car_interface.update([], get_test_starpilot_toggles())
+    assert not fp_ret.distancePressed
+
+  def test_onroad_distance_button_does_not_replace_native_button_events(self):
+    CP = structs.CarParams()
+    CP.carFingerprint = MOCK.MOCK
+    FPCP = custom.StarPilotCarParams.new_message()
+    car_interface = DummyCarInterface(CP, FPCP)
+    car_interface.params_memory = SimpleNamespace(get_bool=lambda key: True)
+
+    native_event = structs.CarState.ButtonEvent(pressed=True, type=structs.CarState.ButtonEvent.Type.decelCruise)
+    car_interface.CS.next_button_events = [native_event]
+
+    ret, fp_ret = car_interface.update([], get_test_starpilot_toggles())
+
+    assert any(be.type == structs.CarState.ButtonEvent.Type.decelCruise and be.pressed for be in ret.buttonEvents)
+    assert any(be.type == structs.CarState.ButtonEvent.Type.gapAdjustCruise and be.pressed for be in ret.buttonEvents)
+    assert fp_ret.distancePressed
+
   def test_chrysler_missing_lkas_signal_defaults_unpressed(self):
     assert not ChryslerCarState.get_lkas_button({"TRACTION_BUTTON": {"TRACTION_OFF": 1}}, is_ram=False)
     assert ChryslerCarState.get_lkas_button({"TRACTION_BUTTON": {"TOGGLE_LKAS": 1}}, is_ram=False)
