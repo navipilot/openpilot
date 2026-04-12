@@ -74,15 +74,13 @@ class StarPilotUtilitiesLayout(StarPilotPanel):
     def _do_flash(res):
       if res == DialogResult.CONFIRM:
         self._params_memory.put_bool("FlashPanda", True)
-        gui_app.set_modal_overlay(alert_dialog(tr("Panda flashing started. Device will reboot when finished.")))
+        gui_app.push_widget(alert_dialog(tr("Panda flashing started. Device will reboot when finished.")))
 
-    gui_app.set_modal_overlay(ConfirmDialog(tr("Flash Panda firmware?"), tr("Flash"), on_close=_do_flash))
+    gui_app.push_widget(ConfirmDialog(tr("Flash Panda firmware?"), tr("Flash"), callback=_do_flash))
 
   def _on_force_drive_state(self):
     options = [tr("Offroad"), tr("Onroad"), tr("Default")]
     current = self._get_force_drive_state()
-    dialog = MultiOptionDialog(tr("Force Drive State"), options, current)
-
     def on_select(res):
       if res == DialogResult.CONFIRM and dialog.selection:
         if dialog.selection == tr("Offroad"):
@@ -96,11 +94,10 @@ class StarPilotUtilitiesLayout(StarPilotPanel):
           self._params.put_bool("ForceOnroad", False)
         self._rebuild_grid()
 
-    gui_app.set_modal_overlay(dialog, callback=on_select)
+    dialog = MultiOptionDialog(tr("Force Drive State"), options, current, callback=on_select)
+    gui_app.push_widget(dialog)
 
   def _on_report_issue(self):
-    dialog = MultiOptionDialog(tr("Select Issue"), REPORT_CATEGORIES)
-
     def on_category(res):
       if res != DialogResult.CONFIRM or not dialog.selection:
         return
@@ -111,7 +108,7 @@ class StarPilotUtilitiesLayout(StarPilotPanel):
           self._params.put("DiscordUsername", username)
           report = json.dumps({"DiscordUser": username, "Issue": dialog.selection})
           self._params_memory.put("IssueReported", report)
-          gui_app.set_modal_overlay(alert_dialog(tr("Issue reported. Thank you!")))
+          gui_app.push_widget(alert_dialog(tr("Issue reported. Thank you!")))
 
       self._keyboard.reset(min_text_size=1)
       self._keyboard.set_title(tr("Discord Username"), "")
@@ -119,7 +116,8 @@ class StarPilotUtilitiesLayout(StarPilotPanel):
       self._keyboard.set_callback(lambda result: on_discord(result, self._keyboard.text))
       gui_app.push_widget(self._keyboard)
 
-    gui_app.set_modal_overlay(dialog, callback=on_category)
+    dialog = MultiOptionDialog(tr("Select Issue"), REPORT_CATEGORIES, callback=on_category)
+    gui_app.push_widget(dialog)
 
   def _on_reset_defaults(self):
     def _do_reset(res):
@@ -131,10 +129,10 @@ class StarPilotUtilitiesLayout(StarPilotPanel):
           default = self._params.get_default_value(k)
           if default is not None:
             self._params.put(k, default)
-        gui_app.set_modal_overlay(alert_dialog(tr("Toggles reset to defaults.")))
+        gui_app.push_widget(alert_dialog(tr("Toggles reset to defaults.")))
         self._rebuild_grid()
 
-    gui_app.set_modal_overlay(ConfirmDialog(tr("Reset all toggles to defaults?"), tr("Reset"), on_close=_do_reset))
+    gui_app.push_widget(ConfirmDialog(tr("Reset all toggles to defaults?"), tr("Reset"), callback=_do_reset))
 
   def _on_reset_stock(self):
     def _do_reset(res):
@@ -146,7 +144,7 @@ class StarPilotUtilitiesLayout(StarPilotPanel):
           stock = self._params.get_stock_value(k)
           if stock is not None:
             self._params.put(k, stock)
-        gui_app.set_modal_overlay(alert_dialog(tr("Toggles reset to stock openpilot.")))
+        gui_app.push_widget(alert_dialog(tr("Toggles reset to stock openpilot.")))
         self._rebuild_grid()
 
-    gui_app.set_modal_overlay(ConfirmDialog(tr("Reset all toggles to stock openpilot?"), tr("Reset"), on_close=_do_reset))
+    gui_app.push_widget(ConfirmDialog(tr("Reset all toggles to stock openpilot?"), tr("Reset"), callback=_do_reset))

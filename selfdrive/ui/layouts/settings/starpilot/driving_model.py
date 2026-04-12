@@ -34,7 +34,7 @@ from openpilot.selfdrive.ui.layouts.settings.starpilot.panel import StarPilotPan
 from openpilot.selfdrive.ui.layouts.settings.starpilot.aethergrid import AetherSliderDialog, hex_to_color
 
 
-MODEL_PANEL_BG = hex_to_color("#11151D")
+MODEL_PANEL_BG = rl.Color(8, 8, 10, 255)
 MODEL_PANEL_BORDER = rl.Color(255, 255, 255, 22)
 MODEL_PANEL_GLOW = rl.Color(92, 116, 151, 34)
 MODEL_HEADER_TEXT = rl.Color(236, 242, 250, 255)
@@ -65,7 +65,7 @@ PANEL_RADIUS = 0.055
 PANEL_PADDING_X = 16
 PANEL_PADDING_TOP = 28
 PANEL_PADDING_BOTTOM = 22
-HEADER_HEIGHT = 156
+HEADER_HEIGHT = 184
 SECTION_GAP = 28
 SECTION_HEADER_HEIGHT = 34
 SECTION_HEADER_GAP = 12
@@ -75,7 +75,7 @@ ROW_RADIUS = 0.12
 ACTION_WIDTH = 188
 ROW_TEXT_GAP = 8
 BUTTON_HEIGHT = 58
-BUTTON_GAP = 12
+BUTTON_GAP = 16
 FADE_HEIGHT = 24
 CONFIRM_TIMEOUT_SECONDS = 3.0
 TRANSITION_SECONDS = 0.24
@@ -336,22 +336,26 @@ class DrivingModelManagerView(Widget):
     title_rect = rl.Rectangle(rect.x, rect.y + 4, rect.width * 0.55, 40)
     gui_label(title_rect, tr("Driving Models"), 40, MODEL_HEADER_TEXT, FontWeight.SEMI_BOLD)
 
-    subtitle_rect = rl.Rectangle(rect.x, rect.y + 46, rect.width * 0.58, 56)
-    gui_label(subtitle_rect, self._controller.header_description_text(), 24, MODEL_SUBTEXT, FontWeight.NORMAL)
+    subtitle_text = self._controller.header_description_text()
+    if subtitle_text:
+      subtitle_rect = rl.Rectangle(rect.x, rect.y + 48, rect.width * 0.58, 36)
+      gui_label(subtitle_rect, subtitle_text, 24, MODEL_SUBTEXT, FontWeight.NORMAL)
 
-    current_label_rect = rl.Rectangle(rect.x, rect.y + 84, rect.width * 0.40, 22)
-    gui_label(current_label_rect, tr("Current model"), 20, MODEL_MUTED, FontWeight.MEDIUM)
+    current_label_rect = rl.Rectangle(rect.x, rect.y + 96, 150, 22)
+    gui_label(current_label_rect, tr("Current Model"), 20, MODEL_MUTED, FontWeight.MEDIUM)
 
-    current_chip_rect = rl.Rectangle(rect.x, rect.y + 108, rect.width * 0.40, 40)
-    self._draw_chip(current_chip_rect, self._controller._current_model_name, MODEL_PRIMARY_SOFT, MODEL_PRIMARY, MODEL_HEADER_TEXT, pill=True)
+    current_value_rect = rl.Rectangle(rect.x + 150, rect.y + 94, rect.width * 0.44, 24)
+    gui_label(current_value_rect, self._controller._current_model_name, 22, MODEL_HEADER_TEXT, FontWeight.MEDIUM)
 
     right_panel_w = min(390, rect.width * 0.35)
-    right_rect = rl.Rectangle(rect.x + rect.width - right_panel_w, rect.y + 8, right_panel_w, 142)
+    stack_height = BUTTON_HEIGHT * 2 + BUTTON_GAP
+    stack_y = rect.y + 24
+    right_rect = rl.Rectangle(rect.x + rect.width - right_panel_w, stack_y, right_panel_w, stack_height)
 
     primary_label, primary_enabled = self._controller.primary_header_button_state()
     secondary_label, secondary_enabled = self._controller.secondary_header_button_state()
-    primary_rect = rl.Rectangle(right_rect.x + 18, right_rect.y + 18, right_rect.width - 36, BUTTON_HEIGHT)
-    secondary_rect = rl.Rectangle(right_rect.x + 18, primary_rect.y + BUTTON_HEIGHT + BUTTON_GAP, right_rect.width - 36, BUTTON_HEIGHT)
+    primary_rect = rl.Rectangle(right_rect.x, right_rect.y, right_rect.width, BUTTON_HEIGHT)
+    secondary_rect = rl.Rectangle(right_rect.x, primary_rect.y + BUTTON_HEIGHT + BUTTON_GAP, right_rect.width, BUTTON_HEIGHT)
     self._header_rects["header:primary"] = primary_rect if primary_enabled else rl.Rectangle(-1, -1, 0, 0)
     self._header_rects["header:secondary"] = secondary_rect if secondary_enabled else rl.Rectangle(-1, -1, 0, 0)
     self._draw_button(primary_rect, primary_label, primary_enabled, emphasized=True)
@@ -1021,10 +1025,10 @@ class StarPilotDrivingModelLayout(StarPilotPanel):
     if self._manifest_fetch_thread is not None and self._manifest_fetch_thread.is_alive():
       return tr("Refreshing the driving model catalog in the background.")
     if ui_state.started:
-      return tr("Downloads and removals pause while driving. Installed rows still show the active model.")
+      return tr("Downloads and removals pause while driving.")
     if self._params.get_bool("ModelRandomizer"):
-      return tr("Model Randomizer is active. Turn it off below to manually choose an installed model.")
-    return tr("Tap an installed model to make it active. Use the action rail to download or remove without opening more menus.")
+      return tr("Model Randomizer is active. Turn it off below to choose a model manually.")
+    return tr("Tap an installed model to make it active.")
 
   def empty_state_title(self) -> str:
     if self._manifest_fetch_thread is not None and self._manifest_fetch_thread.is_alive():
