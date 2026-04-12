@@ -80,6 +80,22 @@ def get_vehicle_min_accel(CP, v_ego):
   return float(ACCEL_MIN)
 
 
+def get_planner_v_ego(CP, car_state):
+  v_ego = max(car_state.vEgo, car_state.vEgoCluster)
+
+  is_gm = getattr(CP, "carName", "") == "gm" or getattr(CP, "brand", "") == "gm"
+  if is_gm and getattr(CP, "enableGasInterceptorDEPRECATED", False):
+    try:
+      from opendbc.car.gm.values import GMFlags
+      is_gm_pedal_long = bool(CP.flags & GMFlags.PEDAL_LONG.value)
+      if is_gm_pedal_long:
+        return float(car_state.vEgo)
+    except Exception:
+      pass
+
+  return float(v_ego)
+
+
 def get_accel_from_plan_classic(CP, speeds, accels, vEgoStopping):
   if len(speeds) == CONTROL_N:
     v_target_now = np.interp(DT_MDL, CONTROL_N_T_IDX, speeds)
@@ -212,7 +228,7 @@ class LongitudinalPlanner:
     else:
       accel_coast = ACCEL_MAX
 
-    v_ego = max(sm['carState'].vEgo, sm['carState'].vEgoCluster)
+    v_ego = get_planner_v_ego(self.CP, sm['carState'])
     v_cruise = sm['starpilotPlan'].vCruise
     v_cruise_initialized = sm['carState'].vCruise != V_CRUISE_UNSET
 
