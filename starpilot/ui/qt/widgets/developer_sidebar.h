@@ -24,6 +24,7 @@ private:
   std::vector<int> metricAssignments;
 
   QColor metricColor;
+  Params params;
 
   ItemStatus accelerationJerkStatus;
   ItemStatus accelerationStatus;

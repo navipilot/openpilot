@@ -72,6 +72,7 @@ void DeveloperSidebar::updateState(const UIState &s, const StarPilotUIState &fs)
   const cereal::LiveDelayData::Reader &liveDelay = fpsm["liveDelay"].getLiveDelay();
   const cereal::LiveParametersData::Reader &liveParameters = fpsm["liveParameters"].getLiveParameters();
   const cereal::LiveTorqueParametersData::Reader &liveTorqueParameters = fpsm["liveTorqueParameters"].getLiveTorqueParameters();
+  const bool usingLiveTorqueTune = liveTorqueParameters.getUseParams() || starpilot_scene.starpilot_toggles.value("force_auto_tune").toBool();
 
   const bool is_metric = s.scene.is_metric;
   const bool use_si = starpilot_scene.starpilot_toggles.value("use_si_metrics").toBool();
@@ -116,14 +117,24 @@ void DeveloperSidebar::updateState(const UIState &s, const StarPilotUIState &fs)
     torqueLabel += QString(" - (%1%)").arg(maxTorque);
   }
 
+  float displayedFriction = usingLiveTorqueTune ? liveTorqueParameters.getFrictionCoefficientFiltered() : params.getFloat("SteerFrictionStock");
+  if (displayedFriction == 0.0f) {
+    displayedFriction = liveTorqueParameters.getFrictionCoefficientFiltered();
+  }
+
+  float displayedLatAccel = usingLiveTorqueTune ? liveTorqueParameters.getLatAccelFactorFiltered() : params.getFloat("SteerLatAccelStock");
+  if (displayedLatAccel == 0.0f) {
+    displayedLatAccel = liveTorqueParameters.getLatAccelFactorFiltered();
+  }
+
   accelerationStatus = ItemStatus(QPair<QString, QString>(tr("ACCEL"), QString::number(acceleration, 'f', 2) + accelerationUnit), metricColor);
   accelerationJerkStatus = ItemStatus(QPair<QString, QString>(tr("ACCEL JERK"), QString::number(starpilotPlan.getAccelerationJerk())), metricColor);
   actuatorAccelerationStatus = ItemStatus(QPair<QString, QString>(tr("ACT ACCEL"), QString::number(carControl.getActuators().getAccel() * accelerationConversion, 'f', 2) + accelerationUnit), metricColor);
   dangerFactorStatus = ItemStatus(QPair<QString, QString>(tr("DANGER %"), QString::number(starpilotPlan.getDangerFactor() * 100.0f, 'f', 2) + "%"), metricColor);
   dangerJerkStatus = ItemStatus(QPair<QString, QString>(tr("DANGER JERK"), QString::number(starpilotPlan.getDangerJerk())), metricColor);
   delayStatus = ItemStatus(QPair<QString, QString>(tr("STEER DELAY"), QString::number(liveDelay.getLateralDelay(), 'f', 5)), metricColor);
-  frictionStatus = ItemStatus(QPair<QString, QString>(tr("FRICTION"), QString::number(liveTorqueParameters.getFrictionCoefficientFiltered(), 'f', 5)), metricColor);
-  latAccelStatus = ItemStatus(QPair<QString, QString>(tr("LAT ACCEL"), QString::number(liveTorqueParameters.getLatAccelFactorFiltered(), 'f', 5)), metricColor);
+  frictionStatus = ItemStatus(QPair<QString, QString>(tr("FRICTION"), QString::number(displayedFriction, 'f', 5)), metricColor);
+  latAccelStatus = ItemStatus(QPair<QString, QString>(tr("LAT ACCEL"), QString::number(displayedLatAccel, 'f', 5)), metricColor);
   lateralEngagementStatus = ItemStatus(QPair<QString, QString>(tr("LATERAL %"), QString::number((lateralEngagementTime / totalEngagementTime) * 100.0f, 'f', 2) + "%"), metricColor);
   longitudinalEngagementStatus = ItemStatus(QPair<QString, QString>(tr("LONG %"), QString::number((longitudinalEngagementTime / totalEngagementTime) * 100.0f, 'f', 2) + "%"), metricColor);
   maxAccelerationStatus = ItemStatus(QPair<QString, QString>(tr("MAX ACCEL"), QString::number(maxAcceleration, 'f', 2) + accelerationUnit), metricColor);
