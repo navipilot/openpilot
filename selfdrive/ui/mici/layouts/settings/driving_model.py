@@ -18,7 +18,7 @@ from openpilot.selfdrive.ui.mici.widgets.button import BigButton
 from openpilot.selfdrive.ui.mici.widgets.dialog import BigDialog, BigDialogBase, BigMultiOptionDialog
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.application import gui_app, FontWeight
-from openpilot.system.ui.widgets import DialogResult, Widget
+from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.label import gui_label
 import pyray as rl
 
@@ -75,17 +75,19 @@ def _split_param(param_value: str | None) -> list[str]:
 
 class DownloadProgressDialog(BigDialogBase):
   def __init__(self, params_memory: Params, is_downloading: Callable[[], bool], cancel_callback: Callable[[], None],
-               is_terminal_progress: Callable[[str], bool]):
+               is_terminal_progress: Callable[[str], bool], on_close: Callable[[], None] | None = None):
     super().__init__()
     self._params_memory = params_memory
     self._is_downloading = is_downloading
     self._cancel_callback = cancel_callback
     self._is_terminal_progress = is_terminal_progress
+    self._on_close = on_close
 
     self._progress = 0.0
     self._status = "Downloading..."
     self._terminal_progress_since = 0.0
     self._downloading = False
+    self._dismissed = False
 
     self._cancel_btn = DownloadActionButton("cancel download")
     self._cancel_btn.set_click_callback(self._cancel_callback)
@@ -140,7 +142,9 @@ class DownloadProgressDialog(BigDialogBase):
       if self._terminal_progress_since == 0.0:
         self._terminal_progress_since = time.monotonic()
       elif time.monotonic() - self._terminal_progress_since >= _DOWNLOAD_DIALOG_CLOSE_SECONDS:
-        self._ret = DialogResult.CONFIRM
+        if not self._dismissed:
+          self._dismissed = True
+          self.dismiss(self._on_close)
     else:
       self._terminal_progress_since = 0.0
 
@@ -235,8 +239,6 @@ class DownloadProgressDialog(BigDialogBase):
         alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
       )
 
-    return self._ret
-
 
 class DownloadActionButton(Widget):
   def __init__(self, label: str):
@@ -276,7 +278,7 @@ class DownloadActionButton(Widget):
 
 class DrivingModelBigButton(BigButton):
   def __init__(self):
-    super().__init__("driving model", "", "icons_mici/settings/device/lkas.png")
+    super().__init__("driving model", "", gui_app.texture("icons_mici/settings/device/lkas.png", 72, 56))
     self._params = Params()
     self._params_memory = Params(memory=True)
     self._model_manager = ModelManager(self._params, self._params_memory)
@@ -285,18 +287,48 @@ class DrivingModelBigButton(BigButton):
     self._active_job = ""
     self._manifest_last_refresh_mono = 0.0
     self._terminal_progress_since = 0.0
+    self._sub_label.set_font_size(32)
+    self._sub_label._scroll = True
+    self._sub_label._elide = False
+    self._sub_label._wrap_text = False
 
     self.set_click_callback(self._open_manager_menu)
     self.refresh()
 
   def show_event(self):
     super().show_event()
+    self._sub_label.reset_scroll()
     self.refresh()
     # Always fetch manifest once when this settings pane opens.
     self._maybe_refresh_manifest(force=(self._manifest_last_refresh_mono == 0.0))
 
   def refresh(self):
     self._update_button_value()
+
+  def set_value(self, value: str):
+    super().set_value(value)
+    self._sub_label.reset_scroll()
+
+  def _get_label_font_size(self):
+    return 42
+
+  def _width_hint(self) -> int:
+    icon_width = self._txt_icon.width + 16 if self._txt_icon else 0
+    return int(self._rect.width - self.LABEL_HORIZONTAL_PADDING * 2 - icon_width)
+
+  def _show_option_dialog(self, title: str, options: list[str], current: str | None, on_selected: Callable[[str], None],
+                          back_callback: Callable[[], None] | None = None):
+    dialog_holder: dict[str, BigMultiOptionDialog] = {}
+
+    def on_confirm():
+      on_selected(dialog_holder["dialog"].get_selected_option())
+
+    default_option = current if current in options else None
+    dialog = BigMultiOptionDialog(options=options, default=default_option, right_btn_callback=on_confirm)
+    if back_callback is not None:
+      dialog.set_back_callback(back_callback)
+    dialog_holder["dialog"] = dialog
+    gui_app.push_widget(dialog)
 
   def _update_state(self):
     super()._update_state()
@@ -315,8 +347,7 @@ class DrivingModelBigButton(BigButton):
     if not options:
       return
 
-    def on_confirm():
-      value = option_dialog.get_selected_option()
+    def on_selected(value: str):
       if value == "set sort mode":
         self._open_sort_mode_dialog()
       elif value == "switch model":
@@ -328,9 +359,7 @@ class DrivingModelBigButton(BigButton):
       elif value == "refresh manifest":
         self._maybe_refresh_manifest(force=True)
 
-    default_option = "switch model" if "switch model" in options else options[0]
-    option_dialog = BigMultiOptionDialog(options=options, default=default_option, right_btn_callback=on_confirm)
-    gui_app.set_modal_overlay(option_dialog)
+    self._show_option_dialog("driving model", options, None, on_selected)
 
   def _open_switch_dialog(self):
     self._maybe_refresh_manifest(force=False)
@@ -346,7 +375,8 @@ class DrivingModelBigButton(BigButton):
       return
 
     current_key = self._get_current_model_key()
-    self._show_model_dialog("Select Driving Model", installed, current_key, self._switch_model)
+    self._show_model_dialog("Select Driving Model", installed, current_key, self._switch_model,
+                            back_callback=self._open_manager_menu)
 
   def _open_download_dialog(self):
     if ui_state.started:
@@ -365,7 +395,8 @@ class DrivingModelBigButton(BigButton):
       self._show_message("All models downloaded", "No additional models are available.", return_to_manager=True)
       return
 
-    self._show_model_dialog("Download Driving Model", missing, "", self._start_model_download)
+    self._show_model_dialog("Download Driving Model", missing, "", self._start_model_download,
+                            back_callback=self._open_manager_menu)
 
   def _download_all_missing(self):
     if ui_state.started:
@@ -398,22 +429,20 @@ class DrivingModelBigButton(BigButton):
     options = [_SORT_MODE_LABELS[mode] for mode in _SORT_MODES]
     current_mode = self._get_sort_mode()
 
-    def on_confirm():
-      selected_label = sort_dialog.get_selected_option()
+    def on_selected(selected_label: str):
       selected_mode = _LABEL_TO_SORT_MODE.get(selected_label, _SORT_MODE_ALPHABETICAL)
       self._params.put(_SORT_MODE_PARAM, selected_mode)
-      self._open_manager_menu_if_no_overlay()
+      self._open_manager_menu()
 
-    sort_dialog = BigMultiOptionDialog(options=options, default=_SORT_MODE_LABELS[current_mode], right_btn_callback=on_confirm)
-    sort_dialog.set_back_callback(self._open_manager_menu)
-    gui_app.set_modal_overlay(sort_dialog)
+    self._show_option_dialog("sort mode", options, _SORT_MODE_LABELS[current_mode], on_selected,
+                             back_callback=self._open_manager_menu)
 
   def _get_sort_mode(self) -> str:
     mode = (self._params.get(_SORT_MODE_PARAM, encoding="utf-8") or "").strip()
     return mode if mode in _SORT_MODES else _SORT_MODE_ALPHABETICAL
 
   def _show_model_dialog(self, title: str, entries: list[ModelEntry], current_key: str,
-                         on_selected: Callable[[str], None]):
+                         on_selected: Callable[[str], None], back_callback: Callable[[], None] | None = None):
     options, option_to_key, key_to_option = self._build_model_options(entries)
     if not options:
       self._show_message("No models available", "Refresh manifest and try again.", return_to_manager=True)
@@ -421,15 +450,12 @@ class DrivingModelBigButton(BigButton):
 
     default_option = key_to_option.get(current_key, options[0])
 
-    def on_confirm():
-      model_key = option_to_key.get(model_dialog.get_selected_option())
+    def on_dialog_selected(selected_option: str):
+      model_key = option_to_key.get(selected_option)
       if model_key:
         on_selected(model_key)
-      self._open_manager_menu_if_no_overlay()
 
-    model_dialog = BigMultiOptionDialog(options=options, default=default_option, right_btn_callback=on_confirm)
-    model_dialog.set_back_callback(self._open_manager_menu)
-    gui_app.set_modal_overlay(model_dialog)
+    self._show_option_dialog(title, options, default_option, on_dialog_selected, back_callback=back_callback)
 
   def _build_model_options(self, entries: list[ModelEntry]) -> tuple[list[str], dict[str, str], dict[str, str]]:
     # Ensure display names are unique before applying status text (date/favorite).
@@ -712,21 +738,18 @@ class DrivingModelBigButton(BigButton):
     lower = progress.lower()
     return any(pattern in lower for pattern in _TERMINAL_PROGRESS_PATTERNS)
 
-  def _open_manager_menu_if_no_overlay(self):
-    if gui_app._modal_overlay.overlay is None:
-      self._open_manager_menu()
-
   def _show_download_progress_dialog(self):
     dialog = DownloadProgressDialog(
       params_memory=self._params_memory,
       is_downloading=self._is_download_job_running,
       cancel_callback=self._cancel_download,
       is_terminal_progress=self._is_terminal_progress,
+      on_close=self._open_manager_menu,
     )
-    gui_app.set_modal_overlay(dialog, callback=lambda _result: self._open_manager_menu())
+    gui_app.push_widget(dialog)
 
   def _show_message(self, title: str, description: str, return_to_manager: bool = False):
     dialog = BigDialog(title, description)
     if return_to_manager:
       dialog.set_back_callback(self._open_manager_menu)
-    gui_app.set_modal_overlay(dialog)
+    gui_app.push_widget(dialog)

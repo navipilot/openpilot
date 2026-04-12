@@ -25,6 +25,52 @@ from openpilot.system.ui.widgets.list_view import (
 VALUE_FONT_SIZE = 48
 
 
+class SshKeyFetcher:
+  HTTP_TIMEOUT = 15  # seconds
+
+  def __init__(self, params: Params):
+    self._params = params
+    self._on_response: Callable[[str | None], None] | None = None
+    self._done = False
+    self._error: str | None = None
+
+  def fetch(self, username: str, on_response: Callable[[str | None], None]):
+    self._error = None
+    self._done = False
+    self._on_response = on_response
+    threading.Thread(target=self._fetch_thread, args=(username,), daemon=True).start()
+
+  def update(self):
+    if not self._done:
+      return
+    self._done = False
+    if self._error is not None:
+      self.clear()
+    if self._on_response:
+      self._on_response(self._error)
+
+  def clear(self):
+    self._params.remove("GithubUsername")
+    self._params.remove("GithubSshKeys")
+
+  def _fetch_thread(self, username: str):
+    try:
+      response = requests.get(f"https://github.com/{username}.keys", timeout=self.HTTP_TIMEOUT)
+      response.raise_for_status()
+      keys = response.text.strip()
+      if not keys:
+        raise requests.exceptions.HTTPError("No SSH keys found")
+
+      self._params.put("GithubUsername", username)
+      self._params.put("GithubSshKeys", keys)
+    except requests.exceptions.Timeout:
+      self._error = tr("Request timed out")
+    except Exception:
+      self._error = tr("No SSH keys found for user '{}'").format(username)
+    finally:
+      self._done = True
+
+
 class SshKeyActionState(Enum):
   LOADING = tr_noop("LOADING")
   ADD = tr_noop("ADD")

@@ -1,6 +1,8 @@
 import atexit
 import cffi
+import math
 import os
+import queue
 import time
 import signal
 import sys
@@ -11,7 +13,6 @@ import subprocess
 from contextlib import contextmanager
 from collections.abc import Callable
 from collections import deque
-from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from typing import NamedTuple
@@ -40,6 +41,10 @@ PROFILE_RENDER = int(os.getenv("PROFILE_RENDER", "0"))
 PROFILE_STATS = int(os.getenv("PROFILE_STATS", "100"))  # Number of functions to show in profile output
 RECORD = os.getenv("RECORD") == "1"
 RECORD_OUTPUT = str(Path(os.getenv("RECORD_OUTPUT", "output")).with_suffix(".mp4"))
+RECORD_QUALITY = int(os.getenv("RECORD_QUALITY", "23"))  # Dynamic bitrate quality level (CRF); 0 is lossless (bigger size), max is 51, default is 23 for x264
+RECORD_BITRATE = os.getenv("RECORD_BITRATE", "")  # Target bitrate e.g. "2000k" (overrides RECORD_QUALITY when set)
+RECORD_SPEED = int(os.getenv("RECORD_SPEED", "1"))  # Speed multiplier
+OFFSCREEN = os.getenv("OFFSCREEN") == "1"  # Disable FPS limiting for fast offline rendering
 
 GL_VERSION = """
 #version 300 es
@@ -51,9 +56,7 @@ if platform.system() == "Darwin":
   """
 
 BURN_IN_MODE = "BURN_IN" in os.environ
-BURN_IN_VERTEX_SHADER = (
-  GL_VERSION
-  + """
+BURN_IN_VERTEX_SHADER = GL_VERSION + """
 in vec3 vertexPosition;
 in vec2 vertexTexCoord;
 uniform mat4 mvp;
@@ -63,10 +66,7 @@ void main() {
   gl_Position = mvp * vec4(vertexPosition, 1.0);
 }
 """
-)
-BURN_IN_FRAGMENT_SHADER = (
-  GL_VERSION
-  + """
+BURN_IN_FRAGMENT_SHADER = GL_VERSION + """
 in vec2 fragTexCoord;
 uniform sampler2D texture0;
 out vec4 fragColor;
@@ -82,7 +82,6 @@ void main() {
   fragColor = vec4(gradient, sampled.a);
 }
 """
-)
 
 DEFAULT_TEXT_SIZE = 60
 DEFAULT_TEXT_COLOR = rl.Color(255, 255, 255, int(255 * 0.9))
@@ -96,13 +95,10 @@ FONT_DIR = ASSETS_DIR.joinpath("fonts")
 
 
 class FontWeight(StrEnum):
-  LIGHT = "Inter-Light.fnt"
   NORMAL = "Inter-Regular.fnt" if BIG_UI else "Inter-Medium.fnt"
   MEDIUM = "Inter-Medium.fnt"
   BOLD = "Inter-Bold.fnt"
   SEMI_BOLD = "Inter-SemiBold.fnt"
-  EXTRA_BOLD = "Inter-ExtraBold.fnt"
-  BLACK = "Inter-Black.fnt"
   UNIFONT = "unifont.fnt"
 
   # Small UI fonts
@@ -116,12 +112,6 @@ def font_fallback(font: rl.Font) -> rl.Font:
   if multilang.requires_unifont():
     return gui_app.font(FontWeight.UNIFONT)
   return font
-
-
-@dataclass
-class ModalOverlay:
-  overlay: object = None
-  callback: Callable | None = None
 
 
 class MousePos(NamedTuple):
@@ -179,6 +169,10 @@ class MouseState:
       self._rk.keep_time()
 
   def _handle_mouse_event(self):
+    # TODO: read touch events from evdev directly to get real kernel timestamps.
+    #  Polling at 140Hz with time.monotonic() causes timing jitter that makes scroll
+    #  velocity oscillate (alternating high/low). Real timestamps would also let us
+    #  detect swipe-stop-lift via event gaps instead of the fragile decel heuristic.
     for slot in range(MAX_TOUCH_SLOTS):
       mouse_pos = rl.get_touch_position(slot)
       x = mouse_pos.x / self._scale if self._scale != 1.0 else mouse_pos.x
@@ -192,7 +186,8 @@ class MouseState:
         time.monotonic(),
       )
       # Only add changes
-      if self._prev_mouse_event[slot] is None or ev[:-1] != self._prev_mouse_event[slot][:-1]:
+      prev = self._prev_mouse_event[slot]
+      if prev is None or ev[:-1] != prev[:-1]:
         with self._lock:
           self._events.append(ev)
         self._prev_mouse_event[slot] = ev
@@ -200,6 +195,8 @@ class MouseState:
 
 class GuiApplication:
   def __init__(self, width: int | None = None, height: int | None = None):
+    self._set_log_callback()
+
     self._fonts: dict[FontWeight, rl.Font] = {}
     self._width = width if width is not None else GuiApplication._default_width()
     self._height = height if height is not None else GuiApplication._default_height()
@@ -218,17 +215,17 @@ class GuiApplication:
     self._render_texture: rl.RenderTexture | None = None
     self._burn_in_shader: rl.Shader | None = None
     self._ffmpeg_proc: subprocess.Popen | None = None
+    self._ffmpeg_queue: queue.Queue | None = None
+    self._ffmpeg_thread: threading.Thread | None = None
+    self._ffmpeg_stop_event: threading.Event | None = None
     self._textures: dict[str, rl.Texture] = {}
     self._target_fps: int = _DEFAULT_FPS
     self._last_fps_log_time: float = time.monotonic()
     self._frame = 0
     self._window_close_requested = False
-    self._trace_log_callback = None
-    self._progress_hook: Callable[[str], None] | None = None
-    self._modal_overlay = ModalOverlay()
-    self._modal_overlay_shown = False
-    self._modal_overlay_tick: Callable[[], None] | None = None
-    self._nav_stack: list = []
+    self._nav_stack: list[object] = []
+    self._nav_stack_ticks: list[Callable[[], None]] = []
+    self._nav_stack_widgets_to_render = 1 if self.big_ui() else 2
 
     self._mouse = MouseState(self._scale)
     self._mouse_events: list[MouseEvent] = []
@@ -256,36 +253,23 @@ class GuiApplication:
     self._show_fps = show
 
   @property
+  def show_touches(self) -> bool:
+    return self._show_touches
+
+  @property
   def target_fps(self):
     return self._target_fps
 
   def request_close(self):
     self._window_close_requested = True
 
-  def set_progress_hook(self, hook: Callable[[str], None] | None):
-    self._progress_hook = hook
-
-  def _mark_progress(self, phase: str):
-    if self._progress_hook is None:
-      return
-
-    try:
-      self._progress_hook(phase)
-    except Exception:
-      pass
-
   def init_window(self, title: str, fps: int = _DEFAULT_FPS):
     with self._startup_profile_context():
-
       def _close(sig, frame):
         self.close()
         sys.exit(0)
-
       signal.signal(signal.SIGINT, _close)
       atexit.register(self.close)
-
-      self._set_log_callback()
-      rl.set_trace_log_level(rl.TraceLogLevel.LOG_WARNING)
 
       flags = rl.ConfigFlags.FLAG_MSAA_4X_HINT
       if ENABLE_VSYNC:
@@ -298,44 +282,48 @@ class GuiApplication:
       if self._scale != 1.0:
         rl.set_mouse_scale(1 / self._scale, 1 / self._scale)
       if needs_render_texture:
-        self._render_texture = rl.load_render_texture(self._width, self._height)
+        self._render_texture = rl.load_render_texture(self._scaled_width, self._scaled_height)
         rl.set_texture_filter(self._render_texture.texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
 
       if RECORD:
+        output_fps = fps * RECORD_SPEED
         ffmpeg_args = [
           'ffmpeg',
-          '-v',
-          'warning',  # Reduce ffmpeg log spam
-          '-stats',  # Show encoding progress
-          '-f',
-          'rawvideo',  # Input format
-          '-pix_fmt',
-          'rgba',  # Input pixel format
-          '-s',
-          f'{self._width}x{self._height}',  # Input resolution
-          '-r',
-          str(fps),  # Input frame rate
-          '-i',
-          'pipe:0',  # Input from stdin
-          '-vf',
-          'vflip,format=yuv420p',  # Flip vertically and convert rgba to yuv420p
-          '-c:v',
-          'libx264',  # Video codec
-          '-preset',
-          'ultrafast',  # Encoding speed
-          '-y',  # Overwrite existing file
-          '-f',
-          'mp4',  # Output format
-          RECORD_OUTPUT,  # Output file path
+          '-v', 'warning',          # Reduce ffmpeg log spam
+          '-nostats',               # Suppress encoding progress
+          '-f', 'rawvideo',         # Input format
+          '-pix_fmt', 'rgba',       # Input pixel format
+          '-s', f'{self._scaled_width}x{self._scaled_height}',  # Input resolution
+          '-r', str(fps),           # Input frame rate
+          '-i', 'pipe:0',           # Input from stdin
+          '-vf', 'vflip,format=yuv420p',  # Flip vertically and convert to yuv420p
+          '-r', str(output_fps),    # Output frame rate (for speed multiplier)
+          '-c:v', 'libx264',
+          '-preset', 'veryfast',
+          '-crf', str(RECORD_QUALITY)
+        ]
+        if RECORD_BITRATE:
+          # NOTE: custom bitrate overrides crf setting
+          ffmpeg_args += ['-b:v', RECORD_BITRATE, '-maxrate', RECORD_BITRATE, '-bufsize', RECORD_BITRATE]
+        ffmpeg_args += [
+          '-y',                     # Overwrite existing file
+          '-f', 'mp4',              # Output format
+          RECORD_OUTPUT,            # Output file path
         ]
         self._ffmpeg_proc = subprocess.Popen(ffmpeg_args, stdin=subprocess.PIPE)
+        self._ffmpeg_queue = queue.Queue(maxsize=60)  # Buffer up to 60 frames
+        self._ffmpeg_stop_event = threading.Event()
+        self._ffmpeg_thread = threading.Thread(target=self._ffmpeg_writer_thread, daemon=True)
+        self._ffmpeg_thread.start()
 
-      rl.set_target_fps(fps)
+      # OFFSCREEN disables FPS limiting for fast offline rendering (e.g. clips)
+      rl.set_target_fps(0 if OFFSCREEN else fps)
 
       self._target_fps = fps
       self._set_styles()
       self._load_fonts()
       self._patch_text_functions()
+      self._patch_scissor_mode()
       if BURN_IN_MODE and self._burn_in_shader is None:
         self._burn_in_shader = rl.load_shader_from_memory(BURN_IN_VERTEX_SHADER, BURN_IN_FRAGMENT_SHADER)
 
@@ -372,92 +360,131 @@ class GuiApplication:
     print(f"{green}UI window ready in {elapsed_ms:.1f} ms{reset}")
     sys.exit(0)
 
-  def set_modal_overlay(self, overlay, callback: Callable | None = None):
-    if self._modal_overlay.overlay is not None:
-      if hasattr(self._modal_overlay.overlay, 'hide_event'):
-        self._modal_overlay.overlay.hide_event()
+  def _ffmpeg_writer_thread(self):
+    """Background thread that writes frames to ffmpeg."""
+    while True:
+      try:
+        data = self._ffmpeg_queue.get(timeout=1.0)
+        if data is None:  # Sentinel to stop
+          break
+        self._ffmpeg_proc.stdin.write(data)
+      except queue.Empty:
+        if self._ffmpeg_stop_event.is_set():
+          break
+        continue
+      except Exception:
+        break
 
-      if self._modal_overlay.callback is not None:
-        self._modal_overlay.callback(-1)
-
-    self._modal_overlay = ModalOverlay(overlay=overlay, callback=callback)
-
-  def set_modal_overlay_tick(self, tick_function: Callable | None):
-    self._modal_overlay_tick = tick_function
-
-  def push_widget(self, widget):
+  def push_widget(self, widget: object):
     if widget in self._nav_stack:
+      cloudlog.warning("Widget already in stack, cannot push again!")
       return
-    if self._nav_stack:
-      prev = self._nav_stack[-1]
-      if hasattr(prev, 'set_enabled'):
-        prev.set_enabled(False)
+
+    # disable previous widget to prevent input processing
+    if len(self._nav_stack) > 0:
+      prev_widget = self._nav_stack[-1]
+      # TODO: change these to touch_valid
+      prev_widget.set_enabled(False)
+
     self._nav_stack.append(widget)
-    if hasattr(widget, 'show_event'):
-      widget.show_event()
-    if hasattr(widget, 'set_enabled'):
-      widget.set_enabled(True)
+    widget.show_event()
+    widget.set_enabled(True)
 
   def pop_widget(self, idx: int | None = None):
+    # Pops widget instantly without animation
     if len(self._nav_stack) < 2:
+      cloudlog.warning("At least one widget should remain on the stack, ignoring pop!")
       return
+
     idx_to_pop = len(self._nav_stack) - 1 if idx is None else idx
     if idx_to_pop <= 0 or idx_to_pop >= len(self._nav_stack):
+      cloudlog.warning(f"Invalid index {idx_to_pop} to pop, ignoring!")
       return
-    if idx_to_pop == len(self._nav_stack) - 1:
-      prev = self._nav_stack[idx_to_pop - 1]
-      if hasattr(prev, 'set_enabled'):
-        prev.set_enabled(True)
-    widget = self._nav_stack.pop(idx_to_pop)
-    if hasattr(widget, 'hide_event'):
-      widget.hide_event()
 
-  def _render_nav_stack(self) -> bool:
-    if not self._nav_stack:
-      return False
-    widget = self._nav_stack[-1]
-    if hasattr(widget, 'render'):
-      widget.render(rl.Rectangle(0, 0, self.width, self.height))
-    return True
+    # only re-enable previous widget if popping top widget
+    if idx_to_pop == len(self._nav_stack) - 1:
+      prev_widget = self._nav_stack[idx_to_pop - 1]
+      prev_widget.set_enabled(True)
+
+    widget = self._nav_stack.pop(idx_to_pop)
+    widget.hide_event()
+
+  def pop_widgets_to(self, widget: object, callback: Callable[[], None] | None = None, instant: bool = False):
+    # Pops middle widgets instantly without animation then dismisses top, animated out if NavWidget
+    if widget not in self._nav_stack:
+      cloudlog.warning("Widget not in stack, cannot pop to it!")
+      return
+
+    # Nothing to pop, ensure we still run callback
+    top_widget = self._nav_stack[-1]
+    if top_widget == widget:
+      if callback:
+        callback()
+      return
+
+    # instantly pop widgets in between, then dismiss top widget for animation
+    while len(self._nav_stack) > 1 and self._nav_stack[-2] != widget:
+      self.pop_widget(len(self._nav_stack) - 2)
+
+    if not instant:
+      top_widget.dismiss(callback)
+    else:
+      self.pop_widget()
+
+  def get_active_widget(self):
+    if len(self._nav_stack) > 0:
+      return self._nav_stack[-1]
+    return None
+
+  def widget_in_stack(self, widget: object) -> bool:
+    return widget in self._nav_stack
+
+  def add_nav_stack_tick(self, tick_function: Callable[[], None]):
+    if tick_function not in self._nav_stack_ticks:
+      self._nav_stack_ticks.append(tick_function)
+
+  def remove_nav_stack_tick(self, tick_function: Callable[[], None]):
+    if tick_function in self._nav_stack_ticks:
+      self._nav_stack_ticks.remove(tick_function)
 
   def set_should_render(self, should_render: bool):
     self._should_render = should_render
 
-  def texture(self, asset_path: str, width: int | None = None, height: int | None = None, alpha_premultiply=False, keep_aspect_ratio=True):
-    cache_key = f"{asset_path}_{width}_{height}_{alpha_premultiply}{keep_aspect_ratio}"
+  def texture(self, asset_path: str, width: int | None = None, height: int | None = None,
+              alpha_premultiply=False, keep_aspect_ratio=True, flip_x: bool = False) -> rl.Texture:
+    if width is not None:
+      width = round(width)
+    if height is not None:
+      height = round(height)
+
+    cache_key = f"{asset_path}_{width}_{height}_{alpha_premultiply}_{keep_aspect_ratio}_{flip_x}"
     if cache_key in self._textures:
       return self._textures[cache_key]
 
     with as_file(ASSETS_DIR.joinpath(asset_path)) as fspath:
-      image_obj = self._load_image_from_path(fspath.as_posix(), width, height, alpha_premultiply, keep_aspect_ratio)
+      image_obj = self._load_image_from_path(fspath.as_posix(), width, height, alpha_premultiply, keep_aspect_ratio, flip_x)
       texture_obj = self._load_texture_from_image(image_obj)
+
+    # Set logical size so widget layout math stays at 1x coordinates
+    if self._scale != 1.0 and width is not None and height is not None:
+      texture_obj.width = width
+      texture_obj.height = height
+
     self._textures[cache_key] = texture_obj
     return texture_obj
 
-  def starpilot_texture(self, asset_path: str, width: int | None = None, height: int | None = None, alpha_premultiply=False, keep_aspect_ratio=True):
-    """Load a texture from the StarPilot assets folder."""
-    cache_key = f"starpilot_{asset_path}_{width}_{height}_{alpha_premultiply}{keep_aspect_ratio}"
-    if cache_key in self._textures:
-      return self._textures[cache_key]
-
-    starpilot_assets = files("openpilot.starpilot").joinpath("assets")
-    with as_file(starpilot_assets.joinpath(asset_path)) as fspath:
-      image_obj = self._load_image_from_path(fspath.as_posix(), width, height, alpha_premultiply, keep_aspect_ratio)
-      texture_obj = self._load_texture_from_image(image_obj)
-    self._textures[cache_key] = texture_obj
-    return texture_obj
-
-  def _load_image_from_path(
-    self, image_path: str, width: int | None = None, height: int | None = None, alpha_premultiply: bool = False, keep_aspect_ratio: bool = True
-  ) -> rl.Image:
+  def _load_image_from_path(self, image_path: str, width: int | None = None, height: int | None = None,
+                            alpha_premultiply: bool = False, keep_aspect_ratio: bool = True, flip_x: bool = False) -> rl.Image:
     """Load and resize an image, storing it for later automatic unloading."""
     image = rl.load_image(image_path)
 
-    if image.width == 0 or image.height == 0:
-      return image
-
     if alpha_premultiply:
       rl.image_alpha_premultiply(image)
+
+    # Scale up load size for sharper rendering, capped at source resolution
+    if self._scale != 1.0 and width is not None and height is not None:
+      width = min(int(width * self._scale), image.width)
+      height = min(int(height * self._scale), image.height)
 
     if width is not None and height is not None:
       same_dimensions = image.width == width and image.height == height
@@ -481,6 +508,10 @@ class GuiApplication:
           rl.image_resize(image, width, height)
     else:
       assert keep_aspect_ratio, "Cannot resize without specifying width and height"
+
+    if flip_x:
+      rl.image_flip_horizontal(image)
+
     return image
 
   def _load_texture_from_image(self, image: rl.Image) -> rl.Texture:
@@ -495,11 +526,17 @@ class GuiApplication:
     return texture
 
   def close_ffmpeg(self):
+    if self._ffmpeg_thread is not None:
+      # Signal thread to stop, send sentinel, then wait for it to drain
+      self._ffmpeg_stop_event.set()
+      self._ffmpeg_queue.put(None)
+      self._ffmpeg_thread.join(timeout=30)
+
     if self._ffmpeg_proc is not None:
       self._ffmpeg_proc.stdin.flush()
       self._ffmpeg_proc.stdin.close()
       try:
-        self._ffmpeg_proc.wait(timeout=5)
+        self._ffmpeg_proc.wait(timeout=30)
       except subprocess.TimeoutExpired:
         self._ffmpeg_proc.terminate()
         self._ffmpeg_proc.wait()
@@ -539,17 +576,15 @@ class GuiApplication:
   def last_mouse_event(self) -> MouseEvent:
     return self._last_mouse_event
 
-  def render(self, render_callback: Callable[[], None] | None = None):
+  def render(self):
     try:
       if self._profile_render_frames > 0:
         import cProfile
-
         self._render_profiler = cProfile.Profile()
         self._render_profile_start_time = time.monotonic()
         self._render_profiler.enable()
 
       while not (self._window_close_requested or rl.window_should_close()):
-        self._mark_progress("gui_app.loop_start")
         if PC:
           # Thread is not used on PC, need to manually add mouse events
           self._mouse._handle_mouse_event()
@@ -561,7 +596,6 @@ class GuiApplication:
 
         # Skip rendering when screen is off
         if not self._should_render:
-          self._mark_progress("gui_app.skip_render")
           if PC:
             rl.poll_input_events()
           time.sleep(1 / self._target_fps)
@@ -569,59 +603,43 @@ class GuiApplication:
           continue
 
         if self._render_texture:
-          self._mark_progress("gui_app.before_begin_texture_mode")
           rl.begin_texture_mode(self._render_texture)
-          self._mark_progress("gui_app.after_begin_texture_mode")
-          self._mark_progress("gui_app.before_clear_background")
           rl.clear_background(rl.BLACK)
-          self._mark_progress("gui_app.after_clear_background")
         else:
-          self._mark_progress("gui_app.before_begin_drawing")
           rl.begin_drawing()
-          self._mark_progress("gui_app.after_begin_drawing")
-          self._mark_progress("gui_app.before_clear_background")
           rl.clear_background(rl.BLACK)
-          self._mark_progress("gui_app.after_clear_background")
 
-        # Handle modal overlay rendering and input processing
-        if self._render_nav_stack():
-          self._mark_progress("gui_app.nav_stack")
-          yield False
-        elif self._handle_modal_overlay():
-          # Allow a Widget to still run a function while overlay is shown
-          if self._modal_overlay_tick is not None:
-            self._modal_overlay_tick()
-          self._mark_progress("gui_app.modal_overlay")
-          yield False
-        else:
-          self._mark_progress("gui_app.frame_ready")
-          if render_callback is not None:
-            self._mark_progress("gui_app.before_render_callback")
-            render_callback()
-            self._mark_progress("gui_app.after_render_callback")
-          yield True
+        if self._scale != 1.0:
+          rl.rl_push_matrix()
+          rl.rl_scalef(self._scale, self._scale, 1.0)
+
+        # Allow a Widget to still run a function regardless of the stack depth
+        for tick in self._nav_stack_ticks:
+          tick()
+
+        # Only render top widgets
+        for widget in self._nav_stack[-self._nav_stack_widgets_to_render:]:
+          widget.render(rl.Rectangle(0, 0, self.width, self.height))
+
+        yield True
+
+        if self._scale != 1.0:
+          rl.rl_pop_matrix()
 
         if self._render_texture:
-          self._mark_progress("gui_app.end_texture_mode")
           rl.end_texture_mode()
-          self._mark_progress("gui_app.before_present_begin_drawing")
           rl.begin_drawing()
-          self._mark_progress("gui_app.after_present_begin_drawing")
-          self._mark_progress("gui_app.before_present_clear_background")
           rl.clear_background(rl.BLACK)
-          self._mark_progress("gui_app.after_present_clear_background")
-          src_rect = rl.Rectangle(0, 0, float(self._width), -float(self._height))
+          src_rect = rl.Rectangle(0, 0, float(self._scaled_width), -float(self._scaled_height))
           dst_rect = rl.Rectangle(0, 0, float(self._scaled_width), float(self._scaled_height))
           texture = self._render_texture.texture
           if texture:
-            self._mark_progress("gui_app.before_present_draw_texture")
             if BURN_IN_MODE and self._burn_in_shader:
               rl.begin_shader_mode(self._burn_in_shader)
               rl.draw_texture_pro(texture, src_rect, dst_rect, rl.Vector2(0, 0), 0.0, rl.WHITE)
               rl.end_shader_mode()
             else:
               rl.draw_texture_pro(texture, src_rect, dst_rect, rl.Vector2(0, 0), 0.0, rl.WHITE)
-            self._mark_progress("gui_app.after_present_draw_texture")
 
         if self._show_fps:
           rl.draw_fps(10, 10)
@@ -632,21 +650,17 @@ class GuiApplication:
         if self._grid_size > 0:
           self._draw_grid()
 
-        self._mark_progress("gui_app.end_drawing")
         rl.end_drawing()
-        self._mark_progress("gui_app.after_end_drawing")
 
         if RECORD:
           image = rl.load_image_from_texture(self._render_texture.texture)
           data_size = image.width * image.height * 4
           data = bytes(rl.ffi.buffer(image.data, data_size))
-          self._ffmpeg_proc.stdin.write(data)
-          self._ffmpeg_proc.stdin.flush()
+          self._ffmpeg_queue.put(data)  # Async write via background thread
           rl.unload_image(image)
 
         self._monitor_fps()
         self._frame += 1
-        self._mark_progress("gui_app.frame_complete")
 
         if self._profile_render_frames > 0 and self._frame >= self._profile_render_frames:
           self._output_render_profile()
@@ -664,60 +678,16 @@ class GuiApplication:
   def height(self):
     return self._height
 
-  def _handle_modal_overlay(self) -> bool:
-    if self._modal_overlay.overlay:
-      if hasattr(self._modal_overlay.overlay, 'render'):
-        result = self._modal_overlay.overlay.render(rl.Rectangle(0, 0, self.width, self.height))
-      elif callable(self._modal_overlay.overlay):
-        result = self._modal_overlay.overlay()
-      else:
-        raise Exception
-
-      # Send show event to Widget
-      if not self._modal_overlay_shown and hasattr(self._modal_overlay.overlay, 'show_event'):
-        self._modal_overlay.overlay.show_event()
-        self._modal_overlay_shown = True
-
-      if result >= 0:
-        # Clear the overlay and execute the callback
-        original_modal = self._modal_overlay
-        self._modal_overlay = ModalOverlay()
-        if hasattr(original_modal.overlay, 'hide_event'):
-          original_modal.overlay.hide_event()
-        if original_modal.callback is not None:
-          original_modal.callback(result)
-      return True
-    else:
-      self._modal_overlay_shown = False
-      return False
-
   def _load_fonts(self):
-    self._ensure_font_atlases()
-    with as_file(FONT_DIR) as fspath:
-      for font_weight_file in FontWeight:
+    for font_weight_file in FontWeight:
+      with as_file(FONT_DIR) as fspath:
         fnt_path = fspath / font_weight_file
         font = rl.load_font(fnt_path.as_posix())
-        rl.set_texture_filter(font.texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
+        if font_weight_file != FontWeight.UNIFONT:
+          rl.gen_texture_mipmaps(font.texture)
+          rl.set_texture_filter(font.texture, rl.TextureFilter.TEXTURE_FILTER_TRILINEAR)
         self._fonts[font_weight_file] = font
     rl.gui_set_font(self._fonts[FontWeight.NORMAL])
-
-  def _ensure_font_atlases(self):
-    with as_file(FONT_DIR) as fspath:
-      required_fonts = [fspath / fw.value for fw in FontWeight]
-      missing_fonts = [font_path.name for font_path in required_fonts if not font_path.exists()]
-      if not missing_fonts:
-        return
-
-      process_script = fspath / "process.py"
-      if not process_script.exists():
-        cloudlog.warning(f"Missing font atlases {missing_fonts}, but no generator found at {process_script}")
-        return
-
-      cloudlog.warning(f"Generating missing font atlases: {missing_fonts}")
-      try:
-        subprocess.run([sys.executable, process_script.as_posix()], check=True, cwd=fspath.as_posix())
-      except Exception:
-        cloudlog.exception("Failed to generate font atlases")
 
   def _set_styles(self):
     rl.gui_set_style(rl.GuiControl.DEFAULT, rl.GuiControlProperty.BORDER_WIDTH, 0)
@@ -736,6 +706,20 @@ class GuiApplication:
       return rl._orig_draw_text_ex(font, text, position, font_size * FONT_SCALE, spacing, tint)
 
     rl.draw_text_ex = _draw_text_ex_scaled
+
+  def _patch_scissor_mode(self):
+    if self._scale == 1.0:
+      return
+
+    if not hasattr(rl, "_orig_begin_scissor_mode"):
+      rl._orig_begin_scissor_mode = rl.begin_scissor_mode
+
+    def _begin_scissor_mode_scaled(x, y, width, height):
+      return rl._orig_begin_scissor_mode(
+        int(x * self._scale), int(y * self._scale),
+        int(math.ceil(width * self._scale)), int(math.ceil(height * self._scale)))
+
+    rl.begin_scissor_mode = _begin_scissor_mode_scaled
 
   def _set_log_callback(self):
     ffi_libc = cffi.FFI()
@@ -772,6 +756,9 @@ class GuiApplication:
         cloudlog.debug(f"raylib: {text_str}")
       else:
         cloudlog.error(f"raylib: Unknown level {log_level}: {text_str}")
+
+    # ensure we get all the logs forwarded to us
+    rl.set_trace_log_level(rl.TraceLogLevel.LOG_DEBUG)
 
     # Store callback reference
     self._trace_log_callback = trace_log_callback
@@ -842,11 +829,11 @@ class GuiApplication:
     green = "\033[92m"
     reset = "\033[0m"
     print(f"\n{green}Rendered {self._frame} frames in {elapsed_ms:.1f} ms{reset}")
-    print(f"{green}Average frame time: {avg_frame_time:.2f} ms ({1000 / avg_frame_time:.1f} FPS){reset}")
+    print(f"{green}Average frame time: {avg_frame_time:.2f} ms ({1000/avg_frame_time:.1f} FPS){reset}")
     sys.exit(0)
 
   def _calculate_auto_scale(self) -> float:
-    # Create temporary window to query monitor info
+     # Create temporary window to query monitor info
     rl.init_window(1, 1, "")
     w, h = rl.get_monitor_width(0), rl.get_monitor_height(0)
     rl.close_window()

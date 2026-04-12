@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from openpilot.common.params import Params
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.selfdrive.locationd.calibrationd import HEIGHT_INIT
-from openpilot.selfdrive.ui.ui_state import ui_state
+from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
 from openpilot.selfdrive.ui.mici.onroad import blend_colors
 from openpilot.selfdrive.ui.mici.onroad.starpilot_status import get_border_color, get_path_edge_color
 from openpilot.system.ui.lib.application import gui_app
@@ -331,7 +331,8 @@ class ModelRenderer(Widget):
     if not self._path.projected_points.size:
       return
 
-    allow_throttle = sm['longitudinalPlan'].allowThrottle or not self._longitudinal_control
+    lateral_ui_active = ui_state.status == UIStatus.ENGAGED or ui_state.always_on_lateral_active
+    allow_throttle = sm['longitudinalPlan'].allowThrottle or not self._longitudinal_control or ui_state.always_on_lateral_active
     self._blend_filter.update(int(allow_throttle))
 
     if self._experimental_mode:
@@ -345,6 +346,8 @@ class ModelRenderer(Widget):
       # Blend throttle/no throttle colors based on transition
       blend_factor = round(self._blend_filter.x * 100) / 100
       blended_colors = self._blend_colors(NO_THROTTLE_COLORS, THROTTLE_COLORS, blend_factor)
+      if lateral_ui_active and blend_factor < 1.0:
+        blended_colors = self._blend_colors(blended_colors, THROTTLE_COLORS, 0.65)
       gradient = Gradient(
         start=(0.0, 1.0),  # Bottom of path
         end=(0.0, 0.0),  # Top of path

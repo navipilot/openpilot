@@ -264,12 +264,13 @@ class HudRenderer(Widget):
 
   def _draw_steering_wheel(self, rect: rl.Rectangle) -> None:
     wheel_txt = self._txt_wheel_critical if self._show_wheel_critical else self._txt_wheel
+    lateral_ui_active = ui_state.status == UIStatus.ENGAGED or ui_state.always_on_lateral_active
 
     if self._show_wheel_critical:
       self._wheel_alpha_filter.update(255)
       self._wheel_y_filter.update(0)
     else:
-      if ui_state.status == UIStatus.DISENGAGED:
+      if not lateral_ui_active and ui_state.status == UIStatus.DISENGAGED:
         self._wheel_alpha_filter.update(0)
         self._wheel_y_filter.update(wheel_txt.height / 2)
       else:

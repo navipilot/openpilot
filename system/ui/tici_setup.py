@@ -7,16 +7,14 @@ import urllib.request
 import urllib.error
 from urllib.parse import urlparse
 from enum import IntEnum
-import shutil
 
 import pyray as rl
 
 from cereal import log
-from openpilot.common.utils import run_cmd
 from openpilot.system.hardware import HARDWARE
 from openpilot.system.ui.lib.scroll_panel import GuiScrollPanel
 from openpilot.system.ui.lib.application import gui_app, FontWeight, FONT_SCALE
-from openpilot.system.ui.widgets import Widget
+from openpilot.system.ui.widgets import DialogResult, Widget
 from openpilot.system.ui.widgets.button import Button, ButtonStyle, ButtonRadio
 from openpilot.system.ui.widgets.keyboard import Keyboard
 from openpilot.system.ui.widgets.label import Label
@@ -32,23 +30,11 @@ BODY_FONT_SIZE = 80
 BUTTON_HEIGHT = 160
 BUTTON_SPACING = 50
 
-NETWORK_CHECK_URL = "https://openpilot.comma.ai"
-DEFAULT_INSTALLER_URL = "https://installer.comma.ai/firestar5683/StarPilot"
+OPENPILOT_URL = "https://openpilot.comma.ai"
 USER_AGENT = f"AGNOSSetup-{HARDWARE.get_os_version()}"
 
-CONTINUE_PATH = "/data/continue.sh"
-TMP_CONTINUE_PATH = "/data/continue.sh.new"
-INSTALL_PATH = "/data/openpilot"
-VALID_CACHE_PATH = "/data/.openpilot_cache"
-INSTALLER_SOURCE_PATH = "/usr/comma/installer"
 INSTALLER_DESTINATION_PATH = "/tmp/installer"
 INSTALLER_URL_PATH = "/tmp/installer_url"
-
-CONTINUE = """#!/usr/bin/env bash
-
-cd /data/openpilot
-exec ./launch_openpilot.sh
-"""
 
 
 class SetupState(IntEnum):
@@ -93,7 +79,7 @@ class Setup(Widget):
     self._getting_started_body_label = Label("Before we get on the road, let's finish installation and cover some details.",
                                              BODY_FONT_SIZE, text_alignment=rl.GuiTextAlignment.TEXT_ALIGN_LEFT, text_padding=20)
 
-    self._software_selection_openpilot_button = ButtonRadio("StarPilot", self.checkmark, font_size=BODY_FONT_SIZE, text_padding=80)
+    self._software_selection_openpilot_button = ButtonRadio("openpilot", self.checkmark, font_size=BODY_FONT_SIZE, text_padding=80)
     self._software_selection_custom_software_button = ButtonRadio("Custom Software", self.checkmark, font_size=BODY_FONT_SIZE, text_padding=80)
     self._software_selection_continue_button = Button("Continue", self._software_selection_continue_button_callback,
                                                       button_style=ButtonStyle.PRIMARY)
@@ -177,7 +163,9 @@ class Setup(Widget):
 
   def _software_selection_continue_button_callback(self):
     if self._software_selection_openpilot_button.selected:
-      self.use_openpilot()
+      self.state = SetupState.NETWORK_SETUP
+      self.stop_network_check_thread.clear()
+      self.start_network_check()
     else:
       self.state = SetupState.CUSTOM_SOFTWARE_WARNING
 
@@ -190,12 +178,12 @@ class Setup(Widget):
   def _network_setup_continue_button_callback(self):
     self.stop_network_check_thread.set()
     if self._software_selection_openpilot_button.selected:
-      self.download(DEFAULT_INSTALLER_URL)
+      self.download(OPENPILOT_URL)
     else:
       self.state = SetupState.CUSTOM_SOFTWARE
 
   def render_low_voltage(self, rect: rl.Rectangle):
-    rl.draw_texture(self.warning, int(rect.x + 150), int(rect.y + 110), rl.WHITE)
+    rl.draw_texture_ex(self.warning, rl.Vector2(rect.x + 150, rect.y + 110), 0.0, 1.0, rl.WHITE)
 
     self._low_voltage_title_label.render(rl.Rectangle(rect.x + 150, rect.y + 110 + 150 + 100, rect.width - 500 - 150, TITLE_FONT_SIZE * FONT_SCALE))
     self._low_voltage_body_label.render(rl.Rectangle(rect.x + 150, rect.y + 110 + 150 + 150, rect.width - 500, BODY_FONT_SIZE * FONT_SCALE * 3))
@@ -219,7 +207,7 @@ class Setup(Widget):
     while not self.stop_network_check_thread.is_set():
       if self.state == SetupState.NETWORK_SETUP:
         try:
-          urllib.request.urlopen(NETWORK_CHECK_URL, timeout=2)
+          urllib.request.urlopen(OPENPILOT_URL, timeout=2.0)
           self.network_connected.set()
           if HARDWARE.get_network_type() == NetworkType.wifi:
             self.wifi_connected.set()
@@ -227,7 +215,7 @@ class Setup(Widget):
             self.wifi_connected.clear()
         except Exception:
           self.network_connected.clear()
-      time.sleep(1)
+      time.sleep(1.0)
 
   def start_network_check(self):
     if self.network_check_thread is None or not self.network_check_thread.is_alive():
@@ -328,38 +316,20 @@ class Setup(Widget):
   def render_custom_software(self):
     def handle_keyboard_result(result):
       # Enter pressed
-      if result == 1:
+      if result == DialogResult.CONFIRM:
         url = self.keyboard.text
         self.keyboard.clear()
         if url:
           self.download(url)
 
       # Cancel pressed
-      elif result == 0:
+      elif result == DialogResult.CANCEL:
         self.state = SetupState.SOFTWARE_SELECTION
 
     self.keyboard.reset(min_text_size=1)
     self.keyboard.set_title("Enter URL", "for Custom Software")
-    gui_app.set_modal_overlay(self.keyboard, callback=handle_keyboard_result)
-
-  def use_openpilot(self):
-    if os.path.isdir(INSTALL_PATH) and os.path.isfile(VALID_CACHE_PATH):
-      os.remove(VALID_CACHE_PATH)
-      with open(TMP_CONTINUE_PATH, "w") as f:
-        f.write(CONTINUE)
-      run_cmd(["chmod", "+x", TMP_CONTINUE_PATH])
-      shutil.move(TMP_CONTINUE_PATH, CONTINUE_PATH)
-      shutil.copyfile(INSTALLER_SOURCE_PATH, INSTALLER_DESTINATION_PATH)
-      with open(INSTALLER_URL_PATH, "w") as f:
-        f.write(DEFAULT_INSTALLER_URL)
-
-      # give time for installer UI to take over
-      time.sleep(0.1)
-      gui_app.request_close()
-    else:
-      self.state = SetupState.NETWORK_SETUP
-      self.stop_network_check_thread.clear()
-      self.start_network_check()
+    self.keyboard.set_callback(handle_keyboard_result)
+    gui_app.push_widget(self.keyboard)
 
   def download(self, url: str):
     # autocomplete incomplete URLs
@@ -418,9 +388,6 @@ class Setup(Widget):
       with open(INSTALLER_URL_PATH, "w") as f:
         f.write(self.download_url)
 
-      if os.path.isfile(VALID_CACHE_PATH):
-        os.remove(VALID_CACHE_PATH)
-
       # give time for installer UI to take over
       time.sleep(0.1)
       gui_app.request_close()
@@ -443,9 +410,9 @@ def main():
   try:
     gui_app.init_window("Setup", 20)
     setup = Setup()
-    for should_render in gui_app.render():
-      if should_render:
-        setup.render(rl.Rectangle(0, 0, gui_app.width, gui_app.height))
+    gui_app.push_widget(setup)
+    for _ in gui_app.render():
+      pass
     setup.close()
   except Exception as e:
     print(f"Setup error: {e}")

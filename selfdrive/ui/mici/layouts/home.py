@@ -1,23 +1,17 @@
-import time
+import datetime
 import re
+import time
 
 from cereal import log
 import pyray as rl
 from collections.abc import Callable
-from openpilot.system.ui.widgets.label import gui_label, MiciLabel, UnifiedLabel
 from openpilot.system.ui.widgets import Widget
-from openpilot.system.ui.lib.application import gui_app, FontWeight, DEFAULT_TEXT_COLOR, MousePos
-from openpilot.starpilot.common.starpilot_variables import MODELS_PATH
-from openpilot.starpilot.common.experimental_state import (
-  CEStatus,
-  next_manual_ce_status,
-  requested_experimental_mode,
-  sync_manual_ce_state,
-)
+from openpilot.system.ui.widgets.layouts import HBoxLayout
+from openpilot.system.ui.widgets.icon_widget import IconWidget
+from openpilot.system.ui.widgets.label import UnifiedLabel
+from openpilot.system.ui.lib.application import gui_app, FontWeight, MousePos
 from openpilot.selfdrive.ui.ui_state import ui_state
-from openpilot.system.ui.text import wrap_text
-from openpilot.system.version import training_version
-from openpilot.system.hardware import PC
+from openpilot.system.version import RELEASE_BRANCHES
 
 HEAD_BUTTON_FONT_SIZE = 40
 HOME_PADDING = 8
@@ -35,57 +29,56 @@ NETWORK_TYPES = {
 }
 
 
-class DeviceStatus(Widget):
+class NetworkIcon(Widget):
   def __init__(self):
     super().__init__()
-    self.set_rect(rl.Rectangle(0, 0, 300, 175))
-    self._update_state()
-    self._version_text = self._get_version_text()
+    self.set_rect(rl.Rectangle(0, 0, 54, 44))  # max size of all icons
+    self._net_type = NetworkType.none
+    self._net_strength = 0
 
-    self._do_welcome()
+    self._wifi_slash_txt = gui_app.texture("icons_mici/settings/network/wifi_strength_slash.png", 50, 44)
+    self._wifi_none_txt = gui_app.texture("icons_mici/settings/network/wifi_strength_none.png", 50, 37)
+    self._wifi_low_txt = gui_app.texture("icons_mici/settings/network/wifi_strength_low.png", 50, 37)
+    self._wifi_medium_txt = gui_app.texture("icons_mici/settings/network/wifi_strength_medium.png", 50, 37)
+    self._wifi_full_txt = gui_app.texture("icons_mici/settings/network/wifi_strength_full.png", 50, 37)
 
-  def _do_welcome(self):
-    # Keep onboarding bypass for desktop UI runs only.
-    if PC:
-      ui_state.params.put("CompletedTrainingVersion", training_version)
-
-  def refresh(self):
-    self._update_state()
-    self._version_text = self._get_version_text()
-
-  def _get_version_text(self) -> str:
-    brand = "starpilot"
-    description = ui_state.params.get("UpdaterCurrentDescription")
-    return f"{brand} {description}" if description else brand
+    self._cell_none_txt = gui_app.texture("icons_mici/settings/network/cell_strength_none.png", 54, 36)
+    self._cell_low_txt = gui_app.texture("icons_mici/settings/network/cell_strength_low.png", 54, 36)
+    self._cell_medium_txt = gui_app.texture("icons_mici/settings/network/cell_strength_medium.png", 54, 36)
+    self._cell_high_txt = gui_app.texture("icons_mici/settings/network/cell_strength_high.png", 54, 36)
+    self._cell_full_txt = gui_app.texture("icons_mici/settings/network/cell_strength_full.png", 54, 36)
 
   def _update_state(self):
-    # TODO: refresh function that can be called periodically, not at 60 fps, so we can update version
-    # update system status
-    self._system_status = "SYSTEM READY ✓" if ui_state.panda_type != log.PandaState.PandaType.unknown else "BOOTING UP..."
-
-    # update network status
-    strength = ui_state.sm['deviceState'].networkStrength.raw
-    strength_text = "● " * strength + "○ " * (4 - strength)  # ◌ also works
-    network_type = NETWORK_TYPES[ui_state.sm['deviceState'].networkType.raw]
-    self._network_status = f"{network_type} {strength_text}"
+    device_state = ui_state.sm['deviceState']
+    self._net_type = device_state.networkType
+    strength = device_state.networkStrength
+    self._net_strength = max(0, min(5, strength.raw + 1)) if strength.raw > 0 else 0
 
   def _render(self, _):
-    # draw status
-    status_rect = rl.Rectangle(self._rect.x, self._rect.y, self._rect.width, 40)
-    gui_label(status_rect, self._system_status, font_size=HEAD_BUTTON_FONT_SIZE, color=DEFAULT_TEXT_COLOR,
-              font_weight=FontWeight.BOLD, alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER)
+    if self._net_type == NetworkType.wifi:
+      # There is no 1
+      draw_net_txt = {0: self._wifi_none_txt,
+                      2: self._wifi_low_txt,
+                      3: self._wifi_medium_txt,
+                      4: self._wifi_full_txt,
+                      5: self._wifi_full_txt}.get(self._net_strength, self._wifi_low_txt)
+    elif self._net_type in (NetworkType.cell2G, NetworkType.cell3G, NetworkType.cell4G, NetworkType.cell5G):
+      draw_net_txt = {0: self._cell_none_txt,
+                      2: self._cell_low_txt,
+                      3: self._cell_medium_txt,
+                      4: self._cell_high_txt,
+                      5: self._cell_full_txt}.get(self._net_strength, self._cell_none_txt)
+    else:
+      draw_net_txt = self._wifi_slash_txt
 
-    # draw network status
-    network_rect = rl.Rectangle(self._rect.x, self._rect.y + 60, self._rect.width, 40)
-    gui_label(network_rect, self._network_status, font_size=40, color=DEFAULT_TEXT_COLOR,
-              font_weight=FontWeight.MEDIUM, alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER)
+    draw_x = self._rect.x + (self._rect.width - draw_net_txt.width) / 2
+    draw_y = self._rect.y + (self._rect.height - draw_net_txt.height) / 2
 
-    # draw version
-    version_font_size = 30
-    version_rect = rl.Rectangle(self._rect.x, self._rect.y + 140, self._rect.width + 20, 40)
-    wrapped_text = '\n'.join(wrap_text(self._version_text, version_font_size, version_rect.width))
-    gui_label(version_rect, wrapped_text, font_size=version_font_size, color=DEFAULT_TEXT_COLOR,
-              font_weight=FontWeight.MEDIUM, alignment=rl.GuiTextAlignment.TEXT_ALIGN_LEFT)
+    if draw_net_txt == self._wifi_slash_txt:
+      # Offset by difference in height between slashless and slash icons to make center align match
+      draw_y -= (self._wifi_slash_txt.height - self._wifi_none_txt.height) / 2
+
+    rl.draw_texture_ex(draw_net_txt, rl.Vector2(draw_x, draw_y), 0.0, 1.0, rl.Color(255, 255, 255, int(255 * 0.9)))
 
 
 class MiciHomeLayout(Widget):
@@ -100,117 +93,46 @@ class MiciHomeLayout(Widget):
 
     self._version_text = None
     self._experimental_mode = False
-    self._safe_mode = False
     self._current_model_name = "default"
 
-    self._settings_txt = gui_app.texture("icons_mici/settings.png", 48, 48)
-    self._experimental_txt = gui_app.texture("icons_mici/experimental_mode.png", 48, 48)
-    self._mic_txt = gui_app.texture("icons_mici/microphone.png", 48, 48)
+    self._experimental_icon = IconWidget("icons_mici/experimental_mode.png", (48, 48))
+    self._mic_icon = IconWidget("icons_mici/microphone.png", (32, 46))
 
-    self._net_type = NETWORK_TYPES.get(NetworkType.none)
-    self._net_strength = 0
+    self._status_bar_layout = HBoxLayout([
+      IconWidget("icons_mici/settings.png", (48, 48), opacity=0.9),
+      NetworkIcon(),
+      self._experimental_icon,
+      self._mic_icon,
+    ], spacing=18)
 
-    self._wifi_slash_txt = gui_app.texture("icons_mici/settings/network/wifi_strength_slash.png", 50, 44)
-    self._wifi_none_txt = gui_app.texture("icons_mici/settings/network/wifi_strength_none.png", 50, 44)
-    self._wifi_low_txt = gui_app.texture("icons_mici/settings/network/wifi_strength_low.png", 50, 44)
-    self._wifi_medium_txt = gui_app.texture("icons_mici/settings/network/wifi_strength_medium.png", 50, 44)
-    self._wifi_full_txt = gui_app.texture("icons_mici/settings/network/wifi_strength_full.png", 50, 44)
-
-    self._cell_none_txt = gui_app.texture("icons_mici/settings/network/cell_strength_none.png", 55, 35)
-    self._cell_low_txt = gui_app.texture("icons_mici/settings/network/cell_strength_low.png", 55, 35)
-    self._cell_medium_txt = gui_app.texture("icons_mici/settings/network/cell_strength_medium.png", 55, 35)
-    self._cell_high_txt = gui_app.texture("icons_mici/settings/network/cell_strength_high.png", 55, 35)
-    self._cell_full_txt = gui_app.texture("icons_mici/settings/network/cell_strength_full.png", 55, 35)
-
-    self._openpilot_label = MiciLabel("starpilot", font_size=96, color=rl.Color(255, 255, 255, int(255 * 0.9)), font_weight=FontWeight.DISPLAY)
-    self._version_label = MiciLabel("", font_size=36, font_weight=FontWeight.ROMAN)
-    self._large_version_label = MiciLabel("", font_size=64, color=rl.GRAY, font_weight=FontWeight.ROMAN)
-    self._date_label = MiciLabel("", font_size=36, color=rl.GRAY, font_weight=FontWeight.ROMAN)
+    self._openpilot_label = UnifiedLabel("starpilot", font_size=96, font_weight=FontWeight.DISPLAY, max_width=480, wrap_text=False)
+    self._version_label = UnifiedLabel("", font_size=36, font_weight=FontWeight.ROMAN, max_width=480, wrap_text=False)
+    self._large_version_label = UnifiedLabel("", font_size=64, text_color=rl.GRAY, font_weight=FontWeight.ROMAN, max_width=480, wrap_text=False)
+    self._date_label = UnifiedLabel("", font_size=36, text_color=rl.GRAY, font_weight=FontWeight.ROMAN, max_width=480, wrap_text=False)
     self._branch_label = UnifiedLabel("", font_size=36, text_color=rl.GRAY, font_weight=FontWeight.ROMAN, scroll=True)
-    self._version_commit_label = MiciLabel("", font_size=36, color=rl.GRAY, font_weight=FontWeight.ROMAN)
+    self._version_commit_label = UnifiedLabel("", font_size=36, text_color=rl.GRAY, font_weight=FontWeight.ROMAN, max_width=480, wrap_text=False)
 
   def show_event(self):
+    super().show_event()
     self._version_text = self._get_version_text()
-    self._update_network_status(ui_state.sm['deviceState'])
     self._update_params()
 
   def _update_params(self):
-    self._safe_mode = ui_state.params.get_bool("SafeMode")
-    self._experimental_mode = requested_experimental_mode(ui_state.params, ui_state.params_memory)
+    self._experimental_mode = ui_state.params.get_bool("ExperimentalMode")
 
-    def _clean_name(value: str) -> str:
+    def _clean_model_name(value: str) -> str:
       return re.sub(r"[🗺️👀📡]", "", value).replace("(Default)", "").strip()
 
-    def _decode_default(value) -> str:
-      if isinstance(value, bytes):
-        return value.decode("utf-8", errors="ignore").strip()
-      return str(value or "").strip()
+    current_name = _clean_model_name(ui_state.params.get("DrivingModelName", encoding="utf-8") or "")
+    if not current_name:
+      default_name = ui_state.params.get_default_value("DrivingModelName")
+      if isinstance(default_name, bytes):
+        default_name = default_name.decode("utf-8", errors="ignore")
+      current_name = _clean_model_name(str(default_name or ""))
 
-    model_key = (ui_state.params.get("Model", encoding="utf-8") or
-                 ui_state.params.get("DrivingModel", encoding="utf-8") or "").strip()
-    current_param_name = _clean_name(ui_state.params.get("DrivingModelName", encoding="utf-8") or "")
-
-    available_models = [entry.strip() for entry in (ui_state.params.get("AvailableModels", encoding="utf-8") or "").split(",")]
-    available_names = [entry.strip() for entry in (ui_state.params.get("AvailableModelNames", encoding="utf-8") or "").split(",")]
-    model_versions = [entry.strip() for entry in (ui_state.params.get("ModelVersions", encoding="utf-8") or "").split(",")]
-    model_name_map = {
-      key: _clean_name(name)
-      for key, name in zip(available_models, available_names)
-      if key and _clean_name(name)
-    }
-    model_version_map = {
-      key: version
-      for key, version in zip(available_models, model_versions)
-      if key and version
-    }
-
-    default_key = _decode_default(ui_state.params.get_default_value("DrivingModel") or
-                                  ui_state.params.get_default_value("Model")) or "sc"
-    default_name = _clean_name(_decode_default(ui_state.params.get_default_value("DrivingModelName"))) or "South Carolina"
-
-    def _is_model_installed(key: str) -> bool:
-      if not key:
-        return False
-
-      # Built-in default model is always available.
-      if key == default_key:
-        return True
-
-      if (MODELS_PATH / f"{key}.thneed").is_file():
-        return True
-
-      version = model_version_map.get(key, "")
-      required = [
-        f"{key}_driving_policy_tinygrad.pkl",
-        f"{key}_driving_vision_tinygrad.pkl",
-        f"{key}_driving_policy_metadata.pkl",
-        f"{key}_driving_vision_metadata.pkl",
-      ]
-      if version == "v12":
-        required.extend([
-          f"{key}_driving_off_policy_tinygrad.pkl",
-          f"{key}_driving_off_policy_metadata.pkl",
-        ])
-      return all((MODELS_PATH / filename).is_file() for filename in required)
-
-    # If a stale custom model is selected but not actually installed, show default.
-    if model_key and not _is_model_installed(model_key):
-      model_key = default_key
-
-    resolved_name = ""
-    if model_key in model_name_map:
-      resolved_name = model_name_map[model_key]
-    elif model_key.endswith("2") and model_key[:-1] in model_name_map:
-      resolved_name = model_name_map[model_key[:-1]]
-    elif model_key == default_key or (model_key.endswith("2") and model_key[:-1] == default_key):
-      resolved_name = default_name
-
-    if not resolved_name and current_param_name:
-      resolved_name = current_param_name
-    if not resolved_name:
-      resolved_name = default_name if (not model_key or model_key == default_key) else model_key
-
-    self._current_model_name = resolved_name
+    current_key = (ui_state.params.get("Model", encoding="utf-8") or
+                   ui_state.params.get("DrivingModel", encoding="utf-8") or "").strip()
+    self._current_model_name = current_name or current_key or "default"
 
   def _update_state(self):
     if self.is_pressed and not self._is_pressed_prev:
@@ -223,32 +145,17 @@ class MiciHomeLayout(Widget):
     if self._mouse_down_t is not None:
       if time.monotonic() - self._mouse_down_t > 0.5:
         # long gating for experimental mode - only allow toggle if longitudinal control is available
-        if ui_state.has_longitudinal_control and not self._safe_mode:
-          if ui_state.params.get_bool("ConditionalExperimental"):
-            current_status = ui_state.params_memory.get_int("CEStatus", default=CEStatus["OFF"])
-            override_value = next_manual_ce_status(current_status, self._experimental_mode)
-            ui_state.params_memory.put_int("CEStatus", override_value)
-            sync_manual_ce_state(ui_state.params, override_value)
-            self._experimental_mode = override_value == CEStatus["USER_OVERRIDDEN"]
-          else:
-            self._experimental_mode = not self._experimental_mode
-            ui_state.params.put_bool("ExperimentalMode", self._experimental_mode)
+        if ui_state.has_longitudinal_control:
+          self._experimental_mode = not self._experimental_mode
+          ui_state.params.put("ExperimentalMode", self._experimental_mode)
         self._mouse_down_t = None
         self._did_long_press = True
 
     if rl.get_time() - self._last_refresh > 5.0:
-      device_state = ui_state.sm['deviceState']
-      self._update_network_status(device_state)
-
       # Update version text
       self._version_text = self._get_version_text()
       self._last_refresh = rl.get_time()
       self._update_params()
-
-  def _update_network_status(self, device_state):
-    self._net_type = device_state.networkType
-    strength = device_state.networkStrength
-    self._net_strength = max(0, min(5, strength.raw + 1)) if strength.raw > 0 else 0
 
   def set_callbacks(self, on_settings: Callable | None = None):
     self._on_settings_click = on_settings
@@ -260,17 +167,22 @@ class MiciHomeLayout(Widget):
     self._did_long_press = False
 
   def _get_version_text(self) -> tuple[str, str, str, str] | None:
-    description = ui_state.params.get("UpdaterCurrentDescription")
+    version = ui_state.params.get("Version")
+    branch = ui_state.params.get("GitBranch")
+    commit = ui_state.params.get("GitCommit")
 
-    if description is not None and len(description) > 0:
-      # Expect "version / branch / commit / date"; be tolerant of other formats
-      try:
-        version, branch, commit, date = description.split(" / ")
-        return version, branch, commit, date
-      except Exception:
-        return None
+    if not all((version, branch, commit)):
+      return None
 
-    return None
+    commit_date_raw = ui_state.params.get("GitCommitDate")
+    try:
+      # GitCommitDate format from get_commit_date(): '%ct %ci' e.g. "'1708012345 2024-02-15 ...'"
+      unix_ts = int(commit_date_raw.strip("'").split()[0])
+      date_str = datetime.datetime.fromtimestamp(unix_ts).strftime("%b %d")
+    except (ValueError, IndexError, TypeError, AttributeError):
+      date_str = ""
+
+    return version, branch, commit[:7], date_str
 
   def _render(self, _):
     # TODO: why is there extra space here to get it to be flush?
@@ -279,83 +191,31 @@ class MiciHomeLayout(Widget):
     self._openpilot_label.render()
 
     if self._version_text is not None:
+      # release branch
+      release_branch = self._version_text[1] in RELEASE_BRANCHES
       version_pos = rl.Rectangle(text_pos.x, text_pos.y + self._openpilot_label.font_size + 16, 100, 44)
       self._version_label.set_text(self._version_text[0])
       self._version_label.set_position(version_pos.x, version_pos.y)
       self._version_label.render()
 
       self._date_label.set_text(" " + self._version_text[3])
-      self._date_label.set_position(version_pos.x + self._version_label.rect.width + 10, version_pos.y)
+      self._date_label.set_position(version_pos.x + self._version_label.text_width + 10, version_pos.y)
       self._date_label.render()
 
-      self._branch_label.set_max_width(gui_app.width - self._version_label.rect.width - self._date_label.rect.width - 32)
+      self._branch_label.set_max_width(gui_app.width - self._version_label.text_width - self._date_label.text_width - 32)
       self._branch_label.set_text(" " + self._current_model_name)
-      self._branch_label.set_position(version_pos.x + self._version_label.rect.width + self._date_label.rect.width + 20, version_pos.y)
+      self._branch_label.set_position(version_pos.x + self._version_label.text_width + self._date_label.text_width + 20, version_pos.y)
       self._branch_label.render()
 
-      self._version_commit_label.set_text(self._version_text[2])
-      self._version_commit_label.set_position(version_pos.x, version_pos.y + self._date_label.font_size + 7)
-      self._version_commit_label.render()
-    else:
-      self._branch_label.set_max_width(gui_app.width - 32)
-      self._branch_label.set_text(self._current_model_name)
-      self._branch_label.set_position(text_pos.x, text_pos.y + self._openpilot_label.font_size + 16)
-      self._branch_label.render()
+      if not release_branch:
+        # 2nd line
+        self._version_commit_label.set_text(self._version_text[2])
+        self._version_commit_label.set_position(version_pos.x, version_pos.y + self._date_label.font_size + 7)
+        self._version_commit_label.render()
 
-    self._render_bottom_status_bar()
-
-  def _render_bottom_status_bar(self):
     # ***** Center-aligned bottom section icons *****
+    self._experimental_icon.set_visible(self._experimental_mode)
+    self._mic_icon.set_visible(ui_state.recording_audio)
 
-    # TODO: refactor repeated icon drawing into a small loop
-    ITEM_SPACING = 18
-    Y_CENTER = 24
-
-    last_x = self.rect.x + HOME_PADDING
-
-    # Draw settings icon in bottom left corner
-    rl.draw_texture(self._settings_txt, int(last_x), int(self._rect.y + self.rect.height - self._settings_txt.height / 2 - Y_CENTER),
-                    rl.Color(255, 255, 255, int(255 * 0.9)))
-    last_x = last_x + self._settings_txt.width + ITEM_SPACING
-
-    # draw network
-    if self._net_type == NetworkType.wifi:
-      # There is no 1
-      draw_net_txt = {0: self._wifi_none_txt,
-                      2: self._wifi_low_txt,
-                      3: self._wifi_medium_txt,
-                      4: self._wifi_full_txt,
-                      5: self._wifi_full_txt}.get(self._net_strength, self._wifi_low_txt)
-      rl.draw_texture(draw_net_txt, int(last_x),
-                      int(self._rect.y + self.rect.height - draw_net_txt.height / 2 - Y_CENTER), rl.Color(255, 255, 255, int(255 * 0.9)))
-      last_x += draw_net_txt.width + ITEM_SPACING
-
-    elif self._net_type in (NetworkType.cell2G, NetworkType.cell3G, NetworkType.cell4G, NetworkType.cell5G):
-      draw_net_txt = {0: self._cell_none_txt,
-                      2: self._cell_low_txt,
-                      3: self._cell_medium_txt,
-                      4: self._cell_high_txt,
-                      5: self._cell_full_txt}.get(self._net_strength, self._cell_none_txt)
-      rl.draw_texture(draw_net_txt, int(last_x),
-                      int(self._rect.y + self.rect.height - draw_net_txt.height / 2 - Y_CENTER), rl.Color(255, 255, 255, int(255 * 0.9)))
-      last_x += draw_net_txt.width + ITEM_SPACING
-
-    else:
-      # No network
-      # Offset by difference in height between slashless and slash icons to make center align match
-      rl.draw_texture(self._wifi_slash_txt, int(last_x), int(self._rect.y + self.rect.height - self._wifi_slash_txt.height / 2 -
-                                                             (self._wifi_slash_txt.height - self._wifi_none_txt.height) / 2 - Y_CENTER),
-                      rl.Color(255, 255, 255, 255))
-      last_x += self._wifi_slash_txt.width + ITEM_SPACING
-
-    # draw experimental icon
-    if self._experimental_mode:
-      rl.draw_texture(self._experimental_txt, int(last_x),
-                      int(self._rect.y + self.rect.height - self._experimental_txt.height / 2 - Y_CENTER), rl.Color(255, 255, 255, 255))
-      last_x += self._experimental_txt.width + ITEM_SPACING
-
-    # draw microphone icon when recording audio is enabled
-    if ui_state.recording_audio:
-      rl.draw_texture(self._mic_txt, int(last_x),
-                      int(self._rect.y + self.rect.height - self._mic_txt.height / 2 - Y_CENTER), rl.Color(255, 255, 255, 255))
-      last_x += self._mic_txt.width + ITEM_SPACING
+    footer_rect = rl.Rectangle(self.rect.x + HOME_PADDING, self.rect.y + self.rect.height - 48, self.rect.width - HOME_PADDING, 48)
+    self._status_bar_layout.render(footer_rect)

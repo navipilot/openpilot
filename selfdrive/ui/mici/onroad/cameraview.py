@@ -51,13 +51,9 @@ if TICI:
 
     void main() {
       vec4 color = texture(texture0, fragTexCoord);
+      // Keep the onroad camera feed full-color in every driving state.
       if (engaged == 1) {
-        float gray = dot(color.rgb, vec3(0.299, 0.587, 0.114));  // Luma
-        color.rgb = mix(vec3(gray), color.rgb, 0.2);  // 20% saturation
-        color.rgb = clamp((color.rgb - 0.5) * 1.2 + 0.5, 0.0, 1.0);  // +20% contrast
-        color.rgb = pow(color.rgb, vec3(1.0/1.28));
-      } else {
-        color.rgb *= 0.85;  // 85% opacity
+        color.rgb = color.rgb;
       }
       if (enhance_driver == 1) {
         float brightness = 1.1;
@@ -82,12 +78,9 @@ else:
       float y = texture(texture0, fragTexCoord).r;
       vec2 uv = texture(texture1, fragTexCoord).ra - 0.5;
       vec3 rgb = vec3(y + 1.402*uv.y, y - 0.344*uv.x - 0.714*uv.y, y + 1.772*uv.x);
+      // Keep the onroad camera feed full-color in every driving state.
       if (engaged == 1) {
-        float gray = dot(rgb, vec3(0.299, 0.587, 0.114));
-        rgb = mix(vec3(gray), rgb, 0.2);  // 20% saturation
-        rgb = clamp((rgb - 0.5) * 1.2 + 0.5, 0.0, 1.0);  // +20% contrast
-      } else {
-        rgb *= 0.85;  // 85% opacity
+        rgb = rgb;
       }
       // TODO: the images out of camerad need some more correction and
       // the ui should apply a gamma curve for the device display
@@ -324,8 +317,10 @@ class CameraView(Widget):
 
   def _update_texture_color_filtering(self):
     self._engaged_val[0] = 1 if ui_state.status != UIStatus.DISENGAGED else 0
-    rl.set_shader_value(self.shader, self._engaged_loc, self._engaged_val, rl.ShaderUniformDataType.SHADER_UNIFORM_INT)
-    rl.set_shader_value(self.shader, self._enhance_driver_loc, self._enhance_driver_val, rl.ShaderUniformDataType.SHADER_UNIFORM_INT)
+    if self._engaged_loc >= 0:
+      rl.set_shader_value(self.shader, self._engaged_loc, self._engaged_val, rl.ShaderUniformDataType.SHADER_UNIFORM_INT)
+    if self._enhance_driver_loc >= 0:
+      rl.set_shader_value(self.shader, self._enhance_driver_loc, self._enhance_driver_val, rl.ShaderUniformDataType.SHADER_UNIFORM_INT)
 
   def _ensure_connection(self) -> bool:
     if not self.client.is_connected():

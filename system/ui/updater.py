@@ -28,7 +28,7 @@ def _ui_device_type() -> str:
 def main():
   device_type = _ui_device_type()
 
-  # The updater stack imports application sizing during module import, so patch the
+  # The updater imports application sizing during module import, so patch the
   # hardware probe before importing either UI implementation.
   HARDWARE.get_device_type = lambda: device_type
 
