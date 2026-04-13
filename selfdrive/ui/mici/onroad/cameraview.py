@@ -1,3 +1,4 @@
+import os
 import platform
 import numpy as np
 import pyray as rl
@@ -11,6 +12,7 @@ from openpilot.system.ui.widgets import Widget
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
 
 CONNECTION_RETRY_INTERVAL = 0.2  # seconds between connection attempts
+MICI_FORCE_TEXTURE_CAMERA = os.getenv("MICI_FORCE_TEXTURE_CAMERA", "1") == "1"
 
 VERSION = """
 #version 300 es
@@ -110,8 +112,10 @@ class CameraView(Widget):
 
     self._texture_needs_update = True
     self.last_connection_attempt: float = 0.0
-    self._use_egl = TICI and init_egl()
-    if TICI and not self._use_egl:
+    self._use_egl = TICI and not MICI_FORCE_TEXTURE_CAMERA and init_egl()
+    if TICI and MICI_FORCE_TEXTURE_CAMERA:
+      cloudlog.warning("CameraView EGL disabled by MICI_FORCE_TEXTURE_CAMERA, using texture rendering")
+    elif TICI and not self._use_egl:
       cloudlog.error("CameraView EGL init failed, falling back to texture rendering")
 
     frame_shader = FRAME_FRAGMENT_SHADER_EXTERNAL if self._use_egl else FRAME_FRAGMENT_SHADER_YUV

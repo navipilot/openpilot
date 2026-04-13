@@ -105,6 +105,27 @@ void write_ui_thread_snapshot(int fd) {
   write_stall_dump_section(fd, "main_thread kernel_stack", util::read_file(task_dir + "/stack"));
 }
 
+double ui_elapsed_s(uint64_t now, uint64_t then) {
+  if (then == 0 || now < then) {
+    return 0.0;
+  }
+  return static_cast<double>(now - then) / 1e9;
+}
+
+bool ui_timestamp_anomaly(uint64_t now, uint64_t then, const char *context, UIStallPhase phase, uint64_t frame) {
+  if (then == 0 || now >= then) {
+    return false;
+  }
+
+  LOGW("UI stall monitor timestamp anomaly (%s now_ns=%llu then_ns=%llu phase=%s frame=%llu)",
+       context,
+       static_cast<unsigned long long>(now),
+       static_cast<unsigned long long>(then),
+       ui_stall_phase_name(phase),
+       static_cast<unsigned long long>(frame));
+  return true;
+}
+
 void ui_stall_progress(UIStallPhase phase, uint64_t frame = 0) {
   const uint64_t now = nanos_since_boot();
   ui_stall_phase.store(static_cast<int>(phase), std::memory_order_relaxed);
@@ -114,7 +135,10 @@ void ui_stall_progress(UIStallPhase phase, uint64_t frame = 0) {
   if (ui_stall_reported.exchange(false, std::memory_order_relaxed)) {
     const uint64_t stall_started = ui_stall_reported_ns.load(std::memory_order_relaxed);
     const UIStallPhase stalled_phase = static_cast<UIStallPhase>(ui_stall_reported_phase.load(std::memory_order_relaxed));
-    const double stalled_for_s = stall_started == 0 ? 0.0 : (now - stall_started) / 1e9;
+    const double stalled_for_s = ui_elapsed_s(now, stall_started);
+    if (ui_timestamp_anomaly(now, stall_started, "recover", stalled_phase, frame)) {
+      ui_stall_reported_ns.store(0, std::memory_order_relaxed);
+    }
     LOGW("UI stall recovered after %.1fs (stalled_phase=%s current_phase=%s frame=%llu)",
          stalled_for_s,
          ui_stall_phase_name(stalled_phase),
@@ -147,7 +171,15 @@ void start_ui_stall_monitor() {
           continue;
         }
 
-        const double stalled_for_s = (now - last_progress) / 1e9;
+        const UIStallPhase phase = static_cast<UIStallPhase>(ui_stall_phase.load(std::memory_order_relaxed));
+        const uint64_t frame = ui_stall_frame.load(std::memory_order_relaxed);
+        if (ui_timestamp_anomaly(now, last_progress, "probe", phase, frame)) {
+          ui_stall_last_progress_ns.store(now, std::memory_order_relaxed);
+          ui_stall_reported.store(false, std::memory_order_relaxed);
+          continue;
+        }
+
+        const double stalled_for_s = ui_elapsed_s(now, last_progress);
         if (stalled_for_s < stall_probe_dt) {
           continue;
         }
@@ -157,36 +189,40 @@ void start_ui_stall_monitor() {
           continue;
         }
 
-        const UIStallPhase phase = static_cast<UIStallPhase>(ui_stall_phase.load(std::memory_order_relaxed));
-        const uint64_t frame = ui_stall_frame.load(std::memory_order_relaxed);
         ui_stall_reported_ns.store(now, std::memory_order_relaxed);
         ui_stall_reported_phase.store(static_cast<int>(phase), std::memory_order_relaxed);
 
         const std::string path = ui_stall_dump_dir() + "/qt_ui_stall_" + std::to_string(getpid()) + "_" + std::to_string(now) + ".log";
         int fd = open(path.c_str(), O_CREAT | O_WRONLY | O_TRUNC | O_CLOEXEC, 0644);
         if (fd >= 0) {
-          char header[256];
+          char header[384];
           const int header_len = std::snprintf(header, sizeof(header),
-                                               "phase=%s frame=%llu stalled_for_s=%.3f\n",
+                                               "phase=%s frame=%llu stalled_for_s=%.3f now_ns=%llu last_progress_ns=%llu\n",
                                                ui_stall_phase_name(phase),
                                                static_cast<unsigned long long>(frame),
-                                               stalled_for_s);
+                                               stalled_for_s,
+                                               static_cast<unsigned long long>(now),
+                                               static_cast<unsigned long long>(last_progress));
           if (header_len > 0) {
             write(fd, header, header_len);
           }
 
           write_ui_thread_snapshot(fd);
           close(fd);
-          LOGE("UI main thread stalled for %.1fs (phase=%s frame=%llu dump=%s)",
+          LOGE("UI main thread stalled for %.1fs (phase=%s frame=%llu now_ns=%llu last_progress_ns=%llu dump=%s)",
                stalled_for_s,
                ui_stall_phase_name(phase),
                static_cast<unsigned long long>(frame),
+               static_cast<unsigned long long>(now),
+               static_cast<unsigned long long>(last_progress),
                path.c_str());
         } else {
-          LOGE("UI main thread stalled for %.1fs (phase=%s frame=%llu dump_open_failed errno=%d)",
+          LOGE("UI main thread stalled for %.1fs (phase=%s frame=%llu now_ns=%llu last_progress_ns=%llu dump_open_failed errno=%d)",
                stalled_for_s,
                ui_stall_phase_name(phase),
                static_cast<unsigned long long>(frame),
+               static_cast<unsigned long long>(now),
+               static_cast<unsigned long long>(last_progress),
                errno);
         }
       }
