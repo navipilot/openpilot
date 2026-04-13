@@ -1,4 +1,5 @@
 #include "starpilot/ui/qt/offroad/theme_settings.h"
+#include "system/hardware/hw.h"
 
 bool isUserCreatedTheme(const QString &themeName) {
   return themeName.endsWith("-user_created");
@@ -209,6 +210,17 @@ QString storeThemeName(const QString &input, const std::string &paramKey, Params
 
 StarPilotThemesPanel::StarPilotThemesPanel(StarPilotSettingsWindow *parent, bool forceOpen) : StarPilotListWidget(parent), parent(parent) {
   forceOpenDescriptions = forceOpen;
+
+  if (Hardware::PC()) {
+    const QString themesRoot = QString::fromStdString(Path::comma_home() + "/starpilot/data/themes/");
+    bootLogosDirectory.setPath(themesRoot + "bootlogos/");
+    themePacksDirectory.setPath(themesRoot + "theme_packs/");
+    wheelsDirectory.setPath(themesRoot + "steering_wheels/");
+  }
+
+  QDir().mkpath(bootLogosDirectory.path());
+  QDir().mkpath(themePacksDirectory.path());
+  QDir().mkpath(wheelsDirectory.path());
 
   QStackedLayout *themesLayout = new QStackedLayout();
   addItem(themesLayout);

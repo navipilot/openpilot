@@ -266,6 +266,14 @@ start_fake_wifi() {
   FAKE_WIFI_PID=$!
 }
 
+seed_starpilot_theme() {
+  "${PY_BIN}" - <<'PY'
+from openpilot.starpilot.common.starpilot_functions import seed_desktop_theme_assets
+
+seed_desktop_theme_assets()
+PY
+}
+
 if ! python_ui_runtime_ok >/dev/null 2>&1; then
   echo "Preparing host Python UI runtime extensions..."
   sync_deps
@@ -329,6 +337,7 @@ params.put_bool("OpenpilotEnabledToggle", True)
 params.put_bool("IsDriverViewEnabled", False)
 PY
 
+seed_starpilot_theme
 kill_stale_c4_ui
 start_fake_wifi
 "${PY_BIN}" selfdrive/ui/ui.py "$@"

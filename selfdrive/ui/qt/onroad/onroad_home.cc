@@ -58,14 +58,27 @@ void OnroadWindow::updateState(const UIState &s, const StarPilotUIState &fs) {
   alerts->updateState(s, fs);
   nvg->updateState(s, fs);
 
+  const StarPilotUIScene &starpilot_scene = fs.starpilot_scene;
+  const auto selfdriveState = (*s.sm)["selfdriveState"].getSelfdriveState();
   QColor bgColor = bg_colors[s.status];
+  if (starpilot_scene.switchback_mode_enabled && (selfdriveState.getEnabled() || starpilot_scene.always_on_lateral_active)) {
+    bgColor = bg_colors[STATUS_SWITCHBACK_MODE_ENABLED];
+  } else if (starpilot_scene.always_on_lateral_active) {
+    bgColor = bg_colors[STATUS_ALWAYS_ON_LATERAL_ACTIVE];
+  } else if (starpilot_scene.conditional_status == 1) {
+    bgColor = bg_colors[STATUS_CEM_DISABLED];
+  } else if (selfdriveState.getExperimentalMode()) {
+    bgColor = bg_colors[STATUS_EXPERIMENTAL_MODE_ENABLED];
+  } else if (starpilot_scene.traffic_mode_enabled && selfdriveState.getEnabled()) {
+    bgColor = bg_colors[STATUS_TRAFFIC_MODE_ENABLED];
+  }
+
   if (bg != bgColor) {
     // repaint border
     bg = bgColor;
     update();
   }
 
-  const StarPilotUIScene &starpilot_scene = fs.starpilot_scene;
   const QJsonObject &starpilot_toggles = starpilot_scene.starpilot_toggles;
 
   starpilot_nvg->alertHeight = alerts->alertHeight;

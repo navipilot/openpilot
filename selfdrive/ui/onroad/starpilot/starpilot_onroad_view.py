@@ -3,7 +3,7 @@ import time
 from msgq.visionipc import VisionStreamType
 from openpilot.common.params import Params
 from openpilot.selfdrive.ui import UI_BORDER_SIZE
-from openpilot.selfdrive.ui.onroad.augmented_road_view import AugmentedRoadView, BORDER_COLORS
+from openpilot.selfdrive.ui.onroad.augmented_road_view import AugmentedRoadView
 from openpilot.selfdrive.ui.onroad.starpilot.curve_speed_border import render_glow, render_filament
 from openpilot.selfdrive.ui.onroad.starpilot.path import render_adjacent_paths, render_blind_spot_path, render_path_edges
 from openpilot.selfdrive.ui.onroad.starpilot.personality_button import PersonalityButton, BTN_SIZE
@@ -11,10 +11,9 @@ from openpilot.selfdrive.ui.onroad.starpilot.slc_speed_limit import (
   render_speed_limit, handle_slc_click, SET_SPEED_X_OFFSET, SET_SPEED_Y_OFFSET,
   SET_SPEED_WIDTH_IMP, SET_SPEED_WIDTH_MET, SET_SPEED_HEIGHT, SIGN_MARGIN,
 )
-from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
+from openpilot.selfdrive.ui.ui_state import ui_state
+from openpilot.selfdrive.ui.lib.starpilot_status import get_screen_edge_color
 from openpilot.system.ui.lib.application import MousePos, gui_app, FontWeight
-
-AOL_COLOR = rl.Color(10, 186, 181, 255)
 
 
 class StarPilotOnroadView(AugmentedRoadView):
@@ -181,7 +180,7 @@ class StarPilotOnroadView(AugmentedRoadView):
     render_glow(border_rect)
 
     # Layer 4: Standard border
-    border_color = AOL_COLOR if ui_state.always_on_lateral_active else BORDER_COLORS.get(ui_state.status, BORDER_COLORS[UIStatus.DISENGAGED])
+    border_color = get_screen_edge_color(ui_state)
     rl.draw_rectangle_rounded_lines_ex(border_rect, 0.12, 10, UI_BORDER_SIZE, border_color)
 
     # Layer 5: Amber filament (on top of standard border)

@@ -6,6 +6,7 @@ import threading
 import time
 
 from pathlib import Path
+from types import SimpleNamespace
 
 from cereal import messaging
 from openpilot.common.basedir import BASEDIR
@@ -23,6 +24,37 @@ from openpilot.starpilot.common.starpilot_variables import (
   ERROR_LOGS_PATH, STARPILOT_API, FROGS_GO_MOO_PATH, HD_LOGS_PATH, KONIK_LOGS_PATH, MAPS_PATH, THEME_SAVE_PATH,
   StarPilotVariables, get_starpilot_toggles
 )
+
+
+def seed_desktop_theme_assets():
+  params = Params()
+  params_memory = Params(memory=True)
+  params_defaults = Params(return_defaults=True)
+  theme_manager = ThemeManager(params, params_memory, boot_run=True)
+
+  custom_themes = params_defaults.get_bool("CustomThemes")
+  random_themes = custom_themes and params_defaults.get_bool("RandomThemes")
+
+  starpilot_toggles = SimpleNamespace(
+    boot_logo=params_defaults.get("BootLogo", encoding="utf-8", default="starpilot"),
+    holiday_themes=params_defaults.get_bool("HolidayThemes"),
+    random_themes=random_themes,
+    random_themes_holidays=random_themes and params_defaults.get_bool("RandomThemesHolidays"),
+    color_scheme=params_defaults.get("ColorScheme", encoding="utf-8", default="stock") if custom_themes else "stock",
+    distance_icons=params_defaults.get("DistanceIconPack", encoding="utf-8", default="stock") if custom_themes else "stock",
+    icon_pack=params_defaults.get("IconPack", encoding="utf-8", default="stock") if custom_themes else "stock",
+    sound_pack=params_defaults.get("SoundPack", encoding="utf-8", default="stock") if custom_themes else "stock",
+    signal_icons=params_defaults.get("SignalAnimation", encoding="utf-8", default="stock") if custom_themes else "stock",
+    wheel_image=params_defaults.get("WheelIcon", encoding="utf-8", default="stock") if custom_themes else "stock",
+  )
+
+  theme_manager.update_active_theme(
+    time_validated=system_time_valid(),
+    starpilot_toggles=starpilot_toggles,
+    boot_run=True,
+  )
+  theme_manager.update_theme_asset("distance_icons", starpilot_toggles.distance_icons, boot_run=True)
+  theme_manager.update_wheel_image(starpilot_toggles.wheel_image, boot_run=True)
 
 
 def starpilot_boot_functions(build_metadata, params):

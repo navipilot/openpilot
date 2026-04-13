@@ -265,6 +265,14 @@ params.put_bool("ForceOffroad", False)
 PY
 }
 
+seed_starpilot_theme() {
+  "${ROOT_DIR}/.venv/bin/python3" - <<'PY'
+from openpilot.starpilot.common.starpilot_functions import seed_desktop_theme_assets
+
+seed_desktop_theme_assets()
+PY
+}
+
 build_replay() {
   SP_DISABLE_AUTO_DEVICE_SCONS=1 "${ROOT_DIR}/.venv/bin/scons" --extras -j"${jobs}" tools/replay/replay
 }
@@ -364,6 +372,7 @@ case " ${UI_TARGETS[*]-} " in
 esac
 
 seed_params
+seed_starpilot_theme
 
 echo "Starting replay: ${REPLAY_ARGS[*]}"
 launch_replay

@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 import glob
+import io
 import json
+import os
 import random
 import requests
 import shutil
+import subprocess
+import zipfile
 
 from datetime import date, timedelta
 from dateutil import easter
@@ -19,6 +23,7 @@ DOWNLOAD_PROGRESS_PARAM = "ThemeDownloadProgress"
 
 HOLIDAY_THEME_PATH = Path(__file__).parent / "holiday_themes"
 STOCKOP_THEME_PATH = Path(__file__).parent / "stock_theme"
+LOCAL_RESOURCES_PATH = Path(os.getenv("STARPILOT_LOCAL_RESOURCES_PATH", "~/StarPilot-Resources")).expanduser()
 
 HOLIDAY_SLUGS = {
   "new_years": "New Year's",
@@ -64,6 +69,7 @@ class ThemeManager:
     (THEME_SAVE_PATH / "bootlogos").mkdir(parents=True, exist_ok=True)
     (THEME_SAVE_PATH / "theme_packs").mkdir(parents=True, exist_ok=True)
     (THEME_SAVE_PATH / "steering_wheels").mkdir(parents=True, exist_ok=True)
+    self.sync_local_resources()
 
     self.theme_sizes = load_json_file(self.theme_sizes_path)
 
@@ -76,6 +82,96 @@ class ThemeManager:
 
     if boot_run:
       self.copy_default_theme()
+
+  @staticmethod
+  def _local_resources_available():
+    return LOCAL_RESOURCES_PATH.is_dir() and (LOCAL_RESOURCES_PATH / ".git").exists()
+
+  @staticmethod
+  def _git_list_tree(ref):
+    result = subprocess.run(
+      ["git", "-C", str(LOCAL_RESOURCES_PATH), "ls-tree", "-r", "--name-only", ref],
+      capture_output=True,
+      text=True,
+      check=True,
+    )
+    return [line for line in result.stdout.splitlines() if line]
+
+  @staticmethod
+  def _git_show_bytes(ref, path):
+    result = subprocess.run(
+      ["git", "-C", str(LOCAL_RESOURCES_PATH), "show", f"{ref}:{path}"],
+      capture_output=True,
+      check=True,
+    )
+    return result.stdout
+
+  @staticmethod
+  def _directory_has_files(path):
+    return path.is_dir() and any(path.iterdir())
+
+  @staticmethod
+  def _write_file_if_missing(destination, data):
+    if destination.exists() and destination.stat().st_size > 0:
+      return False
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(data)
+    return True
+
+  @staticmethod
+  def _extract_zip_if_missing(zip_bytes, destination):
+    if ThemeManager._directory_has_files(destination):
+      return False
+    destination.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as archive:
+      archive.extractall(destination)
+    return True
+
+  def sync_local_resources(self):
+    if not self._local_resources_available():
+      return
+
+    try:
+      imported_assets = 0
+
+      for path in self._git_list_tree("Steering-Wheels"):
+        suffix = Path(path).suffix.lower()
+        if suffix not in {".gif", ".png", ".webp", ".jpg", ".jpeg"}:
+          continue
+        destination = THEME_SAVE_PATH / "steering_wheels" / Path(path).name
+        imported_assets += int(self._write_file_if_missing(destination, self._git_show_bytes("Steering-Wheels", path)))
+
+      for path in self._git_list_tree("Themes"):
+        path_obj = Path(path)
+        suffix = path_obj.suffix.lower()
+
+        if path_obj.parts[:1] == ("bootlogo",) and suffix in {".png", ".jpg", ".jpeg"}:
+          destination = THEME_SAVE_PATH / "bootlogos" / path_obj.name
+          imported_assets += int(self._write_file_if_missing(destination, self._git_show_bytes("Themes", path)))
+          continue
+
+        if suffix != ".zip" or len(path_obj.parts) != 2:
+          continue
+
+        theme_name, archive_name = path_obj.parts
+        component = Path(archive_name).stem.lower()
+        if component not in {"colors", "distance_icons", "icons", "signals", "sounds"}:
+          continue
+
+        destination = THEME_SAVE_PATH / "theme_packs" / theme_name / component
+        imported_assets += int(self._extract_zip_if_missing(self._git_show_bytes("Themes", path), destination))
+
+      for path in self._git_list_tree("Distance-Icons"):
+        path_obj = Path(path)
+        if path_obj.suffix.lower() != ".zip":
+          continue
+        destination = THEME_SAVE_PATH / "theme_packs" / path_obj.stem / "distance_icons"
+        imported_assets += int(self._extract_zip_if_missing(self._git_show_bytes("Distance-Icons", path), destination))
+
+      if imported_assets:
+        print(f"Imported {imported_assets} local theme assets from {LOCAL_RESOURCES_PATH}")
+    except (FileNotFoundError, subprocess.CalledProcessError, zipfile.BadZipFile, OSError) as error:
+      print(f"Failed to sync local theme resources from {LOCAL_RESOURCES_PATH}: {error}")
 
   @staticmethod
   def calculate_thanksgiving(year):
@@ -645,9 +741,12 @@ class ThemeManager:
     if self.downloading_theme:
       return
 
+    self.sync_local_resources()
+
     repo_url = get_repository_url(self.session)
     if repo_url is None:
       print("GitHub and GitLab are offline...")
+      self.update_theme_params([], [], [], [], [], [], [])
       return
 
     assets = self.fetch_assets(repo_url, starpilot_toggles)
@@ -734,11 +833,20 @@ class ThemeManager:
 
     image_name = image.replace(" ", "_").lower()
     matching_files = [images for images in wheel_location.iterdir() if images.stem.lower() in {image_name, "wheel"}]
-    if matching_files:
-      source_file = matching_files[0]
-      destination_file = wheel_save_location / f"wheel{source_file.suffix}"
-      destination_file.symlink_to(source_file)
-      print(f"Linked {destination_file} to {source_file}")
+    if not matching_files:
+      stock_location = STOCKOP_THEME_PATH / "steering_wheel"
+      matching_files = [images for images in stock_location.iterdir() if images.stem.lower() == "wheel"]
+      if matching_files:
+        print(f"Steering wheel '{image}' not found, using the stock steering wheel instead")
+
+    if not matching_files:
+      print(f"No steering wheel asset found for '{image}'")
+      return
+
+    source_file = matching_files[0]
+    destination_file = wheel_save_location / f"wheel{source_file.suffix}"
+    destination_file.symlink_to(source_file)
+    print(f"Linked {destination_file} to {source_file}")
 
   def validate_themes(self, downloadable_boot_logos, downloadable_colors, downloadable_distance_icons, downloadable_icons, downloadable_signals, downloadable_sounds, downloadable_wheels, starpilot_toggles):
     downloaded_data = self.params.get("ThemesDownloaded")

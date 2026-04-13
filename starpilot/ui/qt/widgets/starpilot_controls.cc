@@ -65,16 +65,25 @@ void loadGif(const QString &gifPath, QSharedPointer<QMovie> &movie, const QSize 
   movie->start();
 }
 
+static QString resolveImagePath(const QString &basePath, const QStringList &extensions) {
+  for (const QString &extension : extensions) {
+    const QString candidate = basePath + "." + extension;
+    if (QFileInfo::exists(candidate)) {
+      return candidate;
+    }
+  }
+
+  return {};
+}
+
 void loadImage(const QString &basePath, QPixmap &pixmap, QSharedPointer<QMovie> &movie, const QSize &size, QWidget *parent) {
   if (!parent || basePath.isEmpty()) {
     return;
   }
 
   static QHash<QString, QPixmap> pixmapCache;
-  QString cacheKey = basePath + QString("_%1x%2").arg(size.width()).arg(size.height());
-
-  QString gifPath = basePath + ".gif";
-  if (QFileInfo::exists(gifPath)) {
+  const QString gifPath = resolveImagePath(basePath, {"gif"});
+  if (!gifPath.isEmpty()) {
     loadGif(gifPath, movie, size, parent);
     if (!pixmap.isNull()) {
       pixmap = QPixmap();
@@ -83,6 +92,18 @@ void loadImage(const QString &basePath, QPixmap &pixmap, QSharedPointer<QMovie> 
   }
 
   clearMovie(movie, parent);
+
+  const QString imagePath = resolveImagePath(basePath, {"png", "webp", "jpg", "jpeg"});
+  if (imagePath.isEmpty()) {
+    if (!pixmap.isNull()) {
+      pixmap = QPixmap();
+      parent->update();
+    }
+    return;
+  }
+
+  const QFileInfo imageInfo(imagePath);
+  const QString cacheKey = imagePath + QString("_%1x%2_%3").arg(size.width()).arg(size.height()).arg(imageInfo.lastModified().toMSecsSinceEpoch());
 
   if (pixmapCache.contains(cacheKey)) {
     QPixmap &cached = pixmapCache[cacheKey];
@@ -93,16 +114,7 @@ void loadImage(const QString &basePath, QPixmap &pixmap, QSharedPointer<QMovie> 
     return;
   }
 
-  QString pngPath = basePath + ".png";
-  if (!QFileInfo::exists(pngPath)) {
-    if (!pixmap.isNull()) {
-      pixmap = QPixmap();
-      parent->update();
-    }
-    return;
-  }
-
-  QPixmap loadedPixmap(pngPath);
+  QPixmap loadedPixmap(imagePath);
   if (!loadedPixmap.isNull()) {
     pixmap = loadedPixmap.scaled(size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
     pixmapCache.insert(cacheKey, pixmap);

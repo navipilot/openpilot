@@ -20,7 +20,7 @@ void drawIcon(QPainter &p, const QPoint &center, const QPixmap &img, const QBrus
 }
 
 // ExperimentalButton
-ExperimentalButton::ExperimentalButton(QWidget *parent) : experimental_mode(false), engageable(false), QPushButton(parent) {
+ExperimentalButton::ExperimentalButton(QWidget *parent) : QPushButton(parent), experimental_mode(false), engageable(false), steering_angle_deg(0) {
   setFixedSize(btn_size, btn_size);
 
   engage_img = loadPixmap("../assets/icons/chffr_wheel.png", {img_size, img_size});
@@ -86,6 +86,9 @@ void ExperimentalButton::paintEvent(QPaintEvent *event) {
     drawIcon(p, QPoint(btn_size / 2, btn_size / 2), wheel_gif->currentPixmap(), background_color, (isDown() || !engageable) ? 0.6 : 1.0, steering_angle_deg);
   } else if (!wheel_img.isNull()) {
     drawIcon(p, QPoint(btn_size / 2, btn_size / 2), wheel_img, background_color, (isDown() || !engageable) ? 0.6 : 1.0, steering_angle_deg);
+  } else {
+    QPixmap img = experimental_mode ? experimental_img : engage_img;
+    drawIcon(p, QPoint(btn_size / 2, btn_size / 2), img, background_color, (isDown() || !engageable) ? 0.6 : 1.0, steering_angle_deg);
   }
 }
 
@@ -115,4 +118,7 @@ void ExperimentalButton::updateBackgroundColor() {
 
 void ExperimentalButton::updateTheme() {
   loadImage("../../starpilot/assets/active_theme/steering_wheel/wheel", wheel_img, wheel_gif, QSize(img_size, img_size), this);
+  if (!wheel_gif && wheel_img.isNull()) {
+    loadImage("../../starpilot/assets/stock_theme/steering_wheel/wheel", wheel_img, wheel_gif, QSize(img_size, img_size), this);
+  }
 }

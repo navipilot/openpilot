@@ -120,6 +120,14 @@ start_fake_wifi() {
   FAKE_WIFI_PID=$!
 }
 
+seed_starpilot_theme() {
+  "${ROOT_DIR}/.venv/bin/python3" - <<'PY'
+from openpilot.starpilot.common.starpilot_functions import seed_desktop_theme_assets
+
+seed_desktop_theme_assets()
+PY
+}
+
 stop_fake_wifi() {
   if [[ -n "${FAKE_WIFI_PID}" ]]; then
     kill "${FAKE_WIFI_PID}" >/dev/null 2>&1 || true
@@ -225,6 +233,7 @@ if [[ "${SP_C3_COMPILE_ONLY:-0}" == "1" ]]; then
   exit 0
 fi
 
+seed_starpilot_theme
 start_fake_wifi
 trap stop_fake_wifi EXIT
 "${HOST_UI}" "$@"
