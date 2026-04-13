@@ -5,12 +5,15 @@ from openpilot.common.constants import CV
 HIGHWAY_LEAD_BEHAVIOR_MIN_SPEED = 45. * CV.MPH_TO_MS
 
 
-def get_tracked_lead_catchup_bias(v_ego: float, lead_distance: float, desired_gap: float, closing_speed: float) -> float:
+def get_tracked_lead_catchup_bias(v_ego: float, lead_distance: float, desired_gap: float, closing_speed: float,
+                                  v_cruise: float | None = None) -> float:
   gap_error = lead_distance - desired_gap
   actual_hw = lead_distance / max(v_ego, 1e-3)
   desired_hw = desired_gap / max(v_ego, 1e-3)
 
   if v_ego <= HIGHWAY_LEAD_BEHAVIOR_MIN_SPEED:
+    return 0.0
+  if v_cruise is not None and v_ego >= v_cruise:
     return 0.0
   if gap_error <= 0.0:
     return 0.0

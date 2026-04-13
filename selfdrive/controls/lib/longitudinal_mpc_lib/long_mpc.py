@@ -553,7 +553,7 @@ class LongitudinalMpc:
       if tracking_lead and lead_one.status:
         desired_gap = desired_follow_distance(v_ego, lead_one.vLead, t_follow)
         closing_speed = max(0.0, v_ego - lead_one.vLead)
-        cruise_obstacle += get_tracked_lead_catchup_bias(v_ego, lead_one.dRel, desired_gap, closing_speed)
+        cruise_obstacle += get_tracked_lead_catchup_bias(v_ego, lead_one.dRel, desired_gap, closing_speed, v_cruise=v_cruise)
       x_obstacles = np.column_stack([lead_0_obstacle, lead_1_obstacle, cruise_obstacle])
       self.source = SOURCES[np.argmin(x_obstacles[0])]
 
