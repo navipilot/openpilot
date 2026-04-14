@@ -10,6 +10,7 @@ from openpilot.common.realtime import DT_MDL
 from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.selfdrive.controls.lib.longcontrol import LongCtrlState
 from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import LongitudinalMpc
+from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import STOP_DISTANCE
 from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import T_IDXS as T_IDXS_MPC
 from openpilot.selfdrive.controls.lib.drive_helpers import CONTROL_N
 from openpilot.selfdrive.car.cruise import V_CRUISE_UNSET
@@ -216,6 +217,26 @@ class LongitudinalPlanner:
       throttle_prob = 1.0
     return x, v, a, j, throttle_prob
 
+  def get_close_lead_brake_cap(self, lead, v_ego, accel_min):
+    if lead is None or not lead.status:
+      return None
+
+    lead_brake = max(0.0, -float(lead.aLeadK))
+    reaction_t = max(self.CP.longitudinalActuatorDelay, self.dt)
+    closing_speed = max(0.0, v_ego - lead.vLead)
+    projected_closing_speed = closing_speed + lead_brake * reaction_t
+    if projected_closing_speed < 0.1 and lead_brake < 0.5:
+      return None
+
+    target_gap = float(np.clip(2.0 + 0.2 * v_ego, 2.0, 6.0))
+    delay_buffer = projected_closing_speed * reaction_t
+    available_gap = max(float(lead.dRel) - target_gap - delay_buffer, 0.5)
+    required_decel = (projected_closing_speed ** 2) / (2.0 * available_gap) + 0.7 * lead_brake
+    if required_decel < 0.2:
+      return None
+
+    return max(accel_min, -required_decel)
+
   def update(self, sm, starpilot_toggles):
     self.generation = getattr(starpilot_toggles, "model_version", None)
     self.mode = 'blended' if sm['selfdriveState'].experimentalMode else 'acc'
@@ -230,6 +251,9 @@ class LongitudinalPlanner:
 
     v_ego = get_planner_v_ego(self.CP, sm['carState'])
     v_cruise = sm['starpilotPlan'].vCruise
+    if not np.isfinite(v_cruise):
+      cloudlog.error(f"Longitudinal planner received non-finite vCruise={v_cruise}, falling back to v_ego={v_ego:.2f}")
+      v_cruise = max(v_ego, 0.0)
     v_cruise_initialized = sm['carState'].vCruise != V_CRUISE_UNSET
 
     long_control_off = sm['controlsState'].longControlState == LongCtrlState.off
@@ -270,6 +294,7 @@ class LongitudinalPlanner:
       clipped_accel_coast = max(accel_coast, accel_limits_turns[0])
       clipped_accel_coast_interp = np.interp(v_ego, [MIN_ALLOW_THROTTLE_SPEED, MIN_ALLOW_THROTTLE_SPEED*2], [accel_limits_turns[1], clipped_accel_coast])
       accel_limits_turns[1] = min(accel_limits_turns[1], clipped_accel_coast_interp)
+    no_throttle_output_max = accel_limits_turns[1]
 
     if force_slow_decel:
       v_cruise = 0.0
@@ -277,6 +302,7 @@ class LongitudinalPlanner:
     accel_limits_turns[0] = min(accel_limits_turns[0], self.a_desired + 0.05)
     accel_limits_turns[1] = max(accel_limits_turns[1], self.a_desired - 0.05)
 
+    tracking_lead = bool(sm['starpilotPlan'].trackingLead)
     self.lead_one = sm['radarState'].leadOne
     self.lead_two = sm['radarState'].leadTwo
 
@@ -395,7 +421,6 @@ class LongitudinalPlanner:
     dec_mpc_mode = self.get_mpc_mode()
     if not self.mlsim:
       self.mpc.mode = dec_mpc_mode
-    tracking_lead = bool(sm['starpilotPlan'].trackingLead)
     self.mpc.update(sm['radarState'], v_cruise, x, v, a, j,
                     sm['starpilotPlan'].dangerFactor, sm['starpilotPlan'].tFollow,
                     personality=personality, tracking_lead=tracking_lead)
@@ -465,7 +490,33 @@ class LongitudinalPlanner:
         self.v_desired_trajectory, self.a_desired_trajectory,
         action_t=action_t, vEgoStopping=starpilot_toggles.vEgoStopping)
 
-    self.output_a_target = float(output_a_target)
+    close_lead_caps = []
+    if tracking_lead:
+      for lead in (self.lead_one, self.lead_two):
+        cap = self.get_close_lead_brake_cap(lead, v_ego, accel_limits_turns[0])
+        if cap is not None:
+          close_lead_caps.append(cap)
+    if close_lead_caps:
+      close_lead_brake_cap = min(close_lead_caps)
+      self.a_desired = min(self.a_desired, close_lead_brake_cap)
+      output_a_target = min(output_a_target, close_lead_brake_cap)
+
+    if tracking_lead and sm['carState'].standstill:
+      moving_leads = [lead for lead in (self.lead_one, self.lead_two)
+                      if lead.status and lead.vLead > 0.0 and lead.dRel >= STOP_DISTANCE - 0.5]
+      if moving_leads:
+        output_a_target = max(output_a_target, 0.3)
+
+    if tracking_lead and np.isfinite(v_cruise) and any(lead.status for lead in (self.lead_one, self.lead_two)):
+      # Keep follow/catchup behavior from pulling past the cruise target. Using the
+      # same action horizon as the planner preserves normal accel farther below set speed.
+      cruise_accel_cap = (v_cruise - v_ego + 0.01) / max(action_t, self.dt)
+      output_a_target = min(output_a_target, cruise_accel_cap)
+
+    output_accel_max = no_throttle_output_max if not self.allow_throttle else accel_limits_turns[1]
+    output_a_target = float(np.clip(output_a_target, accel_limits_turns[0], output_accel_max))
+
+    self.output_a_target = output_a_target
     self.output_should_stop = bool(output_should_stop)
 
   def publish(self, sm, pm):

@@ -526,7 +526,7 @@ class LongitudinalMpc:
     self.status = (lead_one.status and tracking_lead) or lead_two.status
 
     lead_xv_0 = self.process_lead(lead_one, tracking_lead)
-    lead_xv_1 = self.process_lead(lead_two, v_ego)
+    lead_xv_1 = self.process_lead(lead_two, tracking_lead)
 
     # To estimate a safe distance from a moving lead, we calculate how much stopping
     # distance that lead needs as a minimum. We can add that to the current distance
