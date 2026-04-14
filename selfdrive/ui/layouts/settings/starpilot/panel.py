@@ -106,7 +106,8 @@ class StarPilotPanel(Widget):
                 icon_path=cat.get("icon"),
                 bg_color=cat.get("color"),
                 is_enabled=cat.get("is_enabled"),
-                desc=tr(cat.get("desc", ""))
+                desc=tr(cat.get("desc", "")),
+                on_test=cat.get("on_test"),
             )
 
         return None

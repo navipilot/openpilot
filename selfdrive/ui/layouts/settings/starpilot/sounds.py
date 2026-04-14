@@ -80,8 +80,6 @@ class StarPilotVolumeControlLayout(StarPilotPanel):
   def __init__(self):
     super().__init__()
     self._init_sound_player()
-    self._pending_sound_test = None
-    self._last_sound_change_time = 0.0
 
     self.SECTIONS = [
       {
@@ -94,12 +92,6 @@ class StarPilotVolumeControlLayout(StarPilotPanel):
       }
     ]
     self._rebuild_grid()
-
-  def _update_state(self):
-    super()._update_state()
-    if self._pending_sound_test and (time.monotonic() - self._last_sound_change_time) > 0.8:
-      self._test_sound(self._pending_sound_test)
-      self._pending_sound_test = None
 
   def _build_volume_categories(self):
     cats = []
@@ -114,21 +106,23 @@ class StarPilotVolumeControlLayout(StarPilotPanel):
         if new_v != 101 and new_v < self.VOLUME_INFO[k]["min"]:
           new_v = self.VOLUME_INFO[k]["min"]
         self._params.put_int(k, new_v)
-        self._pending_sound_test = k
-        self._last_sound_change_time = time.monotonic()
+
+      def test_cb(k=key):
+        self._test_sound(k)
 
       cats.append({
         "title": info["title"],
         "type": "slider",
         "get_value": get_val,
         "set_value": set_val,
+        "on_test": test_cb,
         "min_val": 0,
         "max_val": 101,
         "step": 1,
         "unit": "%",
         "labels": {0: tr("Muted"), 101: tr("Auto")},
         "icon": info["icon"],
-        "color": "#3B82F6"
+        "color": "#3B82F6",
       })
     return cats
 
@@ -150,7 +144,7 @@ class StarPilotVolumeControlLayout(StarPilotPanel):
       "unit": " " + tr("min"),
       "labels": {0: tr("Off"), 1: tr("1 minute")},
       "icon": self.COOLDOWN_INFO["icon"],
-      "color": "#3B82F6"
+      "color": "#3B82F6",
     }]
 
   @classmethod
