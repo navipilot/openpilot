@@ -374,7 +374,7 @@ static void generic_rx_checks(void) {
   }
   steering_disengage_prev = steering_disengage;
 
-  aol_allowed = (acc_main_on || lkas_on) && (alternative_experience & ALT_EXP_ALWAYS_ON_LATERAL);
+  aol_allowed = (alternative_experience & ALT_EXP_ALWAYS_ON_LATERAL) != 0U;
 }
 
 static void stock_ecu_check(bool stock_ecu_detected) {

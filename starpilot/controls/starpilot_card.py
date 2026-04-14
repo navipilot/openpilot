@@ -17,6 +17,7 @@ class StarPilotCard:
 
     self.accel_pressed = False
     self.always_on_lateral_allowed = False
+    self.prev_active = False
     self.decel_pressed = False
     self.distancePressed_previously = False
     self.force_coast = False
@@ -77,6 +78,13 @@ class StarPilotCard:
           self.always_on_lateral_allowed = not self.always_on_lateral_allowed
     elif starpilot_toggles.always_on_lateral_main:
       self.always_on_lateral_allowed = carState.cruiseState.available
+
+    # On rising edge of engagement (SET press enabling lat+long), auto-enable AOL
+    # so that lateral persists when braking disengages longitudinal
+    if sm["selfdriveState"].active and not self.prev_active and self.always_on_lateral_set and starpilot_toggles.always_on_lateral_lkas:
+      self.always_on_lateral_allowed = True
+
+    self.prev_active = sm["selfdriveState"].active
 
     self.always_on_lateral_enabled = self.always_on_lateral_allowed and self.always_on_lateral_set
     self.always_on_lateral_enabled &= carState.gearShifter not in NON_DRIVING_GEARS
