@@ -35,6 +35,26 @@ LaneChangeDirection = log.LaneChangeDirection
 ACTUATOR_FIELDS = tuple(car.CarControl.Actuators.schema.fields.keys())
 
 
+def get_gm_hud_set_speed(set_speed_ms: float, controls_enabled: bool, starpilot_toggles, starpilot_plan) -> float:
+  spoofed_speed = set_speed_ms
+
+  set_speed_offset = float(getattr(starpilot_toggles, "set_speed_offset", 0.0) or 0.0)
+  if spoofed_speed > 0 and set_speed_offset > 0:
+    spoofed_speed += set_speed_offset * CV.KPH_TO_MS
+
+  if not controls_enabled or not getattr(starpilot_toggles, "speed_limit_controller", False):
+    return spoofed_speed
+
+  slc_source = str(getattr(starpilot_plan, "slcSpeedLimitSource", "") or "")
+  slc_speed_limit = float(getattr(starpilot_plan, "slcSpeedLimit", 0.0) or 0.0)
+  slc_speed_limit_offset = float(getattr(starpilot_plan, "slcSpeedLimitOffset", 0.0) or 0.0)
+
+  if slc_source != "None" and slc_speed_limit > 0:
+    return slc_speed_limit + slc_speed_limit_offset
+
+  return spoofed_speed
+
+
 class Controls:
   def __init__(self) -> None:
     self.params = Params()
@@ -192,7 +212,10 @@ class Controls:
     CC.cruiseControl.resume = CC.enabled and CS.cruiseState.standstill and not self.sm['longitudinalPlan'].shouldStop
 
     hudControl = CC.hudControl
-    hudControl.setSpeed = float(CS.vCruiseCluster * CV.KPH_TO_MS)
+    hud_set_speed = float(CS.vCruiseCluster * CV.KPH_TO_MS)
+    if self.CP.brand == "gm":
+      hud_set_speed = get_gm_hud_set_speed(hud_set_speed, CC.enabled, self.starpilot_toggles, self.sm['starpilotPlan'])
+    hudControl.setSpeed = hud_set_speed
     hudControl.speedVisible = CC.enabled
     hudControl.lanesVisible = CC.enabled
     hudControl.leadVisible = self.sm['longitudinalPlan'].hasLead
