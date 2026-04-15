@@ -99,15 +99,15 @@ class GalaxyBigButton(BigButton):
       return
     gui_app.push_widget(GalaxyQRDialog(f"https://galaxy.firestar.link/{slug}"))
 
-  def _pair_with_pin(self, pin: str):
-    clean_pin = str(pin or "").strip()
-    if len(clean_pin) < 6:
-      gui_app.push_widget(BigDialog("", "PIN must be at least 6 characters."))
+  def _pair_with_password(self, password: str):
+    clean_password = str(password or "").strip()
+    if len(clean_password) < 6:
+      gui_app.push_widget(BigDialog("", "Password must be at least 6 characters."))
       return
 
     try:
       self._galaxy_dir.mkdir(parents=True, exist_ok=True)
-      self._auth_path.write_text(hashlib.sha256(clean_pin.encode("utf-8")).hexdigest(), encoding="utf-8")
+      self._auth_path.write_text(hashlib.sha256(clean_password.encode("utf-8")).hexdigest(), encoding="utf-8")
       self._session_path.write_text(secrets.token_hex(32), encoding="utf-8")
       slug = "".join(secrets.choice(self._SLUG_CHARS) for _ in range(16))
       self._slug_path.write_text(slug, encoding="utf-8")
@@ -153,7 +153,7 @@ class GalaxyBigButton(BigButton):
       gui_app.push_widget(dialog)
       return
 
-    gui_app.push_widget(BigInputDialog("create galaxy pin...", default_text="", minimum_length=6, confirm_callback=self._pair_with_pin))
+    gui_app.push_widget(BigInputDialog("set galaxy password...", default_text="", minimum_length=6, confirm_callback=self._pair_with_password))
 
   def _update_state(self):
     self.set_value("paired" if self._is_paired() else "pair")

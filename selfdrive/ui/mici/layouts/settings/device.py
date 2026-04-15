@@ -2,15 +2,18 @@ import os
 import threading
 import pyray as rl
 from enum import IntEnum
+from pathlib import Path
 from collections.abc import Callable
 
 from openpilot.common.basedir import BASEDIR
 from openpilot.common.params import Params
 from openpilot.common.time_helpers import system_time_valid
+from openpilot.system.hardware import PC
+from openpilot.system.hardware.hw import Paths
 from openpilot.system.ui.widgets.scroller import NavRawScrollPanel, NavScroller
 from openpilot.selfdrive.ui.mici.widgets.button import BigButton, BigCircleButton, BigParamControl
-from openpilot.selfdrive.ui.mici.widgets.dialog import BigDialog, BigConfirmationDialog
-from openpilot.selfdrive.ui.mici.widgets.pairing_dialog import PairingDialog
+from openpilot.selfdrive.ui.mici.widgets.dialog import BigDialog, BigConfirmationDialog, BigMultiOptionDialog
+from openpilot.selfdrive.ui.mici.widgets.pairing_dialog import PairingDialog, get_pairing_backend_name, get_pairing_host
 from openpilot.selfdrive.ui.mici.onroad.driver_camera_dialog import DriverCameraDialog
 from openpilot.selfdrive.ui.mici.layouts.onboarding import TrainingGuide, TermsPage
 from openpilot.system.ui.lib.application import gui_app, FontWeight, MousePos
@@ -128,9 +131,66 @@ class UpdaterState(IntEnum):
   UPDATER_RESPONDING = 2
 
 
+def _konik_toggle_path() -> Path:
+  return Path(Paths.comma_home()) / "starpilot" / "cache" / "use_konik" if PC else Path("/cache/use_konik")
+
+
+class ConnectServerBigButton(BigButton):
+  _COMMA_OPTION = "comma connect"
+  _KONIK_OPTION = "konik connect"
+
+  def __init__(self):
+    self._params = Params()
+    self._reboot_icon = gui_app.texture("icons_mici/settings/device/reboot.png", 64, 70)
+    super().__init__("connect\nserver", get_pairing_host(self._params), gui_app.texture("icons_mici/settings/comma_icon.png", 33, 60))
+
+  def _get_label_font_size(self):
+    return 52
+
+  def _selected_option(self) -> str:
+    return self._KONIK_OPTION if self._params.get_bool("UseKonikServer") else self._COMMA_OPTION
+
+  def _apply_selection(self, selection: str):
+    use_konik = selection == self._KONIK_OPTION
+    self._params.put_bool("UseKonikServer", use_konik)
+
+    toggle_path = _konik_toggle_path()
+    toggle_path.parent.mkdir(parents=True, exist_ok=True)
+    if use_konik:
+      toggle_path.touch(exist_ok=True)
+    else:
+      try:
+        toggle_path.unlink(missing_ok=True)
+      except TypeError:
+        if toggle_path.exists():
+          toggle_path.unlink()
+
+    ui_state.params.put_bool("DoReboot", True)
+
+  def _handle_mouse_release(self, mouse_pos: MousePos):
+    super()._handle_mouse_release(mouse_pos)
+
+    dialog_holder: dict[str, BigMultiOptionDialog] = {}
+
+    def on_confirm():
+      selection = dialog_holder["dialog"].get_selected_option()
+      if selection == self._selected_option():
+        return
+
+      gui_app.push_widget(BigConfirmationDialog("slide to\nreboot", self._reboot_icon, lambda: self._apply_selection(selection)))
+
+    dialog = BigMultiOptionDialog(options=[self._COMMA_OPTION, self._KONIK_OPTION], default=self._selected_option(), right_btn_callback=on_confirm)
+    dialog_holder["dialog"] = dialog
+    gui_app.push_widget(dialog)
+
+  def _update_state(self):
+    super()._update_state()
+    self.set_value(get_pairing_host(self._params))
+
+
 class PairBigButton(BigButton):
   def __init__(self):
-    super().__init__("pair", "connect.comma.ai", gui_app.texture("icons_mici/settings/comma_icon.png", 33, 60))
+    super().__init__("pair", get_pairing_host(ui_state.params), gui_app.texture("icons_mici/settings/comma_icon.png", 33, 60))
 
   def _get_label_font_size(self):
     return 64
@@ -146,7 +206,7 @@ class PairBigButton(BigButton):
         self.set_value("upgrade to prime")
     else:
       self.set_text("pair")
-      self.set_value("connect.comma.ai")
+      self.set_value(get_pairing_host(ui_state.params))
 
   def _handle_mouse_release(self, mouse_pos: MousePos):
     super()._handle_mouse_release(mouse_pos)
@@ -158,7 +218,7 @@ class PairBigButton(BigButton):
     if not system_time_valid():
       dlg = BigDialog("", tr("Please connect to Wi-Fi to complete initial pairing."))
     elif UNREGISTERED_DONGLE_ID == (ui_state.params.get("DongleId") or UNREGISTERED_DONGLE_ID):
-      dlg = BigDialog("", tr("Device must be registered with the comma.ai backend to pair."))
+      dlg = BigDialog("", f"Device must be registered with the {get_pairing_backend_name(ui_state.params)} backend to pair.")
     else:
       dlg = PairingDialog()
     gui_app.push_widget(dlg)
@@ -338,6 +398,7 @@ class DeviceLayoutMici(NavScroller):
     regulatory_btn = BigButton("regulatory info", "", gui_app.texture("icons_mici/settings/device/info.png", 64, 64))
     regulatory_btn.set_click_callback(self._on_regulatory)
 
+    self._connect_server_btn = ConnectServerBigButton()
     self._simple_mode_btn = BigParamControl("simple mode", "SimpleMode")
 
     driver_cam_btn = BigButton("driver\ncamera preview", "", gui_app.texture("icons_mici/settings/device/cameras.png", 64, 64))
@@ -354,6 +415,7 @@ class DeviceLayoutMici(NavScroller):
     self._scroller.add_widgets([
       DeviceInfoLayoutMici(),
       UpdateOpenpilotBigButton(),
+      self._connect_server_btn,
       PairBigButton(),
       self._simple_mode_btn,
       review_training_guide_btn,

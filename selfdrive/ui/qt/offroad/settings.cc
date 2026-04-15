@@ -344,8 +344,8 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
     const std::string current_password = util::read_file(galaxy_auth_path);
     if (current_password.empty()) {
       QString new_password = InputDialog::getText(
-        tr("Enter Password"), this,
-        tr("Please enter a password to secure your Galaxy access. (Min 6 characters)"),
+        tr("Set Galaxy Password"), this,
+        tr("Set a password to secure your Galaxy access. (Min 6 characters)"),
         false, 6);
       if (new_password.isEmpty()) {
         return;

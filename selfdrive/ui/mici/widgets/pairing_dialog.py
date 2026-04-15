@@ -12,6 +12,23 @@ from openpilot.system.ui.lib.application import FontWeight, gui_app
 from openpilot.system.ui.widgets.label import UnifiedLabel
 
 
+def use_konik_server(params: Params | None = None) -> bool:
+  params = params or Params()
+  return params.get_bool("UseKonikServer")
+
+
+def get_pairing_host(params: Params | None = None) -> str:
+  return "stable.konik.ai" if use_konik_server(params) else "connect.comma.ai"
+
+
+def get_pairing_service_label(params: Params | None = None) -> str:
+  return "konik connect" if use_konik_server(params) else "comma connect"
+
+
+def get_pairing_backend_name(params: Params | None = None) -> str:
+  return "Konik" if use_konik_server(params) else "comma.ai"
+
+
 class PairingDialog(NavWidget):
   """Dialog for device pairing with QR code."""
 
@@ -24,7 +41,8 @@ class PairingDialog(NavWidget):
     self._last_qr_generation = float("-inf")
 
     self._txt_pair = gui_app.texture("icons_mici/settings/device/pair.png", 33, 60)
-    self._pair_label = UnifiedLabel("pair with comma connect", font_size=48, font_weight=FontWeight.BOLD, line_height=0.8)
+    self._pair_label = UnifiedLabel(f"pair with {get_pairing_service_label(self._params)}", font_size=48, font_weight=FontWeight.BOLD,
+                                    line_height=0.8)
 
   def _get_pairing_url(self) -> str:
     try:
@@ -33,7 +51,7 @@ class PairingDialog(NavWidget):
     except Exception as e:
       cloudlog.warning(f"Failed to get pairing token: {e}")
       token = ""
-    return f"https://connect.comma.ai/?pair={token}"
+    return f"https://{get_pairing_host(self._params)}/?pair={token}"
 
   def _generate_qr_code(self) -> None:
     try:
