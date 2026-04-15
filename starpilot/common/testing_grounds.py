@@ -71,10 +71,10 @@ TESTING_GROUNDS_SLOT_DEFINITIONS = (
   },
   {
     "id": TESTING_GROUND_7,
-    "name": "Unused",
-    "description": "",
-    "aLabel": "A",
-    "bLabel": "B",
+    "name": "Plexy's Car",
+    "description": "Volt lateral A/B sandbox for Plexy's baseline torque tuning.",
+    "aLabel": "A - Installed tune",
+    "bLabel": "B - Plexy baseline",
   },
 )
 

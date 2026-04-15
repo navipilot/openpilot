@@ -130,6 +130,31 @@ BOLT_2022_2023_TURN_IN_FRICTION_BOOST_RIGHT = 0.04
 BOLT_2022_2023_UNWIND_FRICTION_REDUCTION_LEFT = 0.21
 BOLT_2022_2023_UNWIND_FRICTION_REDUCTION_RIGHT = 0.17
 
+VOLT_PLEXY_LATERAL_TESTING_GROUND_ID = testing_ground.id_7
+VOLT_PLEXY_FF_GAIN_LEFT = 0.11
+VOLT_PLEXY_FF_GAIN_RIGHT = 0.05
+VOLT_PLEXY_FF_ONSET = 0.10
+VOLT_PLEXY_FF_ONSET_WIDTH = 0.06
+VOLT_PLEXY_FF_CUTOFF = 1.35
+VOLT_PLEXY_FF_CUTOFF_WIDTH = 0.24
+VOLT_PLEXY_TRANSITION_SPEED = 10.5
+VOLT_PLEXY_PHASE_SCALE = 0.10
+VOLT_PLEXY_TURN_IN_BOOST_LEFT = 0.18
+VOLT_PLEXY_TURN_IN_BOOST_RIGHT = 0.08
+VOLT_PLEXY_UNWIND_TAPER_LEFT = 0.22
+VOLT_PLEXY_UNWIND_TAPER_RIGHT = 0.34
+VOLT_PLEXY_FRICTION_MULT = 1.04
+VOLT_PLEXY_FRICTION_LAT_RISE = 0.22
+VOLT_PLEXY_FRICTION_JERK_RISE = 0.24
+VOLT_PLEXY_TURN_IN_THRESHOLD_REDUCTION_LEFT = 0.14
+VOLT_PLEXY_TURN_IN_THRESHOLD_REDUCTION_RIGHT = 0.08
+VOLT_PLEXY_UNWIND_THRESHOLD_INCREASE_LEFT = 0.15
+VOLT_PLEXY_UNWIND_THRESHOLD_INCREASE_RIGHT = 0.24
+VOLT_PLEXY_TURN_IN_FRICTION_BOOST_LEFT = 0.07
+VOLT_PLEXY_TURN_IN_FRICTION_BOOST_RIGHT = 0.03
+VOLT_PLEXY_UNWIND_FRICTION_REDUCTION_LEFT = 0.16
+VOLT_PLEXY_UNWIND_FRICTION_REDUCTION_RIGHT = 0.26
+
 
 def _sigmoid(x: float) -> float:
   if x >= 0.0:
@@ -359,6 +384,78 @@ def get_bolt_2022_2023_friction_scale(v_ego: float, desired_lateral_accel: float
   return min(max(friction_scale, 0.92), 1.22)
 
 
+def volt_plexy_lateral_testing_ground_active() -> bool:
+  return testing_ground.use(VOLT_PLEXY_LATERAL_TESTING_GROUND_ID)
+
+
+def _volt_plexy_sigmoid(x: float) -> float:
+  return _sigmoid(x)
+
+
+def _volt_plexy_low_speed_factor(v_ego: float) -> float:
+  return 1.0 / (1.0 + (max(v_ego, 0.0) / VOLT_PLEXY_TRANSITION_SPEED) ** 2)
+
+
+def _volt_plexy_transition_phase(desired_lateral_accel: float, desired_lateral_jerk: float) -> float:
+  return math.tanh((desired_lateral_accel * desired_lateral_jerk) / VOLT_PLEXY_PHASE_SCALE)
+
+
+def _volt_plexy_side_value(desired_lateral_accel: float, left_value: float, right_value: float) -> float:
+  return left_value if desired_lateral_accel >= 0.0 else right_value
+
+
+def _volt_plexy_transition_envelope(v_ego: float, desired_lateral_accel: float, desired_lateral_jerk: float) -> float:
+  lat_factor = 1.0 - math.exp(-abs(desired_lateral_accel) / VOLT_PLEXY_FRICTION_LAT_RISE)
+  jerk_factor = 1.0 - math.exp(-abs(desired_lateral_jerk) / VOLT_PLEXY_FRICTION_JERK_RISE)
+  return _volt_plexy_low_speed_factor(v_ego) * lat_factor * jerk_factor
+
+
+def get_volt_plexy_ff_scale(desired_lateral_accel: float, desired_lateral_jerk: float, v_ego: float) -> float:
+  if desired_lateral_accel == 0.0:
+    return 1.0
+
+  gain = _volt_plexy_side_value(desired_lateral_accel, VOLT_PLEXY_FF_GAIN_LEFT, VOLT_PLEXY_FF_GAIN_RIGHT)
+  abs_lateral_accel = abs(desired_lateral_accel)
+  onset = _volt_plexy_sigmoid((abs_lateral_accel - VOLT_PLEXY_FF_ONSET) / VOLT_PLEXY_FF_ONSET_WIDTH)
+  cutoff = _volt_plexy_sigmoid((VOLT_PLEXY_FF_CUTOFF - abs_lateral_accel) / VOLT_PLEXY_FF_CUTOFF_WIDTH)
+  extra_scale = gain * onset * cutoff
+  phase = _volt_plexy_transition_phase(desired_lateral_accel, desired_lateral_jerk)
+  turn_in_weight = max(phase, 0.0)
+  unwind_weight = max(-phase, 0.0)
+  low_speed_factor = _volt_plexy_low_speed_factor(v_ego)
+  turn_in_boost = 1.0 + (_volt_plexy_side_value(desired_lateral_accel, VOLT_PLEXY_TURN_IN_BOOST_LEFT, VOLT_PLEXY_TURN_IN_BOOST_RIGHT) *
+                          turn_in_weight * low_speed_factor)
+  unwind_taper = 1.0 - (_volt_plexy_side_value(desired_lateral_accel, VOLT_PLEXY_UNWIND_TAPER_LEFT, VOLT_PLEXY_UNWIND_TAPER_RIGHT) *
+                         unwind_weight * (0.35 + 0.65 * low_speed_factor))
+  return 1.0 + (extra_scale * turn_in_boost * max(unwind_taper, 0.0))
+
+
+def get_volt_plexy_friction_threshold(v_ego: float, desired_lateral_accel: float = 0.0, desired_lateral_jerk: float = 0.0) -> float:
+  base_threshold = get_friction_threshold(v_ego)
+  transition_envelope = _volt_plexy_transition_envelope(v_ego, desired_lateral_accel, desired_lateral_jerk)
+  phase = _volt_plexy_transition_phase(desired_lateral_accel, desired_lateral_jerk)
+  turn_in_weight = max(phase, 0.0)
+  unwind_weight = max(-phase, 0.0)
+  threshold_scale = 1.0 - (_volt_plexy_side_value(desired_lateral_accel, VOLT_PLEXY_TURN_IN_THRESHOLD_REDUCTION_LEFT, VOLT_PLEXY_TURN_IN_THRESHOLD_REDUCTION_RIGHT) *
+                           transition_envelope * turn_in_weight)
+  threshold_scale += (_volt_plexy_side_value(desired_lateral_accel, VOLT_PLEXY_UNWIND_THRESHOLD_INCREASE_LEFT, VOLT_PLEXY_UNWIND_THRESHOLD_INCREASE_RIGHT) *
+                      transition_envelope * unwind_weight)
+  return base_threshold * min(max(threshold_scale, 0.84), 1.14)
+
+
+def get_volt_plexy_friction_scale(v_ego: float, desired_lateral_accel: float, desired_lateral_jerk: float) -> float:
+  transition_envelope = _volt_plexy_transition_envelope(v_ego, desired_lateral_accel, desired_lateral_jerk)
+  phase = _volt_plexy_transition_phase(desired_lateral_accel, desired_lateral_jerk)
+  turn_in_weight = max(phase, 0.0)
+  unwind_weight = max(-phase, 0.0)
+  friction_scale = VOLT_PLEXY_FRICTION_MULT
+  friction_scale += (_volt_plexy_side_value(desired_lateral_accel, VOLT_PLEXY_TURN_IN_FRICTION_BOOST_LEFT, VOLT_PLEXY_TURN_IN_FRICTION_BOOST_RIGHT) *
+                     transition_envelope * turn_in_weight)
+  friction_scale -= (_volt_plexy_side_value(desired_lateral_accel, VOLT_PLEXY_UNWIND_FRICTION_REDUCTION_LEFT, VOLT_PLEXY_UNWIND_FRICTION_REDUCTION_RIGHT) *
+                     transition_envelope * unwind_weight)
+  return min(max(friction_scale, 0.90), 1.12)
+
+
 class LatControlTorque(LatControl):
   def __init__(self, CP, CI, dt):
     super().__init__(CP, CI, dt)
@@ -384,6 +481,7 @@ class LatControlTorque(LatControl):
     self.is_bolt_2022_2023 = CP.carFingerprint in BOLT_2022_2023_CARS
     self.is_bolt_2018_2021 = CP.carFingerprint in BOLT_2018_2021_CARS
     self.is_bolt_2017 = CP.carFingerprint in BOLT_2017_CARS
+    self.is_volt_cc = CP.carFingerprint == GM_CAR.CHEVROLET_VOLT_CC
     self.is_silverado = CP.carFingerprint == GM_CAR.CHEVROLET_SILVERADO
     self.use_bolt_ff_scaling = self.is_bolt_2022_2023 or self.is_bolt_2018_2021 or self.is_bolt_2017
     self.use_bolt_ki_multiplier = self.use_bolt_ff_scaling
@@ -467,6 +565,7 @@ class LatControlTorque(LatControl):
         ff *= ff_scale
       bolt_2022_2023_tuned_path_active = self.is_bolt_2022_2023
       bolt_2018_2021_tuned_path_active = self.is_bolt_2018_2021
+      volt_plexy_test_active = self.is_volt_cc and volt_plexy_lateral_testing_ground_active()
       friction_threshold = get_friction_threshold(CS.vEgo)
       friction_scale = 1.0
       if bolt_2022_2023_tuned_path_active:
@@ -476,6 +575,10 @@ class LatControlTorque(LatControl):
       elif bolt_2018_2021_tuned_path_active:
         friction_threshold = get_bolt_2018_2021_friction_threshold(CS.vEgo, setpoint, desired_lateral_jerk)
         friction_scale = get_bolt_2018_2021_friction_scale(CS.vEgo, setpoint, desired_lateral_jerk)
+      elif volt_plexy_test_active:
+        ff *= get_volt_plexy_ff_scale(setpoint, desired_lateral_jerk, CS.vEgo)
+        friction_threshold = get_volt_plexy_friction_threshold(CS.vEgo, setpoint, desired_lateral_jerk)
+        friction_scale = get_volt_plexy_friction_scale(CS.vEgo, setpoint, desired_lateral_jerk)
       ff += friction_scale * get_friction(error_with_lsf + JERK_GAIN * desired_lateral_jerk, lateral_accel_deadzone, friction_threshold, self.torque_params)
       deadzone_boost_active = False
       if self.torque_deadzone_boost > 0.0 and abs(gravity_adjusted_future_lateral_accel) < DEADZONE_BOOST_LAT_ACCEL:
