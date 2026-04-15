@@ -86,18 +86,6 @@ class StarPilotPlanner:
       self.starpilot_acceleration.max_accel = 0
       self.starpilot_acceleration.min_accel = 0
 
-    if controls_enabled and starpilot_toggles.conditional_experimental_mode:
-      self.starpilot_cem.update(v_ego, sm, starpilot_toggles)
-    else:
-      self.starpilot_cem.curve_detected = False
-      self.starpilot_cem.stop_sign_and_light(v_ego, sm, PLANNER_TIME - 2)
-
-    self.driving_in_curve = abs(self.lateral_acceleration) >= MINIMUM_LATERAL_ACCELERATION
-
-    self.starpilot_events.update(controls_enabled, v_cruise, sm, starpilot_toggles)
-
-    self.starpilot_following.update(controls_enabled, v_ego, sm, starpilot_toggles)
-
     gps_location = sm[self.gps_location_service]
     self.gps_position = {
       "latitude": gps_location.latitude,
@@ -115,6 +103,7 @@ class StarPilotPlanner:
       self.lane_width_right = 0
 
     self.lateral_acceleration = v_ego**2 * sm["controlsState"].curvature
+    self.driving_in_curve = abs(self.lateral_acceleration) >= MINIMUM_LATERAL_ACCELERATION
 
     self.lateral_check = v_ego >= starpilot_toggles.pause_lateral_below_speed
     self.lateral_check |= not (sm["carState"].leftBlinker or sm["carState"].rightBlinker) and starpilot_toggles.pause_lateral_below_signal
@@ -133,7 +122,17 @@ class StarPilotPlanner:
     if not sm["carState"].standstill:
       self.tracking_lead = self.update_lead_status(starpilot_toggles.stop_distance)
 
+    self.starpilot_following.update(controls_enabled, v_ego, sm, starpilot_toggles)
+
+    if controls_enabled and starpilot_toggles.conditional_experimental_mode:
+      self.starpilot_cem.update(v_ego, sm, starpilot_toggles)
+    else:
+      self.starpilot_cem.curve_detected = False
+      self.starpilot_cem.stop_sign_and_light(v_ego, sm, PLANNER_TIME - 2)
+
     self.v_cruise = self.starpilot_vcruise.update(controls_enabled, now, time_validated, v_cruise, v_ego, sm, starpilot_toggles)
+
+    self.starpilot_events.update(controls_enabled, v_cruise, sm, starpilot_toggles)
 
     if self.gps_valid and time_validated and starpilot_toggles.weather_presets:
       self.starpilot_weather.update_weather(now, starpilot_toggles)

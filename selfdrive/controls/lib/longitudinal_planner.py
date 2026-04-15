@@ -467,6 +467,7 @@ class LongitudinalPlanner:
 
     classic_model = bool(getattr(starpilot_toggles, "classic_model", False))
     tinygrad_model = bool(getattr(starpilot_toggles, "tinygrad_model", False))
+    experimental_mlsim = bool(tinygrad_model and self.mlsim and self.mode != 'acc')
     action_t = self.CP.longitudinalActuatorDelay + DT_MDL
 
     if classic_model:
@@ -490,10 +491,12 @@ class LongitudinalPlanner:
         self.v_desired_trajectory, self.a_desired_trajectory,
         action_t=action_t, vEgoStopping=starpilot_toggles.vEgoStopping)
 
+    output_accel_min = get_vehicle_min_accel(self.CP, v_ego) if experimental_mlsim else accel_limits_turns[0]
+
     close_lead_caps = []
     if tracking_lead:
       for lead in (self.lead_one, self.lead_two):
-        cap = self.get_close_lead_brake_cap(lead, v_ego, accel_limits_turns[0])
+        cap = self.get_close_lead_brake_cap(lead, v_ego, output_accel_min)
         if cap is not None:
           close_lead_caps.append(cap)
     if close_lead_caps:
@@ -514,7 +517,7 @@ class LongitudinalPlanner:
       output_a_target = min(output_a_target, cruise_accel_cap)
 
     output_accel_max = no_throttle_output_max if not self.allow_throttle else accel_limits_turns[1]
-    output_a_target = float(np.clip(output_a_target, accel_limits_turns[0], output_accel_max))
+    output_a_target = float(np.clip(output_a_target, output_accel_min, output_accel_max))
 
     self.output_a_target = output_a_target
     self.output_should_stop = bool(output_should_stop)
