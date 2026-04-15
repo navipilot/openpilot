@@ -57,10 +57,15 @@ class TestGMInterface:
 
     assert car_params.minSteerSpeed == pytest.approx(7 * CV.MPH_TO_MS)
 
-  def test_volt_testing_ground_tune_sets_nonzero_p_and_starting_state(self, monkeypatch):
+  @parameterized.expand([
+    ("interceptor", True),
+    ("ascm_int", False),
+  ])
+  def test_volt_testing_ground_tune_sets_nonzero_p_and_starting_state(self, _name, pedal_present, monkeypatch):
     CarInterface = interfaces[CAR.CHEVROLET_VOLT_ASCM]
     fingerprint = _empty_fingerprint()
-    fingerprint[0][0x201] = 8  # pedal detected
+    if pedal_present:
+      fingerprint[0][0x201] = 8  # pedal detected
     fingerprint[0][0x2FF] = 8  # SASCM detected
 
     monkeypatch.setattr(gm_interface.testing_ground, "use_2", True, raising=False)

@@ -118,8 +118,8 @@ class LongControl:
     self.is_gm_pedal_long = bool(
       CP.brand == "gm" and CP.enableGasInterceptorDEPRECATED and (CP.flags & GMFlags.PEDAL_LONG.value)
     )
-    self.is_volt_interceptor = bool(
-      CP.brand == "gm" and CP.enableGasInterceptorDEPRECATED and str(CP.carFingerprint).startswith("CHEVROLET_VOLT")
+    self.is_volt = bool(
+      CP.brand == "gm" and str(CP.carFingerprint).startswith("CHEVROLET_VOLT")
     )
 
   def update_mpc_mode(self, experimental_mode):
@@ -155,7 +155,7 @@ class LongControl:
     self.integrator_hold_frames = 0
 
   def _get_pedal_long_freeze(self, a_target, error, v_ego, accel_limits):
-    volt_test_tune_handoff = self.is_volt_interceptor and testing_ground.use_2
+    volt_test_tune_handoff = self.is_volt and testing_ground.use_2
 
     if not self.is_gm_pedal_long and not volt_test_tune_handoff:
       self.last_a_target = a_target
@@ -185,7 +185,7 @@ class LongControl:
     return self.integrator_hold_frames > 0 or sat_pushing_lower or sat_pushing_upper
 
   def _shape_volt_test_tune_integrator(self, error, v_ego):
-    if not (self.is_volt_interceptor and testing_ground.use_2):
+    if not (self.is_volt and testing_ground.use_2):
       return
 
     # Bleed stale I quickly when the target reverses against stored integrator.

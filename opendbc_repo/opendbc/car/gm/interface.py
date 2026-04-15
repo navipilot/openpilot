@@ -568,15 +568,14 @@ class CarInterface(CarInterfaceBase):
 
     volt_test_tune_active = (
       testing_ground.use_2 and
-      ret.enableGasInterceptorDEPRECATED and
       ret.openpilotLongitudinalControl and
       candidate in VOLT_LONG_TEST_TUNE_CARS
     )
     if volt_test_tune_active:
-      # Volt interceptor-long currently falls back to an all-I tune on this path.
-      # The test-ground tune adds a modest P term, trims mid/high-speed I memory,
-      # and uses a dedicated starting state so stop-and-go launches do not wind
-      # up the PID.
+      # Volt long can still fall back to an all-I tune on both the interceptor and
+      # ASCM-int paths. The test-ground tune adds a modest P term, trims
+      # mid/high-speed I memory, and uses a dedicated starting state so
+      # stop-and-go launches do not wind up the PID.
       ret.longitudinalTuning.kpBP = [0.0, 4.0, 12.0, 35.0]
       ret.longitudinalTuning.kpV = [0.10, 0.072, 0.050, 0.040]
       ret.longitudinalTuning.kiBP = [0.0, 4.0, 12.0, 35.0]
