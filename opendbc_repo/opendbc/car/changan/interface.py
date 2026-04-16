@@ -29,27 +29,20 @@ class CarInterface(CarInterfaceBase):
     ret.brand = "changan"
     ret.safetyConfigs = [get_safety_config(structs.CarParams.SafetyModel.changan)]
 
-
     ret.transmissionType = structs.CarParams.TransmissionType.automatic
-    # Radar is present but not used for fusion yet
     ret.radarUnavailable = True
     ret.enableBsm = True
 
     # Steering
-    ret.steerActuatorDelay = 0.12  # Fixed from DAS reference
-    ret.steerLimitTimer = 1.0  # Fixed from DAS reference
+    ret.steerActuatorDelay = 0.12
+    ret.steerLimitTimer = 1.0
     ret.steerControlType = structs.CarParams.SteerControlType.angle
     ret.minSteerSpeed = 0.1
 
     # Longitudinal
-    #ret.alphaLongitudinalAvailable = True
-    #ret.openpilotLongitudinalControl = True
-    #ret.autoResumeSng = ret.openpilotLongitudinalControl
-
-    # 启用 Alpha 纵向模型 (End-to-End Longitudinal) 如果 experimental_long=True
-    #if experimental_long:
-    #  ret.longitudinalTuning.kpV = [0.0]
-    #  ret.longitudinalTuning.kiV = [0.0]
+    ret.alphaLongitudinalAvailable = True
+    ret.openpilotLongitudinalControl = True
+    ret.autoResumeSng = ret.openpilotLongitudinalControl
 
     ret.minEnableSpeed = -1.
     ret.longitudinalActuatorDelay = 0.35
@@ -62,7 +55,6 @@ class CarInterface(CarInterfaceBase):
     ret.stopAccel = -0.35
 
     # Longitudinal Tuning (PID)
-    # 只有在非 E2E 模式下生效
     tune = ret.longitudinalTuning
     tune.kpBP = [0., 5., 20., 40.]
     tune.kpV = [1.2, 1.0, 0.7, 0.5]

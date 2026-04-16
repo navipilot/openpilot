@@ -8,27 +8,23 @@ from opendbc.car.docs_definitions import CarDocs, CarParts, CarHarness
 
 Ecu = structs.CarParams.Ecu
 
-MIN_ACC_SPEED = 19. * CV.MPH_TO_MS
-PEDAL_TRANSITION = 10. * CV.MPH_TO_MS
-
 
 class ChanganFlags(IntFlag):
-  CHANGAN_Z6 = 1
-  CHANGAN_Z6_IDD = 2
+  CHANGAN_Z6_IDD = 1
 
 
 class CarControllerParams:
   ACCEL_MAX = 2.0
   ACCEL_MIN = -3.5
   STEER_STEP = 1
-  STEER_MAX = 900  # Fixed from DAS reference
+  STEER_MAX = 900
   STEER_ERROR_MAX = 650
-  MAX_STEERING_ANGLE = 180.0  # Fixed from DAS reference
+  MAX_STEERING_ANGLE = 180.0
   STEERING_SMOOTHING_FACTOR = 0.3
   ANGLE_LIMITS: AngleSteeringLimits = AngleSteeringLimits(
-    180,  # Max angle: 180 degrees (from DAS reference)
-    ([10, 20], [1.4, 0.15]),  # Angle rate up (from DAS reference)
-    ([10, 20], [1.4, 0.26]),  # Angle rate down (from DAS reference)
+    180,
+    ([10, 20], [1.4, 0.15]),  # Angle rate up
+    ([10, 20], [1.4, 0.26]),  # Angle rate down
   )
 
   def __init__(self, CP):
@@ -60,7 +56,7 @@ class CAR(Platforms):
   )
 
 
-STEER_THRESHOLD = 15  # Matches reference
+STEER_THRESHOLD = 15
 EPS_SCALE = defaultdict(lambda: 73)
 DBC = CAR.create_dbc_map()
 
