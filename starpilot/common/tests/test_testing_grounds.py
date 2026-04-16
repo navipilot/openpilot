@@ -5,7 +5,7 @@ import pytest
 from openpilot.starpilot.common import testing_grounds as tg
 
 
-@pytest.mark.parametrize("hidden_slot_id", [tg.TESTING_GROUND_3, tg.TESTING_GROUND_6])
+@pytest.mark.parametrize("hidden_slot_id", [tg.TESTING_GROUND_5, tg.TESTING_GROUND_6])
 def test_hidden_testing_ground_selection_is_migrated(tmp_path, monkeypatch, hidden_slot_id):
   state_path = tmp_path / "slots.json"
   state_path.write_text(json.dumps({

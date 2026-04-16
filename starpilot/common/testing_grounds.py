@@ -33,29 +33,31 @@ TESTING_GROUNDS_STATE_PATH = Path("/tmp/the_pond_testing_grounds_slots.json") if
 TESTING_GROUNDS_SLOT_DEFINITIONS = (
   {
     "id": TESTING_GROUND_1,
-    "name": "GM Long Tune",
+    "name": "ACC Bolt Long Tune",
     "description": "BoltLongTune A/B sandbox for GM ACC longitudinal testing.",
     "aLabel": "A - Installed tune",
-    "bLabel": "B - BoltLongTune test",
+    "bLabel": "B - Firestar Tune",
   },
   {
     "id": TESTING_GROUND_2,
-    "name": "volt test tune",
+    "name": "Volt Long Tune",
     "description": "Volt longitudinal tuning sandbox.",
     "aLabel": "A - Installed tune",
-    "bLabel": "B - Test Tune",
+    "bLabel": "B - Firestar Tune",
   },
   {
     "id": TESTING_GROUND_3,
-    "name": "Unused",
-    "description": "",
-    "aLabel": "A",
+    "name": "Volt Lateral",
+    "description": "Standard-tire Volt lateral A/B sandbox, separate from Plexy's custom tire-size tune.",
+    "aLabel": "A - Installed tune",
+    "bLabel": "B - Firestar Tune",
   },
   {
     "id": TESTING_GROUND_4,
-    "name": "Unused",
-    "description": "",
-    "aLabel": "A",
+    "name": "Genesis G90 Lateral",
+    "description": "Genesis G90 2017 lateral A/B sandbox.",
+    "aLabel": "A - Installed tune",
+    "bLabel": "B - Firestar Tune",
   },
   {
     "id": TESTING_GROUND_5,
@@ -74,7 +76,7 @@ TESTING_GROUNDS_SLOT_DEFINITIONS = (
     "name": "Plexy's Car",
     "description": "Volt lateral A/B sandbox for Plexy's baseline torque tuning.",
     "aLabel": "A - Installed tune",
-    "bLabel": "B - Plexy baseline",
+    "bLabel": "B - Firestar Tune",
   },
 )
 
