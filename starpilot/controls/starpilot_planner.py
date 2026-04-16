@@ -124,7 +124,9 @@ class StarPilotPlanner:
 
     self.starpilot_following.update(controls_enabled, v_ego, sm, starpilot_toggles)
 
-    if controls_enabled and starpilot_toggles.conditional_experimental_mode:
+    cem_tracking_active = controls_enabled or sm["starpilotCarState"].alwaysOnLateralEnabled
+    if cem_tracking_active and starpilot_toggles.conditional_experimental_mode:
+      # Keep CEM's filters warm in AOL so engagement can inherit the current scene.
       self.starpilot_cem.update(v_ego, sm, starpilot_toggles)
     else:
       self.starpilot_cem.curve_detected = False

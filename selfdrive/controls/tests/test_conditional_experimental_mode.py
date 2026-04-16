@@ -87,15 +87,6 @@ def test_starpilot_planner_updates_cem_with_current_frame_state(monkeypatch):
     planner.starpilot_following.following_lead = False
     planner.starpilot_following.slower_lead = False
 
-    sm = {
-      "radarState": SimpleNamespace(leadOne=SimpleNamespace(status=True, dRel=25.0, vLead=0.5)),
-      "selfdriveState": SimpleNamespace(enabled=True),
-      "carState": SimpleNamespace(vCruise=50.0, vEgo=20.0, standstill=False, leftBlinker=False, rightBlinker=False),
-      "controlsState": SimpleNamespace(curvature=0.02),
-      "modelV2": SimpleNamespace(position=SimpleNamespace(x=[0.0, 30.0]), laneLines=[None] * 4, roadEdges=[None] * 2),
-      "starpilotCarState": SimpleNamespace(pauseLateral=False),
-      planner.gps_location_service: SimpleNamespace(latitude=1.0, longitude=1.0, bearingDeg=90.0),
-    }
     starpilot_toggles = SimpleNamespace(
       set_speed_offset=0,
       conditional_experimental_mode=True,
@@ -106,15 +97,28 @@ def test_starpilot_planner_updates_cem_with_current_frame_state(monkeypatch):
       weather_presets=False,
     )
 
-    planner.update(0.0, False, sm, starpilot_toggles)
+    for controls_enabled, aol_enabled in ((True, False), (False, True)):
+      seen.clear()
 
-    assert seen == {
-      "tracking_lead": True,
-      "following_lead": True,
-      "slower_lead": True,
-      "model_length": 30.0,
-      "driving_in_curve": True,
-      "road_curvature_detected": True,
-    }
+      sm = {
+        "radarState": SimpleNamespace(leadOne=SimpleNamespace(status=True, dRel=25.0, vLead=0.5)),
+        "selfdriveState": SimpleNamespace(enabled=controls_enabled),
+        "carState": SimpleNamespace(vCruise=50.0, vEgo=20.0, standstill=False, leftBlinker=False, rightBlinker=False),
+        "controlsState": SimpleNamespace(curvature=0.02),
+        "modelV2": SimpleNamespace(position=SimpleNamespace(x=[0.0, 30.0]), laneLines=[None] * 4, roadEdges=[None] * 2),
+        "starpilotCarState": SimpleNamespace(pauseLateral=False, alwaysOnLateralEnabled=aol_enabled),
+        planner.gps_location_service: SimpleNamespace(latitude=1.0, longitude=1.0, bearingDeg=90.0),
+      }
+
+      planner.update(0.0, False, sm, starpilot_toggles)
+
+      assert seen == {
+        "tracking_lead": True,
+        "following_lead": True,
+        "slower_lead": True,
+        "model_length": 30.0,
+        "driving_in_curve": True,
+        "road_curvature_detected": True,
+      }
   finally:
     planner.shutdown()
