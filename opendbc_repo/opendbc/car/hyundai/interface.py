@@ -59,6 +59,10 @@ class CarInterface(CarInterfaceBase):
         if not ret.flags & HyundaiFlags.RADAR_SCC:
           ret.flags |= HyundaiFlags.CANFD_CAMERA_SCC.value
 
+      # Ioniq 6 HDA2 uses the camera SCC path for stock ACC, even on LKA steering variants.
+      if candidate == CAR.HYUNDAI_IONIQ_6:
+        ret.flags |= HyundaiFlags.CANFD_CAMERA_SCC.value
+
       # Some LKA steering cars have alternative messages for gear checks
       # ICE cars do not have 0x130; GEARS message on 0x40 or 0x70 instead
       if 0x130 not in fingerprint[CAN.ECAN]:

@@ -73,6 +73,10 @@ class HyundaiStarPilotSafetyFlags(IntFlag):
   AOL_LKAS_ON_ENGAGE = 2048
 
 
+class HyundaiStarPilotFlags(IntFlag):
+  SPEED_LIMIT_AVAILABLE = 1
+
+
 class HyundaiFlags(IntFlag):
   # Dynamic Flags
 
@@ -350,7 +354,7 @@ class CAR(Platforms):
   HYUNDAI_IONIQ_6 = HyundaiCanFDPlatformConfig(
     [HyundaiCarDocs("Hyundai Ioniq 6 (with HDA II) 2023-24", "Highway Driving Assist II", car_parts=CarParts.common([CarHarness.hyundai_p]))],
     HYUNDAI_IONIQ_5.specs,
-    flags=HyundaiFlags.EV | HyundaiFlags.CANFD_NO_RADAR_DISABLE,
+    flags=HyundaiFlags.EV,
   )
   HYUNDAI_TUCSON_4TH_GEN = HyundaiCanFDPlatformConfig(
     [
