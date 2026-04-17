@@ -31,12 +31,30 @@ from openpilot.system.ui.widgets.confirm_dialog import ConfirmDialog, alert_dial
 from openpilot.system.ui.widgets.label import gui_label
 from openpilot.system.ui.widgets.option_dialog import MultiOptionDialog
 from openpilot.selfdrive.ui.layouts.settings.starpilot.panel import StarPilotPanel
-from openpilot.selfdrive.ui.layouts.settings.starpilot.aethergrid import AetherButton, AetherChip, AetherListColors, AetherScrollbar, AetherSliderDialog
+from openpilot.selfdrive.ui.layouts.settings.starpilot.aethergrid import (
+  AETHER_LIST_METRICS,
+  AetherButton,
+  AetherChip,
+  AetherListColors,
+  AetherScrollbar,
+  AetherSliderDialog,
+  draw_action_rail,
+  draw_action_pill,
+  draw_busy_ring,
+  draw_download_icon,
+  draw_heart_icon,
+  draw_list_panel_shell,
+  build_list_panel_frame,
+  draw_list_row_shell,
+  draw_list_scroll_fades,
+  draw_soft_card,
+  draw_status_led,
+  draw_toggle_switch,
+  draw_overflow_dots,
+)
 
 
 MODEL_PANEL_BG = AetherListColors.PANEL_BG
-MODEL_PANEL_BORDER = AetherListColors.PANEL_BORDER
-MODEL_PANEL_GLOW = AetherListColors.PANEL_GLOW
 MODEL_HEADER_TEXT = AetherListColors.HEADER
 MODEL_SUBTEXT = AetherListColors.SUBTEXT
 MODEL_MUTED = AetherListColors.MUTED
@@ -52,31 +70,17 @@ MODEL_PRIMARY = AetherListColors.PRIMARY
 MODEL_PRIMARY_SOFT = AetherListColors.PRIMARY_SOFT
 MODEL_DANGER = AetherListColors.DANGER
 MODEL_DANGER_SOFT = AetherListColors.DANGER_SOFT
-MODEL_SUCCESS = AetherListColors.SUCCESS
-MODEL_SUCCESS_SOFT = AetherListColors.SUCCESS_SOFT
 MODEL_WARNING = AetherListColors.WARNING
-MODEL_SCROLL_TRACK = AetherListColors.SCROLL_TRACK
-MODEL_SCROLL_THUMB = AetherListColors.SCROLL_THUMB
 
-MAX_CONTENT_WIDTH = 1560
-OUTER_MARGIN_X = 18
-OUTER_MARGIN_Y = 24
-PANEL_RADIUS = 0.055
-PANEL_PADDING_X = 16
-PANEL_PADDING_TOP = 28
-PANEL_PADDING_BOTTOM = 22
-HEADER_HEIGHT = 210
-SECTION_GAP = 28
-SECTION_HEADER_HEIGHT = 34
-SECTION_HEADER_GAP = 12
-ROW_HEIGHT = 122
-UTILITY_ROW_HEIGHT = 88
-ROW_RADIUS = 0.12
-ACTION_WIDTH = 188
-ROW_TEXT_GAP = 8
-BUTTON_HEIGHT = 58
-BUTTON_GAP = 16
-FADE_HEIGHT = 24
+SECTION_GAP = AETHER_LIST_METRICS.section_gap
+SECTION_HEADER_HEIGHT = AETHER_LIST_METRICS.section_header_height
+SECTION_HEADER_GAP = AETHER_LIST_METRICS.section_header_gap
+ROW_HEIGHT = AETHER_LIST_METRICS.row_height
+UTILITY_ROW_HEIGHT = AETHER_LIST_METRICS.utility_row_height
+ROW_RADIUS = AETHER_LIST_METRICS.row_radius
+ACTION_WIDTH = AETHER_LIST_METRICS.action_width
+BUTTON_HEIGHT = AETHER_LIST_METRICS.header_button_height
+FADE_HEIGHT = AETHER_LIST_METRICS.fade_height
 CONFIRM_TIMEOUT_SECONDS = 3.0
 TRANSITION_SECONDS = 0.24
 
@@ -97,10 +101,6 @@ class ModelCatalogEntry:
 
 def _clean_model_name(name: str) -> str:
   return str(name or "").replace("_default", "").replace("(Default)", "").strip()
-
-
-def _with_alpha(color: rl.Color, alpha: int) -> rl.Color:
-  return rl.Color(color.r, color.g, color.b, max(0, min(color.a, int(alpha))))
 
 
 def _ease(current: float, target: float, tau: float = 0.085) -> float:
@@ -307,29 +307,17 @@ class DrivingModelManagerView(Widget):
     self._utility_rects.clear()
     self._menu_sub_rects.clear()
 
-    shell_w = min(rect.width - OUTER_MARGIN_X * 2, MAX_CONTENT_WIDTH)
-    shell_x = rect.x + (rect.width - shell_w) / 2
-    shell_y = rect.y + OUTER_MARGIN_Y
-    shell_h = rect.height - OUTER_MARGIN_Y * 2
-    self._shell_rect = rl.Rectangle(shell_x, shell_y, shell_w, shell_h)
+    frame = build_list_panel_frame(rect)
+    self._shell_rect = frame.shell
+    draw_list_panel_shell(frame)
 
-    header_rect = rl.Rectangle(
-      shell_x + PANEL_PADDING_X,
-      shell_y + PANEL_PADDING_TOP,
-      shell_w - PANEL_PADDING_X * 2,
-      HEADER_HEIGHT,
-    )
+    header_rect = frame.header
     self._draw_header(header_rect)
 
-    scroll_rect = rl.Rectangle(
-      shell_x + PANEL_PADDING_X,
-      header_rect.y + header_rect.height,
-      shell_w - PANEL_PADDING_X * 2,
-      shell_h - HEADER_HEIGHT - PANEL_PADDING_TOP - PANEL_PADDING_BOTTOM,
-    )
+    scroll_rect = frame.scroll
     self._scroll_rect = scroll_rect
 
-    content_width = scroll_rect.width - 18
+    content_width = scroll_rect.width - AETHER_LIST_METRICS.content_right_gutter
     self._content_height = self._measure_content_height(content_width)
     self._scroll_panel.set_enabled(lambda: not self._controller._is_download_active())
     self._scroll_offset = self._scroll_panel.update(scroll_rect, max(self._content_height, scroll_rect.height))
@@ -341,18 +329,7 @@ class DrivingModelManagerView(Widget):
     if self._content_height > scroll_rect.height:
       self._draw_scrollbar(scroll_rect)
 
-    if self._content_height > scroll_rect.height + 4:
-      fade_height = min(FADE_HEIGHT, int(scroll_rect.height / 4))
-      if self._scroll_offset < -4:
-        rl.draw_rectangle_gradient_v(
-          int(scroll_rect.x), int(scroll_rect.y), int(scroll_rect.width - 12), fade_height, _with_alpha(MODEL_PANEL_BG, 255), _with_alpha(MODEL_PANEL_BG, 0)
-        )
-
-      if (-self._scroll_offset + scroll_rect.height) < (self._content_height - 4):
-        bottom_y = int(scroll_rect.y + scroll_rect.height - fade_height)
-        rl.draw_rectangle_gradient_v(
-          int(scroll_rect.x), bottom_y, int(scroll_rect.width - 12), fade_height, _with_alpha(MODEL_PANEL_BG, 0), _with_alpha(MODEL_PANEL_BG, 255)
-        )
+    draw_list_scroll_fades(scroll_rect, self._content_height, self._scroll_offset, MODEL_PANEL_BG, fade_height=FADE_HEIGHT)
 
   def _draw_header(self, rect: rl.Rectangle):
     title_rect = rl.Rectangle(rect.x, rect.y + 4, rect.width * 0.55, 40)
@@ -386,19 +363,7 @@ class DrivingModelManagerView(Widget):
     led_x = int(random_rect.x + random_rect.width - 26)
     led_y = int(random_rect.y + random_rect.height / 2)
     randomizer_on = self._controller._params.get_bool("ModelRandomizer")
-    if randomizer_on:
-      # Lit: bright theme-blue LED with layered glow rings
-      led_color = rl.Color(110, 175, 245, 255)
-      rl.draw_circle(led_x, led_y, 18, rl.Color(110, 175, 245, 18))
-      rl.draw_circle(led_x, led_y, 12, rl.Color(110, 175, 245, 48))
-      rl.draw_circle(led_x, led_y, 7, rl.Color(110, 175, 245, 100))
-      rl.draw_circle(led_x, led_y, 6, led_color)
-      rl.draw_circle(led_x - 2, led_y - 2, 2, rl.Color(210, 235, 255, 200))
-    else:
-      # Unlit: dark socket with faint ring
-      rl.draw_circle(led_x, led_y, 8, rl.Color(10, 10, 14, 230))
-      rl.draw_circle(led_x, led_y, 6, rl.Color(35, 40, 50, 255))
-      rl.draw_ring(rl.Vector2(led_x, led_y), 6, 7, 0, 360, 24, rl.Color(70, 78, 95, 140))
+    draw_status_led(rl.Vector2(led_x, led_y), randomizer_on)
 
   def _measure_content_height(self, width: float) -> float:
     sections = self._build_sections(width)
@@ -447,8 +412,7 @@ class DrivingModelManagerView(Widget):
 
   def _draw_empty_state(self, rect: rl.Rectangle):
     state_rect = rl.Rectangle(rect.x, rect.y, rect.width - 18, rect.height)
-    rl.draw_rectangle_rounded(state_rect, 0.08, 18, rl.Color(255, 255, 255, 5))
-    rl.draw_rectangle_rounded_lines_ex(state_rect, 0.08, 18, 1, rl.Color(255, 255, 255, 14))
+    draw_soft_card(state_rect, rl.Color(255, 255, 255, 5), rl.Color(255, 255, 255, 14), radius=0.08, segments=18)
     gui_label(
       rl.Rectangle(state_rect.x, state_rect.y + 42, state_rect.width, 40),
       self._controller.empty_state_title(),
@@ -486,32 +450,29 @@ class DrivingModelManagerView(Widget):
     removable = self._controller.is_model_removable(entry.key)
     is_menu_open = (self._confirm_key == entry.key)
 
-    row_bg = MODEL_CURRENT_BG if current else MODEL_ROW_BG
-    row_border = MODEL_CURRENT_BORDER if current else MODEL_ROW_BORDER
-    if row_hovered:
-      row_bg = rl.Color(row_bg.r, row_bg.g, row_bg.b, min(row_bg.a + MODEL_ROW_HOVER.a, 255))
-    if pressed:
-      row_bg = rl.Color(row_bg.r, row_bg.g, row_bg.b, min(row_bg.a + 8, 255))
-
     alpha, offset_y, scale = self._row_transition_style(entry.key)
     draw_rect = rl.Rectangle(
       rect.x + (rect.width * (1 - scale) / 2), rect.y + offset_y + (rect.height * (1 - scale) / 2), rect.width * scale, rect.height * scale
     )
 
-    if row_bg.a > 0:
-      rl.draw_rectangle_rounded(draw_rect, ROW_RADIUS, 18, _with_alpha(row_bg, alpha))
-    if current and row_border.a > 0:
-      rl.draw_rectangle_rounded_lines_ex(draw_rect, ROW_RADIUS, 18, 1, _with_alpha(row_border, alpha))
-    if not is_last:
-      line_y = int(draw_rect.y + draw_rect.height - 1)
-      rl.draw_line(int(draw_rect.x + 22), line_y, int(draw_rect.x + draw_rect.width - 22), line_y, _with_alpha(MODEL_ROW_SEPARATOR, alpha))
+    draw_list_row_shell(
+      draw_rect,
+      current=current,
+      hovered=row_hovered,
+      pressed=pressed,
+      is_last=is_last,
+      alpha=alpha,
+      row_bg=MODEL_ROW_BG,
+      row_border=MODEL_ROW_BORDER,
+      row_separator=MODEL_ROW_SEPARATOR,
+      row_hover=MODEL_ROW_HOVER,
+      current_bg=MODEL_CURRENT_BG,
+      current_border=MODEL_CURRENT_BORDER,
+      row_radius=ROW_RADIUS,
+      separator_inset=22,
+    )
 
-    action_x = draw_rect.x + draw_rect.width - ACTION_WIDTH
-    action_rect = rl.Rectangle(action_x, draw_rect.y, ACTION_WIDTH, draw_rect.height)
-    action_fill = rl.Color(255, 255, 255, 6 if current else MODEL_ACTION_BG.a)
-    if action_fill.a > 0:
-      rl.draw_rectangle_rec(action_rect, _with_alpha(action_fill, alpha))
-    rl.draw_line(int(action_x), int(draw_rect.y + 18), int(action_x), int(draw_rect.y + draw_rect.height - 18), _with_alpha(MODEL_ACTION_SEPARATOR, alpha))
+    action_rect = draw_action_rail(draw_rect, ACTION_WIDTH, current=current, alpha=alpha, fill=MODEL_ACTION_BG, separator=MODEL_ACTION_SEPARATOR, inset_y=18)
 
     info_rect = rl.Rectangle(draw_rect.x + 24, draw_rect.y + 18, draw_rect.width - ACTION_WIDTH - 42, draw_rect.height - 36)
     row_touchable = entry.installed and not self._controller._params.get_bool("ModelRandomizer")
@@ -540,7 +501,7 @@ class DrivingModelManagerView(Widget):
     if entry.user_favorite:
       heart_color = rl.Color(210, 100, 130, 230)
       heart_center = rl.Vector2(rect.x + 15, rect.y + 17)
-      self._draw_heart_icon(heart_center, heart_color)
+      draw_heart_icon(heart_center, heart_color)
       heart_offset = 34
     title_rect = rl.Rectangle(rect.x + heart_offset, rect.y, rect.width - heart_offset, 34)
     gui_label(title_rect, entry.name, 34, MODEL_HEADER_TEXT, FontWeight.MEDIUM)
@@ -569,7 +530,7 @@ class DrivingModelManagerView(Widget):
   def _draw_download_action(self, rect: rl.Rectangle):
     center_x = rect.x + rect.width / 2
     center_y = rect.y + rect.height / 2 - 8
-    self._draw_download_icon(rl.Vector2(center_x, center_y), MODEL_HEADER_TEXT)
+    draw_download_icon(rl.Vector2(center_x, center_y), MODEL_HEADER_TEXT)
     gui_label(
       rl.Rectangle(rect.x + 16, rect.y + rect.height - 40, rect.width - 32, 22),
       tr("Download"),
@@ -582,8 +543,7 @@ class DrivingModelManagerView(Widget):
   def _draw_downloading_action(self, rect: rl.Rectangle, progress_text: str):
     center = rl.Vector2(rect.x + rect.width / 2, rect.y + rect.height / 2 - 8)
     phase = (time.monotonic() * 240.0) % 360.0
-    rl.draw_ring(center, 20, 26, 0, 360, 48, rl.Color(255, 255, 255, 26))
-    rl.draw_ring(center, 20, 26, phase, phase + 260, 48, MODEL_PRIMARY)
+    draw_busy_ring(center, phase, MODEL_PRIMARY)
 
     label = progress_text if progress_text else tr("Downloading")
     gui_label(
@@ -600,10 +560,7 @@ class DrivingModelManagerView(Widget):
       # Three-dot menu indicator
       center_x = rect.x + rect.width / 2
       center_y = rect.y + rect.height / 2 - 10
-      dot_r = 4
-      gap = 12
-      for i in range(3):
-        rl.draw_circle(int(center_x + (i - 1) * gap), int(center_y), dot_r, _with_alpha(MODEL_HEADER_TEXT, 200))
+      draw_overflow_dots(rl.Vector2(center_x, center_y), rl.Color(MODEL_HEADER_TEXT.r, MODEL_HEADER_TEXT.g, MODEL_HEADER_TEXT.b, min(MODEL_HEADER_TEXT.a, 200)))
       gui_label(
         rl.Rectangle(rect.x + 16, rect.y + rect.height - 38, rect.width - 32, 22),
         tr("Options"),
@@ -626,19 +583,15 @@ class DrivingModelManagerView(Widget):
       self._menu_sub_rects[f"{entry.key}:favorite"] = fav_rect
 
       # Delete button
-      rl.draw_rectangle_rounded(delete_rect, 0.35, 12, MODEL_DANGER_SOFT)
-      rl.draw_rectangle_rounded_lines_ex(delete_rect, 0.35, 12, 1, _with_alpha(MODEL_DANGER, 70))
-      gui_label(delete_rect, tr("Delete"), 18, MODEL_DANGER, FontWeight.SEMI_BOLD, alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER)
+      draw_action_pill(delete_rect, tr("Delete"), MODEL_DANGER_SOFT, rl.Color(MODEL_DANGER.r, MODEL_DANGER.g, MODEL_DANGER.b, min(MODEL_DANGER.a, 70)), MODEL_DANGER)
 
       # Favorite toggle button
       is_fav = entry.user_favorite
       fav_fill = rl.Color(210, 100, 130, 44) if is_fav else MODEL_PRIMARY_SOFT
-      fav_border = _with_alpha(rl.Color(210, 100, 130, 255) if is_fav else MODEL_PRIMARY, 70)
+      fav_border = rl.Color((210 if is_fav else MODEL_PRIMARY.r), (100 if is_fav else MODEL_PRIMARY.g), (130 if is_fav else MODEL_PRIMARY.b), min((255 if is_fav else MODEL_PRIMARY.a), 70))
       fav_text_color = rl.Color(210, 100, 130, 255) if is_fav else MODEL_PRIMARY
       fav_label = tr("Unfavorite") if is_fav else tr("Favorite")
-      rl.draw_rectangle_rounded(fav_rect, 0.35, 12, fav_fill)
-      rl.draw_rectangle_rounded_lines_ex(fav_rect, 0.35, 12, 1, fav_border)
-      gui_label(fav_rect, fav_label, 18, fav_text_color, FontWeight.SEMI_BOLD, alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER)
+      draw_action_pill(fav_rect, fav_label, fav_fill, fav_border, fav_text_color)
 
   def _draw_current_action(self, rect: rl.Rectangle):
     chip_rect = rl.Rectangle(rect.x + 24, rect.y + (rect.height - 42) / 2, rect.width - 48, 42)
@@ -648,50 +601,13 @@ class DrivingModelManagerView(Widget):
     chip_rect = rl.Rectangle(rect.x + 20, rect.y + (rect.height - 42) / 2, rect.width - 40, 42)
     AetherChip(tr("Protected"), rl.Color(255, 255, 255, 10), MODEL_MUTED, MODEL_SUBTEXT, font_size=18).render(chip_rect)
 
-  def _draw_trash_icon(self, center: rl.Vector2, color: rl.Color):
-    bin_rect = rl.Rectangle(center.x - 12, center.y - 12, 24, 24)
-    lid_rect = rl.Rectangle(center.x - 14, center.y - 18, 28, 5)
-    handle_rect = rl.Rectangle(center.x - 4, center.y - 22, 8, 4)
-    rl.draw_rectangle_rounded(bin_rect, 0.2, 8, color)
-    rl.draw_rectangle_rounded(lid_rect, 0.5, 8, color)
-    rl.draw_rectangle_rounded(handle_rect, 0.5, 8, color)
-    stripe = _with_alpha(MODEL_PANEL_BG, 120)
-    rl.draw_line(int(center.x - 6), int(center.y - 8), int(center.x - 6), int(center.y + 8), stripe)
-    rl.draw_line(int(center.x), int(center.y - 8), int(center.x), int(center.y + 8), stripe)
-    rl.draw_line(int(center.x + 6), int(center.y - 8), int(center.x + 6), int(center.y + 8), stripe)
-
-  def _draw_heart_icon(self, center: rl.Vector2, color: rl.Color):
-    # Two rounded bumps at top
-    rl.draw_circle(int(center.x - 5), int(center.y - 3), 7, color)
-    rl.draw_circle(int(center.x + 5), int(center.y - 3), 7, color)
-    # Downward triangle for the bottom point
-    rl.draw_triangle(
-      rl.Vector2(center.x + 13, center.y + 1),
-      rl.Vector2(center.x - 13, center.y + 1),
-      rl.Vector2(center.x, center.y + 13),
-      color,
-    )
-
-  def _draw_download_icon(self, center: rl.Vector2, color: rl.Color):
-    shaft_top = rl.Vector2(center.x, center.y - 18)
-    shaft_bottom = rl.Vector2(center.x, center.y + 8)
-    left_head = rl.Vector2(center.x - 11, center.y - 2)
-    right_head = rl.Vector2(center.x + 11, center.y - 2)
-    tray_left = rl.Vector2(center.x - 14, center.y + 18)
-    tray_right = rl.Vector2(center.x + 14, center.y + 18)
-    rl.draw_line_ex(shaft_top, shaft_bottom, 4, color)
-    rl.draw_line_ex(left_head, shaft_bottom, 4, color)
-    rl.draw_line_ex(right_head, shaft_bottom, 4, color)
-    rl.draw_line_ex(tray_left, tray_right, 4, color)
-
   def _draw_utility_section(self, x: float, y: float, width: float, rows: list[dict]):
     title_rect = rl.Rectangle(x, y, width - 18, SECTION_HEADER_HEIGHT)
     gui_label(title_rect, tr("Automation and Tuning"), 26, MODEL_SUBTEXT, FontWeight.MEDIUM)
     y += SECTION_HEADER_HEIGHT + SECTION_HEADER_GAP
 
     container_rect = rl.Rectangle(x, y, width - 18, len(rows) * UTILITY_ROW_HEIGHT)
-    rl.draw_rectangle_rounded(container_rect, 0.055, 18, rl.Color(255, 255, 255, 4))
-    rl.draw_rectangle_rounded_lines_ex(container_rect, 0.055, 18, 1, rl.Color(255, 255, 255, 15))
+    draw_soft_card(container_rect, rl.Color(255, 255, 255, 4), rl.Color(255, 255, 255, 15), radius=0.055, segments=18)
 
     for index, row in enumerate(rows):
       row_rect = rl.Rectangle(x, y + index * UTILITY_ROW_HEIGHT, width - 18, UTILITY_ROW_HEIGHT)
@@ -701,9 +617,7 @@ class DrivingModelManagerView(Widget):
     mouse_pos = gui_app.last_mouse_event.pos
     hovered = rl.check_collision_point_rec(mouse_pos, rect)
     pressed = self._pressed_target == f"utility:{row['id']}"
-    bg = rl.Color(255, 255, 255, 0)
-    if hovered:
-      bg = rl.Color(255, 255, 255, 8)
+    bg = rl.Color(255, 255, 255, 8 if hovered else 0)
     if pressed:
       bg = rl.Color(255, 255, 255, 14)
     if bg.a:
@@ -721,22 +635,13 @@ class DrivingModelManagerView(Widget):
       gui_label(subtitle_rect, row["subtitle"], 20, MODEL_SUBTEXT, FontWeight.NORMAL)
 
     if row["type"] == "toggle":
-      self._draw_toggle(rect, bool(row["value"]))
+      draw_toggle_switch(rect, bool(row["value"]))
     else:
-      value_rect = rl.Rectangle(rect.x + rect.width - 270, rect.y + 20, 220, 28)
+      value_rect = rl.Rectangle(rect.x + rect.width - AETHER_LIST_METRICS.utility_value_right, rect.y + 20, AETHER_LIST_METRICS.utility_value_width, 28)
       gui_label(value_rect, row["value"], 24, MODEL_HEADER_TEXT, FontWeight.MEDIUM, alignment=rl.GuiTextAlignment.TEXT_ALIGN_RIGHT)
       gui_label(
-        rl.Rectangle(rect.x + rect.width - 62, rect.y + 18, 26, 26), "›", 32, MODEL_MUTED, FontWeight.MEDIUM, alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER
+        rl.Rectangle(rect.x + rect.width - AETHER_LIST_METRICS.utility_chevron_right, rect.y + 18, 26, 26), "›", 32, MODEL_MUTED, FontWeight.MEDIUM, alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER
       )
-
-  def _draw_toggle(self, rect: rl.Rectangle, enabled: bool):
-    toggle_w = 78
-    toggle_h = 42
-    toggle_rect = rl.Rectangle(rect.x + rect.width - toggle_w - 34, rect.y + (rect.height - toggle_h) / 2, toggle_w, toggle_h)
-    track = MODEL_PRIMARY if enabled else rl.Color(255, 255, 255, 24)
-    knob_x = toggle_rect.x + toggle_rect.width - 20 if enabled else toggle_rect.x + 20
-    rl.draw_rectangle_rounded(toggle_rect, 1.0, 16, track)
-    rl.draw_circle(int(knob_x), int(toggle_rect.y + toggle_rect.height / 2), 16, rl.WHITE)
 
   def _draw_scrollbar(self, rect: rl.Rectangle):
     self._scrollbar.render(rect, self._content_height, self._scroll_offset)
