@@ -4,7 +4,6 @@ from opendbc.car import Bus, apply_std_steer_angle_limits, structs
 from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.changan import changancan
 from opendbc.car.changan.values import CarControllerParams, CAR
-from openpilot.common.realtime import DT_CTRL
 from openpilot.common.conversions import Conversions as CV
 
 
@@ -15,10 +14,8 @@ class CarController(CarControllerBase):
     self.packer = CANPacker(dbc_names[Bus.pt])
     self.frame = 0
     self.last_angle = 0
-    self.last_acctrq = -5000
     self.first_start = True
 
-    self.counter_244 = 0
     self.counter_1ba = 0
     self.counter_17e = 0
     self.counter_307 = 0
@@ -26,10 +23,8 @@ class CarController(CarControllerBase):
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
-    hud_control = CC.hudControl
 
     if self.first_start:
-      self.counter_244 = int(CS.counter_244) & 0xF
       self.counter_1ba = int(CS.counter_1ba) & 0xF
       self.counter_17e = int(CS.counter_17e) & 0xF
       self.counter_307 = int(CS.counter_307) & 0xF
@@ -39,11 +34,11 @@ class CarController(CarControllerBase):
 
     can_sends = []
 
-    # 计数器步进
+    # 计数器步进（每帧，100Hz）
     self.counter_1ba = (self.counter_1ba + 1) & 0xF
     self.counter_17e = (self.counter_17e + 1) & 0xF
 
-    # 1. 横向控制 (Lateral Control)
+    # ── 横向控制 (Lateral) ────────────────────────────────────────
     lat_active = CC.latActive and not CS.steeringPressed
 
     if lat_active:
@@ -58,30 +53,18 @@ class CarController(CarControllerBase):
 
     self.last_angle = apply_angle
 
+    # GW_1BA：转向指令（始终发送，inactive 时 active=0）
     can_sends.append(changancan.create_steering_control(
       self.packer, CS.sigs1ba, apply_angle, lat_active, self.counter_1ba
     ))
+
+    # GW_17E：EPS 心跳（始终发送）
     can_sends.append(changancan.create_eps_control(
       self.packer, CS.sigs17e, lat_active, self.counter_17e
     ))
 
-    # 2. 纵向控制 (Longitudinal Control, 50Hz)
-    if self.frame % 2 == 0:
-      self.counter_244 = (self.counter_244 + 1) & 0xF
-
-      accel = np.clip(actuators.accel, self.params.ACCEL_MIN, self.params.ACCEL_MAX)
-      acctrq = -5000
-
-      if CC.longActive:
-        can_sends.append(changancan.create_acc_control(
-          self.packer, CS.sigs244, accel, self.counter_244, CC.longActive, acctrq
-        ))
-      else:
-        can_sends.append(changancan.create_acc_control(
-          self.packer, CS.sigs244, 0.0, self.counter_244, False, -5000
-        ))
-
-    # 3. HUD 控制 (10Hz)
+    # ── HUD 同步 (10Hz) ──────────────────────────────────────────
+    # 纵向由原车 ACC 负责，这里只同步巡航速度显示和 ADAS 状态
     if self.frame % 10 == 0:
       self.counter_307 = (self.counter_307 + 1) & 0xF
       self.counter_31a = (self.counter_31a + 1) & 0xF
@@ -91,12 +74,12 @@ class CarController(CarControllerBase):
         self.packer, CS.sigs307, self.counter_307, cruise_speed_kph
       ))
       can_sends.append(changancan.create_acc_hud(
-        self.packer, CS.sigs31a, self.counter_31a, CC.longActive, CS.out.steeringPressed
+        self.packer, CS.sigs31a, self.counter_31a,
+        CS.out.cruiseState.enabled, CS.out.steeringPressed
       ))
 
     new_actuators = actuators.as_builder()
     new_actuators.steeringAngleDeg = float(self.last_angle)
-    new_actuators.accel = float(actuators.accel)
 
     self.frame += 1
     return new_actuators, can_sends
