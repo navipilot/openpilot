@@ -4,10 +4,8 @@ import pyray as rl
 from cereal import messaging, car
 from dataclasses import dataclass, field
 from openpilot.common.params import Params
-from openpilot.common.constants import CV
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.selfdrive.locationd.calibrationd import HEIGHT_INIT
-from openpilot.selfdrive.ui.lib.starpilot_theme import get_theme_color, with_alpha
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
 from openpilot.selfdrive.ui.mici.onroad import blend_colors
 from openpilot.selfdrive.ui.mici.onroad.starpilot_status import get_border_color, get_path_edge_color
@@ -81,8 +79,7 @@ class ModelRenderer(Widget):
     )
 
     # Get longitudinal control setting from car parameters
-    self._params = Params()
-    if car_params := self._params.get("CarParams"):
+    if car_params := Params().get("CarParams"):
       cp = messaging.log_from_bytes(car_params, car.CarParams)
       self._longitudinal_control = cp.openpilotLongitudinalControl
 
@@ -187,36 +184,21 @@ class ModelRenderer(Widget):
 
   def _update_model(self, lead, path_x_array):
     """Update model visualization data based on model message"""
-    model_ui_enabled = self._params.get_bool("ModelUI", default=True)
-    if model_ui_enabled:
-      path_width = self._path_width_to_half_m(self._params.get_float("PathWidth", return_default=True, default=6.1))
-      lane_line_width = self._small_distance_to_half_m(self._params.get_float("LaneLinesWidth", return_default=True, default=4.0))
-      road_edge_width = self._small_distance_to_half_m(self._params.get_float("RoadEdgesWidth", return_default=True, default=2.0))
-    else:
-      path_width = 0.9
-      lane_line_width = 0.025
-      road_edge_width = 0.025
-
-    if model_ui_enabled and self._params.get_bool("DynamicPathWidth", default=False):
-      if ui_state.status == UIStatus.ENGAGED:
-        path_width *= 1.0
-      elif ui_state.always_on_lateral_active:
-        path_width *= 0.75
-      else:
-        path_width *= 0.50
-
     max_distance = np.clip(path_x_array[-1], MIN_DRAW_DISTANCE, MAX_DRAW_DISTANCE)
     max_idx = self._get_path_length_idx(self._lane_lines[0].raw_points[:, 0], max_distance)
 
     # Update lane lines using raw points
+    line_width_factor = 0.12
     for i, lane_line in enumerate(self._lane_lines):
+      if i in (1, 2):
+        line_width_factor = 0.16
       lane_line.projected_points = self._map_line_to_polygon(
-        lane_line.raw_points, lane_line_width * self._lane_line_probs[i], 0.0, max_idx
+        lane_line.raw_points, line_width_factor * self._lane_line_probs[i], 0.0, max_idx
       )
 
     # Update road edges using raw points
     for road_edge in self._road_edges:
-      road_edge.projected_points = self._map_line_to_polygon(road_edge.raw_points, road_edge_width, 0.0, max_idx)
+      road_edge.projected_points = self._map_line_to_polygon(road_edge.raw_points, line_width_factor, 0.0, max_idx)
 
     # Update path using raw points
     if lead and lead.status:
@@ -232,7 +214,7 @@ class ModelRenderer(Widget):
       high_pass_acceleration = self._acceleration_x_filter.x - self._acceleration_x_filter2.x
       y_off = np.interp(high_pass_acceleration, [-1, 0, 1], [0.9 * 2, 0.9, 0.9 / 2])
     else:
-      y_off = path_width
+      y_off = 0.9
 
     max_idx = self._get_path_length_idx(path_x_array, max_distance)
     self._path.projected_points = self._map_line_to_polygon(
@@ -243,7 +225,7 @@ class ModelRenderer(Widget):
 
   def _update_experimental_gradient(self):
     """Pre-calculate experimental mode gradient colors"""
-    if not (self._experimental_mode or self._params.get_bool("AccelerationPath", default=True)):
+    if not self._experimental_mode:
       return
 
     max_len = min(len(self._path.projected_points) // 2, len(self._acceleration_x))
@@ -322,8 +304,7 @@ class ModelRenderer(Widget):
           np.interp(abs(torque), [0.6, 0.8], [0.0, 1.0])
         )
     else:
-      lane_lines_color = get_theme_color("LaneLines", rl.WHITE)
-      color = with_alpha(lane_lines_color, int(alpha * lane_lines_color.a))
+      color = rl.Color(255, 255, 255, int(alpha * 255))
 
     return color
 
@@ -353,28 +334,14 @@ class ModelRenderer(Widget):
     lateral_ui_active = ui_state.status == UIStatus.ENGAGED or ui_state.always_on_lateral_active
     allow_throttle = sm['longitudinalPlan'].allowThrottle or not self._longitudinal_control or ui_state.always_on_lateral_active
     self._blend_filter.update(int(allow_throttle))
-    custom_theme_selected = (self._params.get("ColorScheme", encoding="utf-8", default="stock") or "stock").lower() != "stock"
 
-    if self._experimental_mode or self._params.get_bool("AccelerationPath", default=True):
+    if self._experimental_mode:
       # Draw with acceleration coloring
       if len(self._exp_gradient.colors) > 1:
         draw_polygon(self._rect, self._path.projected_points, gradient=self._exp_gradient)
       else:
         fallback = get_border_color(ui_state)
         draw_polygon(self._rect, self._path.projected_points, rl.Color(fallback.r, fallback.g, fallback.b, 90))
-    elif custom_theme_selected:
-      path_color = get_theme_color("Path", rl.Color(48, 255, 156, 255))
-      gradient = Gradient(
-        start=(0.0, 1.0),
-        end=(0.0, 0.0),
-        colors=[
-          with_alpha(path_color, path_color.a),
-          with_alpha(path_color, int(path_color.a * 0.55)),
-          with_alpha(path_color, int(path_color.a * 0.10)),
-        ],
-        stops=[0.0, 0.5, 1.0],
-      )
-      draw_polygon(self._rect, self._path.projected_points, gradient=gradient)
     else:
       # Blend throttle/no throttle colors based on transition
       blend_factor = round(self._blend_filter.x * 100) / 100
@@ -512,17 +479,3 @@ class ModelRenderer(Widget):
       int(inv_t * start.b + t * end.b),
       int(inv_t * start.a + t * end.a)
     ) for start, end in zip(begin_colors, end_colors, strict=True)]
-
-  def _small_distance_to_half_m(self, value: float) -> float:
-    if value <= 0:
-      return 0.0
-    if self._params.get_bool("IsMetric"):
-      return value / 200.0
-    return value * (CV.INCH_TO_CM / 100.0) / 2.0
-
-  def _path_width_to_half_m(self, value: float) -> float:
-    if value <= 0:
-      return 0.0
-    if self._params.get_bool("IsMetric"):
-      return value / 2.0
-    return value * CV.FOOT_TO_METER / 2.0

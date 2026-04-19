@@ -6,7 +6,6 @@ import numpy as np
 import pyray as rl
 
 from openpilot.selfdrive.ui.lib.starpilot_state import starpilot_state
-from openpilot.selfdrive.ui.lib.starpilot_theme import get_theme_color, with_alpha
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.shader_polygon import draw_polygon, Gradient
 
@@ -177,10 +176,20 @@ def render_path_edges(renderer) -> None:
   elif ui_state.traffic_mode_enabled:
     base_color = rl.Color(201, 34, 49, 241)
   else:
-    color_scheme = renderer._params.get("ColorScheme", encoding="utf-8", default="stock")
-    if color_scheme != "stock":
-      theme_color = get_theme_color("PathEdge", rl.Color(23, 134, 68, 241))
-      base_color = rl.Color(theme_color.r, theme_color.g, theme_color.b, 241)
+    color_scheme = renderer._params.get("ColorScheme")
+    if color_scheme and color_scheme.decode("utf-8") != "stock":
+      path_edges_color = renderer._params.get("PathEdgesColor")
+      if path_edges_color:
+        hex_str = path_edges_color.decode("utf-8").lstrip("#")
+        if len(hex_str) == 6:
+          r = int(hex_str[0:2], 16)
+          g = int(hex_str[2:4], 16)
+          b = int(hex_str[4:6], 16)
+          base_color = rl.Color(r, g, b, 241)
+        else:
+          base_color = rl.Color(23, 134, 68, 241)
+      else:
+        base_color = rl.Color(23, 134, 68, 241)
     else:
       base_color = None
 
@@ -189,9 +198,9 @@ def render_path_edges(renderer) -> None:
       start=(0.0, 1.0),
       end=(0.0, 0.0),
       colors=[
-        with_alpha(base_color, int(255 * 0.4)),
-        with_alpha(base_color, int(255 * 0.35)),
-        with_alpha(base_color, 0),
+        rl.Color(base_color.r, base_color.g, base_color.b, int(255 * 0.4)),
+        rl.Color(base_color.r, base_color.g, base_color.b, int(255 * 0.35)),
+        rl.Color(base_color.r, base_color.g, base_color.b, 0),
       ],
       stops=[0.0, 0.5, 1.0],
     )

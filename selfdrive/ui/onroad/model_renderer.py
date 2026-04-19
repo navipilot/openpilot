@@ -5,9 +5,7 @@ from cereal import messaging, car
 from dataclasses import dataclass, field
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.params import Params
-from openpilot.common.constants import CV
 from openpilot.selfdrive.locationd.calibrationd import HEIGHT_INIT
-from openpilot.selfdrive.ui.lib.starpilot_theme import get_theme_color, with_alpha
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.lib.shader_polygon import draw_polygon, Gradient
@@ -187,24 +185,28 @@ class ModelRenderer(Widget):
 
   def _update_model(self, lead, path_x_array):
     """Update model visualization data based on model message"""
-    model_ui_enabled = self._params.get_bool('ModelUI', default=True)
-    if model_ui_enabled:
-      path_width = self._path_width_to_half_m(self._params.get_float('PathWidth', return_default=True, default=6.1))
-      lane_line_width_m = self._small_distance_to_half_m(self._params.get_float('LaneLinesWidth', return_default=True, default=4.0))
-      road_edge_width_m = self._small_distance_to_half_m(self._params.get_float('RoadEdgesWidth', return_default=True, default=2.0))
-      path_edge_width_pct = np.clip(self._params.get_float('PathEdgeWidth', return_default=True, default=20.0) / 100.0, 0.0, 1.0)
-    else:
-      path_width = 0.9
-      lane_line_width_m = 0.025
-      road_edge_width_m = 0.025
-      path_edge_width_pct = 0.0
+    path_width = self._params.get_float('PathWidth')  # stored in feet, convert to meters
+    if path_width <= 0:
+      path_width = 0.9  # default in meters
+
+    lane_line_width = self._params.get_int('LaneLinesWidth')  # stored in inches, convert to meters
+    if lane_line_width <= 0:
+      lane_line_width = int(0.025 / 0.0254)  # default ~1 inch
+    lane_line_width_m = lane_line_width * 0.0254
+
+    road_edge_width = self._params.get_int('RoadEdgesWidth')  # stored in inches
+    if road_edge_width <= 0:
+      road_edge_width = int(0.025 / 0.0254)
+    road_edge_width_m = road_edge_width * 0.0254
+
+    path_edge_width_pct = self._params.get_int('PathEdgeWidth') / 100.0
 
     # Dynamic path width
-    if model_ui_enabled and self._params.get_bool('DynamicPathWidth', default=False):
+    if self._params.get_bool('DynamicPathWidth'):
       status = ui_state.status
       if status == UIStatus.ENGAGED:
         path_width *= 1.0
-      elif ui_state.always_on_lateral_active:
+      elif status == UIStatus.ALWAYS_ON_LATERAL:
         path_width *= 0.75
       else:
         path_width *= 0.50
@@ -244,7 +246,7 @@ class ModelRenderer(Widget):
 
   def _update_experimental_gradient(self):
     """Pre-calculate experimental mode gradient colors"""
-    use_acceleration = self._experimental_mode or self._params.get_bool('AccelerationPath', default=True)
+    use_acceleration = self._experimental_mode or self._params.get_bool('AccelerationPath')
     use_rainbow = self._params.get_bool('RainbowPath') and not use_acceleration
 
     if not use_acceleration and not use_rainbow:
@@ -331,14 +333,19 @@ class ModelRenderer(Widget):
 
   def _draw_lane_lines(self):
     """Draw lane lines and road edges"""
-    lane_lines_color = get_theme_color("LaneLines", rl.WHITE)
+    color_scheme = self._params.get('ColorScheme', encoding='utf-8') or 'stock'
+    lane_lines_color = self._params.get('LaneLinesColor', encoding='utf-8')
 
     for i, lane_line in enumerate(self._lane_lines):
       if lane_line.projected_points.size == 0:
         continue
 
       alpha = np.clip(self._lane_line_probs[i], 0.0, 0.7)
-      color = with_alpha(lane_lines_color, int(alpha * lane_lines_color.a))
+      if color_scheme != 'stock' and lane_lines_color:
+        base_color = self._hex_to_color(lane_lines_color)
+        color = rl.Color(base_color.r, base_color.g, base_color.b, int(alpha * 255))
+      else:
+        color = rl.Color(255, 255, 255, int(alpha * 255))
       draw_polygon(self._rect, lane_line.projected_points, color)
 
     for i, road_edge in enumerate(self._road_edges):
@@ -357,26 +364,12 @@ class ModelRenderer(Widget):
     allow_throttle = sm['longitudinalPlan'].allowThrottle or not self._longitudinal_control
     self._blend_filter.update(int(allow_throttle))
 
-    use_accel_path = self._params.get_bool('AccelerationPath', default=True)
-    custom_theme_selected = (self._params.get('ColorScheme', encoding='utf-8', default='stock') or 'stock').lower() != 'stock'
+    use_accel_path = self._params.get_bool('AccelerationPath')
     if self._experimental_mode or use_accel_path:
       if len(self._exp_gradient.colors) > 1:
         draw_polygon(self._rect, self._path.projected_points, gradient=self._exp_gradient)
       else:
         draw_polygon(self._rect, self._path.projected_points, rl.Color(255, 255, 255, 30))
-    elif custom_theme_selected:
-      path_color = get_theme_color("Path", rl.Color(48, 255, 156, 255))
-      gradient = Gradient(
-        start=(0.0, 1.0),
-        end=(0.0, 0.0),
-        colors=[
-          with_alpha(path_color, path_color.a),
-          with_alpha(path_color, int(path_color.a * 0.55)),
-          with_alpha(path_color, int(path_color.a * 0.10)),
-        ],
-        stops=[0.0, 0.5, 1.0],
-      )
-      draw_polygon(self._rect, self._path.projected_points, gradient=gradient)
     else:
       # Blend throttle/no throttle colors based on transition
       blend_factor = round(self._blend_filter.x * 100) / 100
@@ -391,13 +384,12 @@ class ModelRenderer(Widget):
 
   def _draw_lead_indicator(self):
     # Draw lead vehicles if available
-    lead_color = get_theme_color("LeadMarker", rl.Color(201, 34, 49, 255))
     for lead in self._lead_vehicles:
       if not lead.glow or not lead.chevron:
         continue
 
       rl.draw_triangle_fan(lead.glow, len(lead.glow), rl.Color(218, 202, 37, 255))
-      rl.draw_triangle_fan(lead.chevron, len(lead.chevron), with_alpha(lead_color, lead.fill_alpha))
+      rl.draw_triangle_fan(lead.chevron, len(lead.chevron), rl.Color(201, 34, 49, lead.fill_alpha))
 
   def _update_adjacent_paths(self, max_idx: int, max_distance: float):
     """Compute adjacent lane path polygons by averaging lane line pairs."""
@@ -638,20 +630,6 @@ class ModelRenderer(Widget):
       int(rgb[2] * 255),
       int(a * 255)
     )
-
-  def _small_distance_to_half_m(self, value: float) -> float:
-    if value <= 0:
-      return 0.0
-    if self._params.get_bool("IsMetric"):
-      return value / 200.0
-    return value * (CV.INCH_TO_CM / 100.0) / 2.0
-
-  def _path_width_to_half_m(self, value: float) -> float:
-    if value <= 0:
-      return 0.0
-    if self._params.get_bool("IsMetric"):
-      return value / 2.0
-    return value * CV.FOOT_TO_METER / 2.0
 
   @staticmethod
   def _blend_colors(begin_colors, end_colors, t):
