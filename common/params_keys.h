@@ -171,6 +171,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"BlindSpotPath", {PERSISTENT, BOOL, "1", "0", 1}},
     {"BelowSteerSpeedVolume", {PERSISTENT, INT, "101", "101", 2}},
     {"BorderMetrics", {PERSISTENT, BOOL, "0", "0", 3}},
+    {"BorderWidth", {PERSISTENT, FLOAT, "100.0", "100.0", 2}},
     {"CalibratedLateralAcceleration", {PERSISTENT, FLOAT, "2.0", "2.0", 2}},
     {"CalibrationProgress", {PERSISTENT, FLOAT, "0.0", "0.0", 3}},
     {"CameraView", {PERSISTENT, INT, "3", "0", 2}},

@@ -38,6 +38,7 @@ BlindSpotMetrics
 BlindSpotPath
 BootLogo
 BorderMetrics
+BorderWidth
 CECurves
 CECurvesLead
 CELead

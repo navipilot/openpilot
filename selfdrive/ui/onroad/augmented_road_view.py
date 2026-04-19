@@ -6,6 +6,7 @@ from msgq.visionipc import VisionStreamType
 from openpilot.common.constants import CV
 from openpilot.selfdrive.ui import UI_BORDER_SIZE
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
+from openpilot.selfdrive.ui.lib.starpilot_visuals import get_border_width
 from openpilot.selfdrive.ui.onroad.alert_renderer import AlertRenderer, ALERT_COLORS, AlertStatus
 from openpilot.selfdrive.ui.onroad.driver_state import DriverStateRenderer
 from openpilot.selfdrive.ui.onroad.hud_renderer import HudRenderer
@@ -164,12 +165,14 @@ class AugmentedRoadView(CameraView):
     # Update calibration before rendering
     self._update_calibration()
 
+    border_width = self._get_border_width()
+
     # Create inner content area with border padding
     self._content_rect = rl.Rectangle(
-      rect.x + UI_BORDER_SIZE,
-      rect.y + UI_BORDER_SIZE,
-      rect.width - 2 * UI_BORDER_SIZE,
-      rect.height - 2 * UI_BORDER_SIZE,
+      rect.x + border_width,
+      rect.y + border_width,
+      rect.width - 2 * border_width,
+      rect.height - 2 * border_width,
     )
 
     # Enable scissor mode to clip all rendering within content rectangle boundaries
@@ -213,13 +216,17 @@ class AugmentedRoadView(CameraView):
     # We only call click callback on press if not interacting with HUD
     pass
 
+  def _get_border_width(self) -> int:
+    return get_border_width(UI_BORDER_SIZE, ui_state.params)
+
   def _draw_border(self, rect: rl.Rectangle):
-    rl.draw_rectangle_lines_ex(rect, UI_BORDER_SIZE, rl.BLACK)
+    border_width = self._get_border_width()
+    rl.draw_rectangle_lines_ex(rect, border_width, rl.BLACK)
     border_roundness = 0.12
     border_color = get_screen_edge_color(ui_state)
-    border_rect = rl.Rectangle(rect.x + UI_BORDER_SIZE, rect.y + UI_BORDER_SIZE,
-                               rect.width - 2 * UI_BORDER_SIZE, rect.height - 2 * UI_BORDER_SIZE)
-    rl.draw_rectangle_rounded_lines_ex(border_rect, border_roundness, 10, UI_BORDER_SIZE, border_color)
+    border_rect = rl.Rectangle(rect.x + border_width, rect.y + border_width,
+                               rect.width - 2 * border_width, rect.height - 2 * border_width)
+    rl.draw_rectangle_rounded_lines_ex(border_rect, border_roundness, 10, border_width, border_color)
 
   def _switch_stream_if_needed(self, sm):
     if sm['selfdriveState'].experimentalMode and WIDE_CAM in self.available_streams:

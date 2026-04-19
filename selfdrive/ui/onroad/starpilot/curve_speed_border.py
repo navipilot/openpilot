@@ -122,7 +122,7 @@ def _perimeter(r: rl.Rectangle, roundness: float) -> list[tuple[float, float]]:
 
 # ── Public API ─────────────────────────────────────────────────────────
 
-def render_glow(border_rect: rl.Rectangle):
+def render_glow(border_rect: rl.Rectangle, border_width: float = UI_BORDER_SIZE):
   """Layer 3: Amber glow behind the standard border. Call BEFORE drawing standard border."""
   state = _csc_state()
   if state is None or not state['active']:
@@ -137,7 +137,7 @@ def render_glow(border_rect: rl.Rectangle):
   alpha = _GLOW_MAX_ALPHA * intensity * (0.5 + 0.5 * breath)
 
   for i in range(_GLOW_LAYERS):
-    inset = (UI_BORDER_SIZE / _GLOW_LAYERS) * i
+    inset = (border_width / _GLOW_LAYERS) * i
     falloff = 1.0 - (i / _GLOW_LAYERS)
     a = int(alpha * falloff * falloff)
     if a < 2:
@@ -152,7 +152,7 @@ def render_glow(border_rect: rl.Rectangle):
     rl.draw_rectangle_rounded(glow_rect, 0.12, 10, rl.Color(251, 191, 36, a))
 
 
-def render_filament(border_rect: rl.Rectangle):
+def render_filament(border_rect: rl.Rectangle, border_width: float = UI_BORDER_SIZE):
   """Layer 5: Amber filament on top of the standard border. Call AFTER drawing standard border."""
   state = _csc_state()
   if state is None:
@@ -163,10 +163,10 @@ def render_filament(border_rect: rl.Rectangle):
 
   curvature = state['curvature']
   inner = rl.Rectangle(
-    border_rect.x + UI_BORDER_SIZE,
-    border_rect.y + UI_BORDER_SIZE,
-    border_rect.width - 2 * UI_BORDER_SIZE,
-    border_rect.height - 2 * UI_BORDER_SIZE,
+    border_rect.x + border_width,
+    border_rect.y + border_width,
+    border_rect.width - 2 * border_width,
+    border_rect.height - 2 * border_width,
   )
 
   points = _perimeter(inner, 0.12)

@@ -2,7 +2,6 @@ import pyray as rl
 import time
 from msgq.visionipc import VisionStreamType
 from openpilot.common.params import Params
-from openpilot.selfdrive.ui import UI_BORDER_SIZE
 from openpilot.selfdrive.ui.onroad.augmented_road_view import AugmentedRoadView
 from openpilot.selfdrive.ui.onroad.starpilot.curve_speed_border import render_glow, render_filament
 from openpilot.selfdrive.ui.onroad.starpilot.path import render_adjacent_paths, render_blind_spot_path, render_path_edges
@@ -32,20 +31,16 @@ class StarPilotOnroadView(AugmentedRoadView):
     if not ui_state.started:
       return
 
-    self._render_slc(rect)
+    self._render_slc()
     self._render_overlays()
     self._render_path_features(rect)
 
-  def _render_slc(self, rect: rl.Rectangle):
-    content_rect = rl.Rectangle(
-      rect.x + UI_BORDER_SIZE, rect.y + UI_BORDER_SIZE,
-      rect.width - 2 * UI_BORDER_SIZE, rect.height - 2 * UI_BORDER_SIZE,
-    )
+  def _render_slc(self):
     rl.begin_scissor_mode(
-      int(content_rect.x), int(content_rect.y),
-      int(content_rect.width), int(content_rect.height),
+      int(self._content_rect.x), int(self._content_rect.y),
+      int(self._content_rect.width), int(self._content_rect.height),
     )
-    render_speed_limit(content_rect)
+    render_speed_limit(self._content_rect)
     rl.end_scissor_mode()
 
   def _render_overlays(self):
@@ -172,24 +167,26 @@ class StarPilotOnroadView(AugmentedRoadView):
     )
 
   def _draw_border(self, rect: rl.Rectangle):
-    rl.draw_rectangle_lines_ex(rect, UI_BORDER_SIZE, rl.BLACK)
-    border_rect = rl.Rectangle(rect.x + UI_BORDER_SIZE, rect.y + UI_BORDER_SIZE,
-                                rect.width - 2 * UI_BORDER_SIZE, rect.height - 2 * UI_BORDER_SIZE)
+    border_width = self._get_border_width()
+    rl.draw_rectangle_lines_ex(rect, border_width, rl.BLACK)
+    border_rect = rl.Rectangle(rect.x + border_width, rect.y + border_width,
+                                rect.width - 2 * border_width, rect.height - 2 * border_width)
 
     # Layer 3: Amber glow (behind standard border)
-    render_glow(border_rect)
+    render_glow(border_rect, border_width)
 
     # Layer 4: Standard border
     border_color = get_screen_edge_color(ui_state)
-    rl.draw_rectangle_rounded_lines_ex(border_rect, 0.12, 10, UI_BORDER_SIZE, border_color)
+    rl.draw_rectangle_rounded_lines_ex(border_rect, 0.12, 10, border_width, border_color)
 
     # Layer 5: Amber filament (on top of standard border)
-    render_filament(border_rect)
+    render_filament(border_rect, border_width)
 
   def _handle_mouse_press(self, mouse_pos: MousePos):
+    border_width = self._get_border_width()
     content_rect = rl.Rectangle(
-      UI_BORDER_SIZE, UI_BORDER_SIZE,
-      gui_app.width - 2 * UI_BORDER_SIZE, gui_app.height - 2 * UI_BORDER_SIZE,
+      border_width, border_width,
+      gui_app.width - 2 * border_width, gui_app.height - 2 * border_width,
     )
     ss_width = SET_SPEED_WIDTH_MET if ui_state.is_metric else SET_SPEED_WIDTH_IMP
     ss_x = content_rect.x + SET_SPEED_X_OFFSET + (SET_SPEED_WIDTH_IMP - ss_width) // 2

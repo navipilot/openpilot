@@ -1683,6 +1683,17 @@
         "parent_key": "ModelUI"
       },
       {
+        "key": "BorderWidth",
+        "label": "Border Width",
+        "description": "Scale the driving-screen border thickness.\n\n100% matches the stock border width.",
+        "data_type": "float",
+        "ui_type": "numeric",
+        "min": 25.0,
+        "max": 250.0,
+        "step": 5.0,
+        "parent_key": "ModelUI"
+      },
+      {
         "key": "PathEdgeWidth",
         "label": "Path Edges Width",
         "description": "Set the driving-path edge width that represents different driving modes and statuses.\n\nDefault is 20% of the total path width.\n\nColor Guide:\n\n- Light Blue: Always On Lateral\n- Green: Default\n- Orange: Experimental Mode\n- Red: Traffic Mode\n- Yellow: Conditional Experimental Mode overridden",

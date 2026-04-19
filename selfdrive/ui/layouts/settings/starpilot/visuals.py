@@ -335,6 +335,16 @@ class StarPilotModelUILayout(StarPilotPanel):
         "visible": lambda: self._params.get_bool("ModelUI"),
       },
       {
+        "title": tr_noop("Border Width"),
+        "type": "value",
+        "key": "BorderWidth",
+        "get_value": lambda: self._get_border_width_display(),
+        "on_click": lambda: self._show_float_selector("BorderWidth", 25, 250, 5, "%"),
+        "icon": "toggle_icons/icon_road.png",
+        "color": "#8B5CF6",
+        "visible": lambda: self._params.get_bool("ModelUI"),
+      },
+      {
         "title": tr_noop("Path Edge Width"),
         "type": "value",
         "key": "PathEdgeWidth",
@@ -398,6 +408,9 @@ class StarPilotModelUILayout(StarPilotPanel):
 
   def _get_path_width_unit(self):
     return "m" if self._params.get_bool("IsMetric") else "ft"
+
+  def _get_border_width_display(self):
+    return f"{int(round(self._params.get_float('BorderWidth')))}%"
 
   def _get_path_width_display(self):
     val = self._params.get_float('PathWidth')
