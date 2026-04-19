@@ -45,14 +45,14 @@ class CarInterface(CarInterfaceBase):
     ret.autoResumeSng = ret.openpilotLongitudinalControl
 
     ret.minEnableSpeed = -1.
-    ret.longitudinalActuatorDelay = 0.35
+    ret.longitudinalActuatorDelay = 0.3
 
     ret.vEgoStopping = 0.25
     ret.vEgoStarting = 0.25
     ret.stoppingDecelRate = 0.3
     ret.startingState = True
-    ret.startAccel = 0.8
-    ret.stopAccel = -0.35
+    ret.startAccel = 0.5
+    ret.stopAccel = -0.5
 
     # Longitudinal Tuning (PID)
     tune = ret.longitudinalTuning
