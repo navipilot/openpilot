@@ -24,12 +24,13 @@ from openpilot.starpilot.common.safe_mode import (
 )
 from openpilot.starpilot.common.starpilot_utilities import ThreadManager, flash_panda, is_url_pingable, lock_doors, use_konik_server
 from openpilot.starpilot.common.starpilot_variables import ERROR_LOGS_PATH, StarPilotVariables
-from openpilot.starpilot.controls.starpilot_planner import StarPilotPlanner
+from openpilot.starpilot.controls.starpilot_planner import StarPilotPlanner, serialize_starpilot_toggles
 from openpilot.starpilot.system.starpilot_stats import send_stats
 from openpilot.starpilot.system.starpilot_tracking import StarPilotTracking
 
 ASSET_CHECK_RATE = (1 / DT_MDL)
 DRIVE_STATS_SYNC_RATE = 30
+TOGGLE_BROADCAST_INTERVAL_FRAMES = int(1 / DT_MDL)
 UPDATE_CHECK_INTERVAL_SECONDS = 60 * 60
 
 
@@ -181,6 +182,8 @@ def starpilot_thread():
   thread_manager = ThreadManager()
 
   starpilot_toggles = starpilot_variables.starpilot_toggles
+  serialized_starpilot_toggles = serialize_starpilot_toggles(starpilot_toggles)
+  toggle_broadcast_pending = True
 
   drive_stats_session = requests.Session()
   next_drive_stats_sync = 0.0
@@ -211,6 +214,8 @@ def starpilot_thread():
       starpilot_planner.shutdown()
 
       starpilot_toggles = update_toggles(starpilot_variables, started, theme_manager, thread_manager, time_validated, params, starpilot_toggles)
+      serialized_starpilot_toggles = serialize_starpilot_toggles(starpilot_toggles)
+      toggle_broadcast_pending = True
       transition_offroad(starpilot_planner, theme_manager, thread_manager, time_validated, sm, params, starpilot_toggles)
 
       run_update_checks = True
@@ -221,13 +226,17 @@ def starpilot_thread():
       transition_onroad(error_log)
 
     if started and sm.updated["modelV2"]:
+      broadcast_toggles = toggle_broadcast_pending or (rate_keeper.frame % TOGGLE_BROADCAST_INTERVAL_FRAMES == 0)
       starpilot_planner.update(now, time_validated, sm, starpilot_toggles)
-      starpilot_planner.publish(theme_manager.theme_updated, sm, pm, starpilot_toggles)
+      starpilot_planner.publish(theme_manager.theme_updated, sm, pm, starpilot_toggles,
+                                serialized_starpilot_toggles if broadcast_toggles else "")
+      if broadcast_toggles:
+        toggle_broadcast_pending = False
 
       starpilot_tracking.update(now, time_validated, sm, starpilot_toggles)
     elif not started:
       starpilot_plan_send = messaging.new_message("starpilotPlan")
-      starpilot_plan_send.starpilotPlan.starpilotToggles = json.dumps(vars(starpilot_toggles))
+      starpilot_plan_send.starpilotPlan.starpilotToggles = serialized_starpilot_toggles
       starpilot_plan_send.starpilotPlan.themeUpdated = theme_manager.theme_updated
       pm.send("starpilotPlan", starpilot_plan_send)
 
@@ -256,6 +265,8 @@ def starpilot_thread():
 
     if params_memory.get_bool("StarPilotTogglesUpdated") or theme_manager.theme_updated:
       starpilot_toggles = update_toggles(starpilot_variables, started, theme_manager, thread_manager, time_validated, params, starpilot_toggles)
+      serialized_starpilot_toggles = serialize_starpilot_toggles(starpilot_toggles)
+      toggle_broadcast_pending = True
 
     periodic_update_due = monotonic_now >= next_periodic_update_check
     if periodic_update_due:

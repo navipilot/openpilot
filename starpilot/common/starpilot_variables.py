@@ -281,7 +281,13 @@ def default_ev_tuning_enabled(CP):
   return bool(ev_vehicle)
 
 def get_starpilot_toggles(sm=messaging.SubMaster(["starpilotPlan"])):
-  toggles = process_starpilot_toggles(sm["starpilotPlan"].starpilotToggles)
+  toggles_text = sm["starpilotPlan"].starpilotToggles
+  if toggles_text:
+    get_starpilot_toggles._last_toggles_text = toggles_text
+  else:
+    toggles_text = getattr(get_starpilot_toggles, "_last_toggles_text", "")
+
+  toggles = process_starpilot_toggles(toggles_text)
 
   # Force drive-state controls must be authoritative from params so they
   # apply immediately even if starpilotPlan publication is temporarily stale.

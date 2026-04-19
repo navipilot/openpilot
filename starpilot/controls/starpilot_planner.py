@@ -32,6 +32,10 @@ def _sanitize_json_value(value):
   return value
 
 
+def serialize_starpilot_toggles(starpilot_toggles):
+  return json.dumps(_sanitize_json_value(vars(starpilot_toggles)), allow_nan=False)
+
+
 class StarPilotPlanner:
   def __init__(self, error_log, ThemeManager):
     self.params = Params(return_defaults=True)
@@ -152,7 +156,7 @@ class StarPilotPlanner:
     self.tracking_lead_filter.update(following_lead)
     return self.tracking_lead_filter.x >= THRESHOLD
 
-  def publish(self, theme_updated, sm, pm, starpilot_toggles):
+  def publish(self, theme_updated, sm, pm, starpilot_toggles, serialized_toggles=""):
     starpilot_plan_send = messaging.new_message("starpilotPlan")
     starpilot_plan_send.valid = sm.all_checks(service_list=["carState", "controlsState", "selfdriveState", "radarState"])
     starpilotPlan = starpilot_plan_send.starpilotPlan
@@ -178,7 +182,7 @@ class StarPilotPlanner:
 
     starpilotPlan.starpilotEvents = self.starpilot_events.events.to_msg()
 
-    starpilotPlan.starpilotToggles = json.dumps(_sanitize_json_value(vars(starpilot_toggles)), allow_nan=False)
+    starpilotPlan.starpilotToggles = serialized_toggles
 
     if sm["starpilotCarState"].trafficModeEnabled:
       starpilotPlan.increasedStoppedDistance = 0
