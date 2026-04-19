@@ -56,6 +56,14 @@ def get_accel_from_plan(speeds, accels, t_idxs, action_t=DT_MDL, vEgoStopping=0.
 # Backward-compatible alias used by tinygrad_modeld.
 get_accel_from_plan_tomb_raider = get_accel_from_plan
 
+
+def get_lateral_active(enabled: bool, active: bool, always_on_lateral_enabled: bool,
+                       steer_fault_temporary: bool, steer_fault_permanent: bool,
+                       standstill: bool, steer_at_standstill: bool, lateral_check: bool) -> bool:
+  lateral_allowed = (enabled and active) or always_on_lateral_enabled
+  return lateral_allowed and not steer_fault_temporary and not steer_fault_permanent and \
+         (not standstill or steer_at_standstill) and lateral_check
+
 def curv_from_psis(psi_target, psi_rate, vego, action_t):
   vego = np.clip(vego, MIN_SPEED, np.inf)
   curv_from_psi = psi_target / (vego * action_t)

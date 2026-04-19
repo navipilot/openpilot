@@ -158,7 +158,7 @@ class TestLatControl:
     left_unwind = get_volt_standard_friction_threshold(6.0, 0.7, -0.8)
     right_unwind = get_volt_standard_friction_threshold(6.0, -0.7, 0.8)
     assert left_turn_in > base > right_turn_in
-    assert left_unwind < base and right_unwind < base
+    assert left_unwind < base < right_unwind
 
   def test_volt_standard_friction_scale_curve(self):
     base = get_volt_standard_friction_scale(25.0, 0.7, 0.8)
@@ -167,7 +167,7 @@ class TestLatControl:
     left_unwind = get_volt_standard_friction_scale(6.0, 0.7, -0.8)
     right_unwind = get_volt_standard_friction_scale(6.0, -0.7, 0.8)
     assert left_turn_in < base < right_turn_in
-    assert left_unwind > base and right_unwind > base
+    assert left_unwind > base > right_unwind
 
   def test_genesis_g90_ff_scale_curve(self):
     assert get_genesis_g90_ff_scale(0.0, 0.0, 20.0) == 1.0

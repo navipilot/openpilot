@@ -12,7 +12,7 @@ from openpilot.common.swaglog import cloudlog
 from opendbc.car.car_helpers import interfaces
 from opendbc.car.gm.values import CAR as GM_CAR
 from opendbc.car.vehicle_model import VehicleModel
-from openpilot.selfdrive.controls.lib.drive_helpers import clip_curvature
+from openpilot.selfdrive.controls.lib.drive_helpers import clip_curvature, get_lateral_active
 from openpilot.selfdrive.controls.lib.latcontrol import LatControl
 from openpilot.selfdrive.controls.lib.latcontrol_pid import LatControlPID
 from openpilot.selfdrive.controls.lib.latcontrol_angle import LatControlAngle, STEER_ANGLE_SATURATION_THRESHOLD
@@ -35,22 +35,12 @@ LaneChangeDirection = log.LaneChangeDirection
 ACTUATOR_FIELDS = tuple(car.CarControl.Actuators.schema.fields.keys())
 
 
-def get_gm_hud_set_speed(set_speed_ms: float, controls_enabled: bool, starpilot_toggles, starpilot_plan) -> float:
+def get_gm_hud_set_speed(set_speed_ms: float, starpilot_toggles) -> float:
   spoofed_speed = set_speed_ms
 
   set_speed_offset = float(getattr(starpilot_toggles, "set_speed_offset", 0.0) or 0.0)
   if spoofed_speed > 0 and set_speed_offset > 0:
     spoofed_speed += set_speed_offset * CV.KPH_TO_MS
-
-  if not controls_enabled or not getattr(starpilot_toggles, "speed_limit_controller", False):
-    return spoofed_speed
-
-  slc_source = str(getattr(starpilot_plan, "slcSpeedLimitSource", "") or "")
-  slc_speed_limit = float(getattr(starpilot_plan, "slcSpeedLimit", 0.0) or 0.0)
-  slc_speed_limit_offset = float(getattr(starpilot_plan, "slcSpeedLimitOffset", 0.0) or 0.0)
-
-  if slc_source != "None" and slc_speed_limit > 0:
-    return slc_speed_limit + slc_speed_limit_offset
 
   return spoofed_speed
 
@@ -141,8 +131,11 @@ class Controls:
 
     # Check which actuators can be enabled
     standstill = abs(CS.vEgo) <= max(self.CP.minSteerSpeed, 0.3) or CS.standstill
-    CC.latActive = (self.sm['selfdriveState'].active or self.sm['starpilotCarState'].alwaysOnLateralEnabled) and not CS.steerFaultTemporary and not CS.steerFaultPermanent and \
-                   (not standstill or self.CP.steerAtStandstill) and self.sm['starpilotPlan'].lateralCheck
+    CC.latActive = get_lateral_active(CC.enabled, self.sm['selfdriveState'].active,
+                                      self.sm['starpilotCarState'].alwaysOnLateralEnabled,
+                                      CS.steerFaultTemporary, CS.steerFaultPermanent,
+                                      standstill, self.CP.steerAtStandstill,
+                                      self.sm['starpilotPlan'].lateralCheck)
     CC.longActive = CC.enabled and not any(e.overrideLongitudinal for e in self.sm['onroadEvents']) and not self.sm['starpilotCarState'].pauseLongitudinal and self.CP.openpilotLongitudinalControl
 
     actuators = CC.actuators
@@ -222,7 +215,7 @@ class Controls:
       getattr(self.starpilot_toggles, "gm_dash_spoof_offsets", False)
     )
     if gm_dash_spoof_offsets_enabled:
-      hud_set_speed = get_gm_hud_set_speed(hud_set_speed, CC.enabled, self.starpilot_toggles, self.sm['starpilotPlan'])
+      hud_set_speed = get_gm_hud_set_speed(hud_set_speed, self.starpilot_toggles)
     hudControl.setSpeed = hud_set_speed
     hudControl.speedVisible = CC.enabled
     hudControl.lanesVisible = CC.enabled

@@ -175,7 +175,7 @@ StarPilotVehiclesPanel::StarPilotVehiclesPanel(StarPilotSettingsWindow *parent, 
   std::vector<std::tuple<QString, QString, QString, QString>> vehicleToggles {
     {"GMToggles", tr("General Motors Settings"), tr("<b>StarPilot features for General Motors vehicles.</b>"), ""},
     {"GMPedalLongitudinal", tr("Use Pedal For Longitudinal"), tr("<b>Use the pedal interceptor for full longitudinal control</b> on supported GM vehicles."), ""},
-    {"GMDashSpoofOffsets", tr("Apply Offsets To Dash Spoof"), tr("<b>On GM pedal-long cars, add the active global set-speed offset or SLC offset</b> to the spoofed dash set speed."), ""},
+    {"GMDashSpoofOffsets", tr("Apply Offsets To Dash Spoof"), tr("<b>On GM pedal-long cars, add the configured set-speed offset</b> to the spoofed dash set speed so it matches the on-screen set speed."), ""},
     {"LongPitch", tr("Smooth Pedal Response on Hills"), tr("<b>Smoothen acceleration and braking</b> when driving downhill/uphill."), ""},
     {"RemoteStartBootsComma", tr("Remote Start Boots comma"), tr("<b>Use the remote-start GM panda firmware at boot.</b><br><br>Required for GM remote-start startup signal behavior."), ""},
     {"RemapCancelToDistance", tr("Remap Cancel To Distance"), tr("<b>On pedal-interceptor Bolts, remap the steering-wheel CANCEL button to distance/personality input.</b>"), ""},

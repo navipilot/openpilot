@@ -2019,7 +2019,7 @@
       {
         "key": "GMDashSpoofOffsets",
         "label": "Apply Offsets To Dash Spoof",
-        "description": "On GM pedal-long cars, add the active global set-speed offset or SLC offset to the spoofed dash set speed.",
+        "description": "On GM pedal-long cars, add the configured set-speed offset to the spoofed dash set speed so it matches the on-screen set speed.",
         "data_type": "bool",
         "ui_type": "toggle"
       },
