@@ -41,6 +41,7 @@ class SpeedLimitController:
 
     self.calling_mapbox = False
     self.override_slc = False
+    self.override_requires_gas_release = False
 
     self.denied_target = 0
     self.map_speed_limit = 0
@@ -99,6 +100,28 @@ class SpeedLimitController:
       except (TypeError, ValueError):
         next_map_speed_limit = {}
     return next_map_speed_limit if isinstance(next_map_speed_limit, dict) else {}
+
+  @property
+  def override_mode_enabled(self):
+    if self.starpilot_toggles is None:
+      return False
+    return self.starpilot_toggles.speed_limit_controller_override_manual or self.starpilot_toggles.speed_limit_controller_override_set_speed
+
+  def override_active(self, v_ego, gas_pressed):
+    target_with_offset = self.target + self.offset
+    if target_with_offset <= 0 or not self.override_mode_enabled:
+      return False
+    return self.overridden_speed > target_with_offset or (gas_pressed and v_ego > target_with_offset)
+
+  def clear_override_for_source_limit(self, desired_source, desired_target, had_override):
+    if desired_source == "None" or desired_target <= 0 or not had_override:
+      return
+
+    # A new posted limit starts a new segment, so the previous segment's gas override
+    # should not carry through until the driver releases and reapplies the pedal.
+    self.override_slc = False
+    self.overridden_speed = 0
+    self.override_requires_gas_release = True
 
   def get_mapbox_speed_limit(self, now, time_validated, v_ego, sm):
     if not self.starpilot_planner.gps_valid or not self.mapbox_token or (sm["carState"].steeringAngleDeg - sm["liveParameters"].angleOffsetDeg) >= 45:
@@ -227,17 +250,17 @@ class SpeedLimitController:
     self.mapbox_future = future
     future.add_done_callback(complete_request)
 
-  def handle_limit_change(self, desired_source, desired_target, sm):
+  def handle_limit_change(self, desired_source, desired_target, v_ego, sm):
     self.speed_limit_changed_timer += DT_MDL
+    had_override = self.override_active(v_ego, sm["carState"].gasPressed)
 
     speed_limit_accepted = (sm["starpilotCarState"].accelPressed and sm["carControl"].longActive) or self.starpilot_planner.params_memory.get_bool("SpeedLimitAccepted")
     speed_limit_denied = sm["starpilotCarState"].decelPressed or (self.speed_limit_changed_timer >= 30)
 
     if speed_limit_accepted:
-      self.overridden_speed = 0
-
       self.source = desired_source
       self.target = desired_target
+      self.clear_override_for_source_limit(desired_source, desired_target, had_override)
 
       self.starpilot_planner.params_memory.remove("SpeedLimitAccepted")
 
@@ -250,10 +273,12 @@ class SpeedLimitController:
     elif desired_target < self.target and not self.starpilot_toggles.speed_limit_confirmation_lower:
       self.source = desired_source
       self.target = desired_target
+      self.clear_override_for_source_limit(desired_source, desired_target, had_override)
 
     elif desired_target > self.target and not self.starpilot_toggles.speed_limit_confirmation_higher:
       self.source = desired_source
       self.target = desired_target
+      self.clear_override_for_source_limit(desired_source, desired_target, had_override)
 
     else:
       self.source = "None"
@@ -329,6 +354,7 @@ class SpeedLimitController:
       self.speed_limit_changed_timer = 0
       self.unconfirmed_speed_limit = 0
       self.overridden_speed = 0
+      self.override_requires_gas_release = False
 
       if desired_target >= 1:
         self.source = desired_source
@@ -340,7 +366,7 @@ class SpeedLimitController:
       return
 
     if abs(desired_target - self.previous_target) >= 1:
-      self.handle_limit_change(desired_source, desired_target, sm)
+      self.handle_limit_change(desired_source, desired_target, v_ego, sm)
     elif desired_source != self.source and abs(desired_target - self.target) < 1:
       self.source = desired_source
     else:
@@ -385,9 +411,17 @@ class SpeedLimitController:
         self.map_speed_limit = self.next_speed_limit
 
   def update_override(self, v_cruise, v_cruise_diff, v_ego, v_ego_diff, sm):
+    if not sm["selfdriveState"].enabled:
+      self.override_slc = False
+      self.overridden_speed = 0
+      self.override_requires_gas_release = False
+      return
+
+    if not sm["carState"].gasPressed:
+      self.override_requires_gas_release = False
+
     self.override_slc = self.overridden_speed > self.target + self.offset > 0
-    self.override_slc |= sm["carState"].gasPressed and v_ego > self.target + self.offset > 0
-    self.override_slc &= sm["selfdriveState"].enabled
+    self.override_slc |= not self.override_requires_gas_release and sm["carState"].gasPressed and v_ego > self.target + self.offset > 0
 
     if self.override_slc:
       if self.starpilot_toggles.speed_limit_controller_override_manual:
