@@ -493,11 +493,11 @@ class DesireHelper:
       if self.carrot_overtake_cmd:
         atc_left_right = True
       #在变道期间不再接受下一条变道命令，防止结束当前变道后再一次变道
-      if carrotMan.carrotCmdIndex != self.carrot_cmd_index_last and (carrotMan.carrotCmd == "LANECHANGE" or carrotMan.carrotCmd == "OVERTAKE"):
-        self.carrot_cmd_index_last = carrotMan.carrotCmdIndex
+      #if carrotMan.carrotCmdIndex != self.carrot_cmd_index_last and (carrotMan.carrotCmd == "LANECHANGE" or carrotMan.carrotCmd == "OVERTAKE"):
+      #  self.carrot_cmd_index_last = carrotMan.carrotCmdIndex
     elif carrotMan.carrotCmdIndex != self.carrot_cmd_index_last and (carrotMan.carrotCmd == "LANECHANGE" or carrotMan.carrotCmd == "OVERTAKE"): #来自app的变道命令
       self.carrot_cmd_index_last = carrotMan.carrotCmdIndex
-      self.carrot_lane_change_count = int(LANE_CHANGE_TIME_MAX*2 / DT_MDL)
+      self.carrot_lane_change_count = int(0.2 / DT_MDL)
       self.carrot_blinker_state = BLINKER_LEFT if carrotMan.carrotArg == "LEFT" else BLINKER_RIGHT
       print(f"---[{time.strftime('%H:%M:%S')}]Desire lanechange: {carrotMan.carrotArg},counter={self.carrot_lane_change_count},blinker={self.carrot_blinker_state},"
             f"state={self.lane_change_state},prev_desire_enabled={self.prev_desire_enabled},"
@@ -511,6 +511,7 @@ class DesireHelper:
       #self.lane_count_last = -1
       if carrotMan.carrotCmd == "OVERTAKE":
         self.carrot_overtake_cmd = True
+        atc_left_right = True
     elif atc_type in ["turn left", "turn right"]: #来自carrot_man.py的update_auto_turn函数，转弯请求
       if self.atc_active != 2:
         below_lane_change_speed = True
