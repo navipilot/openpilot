@@ -111,6 +111,12 @@ class CarInterface(CarInterfaceBase):
       if 0x391 in fingerprint[0]:
         ret.flags |= HyundaiFlags.HAS_LDA_BUTTON.value
 
+      if candidate == CAR.KIA_FORTE:
+        has_scc_fw = any(fw.ecu == Ecu.fwdRadar for fw in car_fw)
+        has_scc_can = any(addr in fingerprint[bus] for bus in (0, 2) for addr in (0x420, 0x421))
+        if not (has_scc_fw or has_scc_can):
+          ret.flags |= HyundaiFlags.NON_SCC.value
+
     # Common lateral control setup
 
     ret.centerToFront = ret.wheelbase * 0.4
@@ -130,6 +136,8 @@ class CarInterface(CarInterfaceBase):
     # Common longitudinal control setup
 
     ret.radarUnavailable = RADAR_START_ADDR not in fingerprint[1] or Bus.radar not in DBC[ret.carFingerprint]
+    if ret.flags & HyundaiFlags.NON_SCC:
+      ret.alphaLongitudinalAvailable = False
     ret.openpilotLongitudinalControl = alpha_long and ret.alphaLongitudinalAvailable
     ret.pcmCruise = not ret.openpilotLongitudinalControl
     ret.startingState = True

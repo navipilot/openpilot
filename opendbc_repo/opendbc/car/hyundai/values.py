@@ -135,6 +135,9 @@ class HyundaiFlags(IntFlag):
 
   ALT_LIMITS_2 = 2 ** 26
 
+  # No SCC radar/camera cruise module. Stock longitudinal is regular cruise control only.
+  NON_SCC = 2 ** 27
+
 
 @dataclass
 class HyundaiCarDocs(CarDocs):
@@ -758,6 +761,8 @@ FW_QUERY_CONFIG = FwQueryConfig(
   # We lose these ECUs without the comma power on these cars.
   # Note that we still attempt to match with them when they are present
   non_essential_ecus={
+    # Some Forte trims are lateral-only and omit the SCC radar entirely.
+    Ecu.fwdRadar: [CAR.KIA_FORTE],
     Ecu.abs: [CAR.HYUNDAI_PALISADE, CAR.HYUNDAI_SONATA, CAR.HYUNDAI_SANTA_FE_2022, CAR.KIA_K5_2021, CAR.HYUNDAI_ELANTRA_2021,
               CAR.HYUNDAI_SANTA_FE, CAR.HYUNDAI_KONA_EV_2022, CAR.HYUNDAI_KONA_EV, CAR.HYUNDAI_CUSTIN_1ST_GEN, CAR.KIA_SORENTO,
               CAR.KIA_CEED, CAR.KIA_SELTOS],

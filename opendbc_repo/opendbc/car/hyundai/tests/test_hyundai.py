@@ -62,6 +62,18 @@ class TestHyundaiFingerprint:
       CP = CarInterface.get_params(CAR.HYUNDAI_SONATA, fingerprint, [], False, False, False)
       assert CP.radarUnavailable != radar
 
+    forte_no_scc = CarInterface.get_params(CAR.KIA_FORTE, gen_empty_fingerprint(), [], True, False, False)
+    assert bool(forte_no_scc.flags & HyundaiFlags.NON_SCC)
+    assert not forte_no_scc.alphaLongitudinalAvailable
+    assert forte_no_scc.pcmCruise
+
+    forte_with_scc = gen_empty_fingerprint()
+    forte_with_scc[0][0x420] = 8
+    forte_with_scc[0][0x421] = 8
+    CP = CarInterface.get_params(CAR.KIA_FORTE, forte_with_scc, [], True, False, False)
+    assert not bool(CP.flags & HyundaiFlags.NON_SCC)
+    assert CP.alphaLongitudinalAvailable
+
   def test_alternate_limits(self):
     # Alternate lateral control limits, for high torque cars, verify Panda safety mode flag is set
     fingerprint = gen_empty_fingerprint()

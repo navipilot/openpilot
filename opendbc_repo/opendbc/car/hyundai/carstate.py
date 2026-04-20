@@ -130,12 +130,24 @@ class CarState(CarStateBase):
     ret.steerFaultTemporary = cp.vl["MDPS12"]["CF_Mdps_ToiUnavail"] != 0 or cp.vl["MDPS12"]["CF_Mdps_ToiFlt"] != 0
 
     # cruise state
+    no_scc = bool(self.CP.flags & HyundaiFlags.NON_SCC)
     if self.CP.openpilotLongitudinalControl:
       # These are not used for engage/disengage since openpilot keeps track of state using the buttons
       ret.cruiseState.available = cp.vl["TCS13"]["ACCEnable"] == 0
       ret.cruiseState.enabled = cp.vl["TCS13"]["ACC_REQ"] == 1
       ret.cruiseState.standstill = False
       ret.cruiseState.nonAdaptive = False
+    elif no_scc:
+      cruise_enabled = cp.vl["TCS13"]["ACC_REQ"] == 1
+      cruise_set_speed = cp.vl["LVR12"]["CF_Lvr_CruiseSet"]
+
+      # Regular-cruise Forte trims don't publish SCC11/SCC12; use the stock cruise request and set speed.
+      ret.cruiseState.available = cruise_enabled or cp.vl["TCS13"]["ACCEnable"] == 0
+      ret.cruiseState.enabled = cruise_enabled
+      ret.cruiseState.standstill = False
+      ret.cruiseState.nonAdaptive = False
+      if 0 < cruise_set_speed < 255:
+        ret.cruiseState.speed = cruise_set_speed * speed_conv
     else:
       ret.cruiseState.available = cp_cruise.vl["SCC11"]["MainMode_ACC"] == 1
       ret.cruiseState.enabled = cp_cruise.vl["SCC12"]["ACCMode"] != 0
@@ -150,7 +162,7 @@ class CarState(CarStateBase):
     ret.parkingBrake = cp.vl["TCS13"]["PBRAKE_ACT"] == 1
     ret.espDisabled = cp.vl["TCS11"]["TCS_PAS"] == 1
     ret.espActive = cp.vl["TCS11"]["ABS_ACT"] == 1
-    ret.accFaulted = cp.vl["TCS13"]["ACCEnable"] != 0  # 0 ACC CONTROL ENABLED, 1-3 ACC CONTROL DISABLED
+    ret.accFaulted = False if no_scc else cp.vl["TCS13"]["ACCEnable"] != 0  # 0 ACC CONTROL ENABLED, 1-3 ACC CONTROL DISABLED
 
     if self.CP.flags & (HyundaiFlags.HYBRID | HyundaiFlags.EV | HyundaiFlags.FCEV):
       if self.CP.flags & HyundaiFlags.FCEV:
