@@ -1,5 +1,6 @@
 from openpilot.common.params import Params
-from openpilot.selfdrive.ui.mici.widgets.button import BigButton, BigParamControl
+from openpilot.selfdrive.ui.lib.starpilot_visuals import lead_indicator_enabled
+from openpilot.selfdrive.ui.mici.widgets.button import BigButton, BigParamControl, BigToggle
 from openpilot.selfdrive.ui.mici.widgets.dialog import BigDialog, BigMultiOptionDialog
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.widgets.scroller import NavScroller
@@ -38,12 +39,29 @@ class CameraViewBigButton(BigButton):
     gui_app.push_widget(dialog)
 
 
+class LeadIndicatorBigButton(BigToggle):
+  def __init__(self):
+    super().__init__("lead indicator")
+    self.params = Params()
+    self.refresh()
+
+  def _handle_mouse_release(self, mouse_pos):
+    super()._handle_mouse_release(mouse_pos)
+    self.params.put_bool("LeadIndicator", self._checked)
+    self.params.put_bool("HideLeadMarker", not self._checked)
+
+  def refresh(self):
+    self.set_checked(lead_indicator_enabled(self.params))
+
+
 class VisualsLayoutMici(NavScroller):
   def __init__(self):
     super().__init__()
     self._camera_view_btn = CameraViewBigButton()
     self._driver_camera_btn = BigParamControl("driver camera on reverse", "DriverCamera")
     self._stopped_timer_btn = BigParamControl("stopped timer", "StoppedTimer")
+    self._rainbow_path_btn = BigParamControl("rainbow road", "RainbowPath")
+    self._lead_indicator_btn = LeadIndicatorBigButton()
     self._speed_limit_signs_btn = BigParamControl("speed limit signs", "ShowSpeedLimits")
     self._slc_confirmation_btn = BigParamControl("confirm new speed limits", "SLCConfirmation")
     self._slc_confirmation_lower_btn = BigParamControl("confirm lower limits", "SLCConfirmationLower")
@@ -53,6 +71,8 @@ class VisualsLayoutMici(NavScroller):
       self._camera_view_btn,
       self._driver_camera_btn,
       self._stopped_timer_btn,
+      self._rainbow_path_btn,
+      self._lead_indicator_btn,
       self._speed_limit_signs_btn,
       self._slc_confirmation_btn,
       self._slc_confirmation_lower_btn,
@@ -69,6 +89,7 @@ class VisualsLayoutMici(NavScroller):
 
   def _refresh(self):
     self._camera_view_btn.refresh()
+    self._lead_indicator_btn.refresh()
     confirmation_enabled = self._slc_confirmation_btn.params.get_bool("SLCConfirmation")
     self._slc_confirmation_lower_btn.set_visible(confirmation_enabled)
     self._slc_confirmation_higher_btn.set_visible(confirmation_enabled)

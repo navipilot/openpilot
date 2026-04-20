@@ -1609,6 +1609,14 @@
         "parent_key": "CustomUI"
       },
       {
+        "key": "RainbowPath",
+        "label": "Rainbow Road",
+        "description": "Color the driving path like a rainbow road.\n\nOn the Python UIs this overrides acceleration and braking path coloring.",
+        "data_type": "bool",
+        "ui_type": "toggle",
+        "parent_key": "CustomUI"
+      },
+      {
         "key": "AdjacentPath",
         "label": "Adjacent Lanes",
         "description": "Show the driving paths for the left and right lanes.",

@@ -26,6 +26,30 @@ _THEME_COLOR_CACHE: dict[str, object] = {
 }
 
 
+def _as_color(value: object, fallback: tuple[int, int, int, int] = (255, 255, 255, 255)) -> rl.Color:
+  if all(hasattr(value, channel) for channel in ("r", "g", "b", "a")):
+    return rl.Color(
+      _clamp_channel(getattr(value, "r"), fallback[0]),
+      _clamp_channel(getattr(value, "g"), fallback[1]),
+      _clamp_channel(getattr(value, "b"), fallback[2]),
+      _clamp_channel(getattr(value, "a"), fallback[3]),
+    )
+
+  if isinstance(value, (tuple, list)):
+    items = list(value)
+    if len(items) == 3:
+      items.append(fallback[3])
+    if len(items) >= 4:
+      return rl.Color(
+        _clamp_channel(items[0], fallback[0]),
+        _clamp_channel(items[1], fallback[1]),
+        _clamp_channel(items[2], fallback[2]),
+        _clamp_channel(items[3], fallback[3]),
+      )
+
+  return rl.Color(*fallback)
+
+
 def _file_stamp(path: Path) -> tuple[str, int | None, int | None]:
   try:
     stat = path.stat()
@@ -84,9 +108,43 @@ def _load_theme_colors() -> dict[str, rl.Color]:
 def get_theme_color(key: str, fallback: rl.Color | None = None) -> rl.Color:
   color = _load_theme_colors().get(key)
   if color is not None:
-    return color
-  return fallback if fallback is not None else rl.WHITE
+    return _as_color(color)
+  return _as_color(fallback if fallback is not None else rl.WHITE)
+
+
+def get_param_color(params, key: str, fallback_alpha: int = 255) -> rl.Color | None:
+  value = params.get(key, encoding="utf-8") if params is not None else None
+  if not value:
+    return None
+
+  color = value.strip()
+  if not color or color.lower() == "stock":
+    return None
+  if color.startswith("#"):
+    color = color[1:]
+
+  if len(color) not in (6, 8):
+    return None
+
+  try:
+    red = int(color[0:2], 16)
+    green = int(color[2:4], 16)
+    blue = int(color[4:6], 16)
+    alpha = int(color[6:8], 16) if len(color) == 8 else fallback_alpha
+  except ValueError:
+    return None
+
+  return rl.Color(red, green, blue, alpha)
+
+
+def get_visual_color(params, param_key: str, theme_key: str, fallback: rl.Color | None = None) -> rl.Color:
+  base = _as_color(fallback if fallback is not None else rl.WHITE)
+  override = get_param_color(params, param_key, base.a)
+  if override is not None:
+    return override
+  return get_theme_color(theme_key, base)
 
 
 def with_alpha(color: rl.Color, alpha: int) -> rl.Color:
+  color = _as_color(color)
   return rl.Color(color.r, color.g, color.b, max(0, min(255, int(alpha))))

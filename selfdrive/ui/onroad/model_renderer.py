@@ -7,7 +7,8 @@ from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.params import Params
 from openpilot.common.constants import CV
 from openpilot.selfdrive.locationd.calibrationd import HEIGHT_INIT
-from openpilot.selfdrive.ui.lib.starpilot_theme import get_theme_color, with_alpha
+from openpilot.selfdrive.ui.lib.starpilot_theme import get_param_color, get_theme_color, get_visual_color, with_alpha
+from openpilot.selfdrive.ui.lib.starpilot_visuals import lead_indicator_enabled
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.lib.shader_polygon import draw_polygon, Gradient
@@ -16,6 +17,8 @@ from openpilot.system.ui.widgets import Widget
 CLIP_MARGIN = 500
 MIN_DRAW_DISTANCE = 10.0
 MAX_DRAW_DISTANCE = 100.0
+RAINBOW_GRADIENT_COLOR_COUNT = 19
+RAINBOW_SCROLL_SPEED_DEG_PER_SEC = 60.0
 
 THROTTLE_COLORS = [
   rl.Color(13, 248, 122, 102),   # HSLF(148/360, 0.94, 0.51, 0.4)
@@ -59,10 +62,6 @@ class ModelRenderer(Widget):
     self._adjacent_path_vertices = [np.empty((0, 2), dtype=np.float32), np.empty((0, 2), dtype=np.float32)]
     # Outer path polygon for edge rendering
     self._track_edge_vertices = np.empty((0, 2), dtype=np.float32)
-    # Rainbow animation state
-    self._rainbow_hue_offset = 0.0
-    # Cached speed for rainbow animation
-    self._speed = 0.0
 
     # Initialize ModelPoints objects
     self._path = ModelPoints()
@@ -107,7 +106,6 @@ class ModelRenderer(Widget):
 
     # Update state
     self._experimental_mode = sm['selfdriveState'].experimentalMode
-    self._speed = sm['carState'].vEgo
 
     live_calib = sm['liveCalibration']
     self._path_offset_z = live_calib.height[0] if live_calib.height else HEIGHT_INIT[0]
@@ -118,7 +116,7 @@ class ModelRenderer(Widget):
     model = sm['modelV2']
     radar_state = sm['radarState'] if sm.valid['radarState'] else None
     lead_one = radar_state.leadOne if radar_state else None
-    render_lead_indicator = self._longitudinal_control and radar_state is not None
+    render_lead_indicator = self._longitudinal_control and radar_state is not None and lead_indicator_enabled(self._params)
 
     # Update model data when needed
     model_updated = sm.updated['modelV2']
@@ -244,13 +242,22 @@ class ModelRenderer(Widget):
 
   def _update_experimental_gradient(self):
     """Pre-calculate experimental mode gradient colors"""
-    use_acceleration = self._experimental_mode or self._params.get_bool('AccelerationPath', default=True)
-    use_rainbow = self._params.get_bool('RainbowPath') and not use_acceleration
+    use_rainbow = self._params.get_bool('RainbowPath', default=False)
+    use_acceleration = not use_rainbow and (self._experimental_mode or self._params.get_bool('AccelerationPath', default=True))
 
     if not use_acceleration and not use_rainbow:
       return
 
     max_len = min(len(self._path.projected_points) // 2, len(self._acceleration_x))
+    if use_rainbow:
+      gradient_bottom, gradient_top = self._get_visible_gradient_bounds()
+      self._exp_gradient = self._build_rainbow_gradient(gradient_bottom, gradient_top)
+      return
+
+    custom_theme_selected = (self._params.get('ColorScheme', encoding='utf-8', default='stock') or 'stock').lower() != 'stock'
+    path_color = None
+    if custom_theme_selected or get_param_color(self._params, 'PathColor', 255) is not None:
+      path_color = get_visual_color(self._params, 'PathColor', 'Path', rl.Color(48, 255, 156, 255))
 
     segment_colors = []
     gradient_stops = []
@@ -266,16 +273,9 @@ class ModelRenderer(Widget):
       # Calculate color based on acceleration (0 is bottom, 1 is top)
       lin_grad_point = 1 - (track_y - self._rect.y) / self._rect.height
 
-      if use_rainbow:
-        # Rainbow: hue based on gradient position + animated offset
-        self._rainbow_hue_offset += self._speed * 0.02
-        if self._rainbow_hue_offset >= 360.0:
-          self._rainbow_hue_offset = self._rainbow_hue_offset % 360.0
-        path_hue = (lin_grad_point * 120.0 + self._rainbow_hue_offset) % 360.0
-        saturation = 1.0
-        lightness = 0.5
-        alpha = np.interp(lin_grad_point, [0.0, 1.0], [0.5, 0.1])
-        color = self._hsla_to_color(path_hue / 360.0, saturation, lightness, alpha)
+      if path_color is not None and abs(self._acceleration_x[i]) < 0.25:
+        alpha = np.interp(lin_grad_point, [0.0, 1.0], [path_color.a, path_color.a * 0.10])
+        color = with_alpha(path_color, int(alpha))
         gradient_stops.append(lin_grad_point)
         segment_colors.append(color)
         i += 1 + (1 if (i + 2) < max_len else 0)
@@ -305,6 +305,38 @@ class ModelRenderer(Widget):
       stops=gradient_stops,
     )
 
+  def _get_visible_gradient_bounds(self) -> tuple[float, float]:
+    if self._path.projected_points.size == 0:
+      return 1.0, 0.0
+
+    polygon_y = self._path.projected_points[:, 1]
+    visible_track_y = polygon_y[(polygon_y >= self._rect.y) & (polygon_y <= (self._rect.y + self._rect.height))]
+
+    if visible_track_y.size == 0:
+      return 1.0, 0.0
+
+    gradient_bottom = np.clip((float(np.max(visible_track_y)) - self._rect.y) / self._rect.height, 0.0, 1.0)
+    gradient_top = np.clip((float(np.min(visible_track_y)) - self._rect.y) / self._rect.height, 0.0, 1.0)
+    return float(gradient_bottom), float(gradient_top)
+
+  def _build_rainbow_gradient(self, gradient_bottom: float, gradient_top: float) -> Gradient:
+    hue_offset = (rl.get_time() * RAINBOW_SCROLL_SPEED_DEG_PER_SEC) % 360.0
+    stops = [i / (RAINBOW_GRADIENT_COLOR_COUNT - 1) for i in range(RAINBOW_GRADIENT_COLOR_COUNT)]
+    colors = []
+
+    for i, stop in enumerate(stops):
+      hue_progress = i / RAINBOW_GRADIENT_COLOR_COUNT
+      path_hue = (hue_progress * 360.0 - hue_offset) % 360.0
+      alpha = np.interp(stop, [0.0, 1.0], [0.48, 0.18])
+      colors.append(self._hsla_to_color(path_hue / 360.0, 1.0, 0.5, alpha))
+
+    return Gradient(
+      start=(0.0, gradient_bottom),
+      end=(0.0, gradient_top),
+      colors=colors,
+      stops=stops,
+    )
+
   def _update_lead_vehicle(self, d_rel, v_rel, point, rect):
     speed_buff, lead_buff = 10.0, 40.0
 
@@ -331,7 +363,7 @@ class ModelRenderer(Widget):
 
   def _draw_lane_lines(self):
     """Draw lane lines and road edges"""
-    lane_lines_color = get_theme_color("LaneLines", rl.WHITE)
+    lane_lines_color = get_visual_color(self._params, "LaneLinesColor", "LaneLines", rl.WHITE)
 
     for i, lane_line in enumerate(self._lane_lines):
       if lane_line.projected_points.size == 0:
@@ -357,15 +389,17 @@ class ModelRenderer(Widget):
     allow_throttle = sm['longitudinalPlan'].allowThrottle or not self._longitudinal_control
     self._blend_filter.update(int(allow_throttle))
 
-    use_accel_path = self._params.get_bool('AccelerationPath', default=True)
+    use_rainbow = self._params.get_bool('RainbowPath', default=False)
+    use_accel_path = not use_rainbow and self._params.get_bool('AccelerationPath', default=True)
+    path_override = get_param_color(self._params, 'PathColor', 255)
     custom_theme_selected = (self._params.get('ColorScheme', encoding='utf-8', default='stock') or 'stock').lower() != 'stock'
-    if self._experimental_mode or use_accel_path:
+    if use_rainbow or self._experimental_mode or use_accel_path:
       if len(self._exp_gradient.colors) > 1:
         draw_polygon(self._rect, self._path.projected_points, gradient=self._exp_gradient)
       else:
         draw_polygon(self._rect, self._path.projected_points, rl.Color(255, 255, 255, 30))
-    elif custom_theme_selected:
-      path_color = get_theme_color("Path", rl.Color(48, 255, 156, 255))
+    elif path_override is not None or custom_theme_selected:
+      path_color = get_visual_color(self._params, "PathColor", "Path", rl.Color(48, 255, 156, 255))
       gradient = Gradient(
         start=(0.0, 1.0),
         end=(0.0, 0.0),

@@ -6,7 +6,7 @@ import numpy as np
 import pyray as rl
 
 from openpilot.selfdrive.ui.lib.starpilot_state import starpilot_state
-from openpilot.selfdrive.ui.lib.starpilot_theme import get_theme_color, with_alpha
+from openpilot.selfdrive.ui.lib.starpilot_theme import get_param_color, get_theme_color, with_alpha
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.shader_polygon import draw_polygon, Gradient
 
@@ -177,8 +177,11 @@ def render_path_edges(renderer) -> None:
   elif ui_state.traffic_mode_enabled:
     base_color = rl.Color(201, 34, 49, 241)
   else:
+    override = get_param_color(renderer._params, "PathEdgesColor", 241)
     color_scheme = renderer._params.get("ColorScheme", encoding="utf-8", default="stock")
-    if color_scheme != "stock":
+    if override is not None:
+      base_color = rl.Color(override.r, override.g, override.b, 241)
+    elif color_scheme != "stock":
       theme_color = get_theme_color("PathEdge", rl.Color(23, 134, 68, 241))
       base_color = rl.Color(theme_color.r, theme_color.g, theme_color.b, 241)
     else:
