@@ -889,6 +889,7 @@ class LatControlTorque(LatControl):
       genesis_g90_test_active = self.is_genesis_g90 and genesis_g90_lateral_testing_ground_active()
       kia_ev6_test_active = self.is_kia_ev6 and kia_ev6_lateral_testing_ground_active()
       volt_plexy_test_active = self.is_volt_cc and volt_plexy_lateral_testing_ground_active()
+      volt_standard_center_taper = get_volt_standard_center_taper_scale(setpoint, CS.vEgo) if volt_standard_test_active else 1.0
       friction_threshold = get_friction_threshold(CS.vEgo)
       friction_scale = 1.0
       if bolt_2022_2023_tuned_path_active:
@@ -899,9 +900,10 @@ class LatControlTorque(LatControl):
         friction_threshold = get_bolt_2018_2021_friction_threshold(CS.vEgo, setpoint, desired_lateral_jerk)
         friction_scale = get_bolt_2018_2021_friction_scale(CS.vEgo, setpoint, desired_lateral_jerk)
       elif volt_standard_test_active:
-        ff *= get_volt_standard_ff_scale(setpoint, desired_lateral_jerk, CS.vEgo)
+        ff *= get_volt_standard_ff_scale(setpoint, desired_lateral_jerk, CS.vEgo) * volt_standard_center_taper
         friction_threshold = get_volt_standard_friction_threshold(CS.vEgo, setpoint, desired_lateral_jerk)
         friction_scale = get_volt_standard_friction_scale(CS.vEgo, setpoint, desired_lateral_jerk)
+        friction_scale = 1.0 + ((friction_scale - 1.0) * volt_standard_center_taper)
       elif genesis_g90_test_active:
         ff *= get_genesis_g90_ff_scale(setpoint, desired_lateral_jerk, CS.vEgo)
         friction_threshold = get_genesis_g90_friction_threshold(CS.vEgo, setpoint, desired_lateral_jerk)
@@ -932,7 +934,7 @@ class LatControlTorque(LatControl):
       elif bolt_2018_2021_tuned_path_active:
         output_torque *= get_bolt_2018_2021_dynamic_torque_scale(setpoint, desired_lateral_jerk, CS.vEgo)
       elif volt_standard_test_active:
-        output_torque *= get_volt_standard_center_taper_scale(setpoint, CS.vEgo)
+        output_torque *= volt_standard_center_taper
 
       pid_log.active = True
       pid_log.p = float(self.pid.p)
