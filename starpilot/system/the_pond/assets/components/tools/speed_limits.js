@@ -91,7 +91,18 @@ export function SpeedLimits() {
     fetchStatus()
 
     if (pollTimer === null) {
-      pollTimer = setInterval(fetchStatus, 3000)
+      pollTimer = setInterval(() => {
+        if (window.location.pathname !== "/download_speed_limits") {
+          clearInterval(pollTimer)
+          pollTimer = null
+          state.fetched = false
+          return
+        }
+        if (document.visibilityState !== "visible") {
+          return
+        }
+        fetchStatus()
+      }, 3000)
     }
   }
 
