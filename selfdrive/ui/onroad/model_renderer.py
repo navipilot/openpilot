@@ -7,7 +7,7 @@ from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.params import Params
 from openpilot.common.constants import CV
 from openpilot.selfdrive.locationd.calibrationd import HEIGHT_INIT
-from openpilot.selfdrive.ui.lib.starpilot_theme import get_param_color, get_theme_color, get_visual_color, with_alpha
+from openpilot.selfdrive.ui.lib.starpilot_theme import get_param_color, get_theme_color, get_visual_color, is_stock_color_scheme, with_alpha
 from openpilot.selfdrive.ui.lib.starpilot_visuals import lead_indicator_enabled
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
 from openpilot.system.ui.lib.application import gui_app
@@ -19,6 +19,7 @@ MIN_DRAW_DISTANCE = 10.0
 MAX_DRAW_DISTANCE = 100.0
 RAINBOW_GRADIENT_COLOR_COUNT = 19
 RAINBOW_SCROLL_SPEED_DEG_PER_SEC = 60.0
+STOCK_LINE_GREEN = rl.Color(0, 255, 0, 255)
 
 THROTTLE_COLORS = [
   rl.Color(13, 248, 122, 102),   # HSLF(148/360, 0.94, 0.51, 0.4)
@@ -363,7 +364,13 @@ class ModelRenderer(Widget):
 
   def _draw_lane_lines(self):
     """Draw lane lines and road edges"""
-    lane_lines_color = get_visual_color(self._params, "LaneLinesColor", "LaneLines", rl.WHITE)
+    lane_lines_override = get_param_color(self._params, "LaneLinesColor", STOCK_LINE_GREEN.a)
+    if lane_lines_override is not None:
+      lane_lines_color = lane_lines_override
+    elif is_stock_color_scheme(self._params):
+      lane_lines_color = STOCK_LINE_GREEN
+    else:
+      lane_lines_color = get_theme_color("LaneLines", STOCK_LINE_GREEN)
 
     for i, lane_line in enumerate(self._lane_lines):
       if lane_line.projected_points.size == 0:

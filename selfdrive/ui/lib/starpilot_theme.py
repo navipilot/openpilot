@@ -137,6 +137,13 @@ def get_param_color(params, key: str, fallback_alpha: int = 255) -> rl.Color | N
   return rl.Color(red, green, blue, alpha)
 
 
+def is_stock_color_scheme(params) -> bool:
+  if params is None:
+    return True
+  scheme = params.get("ColorScheme", encoding="utf-8", default="stock")
+  return (scheme or "stock").lower() == "stock"
+
+
 def get_visual_color(params, param_key: str, theme_key: str, fallback: rl.Color | None = None) -> rl.Color:
   base = _as_color(fallback if fallback is not None else rl.WHITE)
   override = get_param_color(params, param_key, base.a)

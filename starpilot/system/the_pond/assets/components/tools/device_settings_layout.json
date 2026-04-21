@@ -1699,6 +1699,15 @@
         "parent_key": "ModelUI"
       },
       {
+        "key": "LaneLinesColor",
+        "label": "Lane Line Color",
+        "description": "Set a custom lane-line color for the Python UIs.\n\nUse Stock to follow the default line color behavior.",
+        "data_type": "string",
+        "ui_type": "color",
+        "default_color": "#00FF00",
+        "parent_key": "ModelUI"
+      },
+      {
         "key": "BorderWidth",
         "label": "Border Width",
         "description": "Scale the driving-screen border thickness.\n\n100% matches the stock border width.",
@@ -1720,6 +1729,15 @@
         "parent_key": "ModelUI"
       },
       {
+        "key": "PathEdgesColor",
+        "label": "Path Edge Color",
+        "description": "Set a custom path-edge color for the Python UIs.\n\nUse Stock to follow the default line color behavior.",
+        "data_type": "string",
+        "ui_type": "color",
+        "default_color": "#00FF00",
+        "parent_key": "ModelUI"
+      },
+      {
         "key": "PathWidth",
         "label": "Path Width",
         "description": "Set the driving-path width.\n\nDefault (6.1 feet) matches the width of a 2019 Lexus ES 350.",
@@ -1728,6 +1746,15 @@
         "min": 0.0,
         "max": 10.0,
         "step": 0.1,
+        "parent_key": "ModelUI"
+      },
+      {
+        "key": "PathColor",
+        "label": "Path Color",
+        "description": "Set a custom filled-path color for the Python UIs.\n\nUse Stock to follow the default path color behavior.",
+        "data_type": "string",
+        "ui_type": "color",
+        "default_color": "#30FF9C",
         "parent_key": "ModelUI"
       },
       {

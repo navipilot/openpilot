@@ -6,12 +6,13 @@ import numpy as np
 import pyray as rl
 
 from openpilot.selfdrive.ui.lib.starpilot_state import starpilot_state
-from openpilot.selfdrive.ui.lib.starpilot_theme import get_param_color, get_theme_color, with_alpha
+from openpilot.selfdrive.ui.lib.starpilot_theme import get_param_color, get_theme_color, is_stock_color_scheme, with_alpha
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.shader_polygon import draw_polygon, Gradient
 
 _METRICS_FONT = None
 _METRICS_FONT_SIZE = 45
+_STOCK_LINE_GREEN = rl.Color(0, 255, 0, 241)
 
 
 def _get_metrics_font():
@@ -147,14 +148,10 @@ def render_path_edges(renderer) -> None:
   Qt reference: paintPathEdges in starpilot_annotated_camera.cc:732-769
 
   Path edges are the area between track_edge_vertices (outer) and track_vertices (inner).
-  Color is based on current mode:
-  - If switchback_mode_enabled: use STATUS_SWITCHBACK_MODE_ENABLED color
-  - If always_on_lateral_active: use STATUS_ALWAYS_ON_LATERAL_ACTIVE color
-  - If conditional_status == 1: use STATUS_CEM_DISABLED color
-  - If experimental_mode: use STATUS_EXPERIMENTAL_MODE_ENABLED color
-  - If traffic_mode_enabled: use STATUS_TRAFFIC_MODE_ENABLED color
-  - If color_scheme != "stock" and path_edges_color is set: use that color
-  - Else: stock green gradient HSL(148/360, 0.94, 0.41, 0.4) → HSL(112/360, 1.0, 0.54, 0.35) → transparent
+  Color selection on Python UIs:
+  - If path_edges_color is set: use that color
+  - Else if color_scheme != "stock": use the active theme color
+  - Else: use a fixed stock-style green so border color carries engagement status
 
   The path_edges_color param is a hex string like "#178644".
   """
@@ -166,48 +163,24 @@ def render_path_edges(renderer) -> None:
 
   edge_strip = np.vstack([outer, inner[::-1]])
 
-  if ui_state.switchback_mode_enabled:
-    base_color = rl.Color(139, 108, 197, 241)
-  elif ui_state.always_on_lateral_active:
-    base_color = rl.Color(10, 186, 181, 241)
-  elif ui_state.conditional_status == 1:
-    base_color = rl.Color(255, 255, 0, 241)
-  elif renderer._experimental_mode:
-    base_color = rl.Color(218, 111, 37, 241)
-  elif ui_state.traffic_mode_enabled:
-    base_color = rl.Color(201, 34, 49, 241)
+  override = get_param_color(renderer._params, "PathEdgesColor", 241)
+  if override is not None:
+    base_color = rl.Color(override.r, override.g, override.b, 241)
+  elif is_stock_color_scheme(renderer._params):
+    base_color = _STOCK_LINE_GREEN
   else:
-    override = get_param_color(renderer._params, "PathEdgesColor", 241)
-    color_scheme = renderer._params.get("ColorScheme", encoding="utf-8", default="stock")
-    if override is not None:
-      base_color = rl.Color(override.r, override.g, override.b, 241)
-    elif color_scheme != "stock":
-      theme_color = get_theme_color("PathEdge", rl.Color(23, 134, 68, 241))
-      base_color = rl.Color(theme_color.r, theme_color.g, theme_color.b, 241)
-    else:
-      base_color = None
+    theme_color = get_theme_color("PathEdge", _STOCK_LINE_GREEN)
+    base_color = rl.Color(theme_color.r, theme_color.g, theme_color.b, 241)
 
-  if base_color is not None:
-    gradient = Gradient(
-      start=(0.0, 1.0),
-      end=(0.0, 0.0),
-      colors=[
-        with_alpha(base_color, int(255 * 0.4)),
-        with_alpha(base_color, int(255 * 0.35)),
-        with_alpha(base_color, 0),
-      ],
-      stops=[0.0, 0.5, 1.0],
-    )
-  else:
-    gradient = Gradient(
-      start=(0.0, 1.0),
-      end=(0.0, 0.0),
-      colors=[
-        _hsla_to_color(148.0 / 360.0, 0.94, 0.41, 0.4),
-        _hsla_to_color(112.0 / 360.0, 1.0, 0.54, 0.35),
-        _hsla_to_color(112.0 / 360.0, 1.0, 0.54, 0.0),
-      ],
-      stops=[0.0, 0.5, 1.0],
-    )
+  gradient = Gradient(
+    start=(0.0, 1.0),
+    end=(0.0, 0.0),
+    colors=[
+      with_alpha(base_color, int(255 * 0.4)),
+      with_alpha(base_color, int(255 * 0.35)),
+      with_alpha(base_color, 0),
+    ],
+    stops=[0.0, 0.5, 1.0],
+  )
 
   draw_polygon(renderer._rect, edge_strip, gradient=gradient)
