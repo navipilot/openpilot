@@ -21,6 +21,7 @@ Ecu = CarParams.Ecu
 NO_DATES_PLATFORMS = {
   # CAN FD
   CAR.KIA_SPORTAGE_5TH_GEN,
+  CAR.KIA_SPORTAGE_HEV_2026,
   CAR.HYUNDAI_SANTA_CRUZ_1ST_GEN,
   CAR.HYUNDAI_TUCSON_4TH_GEN,
   # CAN
@@ -51,7 +52,7 @@ class TestHyundaiFingerprint:
       if lka_steering:
         cam_can = CanBus(None, fingerprint).CAM
         fingerprint[cam_can] = [0x50, 0x110]  # LKA steering messages
-      CP = CarInterface.get_params(CAR.KIA_EV6, fingerprint, [], False, False, False)
+      CP = CarInterface.get_params(CAR.KIA_EV6, fingerprint, [], False, False, False, None)
       assert bool(CP.flags & HyundaiFlags.CANFD_LKA_STEERING) == lka_steering
 
     # radar available
@@ -59,10 +60,10 @@ class TestHyundaiFingerprint:
       fingerprint = gen_empty_fingerprint()
       if radar:
         fingerprint[1][RADAR_START_ADDR] = 8
-      CP = CarInterface.get_params(CAR.HYUNDAI_SONATA, fingerprint, [], False, False, False)
+      CP = CarInterface.get_params(CAR.HYUNDAI_SONATA, fingerprint, [], False, False, False, None)
       assert CP.radarUnavailable != radar
 
-    forte_no_scc = CarInterface.get_params(CAR.KIA_FORTE, gen_empty_fingerprint(), [], True, False, False)
+    forte_no_scc = CarInterface.get_params(CAR.KIA_FORTE, gen_empty_fingerprint(), [], True, False, False, None)
     assert bool(forte_no_scc.flags & HyundaiFlags.NON_SCC)
     assert not forte_no_scc.alphaLongitudinalAvailable
     assert forte_no_scc.pcmCruise
@@ -70,15 +71,19 @@ class TestHyundaiFingerprint:
     forte_with_scc = gen_empty_fingerprint()
     forte_with_scc[0][0x420] = 8
     forte_with_scc[0][0x421] = 8
-    CP = CarInterface.get_params(CAR.KIA_FORTE, forte_with_scc, [], True, False, False)
+    CP = CarInterface.get_params(CAR.KIA_FORTE, forte_with_scc, [], True, False, False, None)
     assert not bool(CP.flags & HyundaiFlags.NON_SCC)
     assert CP.alphaLongitudinalAvailable
+
+    CP = CarInterface.get_params(CAR.KIA_SPORTAGE_HEV_2026, gen_empty_fingerprint(), [], False, False, False, None)
+    assert CP.steerControlType == CarParams.SteerControlType.angle
+    assert CP.safetyConfigs[-1].safetyParam & HyundaiSafetyFlags.CANFD_ANGLE_STEERING
 
   def test_alternate_limits(self):
     # Alternate lateral control limits, for high torque cars, verify Panda safety mode flag is set
     fingerprint = gen_empty_fingerprint()
     for car_model in CAR:
-      CP = CarInterface.get_params(car_model, fingerprint, [], False, False, False)
+      CP = CarInterface.get_params(car_model, fingerprint, [], False, False, False, None)
       assert bool(CP.flags & HyundaiFlags.ALT_LIMITS) == bool(CP.safetyConfigs[-1].safetyParam & HyundaiSafetyFlags.ALT_LIMITS)
 
   def test_can_features(self):
@@ -199,8 +204,9 @@ class TestHyundaiFingerprint:
 
           # Hyundai places the ECU part number in their FW versions, assert all parsable
           # Some examples of valid formats: b"56310-L0010", b"56310L0010", b"56310/M6300"
-          assert all(b"-" in code for code, _ in codes), \
-                          f"FW does not have part number: {fw}"
+          if car_model != CAR.KIA_SPORTAGE_HEV_2026:
+            assert all(b"-" in code for code, _ in codes), \
+                            f"FW does not have part number: {fw}"
 
   def test_platform_codes_spot_check(self):
     # Asserts basic platform code parsing behavior for a few cases

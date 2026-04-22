@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 from parameterized import parameterized_class
 import unittest
+import numpy as np
 
+from opendbc.car.hyundai.interface import CarInterface
+from opendbc.car.hyundai.values import CAR, CarControllerParams
 from opendbc.car.hyundai.values import HyundaiSafetyFlags, HyundaiStarPilotSafetyFlags
+from opendbc.car.lateral import get_max_angle_delta_vm, get_max_angle_vm
 from opendbc.car.structs import CarParams
+from opendbc.car.vehicle_model import VehicleModel
 from opendbc.safety.tests.libsafety import libsafety_py
 import opendbc.safety.tests.common as common
-from opendbc.safety.tests.common import CANPackerSafety
+from opendbc.safety.tests.common import CANPackerSafety, away_round, round_speed
 from opendbc.safety.tests.hyundai_common import HyundaiAolLkasOnEngageBase, HyundaiAolLkasOnEngageStockBase, HyundaiButtonBase, HyundaiLongitudinalBase
 
 # All combinations of radar/camera-SCC and gas/hybrid/EV cars
@@ -20,6 +25,22 @@ ALL_GAS_EV_HYBRID_COMBOS = [
   {"GAS_MSG": ("ACCELERATOR", "ACCELERATOR_PEDAL"), "SCC_BUS": 2, "SAFETY_PARAM": HyundaiSafetyFlags.EV_GAS | HyundaiSafetyFlags.CAMERA_SCC},
   {"GAS_MSG": ("ACCELERATOR_ALT", "ACCELERATOR_PEDAL"), "SCC_BUS": 2, "SAFETY_PARAM": HyundaiSafetyFlags.HYBRID_GAS | HyundaiSafetyFlags.CAMERA_SCC},
 ]
+
+
+def _set_value(msg: bytearray, sig, ival: int) -> None:
+  i = sig.lsb // 8
+  bits = sig.size
+  if sig.size < 64:
+    ival &= (1 << sig.size) - 1
+  while 0 <= i < len(msg) and bits > 0:
+    shift = sig.lsb % 8 if (sig.lsb // 8) == i else 0
+    size = min(bits, 8 - shift)
+    mask = ((1 << size) - 1) << shift
+    msg[i] &= ~mask
+    msg[i] |= (ival & ((1 << size) - 1)) << shift
+    bits -= size
+    ival >>= size
+    i = i + 1 if sig.is_little_endian else i - 1
 
 
 class TestHyundaiCanfdBase(HyundaiButtonBase, common.CarSafetyTest, common.DriverTorqueSteeringSafetyTest, common.SteerRequestCutSafetyTest):
@@ -126,6 +147,179 @@ class TestHyundaiCanfdLFASteeringBase(TestHyundaiCanfdBase):
     self.safety = libsafety_py.libsafety
     self.safety.set_safety_hooks(CarParams.SafetyModel.hyundaiCanfd, self.SAFETY_PARAM)
     self.safety.init_tests()
+
+
+class TestHyundaiCanfdAngleSteering(HyundaiButtonBase, common.CarSafetyTest):
+
+  TX_MSGS = [[0x12A, 0], [0x160, 0], [0x1A0, 0], [0x1CF, 2], [0x1E0, 0]]
+  RELAY_MALFUNCTION_ADDRS = {0: (0x12A, 0x1E0)}
+  FWD_BLACKLISTED_ADDRS = {2: [0x12A, 0x1E0]}
+
+  PT_BUS = 0
+  SCC_BUS = 2
+  BUTTONS_TX_BUS = 2
+  LATERAL_FREQUENCY = 100
+  STANDSTILL_THRESHOLD = 12
+  STEER_ANGLE_MAX = 180
+  DEG_TO_CAN = 10
+  GAS_MSG = ("ACCELERATOR_ALT", "ACCELERATOR_PEDAL")
+  SAFETY_PARAM = HyundaiSafetyFlags.CANFD_ANGLE_STEERING | HyundaiSafetyFlags.CAMERA_SCC | HyundaiSafetyFlags.HYBRID_GAS
+  BASELINE_CAR = CAR.KIA_SPORTAGE_HEV_2026
+
+  @classmethod
+  def setUpClass(cls):
+    if cls.__name__ == "TestHyundaiCanfdAngleSteering":
+      super().setUpClass()
+
+  def setUp(self):
+    self.packer = CANPackerSafety("hyundai_canfd_generated")
+    self.safety = libsafety_py.libsafety
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hyundaiCanfd, self.SAFETY_PARAM)
+    self.safety.init_tests()
+    self.angle_cmd_cnt = 0
+
+  def _speed_msg(self, speed):
+    values = {f"WHL_Spd{pos}Val": speed * 0.03125 for pos in ["FL", "FR", "RL", "RR"]}
+    return self.packer.make_can_msg_safety("WHEEL_SPEEDS", self.PT_BUS, values)
+
+  def _pcm_status_msg(self, enable):
+    values = {"ACCMode": 1 if enable else 0}
+    return self.packer.make_can_msg_safety("SCC_CONTROL", self.SCC_BUS, values)
+
+  def _user_brake_msg(self, brake):
+    values = {"DriverBraking": brake}
+    return self.packer.make_can_msg_safety("TCS", self.PT_BUS, values)
+
+  def _user_gas_msg(self, gas):
+    values = {self.GAS_MSG[1]: gas}
+    return self.packer.make_can_msg_safety(self.GAS_MSG[0], self.PT_BUS, values)
+
+  def _button_msg(self, buttons, main_button=0, bus=None):
+    if bus is None:
+      bus = self.PT_BUS
+    values = {
+      "CRUISE_BUTTONS": buttons,
+      "ADAPTIVE_CRUISE_MAIN_BTN": main_button,
+    }
+    return self.packer.make_can_msg_safety("CRUISE_BUTTONS", bus, values)
+
+  def _angle_meas_msg(self, angle):
+    values = {"STEERING_ANGLE": angle}
+    return self.packer.make_can_msg_safety("MDPS", self.PT_BUS, values)
+
+  def _reset_angle_measurement(self, angle):
+    for _ in range(common.MAX_SAMPLE_VALS):
+      self._rx(self._angle_meas_msg(angle))
+
+  def _reset_speed_measurement(self, speed):
+    for _ in range(common.MAX_SAMPLE_VALS):
+      self._rx(self._speed_msg(speed))
+
+  def _set_prev_desired_angle(self, angle):
+    self.safety.set_desired_angle_last(round(angle * self.DEG_TO_CAN))
+
+  def _get_vm(self, car_name):
+    return VehicleModel(CarInterface.get_non_essential_params(str(car_name)))
+
+  def _baseline_limits(self):
+    return CarControllerParams(CarInterface.get_non_essential_params(str(self.BASELINE_CAR)))
+
+  def _get_steer_cmd_angle_max(self, speed):
+    limits = self._baseline_limits()
+    return get_max_angle_vm(max(speed, 1), self._get_vm(self.BASELINE_CAR), limits)
+
+  def _update_checksum(self, addr, dat):
+    msg = self.packer.dbc.addr_to_msg[addr]
+    sig_checksum = next((s for s in msg.sigs.values() if s.calc_checksum is not None), None)
+    checksum = sig_checksum.calc_checksum(addr, sig_checksum, dat)
+    _set_value(dat, sig_checksum, checksum)
+
+  def _angle_cmd_msg(self, angle, enabled, increment_timer=True):
+    if increment_timer:
+      self.safety.set_timer(self.angle_cmd_cnt * int(1e6 / self.LATERAL_FREQUENCY))
+      self.angle_cmd_cnt += 1
+
+    addr = self.packer.dbc.name_to_msg["LFA"].address
+    dat = self.packer.pack(addr, {
+      "LKA_MODE": 2,
+      "LKA_ICON": 2 if enabled else 1,
+      "TORQUE_REQUEST": 0,
+      "LKA_ASSIST": 0,
+      "STEER_REQ": 0,
+      "STEER_MODE": 0,
+      "NEW_SIGNAL_1": 0,
+      "NEW_SIGNAL_2": 0,
+    })
+
+    desired_angle = int(round(np.clip(angle, -819.1, 819.1) * self.DEG_TO_CAN))
+    if desired_angle < 0:
+      desired_angle += 1 << 14
+
+    dat[9] = (dat[9] & ~0x30) | (((2 if enabled else 1) & 0x3) << 4)
+    dat[10] = (dat[10] & 0x03) | ((desired_angle & 0x3F) << 2)
+    dat[11] = (desired_angle >> 6) & 0xFF
+    dat[12] = 250 if enabled else 0
+    self._update_checksum(addr, dat)
+    return libsafety_py.make_CANPacket(addr, 0, bytes(dat))
+
+  def test_steering_angle_measurements(self):
+    self._common_measurement_test(self._angle_meas_msg, -self.STEER_ANGLE_MAX, self.STEER_ANGLE_MAX, self.DEG_TO_CAN,
+                                  self.safety.get_angle_meas_min, self.safety.get_angle_meas_max)
+
+  def test_angle_cmd_when_disabled(self):
+    for controls_allowed in (True, False):
+      self.safety.set_controls_allowed(controls_allowed)
+      for angle_meas in np.arange(-90, 91, 10):
+        self._reset_angle_measurement(angle_meas)
+        for angle_cmd in np.arange(-90, 91, 10):
+          self._set_prev_desired_angle(angle_cmd)
+          self.assertEqual(controls_allowed, self._tx(self._angle_cmd_msg(angle_cmd, True)))
+          self.assertEqual(angle_cmd == angle_meas, self._tx(self._angle_cmd_msg(angle_cmd, False)))
+
+  def test_lateral_accel_limit(self):
+    limits = self._baseline_limits()
+    vm = self._get_vm(self.BASELINE_CAR)
+
+    for speed in np.linspace(0, 40, 40):
+      speed = round_speed(away_round(speed / 0.03125 * 3.6) * 0.03125 / 3.6)
+      speed = max(speed, 1)
+      self.safety.set_controls_allowed(True)
+      self._reset_speed_measurement(speed + 1)
+
+      max_angle = round(get_max_angle_vm(speed, vm, limits), 1)
+      max_angle = float(np.clip(max_angle, -self.STEER_ANGLE_MAX, self.STEER_ANGLE_MAX))
+      self.safety.set_desired_angle_last(round(max_angle * self.DEG_TO_CAN))
+      self.assertTrue(self._tx(self._angle_cmd_msg(max_angle, True)))
+
+  def test_lateral_jerk_limit(self):
+    limits = self._baseline_limits()
+    vm = self._get_vm(self.BASELINE_CAR)
+
+    for speed in np.linspace(0, 40, 40):
+      speed = round_speed(away_round(speed / 0.03125 * 3.6) * 0.03125 / 3.6)
+      speed = max(speed, 1)
+      self.safety.set_controls_allowed(True)
+      self._reset_speed_measurement(speed + 1)
+      self.assertTrue(self._tx(self._angle_cmd_msg(0, True)))
+
+      max_delta = round(get_max_angle_delta_vm(speed, vm, limits), 1)
+      self.assertTrue(self._tx(self._angle_cmd_msg(max_delta, True)))
+      self.safety.set_desired_angle_last(round(max_delta * self.DEG_TO_CAN))
+      self.assertTrue(self._tx(self._angle_cmd_msg(max_delta, True)))
+      self.assertTrue(self._tx(self._angle_cmd_msg(0, True)))
+
+  def test_rt_limits(self):
+    self.safety.set_timer(0)
+    self.safety.set_controls_allowed(True)
+    max_rt_msgs = int(self.LATERAL_FREQUENCY * common.RT_INTERVAL / 1e6 * 1.2 + 1)
+
+    for i in range(max_rt_msgs * 2):
+      should_tx = i <= max_rt_msgs
+      self.assertEqual(should_tx, self._tx(self._angle_cmd_msg(0, True, increment_timer=False)))
+
+    self.safety.set_timer(common.RT_INTERVAL)
+    self.assertFalse(self._tx(self._angle_cmd_msg(0, True, increment_timer=False)))
+    self.assertTrue(self._tx(self._angle_cmd_msg(0, True, increment_timer=False)))
 
 
 @parameterized_class(ALL_GAS_EV_HYBRID_COMBOS)
