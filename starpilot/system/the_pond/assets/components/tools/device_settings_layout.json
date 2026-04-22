@@ -1370,6 +1370,7 @@
         "ui_type": "numeric",
         "min": 0.0,
         "max": 30.0,
+        "step": 0.1,
         "parent_key": "SpeedLimitController"
       },
       {
@@ -1380,6 +1381,7 @@
         "ui_type": "numeric",
         "min": 0.0,
         "max": 30.0,
+        "step": 0.1,
         "parent_key": "SpeedLimitController"
       },
       {
@@ -1506,6 +1508,7 @@
         "ui_type": "numeric",
         "min": -99.0,
         "max": 99.0,
+        "step": 1.0,
         "parent_key": "SpeedLimitController"
       },
       {
@@ -1516,6 +1519,7 @@
         "ui_type": "numeric",
         "min": -99.0,
         "max": 99.0,
+        "step": 1.0,
         "parent_key": "SpeedLimitController"
       },
       {
@@ -1526,6 +1530,7 @@
         "ui_type": "numeric",
         "min": -99.0,
         "max": 99.0,
+        "step": 1.0,
         "parent_key": "SpeedLimitController"
       },
       {
@@ -1536,6 +1541,7 @@
         "ui_type": "numeric",
         "min": -99.0,
         "max": 99.0,
+        "step": 1.0,
         "parent_key": "SpeedLimitController"
       },
       {
@@ -1546,6 +1552,7 @@
         "ui_type": "numeric",
         "min": -99.0,
         "max": 99.0,
+        "step": 1.0,
         "parent_key": "SpeedLimitController"
       },
       {
@@ -1556,6 +1563,7 @@
         "ui_type": "numeric",
         "min": -99.0,
         "max": 99.0,
+        "step": 1.0,
         "parent_key": "SpeedLimitController"
       },
       {
@@ -1566,6 +1574,7 @@
         "ui_type": "numeric",
         "min": -99.0,
         "max": 99.0,
+        "step": 1.0,
         "parent_key": "SpeedLimitController"
       },
       {
