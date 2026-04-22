@@ -19,7 +19,9 @@ MIN_DRAW_DISTANCE = 10.0
 MAX_DRAW_DISTANCE = 100.0
 RAINBOW_GRADIENT_COLOR_COUNT = 19
 RAINBOW_SCROLL_SPEED_DEG_PER_SEC = 60.0
-STOCK_LINE_GREEN = rl.Color(0, 255, 0, 255)
+ACCEL_PATH_MIN_LIGHTNESS = 0.78
+ACCEL_PATH_MIN_SATURATION = 0.50
+STOCK_LANE_LINES_COLOR = rl.Color(255, 255, 255, 255)
 
 THROTTLE_COLORS = [
   rl.Color(13, 248, 122, 102),   # HSLF(148/360, 0.94, 0.51, 0.4)
@@ -255,11 +257,6 @@ class ModelRenderer(Widget):
       self._exp_gradient = self._build_rainbow_gradient(gradient_bottom, gradient_top)
       return
 
-    custom_theme_selected = (self._params.get('ColorScheme', encoding='utf-8', default='stock') or 'stock').lower() != 'stock'
-    path_color = None
-    if custom_theme_selected or get_param_color(self._params, 'PathColor', 255) is not None:
-      path_color = get_visual_color(self._params, 'PathColor', 'Path', rl.Color(48, 255, 156, 255))
-
     segment_colors = []
     gradient_stops = []
 
@@ -274,19 +271,11 @@ class ModelRenderer(Widget):
       # Calculate color based on acceleration (0 is bottom, 1 is top)
       lin_grad_point = 1 - (track_y - self._rect.y) / self._rect.height
 
-      if path_color is not None and abs(self._acceleration_x[i]) < 0.25:
-        alpha = np.interp(lin_grad_point, [0.0, 1.0], [path_color.a, path_color.a * 0.10])
-        color = with_alpha(path_color, int(alpha))
-        gradient_stops.append(lin_grad_point)
-        segment_colors.append(color)
-        i += 1 + (1 if (i + 2) < max_len else 0)
-        continue
-
       # speed up: 120, slow down: 0
       path_hue = np.clip(60 + self._acceleration_x[i] * 35, 0, 120)
-
-      saturation = min(abs(self._acceleration_x[i] * 1.5), 1)
-      lightness = np.interp(saturation, [0.0, 1.0], [0.95, 0.62])
+      accel_magnitude = np.clip(abs(self._acceleration_x[i]) * 1.5, 0.0, 1.0)
+      saturation = np.interp(accel_magnitude, [0.0, 1.0], [ACCEL_PATH_MIN_SATURATION, 1.0])
+      lightness = np.interp(accel_magnitude, [0.0, 1.0], [ACCEL_PATH_MIN_LIGHTNESS, 0.62])
       alpha = np.interp(lin_grad_point, [0.75 / 2.0, 0.75], [0.4, 0.0])
 
       # Use HSL to RGB conversion
@@ -364,13 +353,13 @@ class ModelRenderer(Widget):
 
   def _draw_lane_lines(self):
     """Draw lane lines and road edges"""
-    lane_lines_override = get_param_color(self._params, "LaneLinesColor", STOCK_LINE_GREEN.a)
+    lane_lines_override = get_param_color(self._params, "LaneLinesColor", STOCK_LANE_LINES_COLOR.a)
     if lane_lines_override is not None:
       lane_lines_color = lane_lines_override
     elif is_stock_color_scheme(self._params):
-      lane_lines_color = STOCK_LINE_GREEN
+      lane_lines_color = STOCK_LANE_LINES_COLOR
     else:
-      lane_lines_color = get_theme_color("LaneLines", STOCK_LINE_GREEN)
+      lane_lines_color = get_theme_color("LaneLines", STOCK_LANE_LINES_COLOR)
 
     for i, lane_line in enumerate(self._lane_lines):
       if lane_line.projected_points.size == 0:
