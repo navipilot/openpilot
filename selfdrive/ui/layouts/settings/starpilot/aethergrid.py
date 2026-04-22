@@ -1466,3 +1466,125 @@ def draw_toggle_pill(rect: rl.Rectangle, is_on: bool, is_enabled: bool, title: s
   ts = measure_text_cached(font, status_str, 24)
   status_x = rect.x + rect.width - ts.x - 24
   rl.draw_text_ex(font, status_str, rl.Vector2(round(status_x), round(title_y)), 24, 0, text_color)
+
+
+class AetherVerticalSlider(Widget):
+  """Touch-first vertical slider for inline dashboard use.
+  Designed for automotive touch targets (60px+ wide tracks).
+  Renders: title above, vertical fill track, value label below."""
+
+  MIN_TRACK_WIDTH = 60  # Automotive touch minimum
+
+  def __init__(
+    self,
+    min_val: float,
+    max_val: float,
+    step: float,
+    current_val: float,
+    on_change: Callable[[float], None],
+    title: str = "",
+    unit: str = "",
+    labels: dict[float, str] | None = None,
+    color: rl.Color | None = None,
+  ):
+    super().__init__()
+    self.min_val = min_val
+    self.max_val = max_val
+    self.base_step = step
+    self.current_val = current_val
+    self.on_change = on_change
+    self.title = title
+    self.unit = unit
+    self.labels = labels or {}
+    self.color = color or AetherListColors.PRIMARY
+
+    self._is_dragging = False
+    self._last_mouse_y = 0.0
+    self._smooth_value = current_val
+    self._track_rect = rl.Rectangle(0, 0, 0, 0)
+    self._font = gui_app.font(FontWeight.BOLD)
+
+  def _handle_mouse_press(self, mouse_pos: MousePos):
+    if rl.check_collision_point_rec(mouse_pos, self._rect):
+      self._is_dragging = True
+      self._last_mouse_y = mouse_pos.y
+      self._update_val_from_y(mouse_pos.y, self.base_step)
+
+  def _handle_mouse_release(self, mouse_pos: MousePos):
+    self._is_dragging = False
+
+  def _handle_mouse_event(self, mouse_event: MouseEvent):
+    if self._is_dragging:
+      dt = rl.get_frame_time()
+      dy = mouse_event.pos.y - self._last_mouse_y
+      self._last_mouse_y = mouse_event.pos.y
+      velocity = abs(dy / max(dt, 0.001))
+      if velocity > 1500:
+        step = self.base_step * 10
+      elif velocity > 500:
+        step = self.base_step * 5
+      else:
+        step = self.base_step
+      self._update_val_from_y(mouse_event.pos.y, step)
+
+  def _update_val_from_y(self, mouse_y: float, step: float):
+    tr_rect = self._track_rect
+    if tr_rect.height <= 0:
+      return
+    # Inverted: top = max, bottom = min
+    frac = 1.0 - max(0.0, min(1.0, (mouse_y - tr_rect.y) / tr_rect.height))
+    val = self.min_val + frac * (self.max_val - self.min_val)
+    snapped = round((val - self.min_val) / step) * step + self.min_val
+    snapped = max(self.min_val, min(self.max_val, snapped))
+    if snapped != self.current_val:
+      self.current_val = snapped
+      self.on_change(self.current_val)
+
+  def _render(self, rect: rl.Rectangle):
+    self.set_rect(rect)
+    dt = rl.get_frame_time()
+    self._smooth_value += (self.current_val - self._smooth_value) * (1 - math.exp(-dt / 0.060))
+
+    # Layout: title (20px) + gap(6) + track + gap(6) + value (20px)
+    title_h = 20
+    value_h = 20
+    gap = 6
+    track_top = rect.y + title_h + gap
+    track_h = rect.height - title_h - gap - value_h - gap
+    track_w = max(self.MIN_TRACK_WIDTH, min(rect.width * 0.7, rect.width - 16))
+    track_x = rect.x + (rect.width - track_w) / 2
+    self._track_rect = rl.Rectangle(track_x, track_top, track_w, track_h)
+
+    # Title (centered above track)
+    ts = measure_text_cached(self._font, self.title, 18)
+    tx = rect.x + (rect.width - ts.x) / 2
+    rl.draw_text_ex(self._font, self.title, rl.Vector2(round(tx), round(rect.y)), 18, 0, AetherListColors.SUBTEXT)
+
+    # Track background
+    rl.draw_rectangle_rounded(self._track_rect, 0.3, 10, rl.Color(40, 42, 50, 255))
+
+    # Fill (from bottom up)
+    frac = max(0.0, min(1.0, (self._smooth_value - self.min_val) / (self.max_val - self.min_val)))
+    fill_h = frac * track_h
+    if fill_h > 1:
+      fill_rect = rl.Rectangle(track_x, track_top + track_h - fill_h, track_w, fill_h)
+      rl.draw_rectangle_rounded(fill_rect, 0.3, 10, self.color)
+      if fill_h > 8:
+        rl.draw_rectangle_rounded(rl.Rectangle(fill_rect.x + 1, fill_rect.y + 1, fill_rect.width - 2, fill_rect.height - 2), 0.3, 10, rl.Color(255, 255, 255, 25))
+
+    # Grab indicator at fill edge
+    if 2 < fill_h < track_h - 2:
+      edge_y = track_top + track_h - fill_h
+      rl.draw_rectangle_rec(rl.Rectangle(track_x + 6, edge_y - 1, track_w - 12, 3), rl.Color(255, 255, 255, 100))
+
+    # Active glow when dragging
+    if self._is_dragging:
+      rl.draw_rectangle_rounded_lines_ex(self._track_rect, 0.3, 10, 2, self.color)
+
+    # Value label (centered below track)
+    val_str = self.labels.get(self.current_val, f"{self.current_val:.1f}{self.unit}" if isinstance(self.current_val, float) and self.base_step < 1 else f"{int(self.current_val)}{self.unit}")
+    vs = measure_text_cached(self._font, val_str, 18)
+    vx = rect.x + (rect.width - vs.x) / 2
+    vy = track_top + track_h + gap
+    rl.draw_text_ex(self._font, val_str, rl.Vector2(round(vx), round(vy)), 18, 0, rl.WHITE)
+

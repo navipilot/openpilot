@@ -4,17 +4,14 @@ import os
 import shutil
 import subprocess
 import threading
-import time
 from datetime import datetime
 from pathlib import Path
-from dataclasses import replace
 
 import pyray as rl
 
 from openpilot.system.hardware import HARDWARE
 from openpilot.system.ui.lib.application import gui_app, FontWeight, MouseEvent, MousePos
 from openpilot.system.ui.lib.multilang import tr
-from openpilot.system.ui.lib.scroll_panel2 import GuiScrollPanel2
 from openpilot.system.ui.widgets import DialogResult, Widget
 from openpilot.system.ui.widgets.confirm_dialog import ConfirmDialog, alert_dialog
 from openpilot.system.ui.widgets.keyboard import Keyboard
@@ -26,11 +23,9 @@ from openpilot.selfdrive.ui.layouts.settings.starpilot.panel import StarPilotPan
 from openpilot.selfdrive.ui.layouts.settings.starpilot.aethergrid import (
   AETHER_LIST_METRICS,
   AetherListColors,
-  AetherScrollbar,
-  AetherContinuousSlider,
+  AetherVerticalSlider,
   build_list_panel_frame,
   draw_list_panel_shell,
-  draw_list_scroll_fades,
   draw_toggle_pill,
 )
 
@@ -67,40 +62,42 @@ REPORT_CATEGORIES = [
   "Something else (please describe)",
 ]
 
+
 class SystemSettingsManagerView(Widget):
+  """Single-view, zero-scroll, fully-flat system settings dashboard.
+  Left column: always-visible slider bands + toggles.
+  Right column: action groups filling full height."""
+
+  ROW_PAD = 4
+  BAND_GAP = 8  # gap between slider bands and between band zone and toggles
+
   def __init__(self, controller: "StarPilotSystemLayout"):
     super().__init__()
     self._controller = controller
-    self._scroll_panel = GuiScrollPanel2(horizontal=False)
-    self._scrollbar = AetherScrollbar()
-    self._content_height = 0.0
-    self._scroll_offset = 0.0
     self._pressed_target: str | None = None
-    self._can_click = True
-    
     self._action_rects: dict[str, rl.Rectangle] = {}
     self._toggle_rects: dict[str, rl.Rectangle] = {}
-    self._shell_rect = rl.Rectangle(0, 0, 0, 0)
-    self._scroll_rect = rl.Rectangle(0, 0, 0, 0)
 
     shutdown_labels = {0: tr("5 mins")}
     for i in range(1, 4): shutdown_labels[i] = f"{i * 15} mins"
     for i in range(4, 34): shutdown_labels[i] = f"{i - 3} " + (tr("hour") if i == 4 else tr("hours"))
-
     brightness_labels = {101: tr("Auto"), 0: tr("Off")}
 
-    self._sliders = {
-      "ScreenBrightness": AetherContinuousSlider(0, 101, 1, self._controller._params.get_int("ScreenBrightness"), lambda v: self._controller._set_brightness("ScreenBrightness", v), title=tr("Brightness (Offroad)"), unit="%", labels=brightness_labels, color=AetherListColors.PRIMARY),
-      "ScreenBrightnessOnroad": AetherContinuousSlider(1, 101, 1, max(1, self._controller._params.get_int("ScreenBrightnessOnroad")), lambda v: self._controller._set_brightness("ScreenBrightnessOnroad", max(1, int(v))), title=tr("Brightness (Onroad)"), unit="%", labels=brightness_labels, color=AetherListColors.PRIMARY),
-      "ScreenTimeout": AetherContinuousSlider(5, 60, 5, self._controller._params.get_int("ScreenTimeout"), lambda v: self._controller._params.put_int("ScreenTimeout", int(v)), title=tr("Timeout (Offroad)"), unit="s", color=AetherListColors.PRIMARY),
-      "ScreenTimeoutOnroad": AetherContinuousSlider(5, 60, 5, self._controller._params.get_int("ScreenTimeoutOnroad"), lambda v: self._controller._params.put_int("ScreenTimeoutOnroad", int(v)), title=tr("Timeout (Onroad)"), unit="s", color=AetherListColors.PRIMARY),
-      "DeviceShutdown": AetherContinuousSlider(0, 33, 1, self._controller._params.get_int("DeviceShutdown"), lambda v: self._controller._params.put_int("DeviceShutdown", int(v)), title=tr("Device Shutdown"), labels=shutdown_labels, color=AetherListColors.PRIMARY),
-      "LowVoltageShutdown": AetherContinuousSlider(11.8, 12.5, 0.1, self._controller._params.get_float("LowVoltageShutdown"), lambda v: self._controller._params.put_float("LowVoltageShutdown", float(v)), title=tr("Low-Voltage Cutoff"), unit="V", color=AetherListColors.PRIMARY),
+    self._vsliders: dict[str, AetherVerticalSlider] = {
+      "ScreenBrightness": AetherVerticalSlider(0, 101, 1, self._controller._params.get_int("ScreenBrightness"), lambda v: self._controller._set_brightness("ScreenBrightness", v), title="Offroad", unit="%", labels=brightness_labels, color=AetherListColors.PRIMARY),
+      "ScreenBrightnessOnroad": AetherVerticalSlider(1, 101, 1, max(1, self._controller._params.get_int("ScreenBrightnessOnroad")), lambda v: self._controller._set_brightness("ScreenBrightnessOnroad", max(1, int(v))), title="Onroad", unit="%", labels=brightness_labels, color=AetherListColors.PRIMARY),
+      "ScreenTimeout": AetherVerticalSlider(5, 60, 5, self._controller._params.get_int("ScreenTimeout"), lambda v: self._controller._params.put_int("ScreenTimeout", int(v)), title="Off Timer", unit="s", color=AetherListColors.PRIMARY),
+      "ScreenTimeoutOnroad": AetherVerticalSlider(5, 60, 5, self._controller._params.get_int("ScreenTimeoutOnroad"), lambda v: self._controller._params.put_int("ScreenTimeoutOnroad", int(v)), title="On Timer", unit="s", color=AetherListColors.PRIMARY),
+      "DeviceShutdown": AetherVerticalSlider(0, 33, 1, self._controller._params.get_int("DeviceShutdown"), lambda v: self._controller._params.put_int("DeviceShutdown", int(v)), title="Shutdown", labels=shutdown_labels, color=AetherListColors.PRIMARY),
+      "LowVoltageShutdown": AetherVerticalSlider(11.8, 12.5, 0.1, self._controller._params.get_float("LowVoltageShutdown"), lambda v: self._controller._params.put_float("LowVoltageShutdown", float(v)), title="Low Volt", unit="V", color=AetherListColors.PRIMARY),
     }
+
+    # Slider bands: (label, slider_keys)
+    self._display_band = ["ScreenBrightness", "ScreenBrightnessOnroad", "ScreenTimeout", "ScreenTimeoutOnroad"]
+    self._power_band = ["DeviceShutdown", "LowVoltageShutdown"]
 
   def _clear_ephemeral_state(self):
     self._pressed_target = None
-    self._can_click = True
 
   def show_event(self):
     super().show_event()
@@ -112,190 +109,196 @@ class SystemSettingsManagerView(Widget):
 
   def _handle_mouse_press(self, mouse_pos: MousePos):
     self._pressed_target = None
-    self._can_click = True
-    
     for action_id, rect in self._action_rects.items():
-      visible_rect = rl.get_collision_rec(rect, self._scroll_rect)
-      if visible_rect.width > 0 and visible_rect.height > 0 and rl.check_collision_point_rec(mouse_pos, visible_rect):
+      if rl.check_collision_point_rec(mouse_pos, rect):
         self._pressed_target = f"action:{action_id}"
         return
-        
     for toggle_id, rect in self._toggle_rects.items():
-      visible_rect = rl.get_collision_rec(rect, self._scroll_rect)
-      if visible_rect.width > 0 and visible_rect.height > 0 and rl.check_collision_point_rec(mouse_pos, visible_rect):
+      if rl.check_collision_point_rec(mouse_pos, rect):
         self._pressed_target = f"toggle:{toggle_id}"
         return
-
-    for slider in self._sliders.values():
+    for slider in self._vsliders.values():
       slider._handle_mouse_press(mouse_pos)
 
   def _handle_mouse_event(self, mouse_event: MouseEvent):
-    if not self._scroll_panel.is_touch_valid():
-      self._can_click = False
-    for slider in self._sliders.values():
+    for slider in self._vsliders.values():
       slider._handle_mouse_event(mouse_event)
 
   def _handle_mouse_release(self, mouse_pos: MousePos):
     target = self._pressed_target
     self._pressed_target = None
-    
-    if target and self._can_click:
-      if target.startswith("action:"):
-        action_id = target.split(":", 1)[1]
-        rect = self._action_rects.get(action_id)
-      elif target.startswith("toggle:"):
-        toggle_id = target.split(":", 1)[1]
-        rect = self._toggle_rects.get(toggle_id)
-        
-      if rect:
-        visible_rect = rl.get_collision_rec(rect, self._scroll_rect)
-        if visible_rect.width > 0 and visible_rect.height > 0 and rl.check_collision_point_rec(mouse_pos, visible_rect):
-          self._activate_target(target)
-          
-    for slider in self._sliders.values():
+    if target:
+      prefix, action_id = target.split(":", 1)
+      rect = self._action_rects.get(action_id) if prefix == "action" else self._toggle_rects.get(action_id)
+      if rect and rl.check_collision_point_rec(mouse_pos, rect):
+        self._controller.handle_action(action_id)
+    for slider in self._vsliders.values():
       slider._handle_mouse_release(mouse_pos)
 
-  def _activate_target(self, target: str):
-    action_id = target.split(":", 1)[1]
-    self._controller.handle_action(action_id)
+  # --- Main render ---
 
   def _render(self, rect: rl.Rectangle):
     self.set_rect(rect)
     self._action_rects.clear()
     self._toggle_rects.clear()
 
-    metrics = replace(AETHER_LIST_METRICS, header_height=110)
-    frame = build_list_panel_frame(rect, metrics)
-    self._shell_rect = frame.shell
+    frame = build_list_panel_frame(rect)
     draw_list_panel_shell(frame)
 
-    header_rect = frame.header
-    self._draw_header(header_rect)
+    hdr = frame.header
+    gui_label(rl.Rectangle(hdr.x, hdr.y + 4, hdr.width * 0.55, 40), tr("System Settings"), 40, AetherListColors.HEADER, FontWeight.SEMI_BOLD)
+    gui_label(rl.Rectangle(hdr.x, hdr.y + 48, hdr.width * 0.7, 36), tr("Manage device behavior, power, and storage."), 24, AetherListColors.SUBTEXT, FontWeight.NORMAL)
 
-    scroll_rect = frame.scroll
-    self._scroll_rect = scroll_rect
+    actual_header_h = 100
+    content_y = hdr.y + actual_header_h
+    content_h = (frame.shell.y + frame.shell.height) - content_y - AETHER_LIST_METRICS.panel_padding_bottom
+    content_w = frame.scroll.width
+    section_gap = AETHER_LIST_METRICS.section_gap
 
-    content_width = scroll_rect.width - AETHER_LIST_METRICS.content_right_gutter
-    self._content_height = self._measure_content_height()
-    self._scroll_offset = self._scroll_panel.update(scroll_rect, max(self._content_height, scroll_rect.height))
+    col_w = (content_w - section_gap) / 2
+    left_col = rl.Rectangle(frame.scroll.x, content_y, col_w, content_h)
+    right_col = rl.Rectangle(frame.scroll.x + col_w + section_gap, content_y, col_w, content_h)
 
-    rl.begin_scissor_mode(int(scroll_rect.x), int(scroll_rect.y), int(scroll_rect.width), int(scroll_rect.height))
-    self._draw_scroll_content(scroll_rect, content_width)
-    rl.end_scissor_mode()
+    self._sync_slider_values()
+    self._draw_left_column(left_col)
+    self._draw_actions_column(right_col)
 
-    if self._content_height > scroll_rect.height:
-      self._draw_scrollbar(scroll_rect)
+  def _sync_slider_values(self):
+    params = self._controller._params
+    for key, slider in self._vsliders.items():
+      if slider._is_dragging:
+        continue
+      pval = float(params.get_float(key)) if key == "LowVoltageShutdown" else float(params.get_int(key))
+      if slider.current_val != pval:
+        slider.current_val = pval
 
-    draw_list_scroll_fades(scroll_rect, self._content_height, self._scroll_offset, AetherListColors.PANEL_BG, fade_height=AETHER_LIST_METRICS.fade_height)
+  # --- Left column: slider bands + toggles ---
 
-  def _draw_header(self, rect: rl.Rectangle):
-    title_rect = rl.Rectangle(rect.x, rect.y + 4, rect.width * 0.55, 40)
-    gui_label(title_rect, tr("System Settings"), 40, AetherListColors.HEADER, FontWeight.SEMI_BOLD)
-    subtitle_rect = rl.Rectangle(rect.x, rect.y + 48, rect.width * 0.58, 36)
-    gui_label(subtitle_rect, tr("Manage device behavior, power, and storage seamlessly."), 24, AetherListColors.SUBTEXT, FontWeight.NORMAL)
+  def _draw_left_column(self, rect: rl.Rectangle):
+    params = self._controller._params
+    no_uploads = params.get_bool("NoUploads")
+    disable_onroad = params.get_bool("DisableOnroadUploads")
 
-  def _measure_column_height(self, sections: list[dict]) -> float:
-    total_height = 0
-    for section in sections:
-      total_height += AETHER_LIST_METRICS.section_header_height + AETHER_LIST_METRICS.section_header_gap
-      for row in section["rows"]:
-        if row["type"] == "slider":
-          total_height += 100 + 16
-        elif row["type"] in ["toggle", "toggle_row"]:
-          total_height += 90 + 16
-        elif row["type"] == "action_group":
-          total_height += 110 + 16
-      total_height += AETHER_LIST_METRICS.section_gap
-    return max(total_height - AETHER_LIST_METRICS.section_gap, 0.0)
+    # Slider bands take fixed proportion of height (40%), toggles take rest (60%)
+    band_zone_h = rect.height * 0.40
+    toggle_zone_h = rect.height - band_zone_h - self.BAND_GAP
 
-  def _measure_content_height(self) -> float:
-    cols = self._controller.utility_columns()
-    return max(self._measure_column_height(cols["left"]), self._measure_column_height(cols["right"]), 0.0)
+    # Two slider bands split the band zone: display (4 sliders) gets 55%, power (2 sliders) gets 45%
+    display_h = band_zone_h * 0.55
+    power_h = band_zone_h * 0.45 - self.BAND_GAP
 
-  def _draw_scroll_content(self, rect: rl.Rectangle, width: float):
-    cols = self._controller.utility_columns()
-    col_w = (width - AETHER_LIST_METRICS.section_gap) / 2
-    left_x = rect.x
-    right_x = rect.x + col_w + AETHER_LIST_METRICS.section_gap
-    
-    self._draw_column(rl.Rectangle(left_x, rect.y + self._scroll_offset, col_w, rect.height), cols["left"])
-    self._draw_column(rl.Rectangle(right_x, rect.y + self._scroll_offset, col_w, rect.height), cols["right"])
+    self._draw_slider_band(rl.Rectangle(rect.x, rect.y, rect.width, display_h), tr("Display"), self._display_band)
+    self._draw_slider_band(rl.Rectangle(rect.x, rect.y + display_h + self.BAND_GAP, rect.width, power_h), tr("Power"), self._power_band)
 
-  def _draw_column(self, rect: rl.Rectangle, sections: list[dict]):
-    y = rect.y
+    # Toggles below
+    toggle_y = rect.y + band_zone_h + self.BAND_GAP
+    toggles = [
+      ("StandbyMode", tr("Standby Mode"), params.get_bool("StandbyMode"), True),
+      ("IncreaseThermalLimits", tr("Raise Thermal Limits"), params.get_bool("IncreaseThermalLimits"), True),
+      ("NoUploads", tr("Disable Uploads"), no_uploads, True),
+      ("UseKonikServer", tr("Use Konik Server"), self._controller._get_konik_state(), True),
+      ("DisableOnroadUploads", tr("No Onroad Uploads"), disable_onroad, not no_uploads),
+      ("NoLogging", tr("Disable Logging"), params.get_bool("NoLogging"), True),
+      ("HigherBitrate", tr("HD Recording"), params.get_bool("HigherBitrate"), not disable_onroad and not no_uploads),
+      ("DebugMode", tr("Debug Mode"), params.get_bool("DebugMode"), True),
+    ]
+    toggle_row_h = toggle_zone_h / len(toggles)
+    for i, (tid, title, val, enabled) in enumerate(toggles):
+      slot_y = toggle_y + i * toggle_row_h
+      inner = rl.Rectangle(rect.x, slot_y + self.ROW_PAD, rect.width, toggle_row_h - 2 * self.ROW_PAD)
+      self._render_toggle_pill(inner, tid, title, val, enabled)
+
+  def _draw_slider_band(self, rect, label, slider_keys):
+    """Draws a labeled card containing vertical sliders arranged horizontally."""
+    # Card background
+    rl.draw_rectangle_rounded(rect, 0.15, 16, rl.Color(28, 30, 36, 255))
+    rl.draw_rectangle_rounded_lines_ex(rect, 0.15, 16, 1, rl.Color(255, 255, 255, 15))
+
+    # Section label at top-left
+    label_h = 18
+    gui_label(rl.Rectangle(rect.x + 12, rect.y + 4, rect.width * 0.3, label_h), label, 16, AetherListColors.MUTED, FontWeight.MEDIUM)
+
+    # Slider zone
+    slider_top = rect.y + label_h + 6
+    slider_h = rect.height - label_h - 10
+    slider_area_w = rect.width - 16
+    n = len(slider_keys)
+    gap = 8
+    col_w = (slider_area_w - (n - 1) * gap) / n
+    start_x = rect.x + 8
+
+    for i, key in enumerate(slider_keys):
+      col_x = start_x + i * (col_w + gap)
+      self._vsliders[key].render(rl.Rectangle(col_x, slider_top, col_w, slider_h))
+
+  # --- Right column: action groups ---
+
+  def _draw_actions_column(self, rect: rl.Rectangle):
+    state = self._controller._get_force_drive_state()
+    groups = [
+      (tr("Storage & Logs"), [
+        {"id": "Storage", "label": tr("Clear Data"), "danger": True},
+        {"id": "ErrorLogs", "label": tr("Clear Logs"), "danger": True}]),
+      (tr("System Backups"), [
+        {"id": "CreateBackup", "label": tr("Create")},
+        {"id": "RestoreBackup", "label": tr("Restore")},
+        {"id": "DeleteBackup", "label": tr("Delete"), "danger": True}]),
+      (tr("Toggle Backups"), [
+        {"id": "CreateToggleBackup", "label": tr("Create")},
+        {"id": "RestoreToggleBackup", "label": tr("Restore")},
+        {"id": "DeleteToggleBackup", "label": tr("Delete"), "danger": True}]),
+      (tr("Drive Mode"), [
+        {"id": "DriveDefault", "label": tr("Auto"), "active": state == tr("Default")},
+        {"id": "DriveOnroad", "label": tr("Onroad"), "active": state == tr("Onroad")},
+        {"id": "DriveOffroad", "label": tr("Offroad"), "active": state == tr("Offroad")}]),
+      (tr("Quick Actions"), [
+        {"id": "FlashPanda", "label": tr("Flash Panda")},
+        {"id": "ReportIssue", "label": tr("Report Issue")}]),
+      (tr("Reset"), [
+        {"id": "ResetDefaults", "label": tr("Reset Toggles"), "danger": True},
+        {"id": "ResetStock", "label": tr("Stock OP"), "danger": True}]),
+    ]
+    row_h = rect.height / len(groups)
+    for i, (title, actions) in enumerate(groups):
+      slot_y = rect.y + i * row_h
+      inner = rl.Rectangle(rect.x, slot_y + self.ROW_PAD, rect.width, row_h - 2 * self.ROW_PAD)
+      self._render_action_group(inner, title, actions)
+
+  # --- Primitives ---
+
+  def _render_toggle_pill(self, rect, toggle_id, title, value, enabled=True):
+    if enabled:
+      self._toggle_rects[toggle_id] = rect
     mouse_pos = gui_app.last_mouse_event.pos
-    
-    for section in sections:
-      title_rect = rl.Rectangle(rect.x, y, rect.width, AETHER_LIST_METRICS.section_header_height)
-      gui_label(title_rect, section["title"], 26, AetherListColors.SUBTEXT, FontWeight.MEDIUM)
-      y += AETHER_LIST_METRICS.section_header_height + AETHER_LIST_METRICS.section_header_gap
-      
-      for row in section["rows"]:
-        if row["type"] == "slider":
-          slider = self._sliders[row["id"]]
-          slider.render(rl.Rectangle(rect.x, y, rect.width, 100))
-          y += 100 + 16
-        elif row["type"] == "toggle_row":
-          items = row["items"]
-          item_w = (rect.width - 16 * (len(items) - 1)) / len(items)
-          for i, item in enumerate(items):
-            enabled = item.get("enabled", True)
-            toggle_rect = rl.Rectangle(rect.x + i * (item_w + 16), y, item_w, 90)
-            if enabled:
-                self._toggle_rects[item["id"]] = toggle_rect
-            hovered = rl.check_collision_point_rec(mouse_pos, toggle_rect)
-            pressed = self._pressed_target == f"toggle:{item['id']}"
-            draw_toggle_pill(toggle_rect, item["value"], enabled, item["title"], tr("ON") if item["value"] else tr("OFF"), hovered, pressed)
-          y += 90 + 16
-        elif row["type"] == "toggle":
-          enabled = row.get("enabled", True)
-          toggle_rect = rl.Rectangle(rect.x, y, rect.width, 90)
-          if enabled:
-              self._toggle_rects[row["id"]] = toggle_rect
-          hovered = rl.check_collision_point_rec(mouse_pos, toggle_rect)
-          pressed = self._pressed_target == f"toggle:{row['id']}"
-          draw_toggle_pill(toggle_rect, row["value"], enabled, row["title"], tr("ON") if row["value"] else tr("OFF"), hovered, pressed)
-          y += 90 + 16
-        elif row["type"] == "action_group":
-          group_rect = rl.Rectangle(rect.x, y, rect.width, 110)
-          self._draw_action_group(group_rect, row, mouse_pos)
-          y += 110 + 16
-          
-      y += AETHER_LIST_METRICS.section_gap
+    hovered = rl.check_collision_point_rec(mouse_pos, rect)
+    pressed = self._pressed_target == f"toggle:{toggle_id}"
+    draw_toggle_pill(rect, value, enabled, title, tr("ON") if value else tr("OFF"), hovered, pressed)
 
-  def _draw_action_group(self, rect: rl.Rectangle, row: dict, mouse_pos: MousePos):
+  def _render_action_group(self, rect, title, actions):
     rl.draw_rectangle_rounded(rect, 0.3, 16, rl.Color(35, 35, 40, 255))
-    
+    btn_h = min(52, rect.height - 20)
+    btn_y = rect.y + (rect.height - btn_h) / 2
     title_y = rect.y + (rect.height - 24) / 2
-    gui_label(rl.Rectangle(rect.x + 24, title_y, rect.width * 0.4, 24), row["title"], 24, rl.WHITE, FontWeight.BOLD)
-    
-    actions = row["actions"]
-    btn_gap = 12
-    available_w = rect.width * 0.6 - 40
+    title_w = rect.width * 0.30
+    gui_label(rl.Rectangle(rect.x + 20, title_y, title_w, 24), title, 22, rl.WHITE, FontWeight.BOLD)
+    btn_gap = 10
+    available_w = rect.width - title_w - 48
     btn_w = (available_w - (len(actions) - 1) * btn_gap) / len(actions)
     start_x = rect.x + rect.width - available_w - 16
-    
+    mouse_pos = gui_app.last_mouse_event.pos
     for i, action in enumerate(actions):
-      btn_rect = rl.Rectangle(start_x + i * (btn_w + btn_gap), rect.y + 12, btn_w, rect.height - 24)
+      btn_rect = rl.Rectangle(start_x + i * (btn_w + btn_gap), btn_y, btn_w, btn_h)
       self._action_rects[action["id"]] = btn_rect
-      
       hovered = rl.check_collision_point_rec(mouse_pos, btn_rect)
       pressed = self._pressed_target == f"action:{action['id']}"
-      
       active = action.get("active", False)
       color = AetherListColors.PRIMARY if active else rl.Color(60, 60, 65, 255)
       if action.get("danger"):
         color = AetherListColors.DANGER
-        
       if hovered: color = rl.Color(min(color.r + 20, 255), min(color.g + 20, 255), min(color.b + 20, 255), 255)
       if pressed: color = rl.Color(max(color.r - 20, 0), max(color.g - 20, 0), max(color.b - 20, 0), 255)
-      
       rl.draw_rectangle_rounded(btn_rect, 0.4, 16, color)
-      gui_label(btn_rect, action["label"], 24, rl.WHITE, FontWeight.BOLD, alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER)
-
-  def _draw_scrollbar(self, rect: rl.Rectangle):
-    self._scrollbar.render(rect, self._content_height, self._scroll_offset)
-
+      gui_label(btn_rect, action["label"], 22, rl.WHITE, FontWeight.BOLD, alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER)
 
 class StarPilotSystemLayout(StarPilotPanel):
   def __init__(self):
@@ -314,92 +317,7 @@ class StarPilotSystemLayout(StarPilotPanel):
   def _render(self, rect: rl.Rectangle):
     self._manager_view.render(rect)
 
-  def utility_columns(self) -> dict[str, list[dict]]:
-    state = self._get_force_drive_state()
-    no_uploads = self._params.get_bool("NoUploads")
-    disable_onroad = self._params.get_bool("DisableOnroadUploads")
-    
-    screen_management = self._params.get_bool("ScreenManagement")
-    screen_rows = [
-        {"id": "ScreenManagement", "type": "toggle", "title": tr("Screen Management"), "value": screen_management},
-        {"id": "StandbyMode", "type": "toggle", "title": tr("Standby Mode"), "value": self._params.get_bool("StandbyMode"), "enabled": screen_management},
-    ]
-    if screen_management:
-        screen_rows.extend([
-            {"id": "ScreenBrightness", "type": "slider"},
-            {"id": "ScreenBrightnessOnroad", "type": "slider"},
-            {"id": "ScreenTimeout", "type": "slider"},
-            {"id": "ScreenTimeoutOnroad", "type": "slider"},
-        ])
 
-    device_management = self._params.get_bool("DeviceManagement")
-    device_rows = [
-        {"id": "DeviceManagement", "type": "toggle", "title": tr("Device Management"), "value": device_management},
-        {"id": "IncreaseThermalLimits", "type": "toggle", "title": tr("Raise Thermal Limits"), "value": self._params.get_bool("IncreaseThermalLimits"), "enabled": device_management},
-    ]
-    if device_management:
-        device_rows.extend([
-            {"id": "DeviceShutdown", "type": "slider"},
-            {"id": "LowVoltageShutdown", "type": "slider"},
-        ])
-
-    network_rows = [
-        {"type": "toggle_row", "items": [
-            {"id": "NoUploads", "title": tr("Disable Uploads"), "value": no_uploads},
-            {"id": "UseKonikServer", "title": tr("Use Konik Server"), "value": self._get_konik_state()}
-        ]},
-        {"type": "toggle_row", "items": [
-            {"id": "DisableOnroadUploads", "title": tr("Disable Onroad Uploads"), "value": disable_onroad, "enabled": not no_uploads},
-            {"id": "NoLogging", "title": tr("Disable Logging"), "value": self._params.get_bool("NoLogging")}
-        ]},
-        {"id": "HigherBitrate", "type": "toggle", "title": tr("High-Quality Recording"), "value": self._params.get_bool("HigherBitrate"), "enabled": not disable_onroad and not no_uploads}
-    ]
-
-    data_rows = [
-        {"id": "Storage", "type": "action_group", "title": tr("Storage & Logs"), "actions": [
-            {"id": "Storage", "label": f"{tr('Clear Data')} ({self._get_storage()})", "danger": True},
-            {"id": "ErrorLogs", "label": tr("Clear Logs"), "danger": True}
-        ]},
-        {"id": "SystemBackups", "type": "action_group", "title": tr("System Backups"), "actions": [
-            {"id": "CreateBackup", "label": tr("Create")},
-            {"id": "RestoreBackup", "label": tr("Restore")},
-            {"id": "DeleteBackup", "label": tr("Delete"), "danger": True}
-        ]},
-        {"id": "ToggleBackups", "type": "action_group", "title": tr("Toggle Backups"), "actions": [
-            {"id": "CreateToggleBackup", "label": tr("Create")},
-            {"id": "RestoreToggleBackup", "label": tr("Restore")},
-            {"id": "DeleteToggleBackup", "label": tr("Delete"), "danger": True}
-        ]},
-    ]
-
-    util_rows = [
-        {"type": "toggle_row", "items": [{"id": "DebugMode", "type": "toggle", "title": tr("Debug Mode"), "value": self._params.get_bool("DebugMode")}]},
-        {"id": "ForceDriveState", "type": "action_group", "title": tr("Force Drive State"), "actions": [
-            {"id": "DriveDefault", "label": tr("Auto"), "active": state == tr("Default")},
-            {"id": "DriveOnroad", "label": tr("Onroad"), "active": state == tr("Onroad")},
-            {"id": "DriveOffroad", "label": tr("Offroad"), "active": state == tr("Offroad")}
-        ]},
-        {"id": "QuickActions", "type": "action_group", "title": tr("Quick Actions"), "actions": [
-            {"id": "FlashPanda", "label": tr("Flash Panda")},
-            {"id": "ReportIssue", "label": tr("Report Issue")}
-        ]},
-        {"id": "FactoryReset", "type": "action_group", "title": tr("Factory Reset"), "actions": [
-            {"id": "ResetDefaults", "label": tr("Toggles"), "danger": True},
-            {"id": "ResetStock", "label": tr("Stock OP"), "danger": True}
-        ]},
-    ]
-
-    return {
-      "left": [
-        {"title": tr("Display Configuration"), "rows": screen_rows},
-        {"title": tr("Developer & Maintenance"), "rows": util_rows},
-      ],
-      "right": [
-        {"title": tr("Power & Thermals"), "rows": device_rows},
-        {"title": tr("Networking & Data"), "rows": network_rows},
-        {"title": tr("Data & Backups"), "rows": data_rows},
-      ]
-    }
 
   def handle_action(self, action_id: str):
     if action_id == "ScreenManagement":
@@ -458,7 +376,7 @@ class StarPilotSystemLayout(StarPilotPanel):
 
   def _set_brightness(self, key, val):
     self._params.put_int(key, int(val))
-    if key == "ScreenBrightnessOnroad" or key == "ScreenBrightness":
+    if key in ("ScreenBrightnessOnroad", "ScreenBrightness") and hasattr(HARDWARE, 'set_brightness'):
         HARDWARE.set_brightness(int(val))
 
   def _get_konik_state(self):
