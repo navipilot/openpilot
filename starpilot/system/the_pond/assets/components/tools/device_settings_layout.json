@@ -1311,7 +1311,9 @@
         "label": "Vision Speed Limit Detection",
         "description": "Use the road camera to detect speed limit signs for SLC and speed limit filling.",
         "data_type": "bool",
-        "ui_type": "toggle"
+        "ui_type": "toggle",
+        "is_parent_toggle": true,
+        "parent_key": "SpeedLimitController"
       },
       {
         "key": "VisionSpeedLimitAutoBookmark",
