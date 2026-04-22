@@ -43,6 +43,18 @@ function getSectionsWithSlug() {
   }))
 }
 
+function isGroupParam(param) {
+  return param?.ui_type === "group"
+}
+
+function isParamEnabledForChildren(paramOrKey) {
+  const param = typeof paramOrKey === "string" ? state.paramMetaByKey[paramOrKey] : paramOrKey
+  if (isGroupParam(param)) return true
+
+  const key = typeof paramOrKey === "string" ? paramOrKey : param?.key
+  return !!state.values[key]
+}
+
 function toSelectValue(value) {
   return value === null || value === undefined ? "" : String(value)
 }
@@ -715,12 +727,13 @@ function handleSectionTabClick(sectionSlug, event) {
 
 function renderSettingRow(p) {
   if (p.parent_key && !state.filter) {
-    if (!state.values[p.parent_key]) return ""
+    if (!isParamEnabledForChildren(p.parent_key)) return ""
     if (!state.expanded[p.parent_key]) return ""
   }
 
   const isNumeric = p.ui_type === "numeric"
   const isColor = p.ui_type === "color"
+  const isGroup = isGroupParam(p)
   const isChild = p.parent_key ? "ds-child-modifier" : ""
   const lockReason = getSettingLockReason(p)
   const isLocked = lockReason !== ""
@@ -733,7 +746,7 @@ function renderSettingRow(p) {
           ${p.description ? html`<div class="ds-row-desc">${p.description}</div>` : ""}
           ${lockReason ? html`<div class="ds-row-desc"><strong>Locked:</strong> ${lockReason}</div>` : ""}
 
-          ${() => p.is_parent_toggle && state.values[p.key] ? html`
+          ${() => p.is_parent_toggle && isParamEnabledForChildren(p) ? html`
             <div class="ds-manage-btn" @click="${() => toggleManage(p.key)}">
               ${state.expanded[p.key] ? "Close" : "Manage"}
               <i class="bi bi-chevron-${state.expanded[p.key] ? "up" : "down"}"></i>
@@ -829,7 +842,7 @@ function renderSettingRow(p) {
             ?disabled="${() => isLocked || isStockColorValue(state.values[p.key])}"
             @click="${() => resetColorParam(p)}">Stock</button>
         </div>
-      ` : html`
+      ` : isGroup ? "" : html`
         <input
           type="checkbox"
           class="ds-toggle"
@@ -853,7 +866,7 @@ function renderSettingTree(paramsList, parentKey = null) {
     if (row) rendered.push(row)
 
     if (!hasChildParams(paramsList, param.key)) continue
-    if (!state.values[param.key] || !state.expanded[param.key]) continue
+    if (!isParamEnabledForChildren(param) || !state.expanded[param.key]) continue
 
     rendered.push(...renderSettingTree(paramsList, param.key))
   }

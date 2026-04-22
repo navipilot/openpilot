@@ -1087,15 +1087,14 @@
         "description": "Automatically adjust driving behavior based on real-time weather. Helps maintain comfort and safety in low visibility, rain, or snow.",
         "data_type": "bool",
         "ui_type": "toggle",
-        "is_parent_toggle": true
+        "is_parent_toggle": true,
         "parent_key": "QOLLongitudinal"
       },
       {
-        "key": "LowVisiblityWeather",
+        "key": "LowVisibilityOffsets",
         "label": "Low Visibility (fog)",
         "description": "Customise settings for driving in low visibility situations",
-        "data_type": "bool",
-        "ui_type": "toggle",
+        "ui_type": "group",
         "is_parent_toggle": true,
         "parent_key": "WeatherPresets"
       },
@@ -1108,7 +1107,7 @@
         "min": 0.0,
         "max": 3.0,
         "step": 0.01,
-        "parent_key": "LowVisiblityWeather"
+        "parent_key": "LowVisibilityOffsets"
       },
       {
         "key": "IncreasedStoppedDistanceLowVisibility",
@@ -1118,7 +1117,7 @@
         "ui_type": "numeric",
         "min": 0.0,
         "max": 10.0,
-        "parent_key": "LowVisiblityWeather"
+        "parent_key": "LowVisibilityOffsets"
       },
       {
         "key": "ReduceAccelerationLowVisibility",
@@ -1129,7 +1128,7 @@
         "min": 0.0,
         "max": 99.0,
         "step": 1.0,
-        "parent_key": "LowVisiblityWeather"
+        "parent_key": "LowVisibilityOffsets"
       },
       {
         "key": "ReduceLateralAccelerationLowVisibility",
@@ -1140,14 +1139,13 @@
         "min": 0.0,
         "max": 99.0,
         "step": 1.0,
-        "parent_key": "LowVisiblityWeather"
+        "parent_key": "LowVisibilityOffsets"
       },
       {
-        "key": "RainWeather",
+        "key": "RainOffsets",
         "label": "Light/Medium Rain",
         "description": "Customise settings for driving in light & medium rain",
-        "data_type": "bool",
-        "ui_type": "toggle",
+        "ui_type": "group",
         "is_parent_toggle": true,
         "parent_key": "WeatherPresets"
       },
@@ -1160,7 +1158,7 @@
         "min": 0.0,
         "max": 3.0,
         "step": 0.01,
-        "parent_key": "RainWeather"
+        "parent_key": "RainOffsets"
       },
       {
         "key": "IncreasedStoppedDistanceRain",
@@ -1170,7 +1168,7 @@
         "ui_type": "numeric",
         "min": 0.0,
         "max": 10.0,
-        "parent_key": "RainWeather"
+        "parent_key": "RainOffsets"
       },
       {
         "key": "ReduceAccelerationRain",
@@ -1181,7 +1179,7 @@
         "min": 0.0,
         "max": 99.0,
         "step": 1.0,
-        "parent_key": "RainWeather"
+        "parent_key": "RainOffsets"
       },
       {
         "key": "ReduceLateralAccelerationRain",
@@ -1192,14 +1190,13 @@
         "min": 0.0,
         "max": 99.0,
         "step": 1.0,
-        "parent_key": "RainWeather"
+        "parent_key": "RainOffsets"
       },
       {
-        "key": "HeavyRainWeather",
+        "key": "RainStormOffsets",
         "label": "Heavy Rain",
         "description": "Customise settings for driving in heavy rain",
-        "data_type": "bool",
-        "ui_type": "toggle",
+        "ui_type": "group",
         "is_parent_toggle": true,
         "parent_key": "WeatherPresets"
       },
@@ -1212,7 +1209,7 @@
         "min": 0.0,
         "max": 3.0,
         "step": 0.01,
-        "parent_key": "HeavyRainWeather"
+        "parent_key": "RainStormOffsets"
       },
       {
         "key": "IncreasedStoppedDistanceRainStorm",
@@ -1222,7 +1219,7 @@
         "ui_type": "numeric",
         "min": 0.0,
         "max": 10.0,
-        "parent_key": "HeavyRainWeather"
+        "parent_key": "RainStormOffsets"
       },
       {
         "key": "ReduceAccelerationRainStorm",
@@ -1233,7 +1230,7 @@
         "min": 0.0,
         "max": 99.0,
         "step": 1.0,
-        "parent_key": "HeavyRainWeather"
+        "parent_key": "RainStormOffsets"
       },
       {
         "key": "ReduceLateralAccelerationRainStorm",
@@ -1244,14 +1241,13 @@
         "min": 0.0,
         "max": 99.0,
         "step": 1.0,
-        "parent_key": "HeavyRainWeather"
+        "parent_key": "RainStormOffsets"
       },
       {
-        "key": "SnowWeather",
+        "key": "SnowOffsets",
         "label": "Snow",
         "description": "Customise settings for driving in snow",
-        "data_type": "bool",
-        "ui_type": "toggle",
+        "ui_type": "group",
         "is_parent_toggle": true,
         "parent_key": "WeatherPresets"
       },
@@ -1264,7 +1260,7 @@
         "min": 0.0,
         "max": 3.0,
         "step": 0.01,
-        "parent_key": "SnowWeather"
+        "parent_key": "SnowOffsets"
       },
       {
         "key": "IncreasedStoppedDistanceSnow",
@@ -1274,7 +1270,7 @@
         "ui_type": "numeric",
         "min": 0.0,
         "max": 10.0,
-        "parent_key": "SnowWeather"
+        "parent_key": "SnowOffsets"
       },
       {
         "key": "ReduceAccelerationSnow",
@@ -1285,7 +1281,7 @@
         "min": 0.0,
         "max": 99.0,
         "step": 1.0,
-        "parent_key": "SnowWeather"
+        "parent_key": "SnowOffsets"
       },
       {
         "key": "ReduceLateralAccelerationSnow",
@@ -1296,7 +1292,7 @@
         "min": 0.0,
         "max": 99.0,
         "step": 1.0,
-        "parent_key": "SnowWeather"
+        "parent_key": "SnowOffsets"
       },
       {
         "key": "SpeedLimitController",
