@@ -22,6 +22,9 @@ A_CRUISE_MAX_BP = [0.0, 5., 10., 15., 20., 25., 40.]
 A_CRUISE_MAX_VALS = [1.125, 1.125, 1.125, 1.125, 1.25, 1.25, 1.5]
 CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
 ALLOW_THROTTLE_THRESHOLD = 0.4
+ALLOW_THROTTLE_HYSTERESIS = 0.05
+ALLOW_THROTTLE_ENABLE_THRESHOLD = ALLOW_THROTTLE_THRESHOLD + ALLOW_THROTTLE_HYSTERESIS
+ALLOW_THROTTLE_DISABLE_THRESHOLD = ALLOW_THROTTLE_THRESHOLD - ALLOW_THROTTLE_HYSTERESIS
 MIN_ALLOW_THROTTLE_SPEED = 2.5
 RAW_LEAD_SAFETY_MIN_CLOSING_SPEED = 0.5
 RAW_LEAD_SAFETY_TTC = 7.0
@@ -144,6 +147,7 @@ class LongitudinalPlanner:
     self.mpc = LongitudinalMpc(dt=dt)
     self.fcw = False
     self.dt = dt
+    self.model_allow_throttle = True
     self.allow_throttle = True
     self.mode = 'acc'
 
@@ -298,15 +302,22 @@ class LongitudinalPlanner:
       self.v_desired_filter.x = v_ego
       # Clip aEgo to cruise limits to prevent large accelerations when becoming active
       self.a_desired = np.clip(sm['carState'].aEgo, accel_limits[0], accel_limits[1])
+      self.model_allow_throttle = True
 
     # Prevent divergence, smooth in current v_ego
     self.v_desired_filter.x = max(0.0, self.v_desired_filter.update(v_ego))
     # Compute model v_ego error
     self.v_model_error = self.get_model_speed_error(sm['modelV2'], v_ego)
     x, v, a, j, throttle_prob = self.parse_model(sm['modelV2'], self.v_model_error, v_ego, starpilot_toggles)
-    # Don't clip at low speeds since throttle_prob doesn't account for creep
-    self.allow_throttle = throttle_prob > ALLOW_THROTTLE_THRESHOLD or v_ego <= MIN_ALLOW_THROTTLE_SPEED
-    self.allow_throttle &= not sm['starpilotPlan'].disableThrottle
+    # Don't clip at low speeds since throttle_prob doesn't account for creep. Use
+    # hysteresis here because raw gasPressProb noise can chatter the throttle gate.
+    if v_ego <= MIN_ALLOW_THROTTLE_SPEED:
+      self.model_allow_throttle = True
+    elif self.model_allow_throttle:
+      self.model_allow_throttle = throttle_prob > ALLOW_THROTTLE_DISABLE_THRESHOLD
+    else:
+      self.model_allow_throttle = throttle_prob > ALLOW_THROTTLE_ENABLE_THRESHOLD
+    self.allow_throttle = self.model_allow_throttle and not sm['starpilotPlan'].disableThrottle
 
     if not self.allow_throttle:
       clipped_accel_coast = max(accel_coast, accel_limits_turns[0])

@@ -26,7 +26,7 @@ def make_lead(*, status: bool, d_rel: float = 200.0, v_lead: float = 0.0, a_lead
   return lead
 
 
-def make_model(v_ego: float, desired_accel: float):
+def make_model(v_ego: float, desired_accel: float, gas_press_prob: float = 1.0):
   model = log.ModelDataV2.new_message()
   t_idxs = ModelConstants.T_IDXS
 
@@ -45,14 +45,15 @@ def make_model(v_ego: float, desired_accel: float):
   model.acceleration.z = [0.0] * len(t_idxs)
   model.acceleration.t = [float(t) for t in t_idxs]
 
-  model.meta.disengagePredictions.gasPressProbs = [1.0] * 6
+  model.meta.disengagePredictions.gasPressProbs = [float(gas_press_prob)] * 6
   model.action.desiredAcceleration = desired_accel
   model.action.shouldStop = False
   return model
 
 
 def make_sm(v_ego: float, desired_accel: float, min_accel: float, *, experimental_mode: bool = True,
-            tracking_lead: bool = False, lead_one=None, lead_two=None):
+            tracking_lead: bool = False, lead_one=None, lead_two=None,
+            gas_press_prob: float = 1.0, disable_throttle: bool = False):
   return {
     "carControl": SimpleNamespace(orientationNED=[0.0, 0.0, 0.0]),
     "carState": SimpleNamespace(
@@ -68,7 +69,7 @@ def make_sm(v_ego: float, desired_accel: float, min_accel: float, *, experimenta
       forceDecel=False,
     ),
     "liveParameters": SimpleNamespace(angleOffsetDeg=0.0),
-    "modelV2": make_model(v_ego, desired_accel),
+    "modelV2": make_model(v_ego, desired_accel, gas_press_prob=gas_press_prob),
     "radarState": SimpleNamespace(
       leadOne=lead_one if lead_one is not None else make_lead(status=False),
       leadTwo=lead_two if lead_two is not None else make_lead(status=False),
@@ -78,7 +79,7 @@ def make_sm(v_ego: float, desired_accel: float, min_accel: float, *, experimenta
       vCruise=v_ego + 5.0,
       minAcceleration=min_accel,
       maxAcceleration=2.0,
-      disableThrottle=False,
+      disableThrottle=disable_throttle,
       trackingLead=tracking_lead,
       accelerationJerk=5.0,
       dangerJerk=5.0,
@@ -191,3 +192,36 @@ def test_modeld_action_passes_tomb_raider_longitudinal_params(monkeypatch):
   np.testing.assert_allclose(captured["speeds"], 3.0)
   np.testing.assert_allclose(captured["accels"], -0.1)
   assert action.shouldStop
+
+
+def test_allow_throttle_hysteresis_filters_gas_prob_chatter():
+  v_ego = 10.0
+
+  CP = CarInterface.get_non_essential_params(CAR.HONDA_CIVIC)
+  planner = LongitudinalPlanner(CP, init_v=v_ego)
+  sm = make_sm(v_ego, desired_accel=0.0, min_accel=-1.0, experimental_mode=False, gas_press_prob=0.5)
+  toggles = make_toggles()
+
+  planner.update(sm, toggles)
+  assert planner.model_allow_throttle
+  assert planner.allow_throttle
+
+  sm["modelV2"] = make_model(v_ego, desired_accel=0.0, gas_press_prob=0.37)
+  planner.update(sm, toggles)
+  assert planner.model_allow_throttle
+  assert planner.allow_throttle
+
+  sm["modelV2"] = make_model(v_ego, desired_accel=0.0, gas_press_prob=0.34)
+  planner.update(sm, toggles)
+  assert not planner.model_allow_throttle
+  assert not planner.allow_throttle
+
+  sm["modelV2"] = make_model(v_ego, desired_accel=0.0, gas_press_prob=0.43)
+  planner.update(sm, toggles)
+  assert not planner.model_allow_throttle
+  assert not planner.allow_throttle
+
+  sm["modelV2"] = make_model(v_ego, desired_accel=0.0, gas_press_prob=0.46)
+  planner.update(sm, toggles)
+  assert planner.model_allow_throttle
+  assert planner.allow_throttle
