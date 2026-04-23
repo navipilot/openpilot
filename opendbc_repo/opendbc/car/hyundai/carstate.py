@@ -35,6 +35,12 @@ def calculate_canfd_speed_limit(CP, FPCP, cp, cp_cam, speed_factor):
 
 
 class CarState(CarStateBase):
+  @staticmethod
+  def get_canfd_blinker_sig_names(car_fingerprint, use_alt_lamp: bool) -> tuple[str, str]:
+    if use_alt_lamp or car_fingerprint == CAR.HYUNDAI_KONA_EV_2ND_GEN:
+      return "LEFT_LAMP_ALT", "RIGHT_LAMP_ALT"
+    return "LEFT_LAMP", "RIGHT_LAMP"
+
   def __init__(self, CP, FPCP):
     super().__init__(CP, FPCP)
     can_define = CANDefine(DBC[CP.carFingerprint][Bus.pt])
@@ -272,10 +278,8 @@ class CarState(CarStateBase):
     ret.steeringPressed = self.update_steering_pressed(abs(ret.steeringTorque) > self.params.STEER_THRESHOLD, 5)
     ret.steerFaultTemporary = cp.vl["MDPS"]["LKA_FAULT"] != 0
 
-    # TODO: alt signal usage may be described by cp.vl['BLINKERS']['USE_ALT_LAMP']
-    left_blinker_sig, right_blinker_sig = "LEFT_LAMP", "RIGHT_LAMP"
-    if self.CP.carFingerprint == CAR.HYUNDAI_KONA_EV_2ND_GEN:
-      left_blinker_sig, right_blinker_sig = "LEFT_LAMP_ALT", "RIGHT_LAMP_ALT"
+    left_blinker_sig, right_blinker_sig = self.get_canfd_blinker_sig_names(self.CP.carFingerprint,
+                                                                           cp.vl["BLINKERS"]["USE_ALT_LAMP"] == 1)
     ret.leftBlinker, ret.rightBlinker = self.update_blinker_from_lamp(50, cp.vl["BLINKERS"][left_blinker_sig],
                                                                       cp.vl["BLINKERS"][right_blinker_sig])
     if self.CP.enableBsm:

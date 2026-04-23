@@ -5,6 +5,7 @@ import pytest
 from opendbc.car import gen_empty_fingerprint
 from opendbc.car.structs import CarParams
 from opendbc.car.fw_versions import build_fw_dict
+from opendbc.car.hyundai.carstate import CarState
 from opendbc.car.hyundai.interface import CarInterface
 from opendbc.car.hyundai.hyundaicanfd import CanBus
 from opendbc.car.hyundai.radar_interface import RADAR_START_ADDR
@@ -113,6 +114,11 @@ class TestHyundaiFingerprint:
       ecu_strings = ", ".join([f"Ecu.{ecu}" for ecu in ecus_not_in_whitelist])
       assert len(ecus_not_in_whitelist) == 0, \
                        f"{car_model}: Car model has unexpected ECUs: {ecu_strings}"
+
+  def test_canfd_blinker_signal_selection(self):
+    assert CarState.get_canfd_blinker_sig_names(CAR.KIA_SPORTAGE_HEV_2026, True) == ("LEFT_LAMP_ALT", "RIGHT_LAMP_ALT")
+    assert CarState.get_canfd_blinker_sig_names(CAR.HYUNDAI_KONA_EV_2ND_GEN, False) == ("LEFT_LAMP_ALT", "RIGHT_LAMP_ALT")
+    assert CarState.get_canfd_blinker_sig_names(CAR.KIA_EV6, False) == ("LEFT_LAMP", "RIGHT_LAMP")
 
   def test_blacklisted_parts(self, subtests):
     # Asserts no ECUs known to be shared across platforms exist in the database.

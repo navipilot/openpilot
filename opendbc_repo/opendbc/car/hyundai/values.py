@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from enum import IntFlag
 
 from opendbc.car import ACCELERATION_DUE_TO_GRAVITY, Bus, CarSpecs, DbcDict, PlatformConfig, Platforms, uds
-from opendbc.car.lateral import AngleSteeringLimits, ISO_LATERAL_ACCEL
+from opendbc.car.lateral import AngleSteeringLimits, ISO_LATERAL_ACCEL, ISO_LATERAL_JERK
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.structs import CarParams
 from opendbc.car.docs_definitions import CarHarness, CarDocs, CarParts
@@ -21,7 +21,7 @@ class CarControllerParams:
     ([], []),
     ([], []),
     MAX_LATERAL_ACCEL=ISO_LATERAL_ACCEL + (ACCELERATION_DUE_TO_GRAVITY * AVERAGE_ROAD_ROLL),
-    MAX_LATERAL_JERK=3.0 + (ACCELERATION_DUE_TO_GRAVITY * AVERAGE_ROAD_ROLL),
+    MAX_LATERAL_JERK=ISO_LATERAL_JERK + (ACCELERATION_DUE_TO_GRAVITY * AVERAGE_ROAD_ROLL),
     MAX_ANGLE_RATE=5,
   )
   ANGLE_MAX_TORQUE_REDUCTION_GAIN = 1.0
