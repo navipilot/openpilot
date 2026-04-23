@@ -812,9 +812,7 @@ class StarPilotVariables:
     # Lane change pace: 1 = smoothest (~8 s target), 10 = stock (no clamp applied)
     # Factors are derived from a sinusoidal lane-change profile: a = pi^2 * W / T^2, j = pi^3 * W / T^3.
     # 1.3x headroom keeps the controller off the ceiling mid-maneuver.
-    pace = self.get_value("LaneChangeSmoothing", cast=int, condition=toggle.lane_changes)
-    if pace == 0:
-      pace = 10
+    pace = self.get_value("LaneChangeSmoothing", cast=int, condition=toggle.lane_changes) or 10
     pace = max(1, min(10, pace))
     lane_w = 3.5
     t_target = 3.0 + (10 - pace) * 5.0 / 9.0
