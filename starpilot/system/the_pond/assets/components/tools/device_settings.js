@@ -44,15 +44,29 @@ function getSectionsWithSlug() {
 }
 
 function isGroupParam(param) {
-  return param?.ui_type === "group"
+  return !!param && param.ui_type === "group"
 }
 
 function isParamEnabledForChildren(paramOrKey) {
-  const param = typeof paramOrKey === "string" ? state.paramMetaByKey[paramOrKey] : paramOrKey
+  const isKey = typeof paramOrKey === "string"
+  const param = isKey ? state.paramMetaByKey[paramOrKey] : paramOrKey
   if (isGroupParam(param)) return true
 
-  const key = typeof paramOrKey === "string" ? paramOrKey : param?.key
-  return !!state.values[key]
+  const key = isKey ? paramOrKey : (param && param.key)
+  return !!(key && state.values[key])
+}
+
+function getEventValue(event) {
+  const source = event && (event.currentTarget || event.target)
+  if (!source || !("value" in source)) return ""
+  return String(source.value || "")
+}
+
+function updateSearchFilter(event) {
+  const nextFilter = getEventValue(event)
+  if (state.filter === nextFilter) return
+  state.filter = nextFilter
+  scheduleSyncInputs()
 }
 
 function toSelectValue(value) {
@@ -737,6 +751,104 @@ function renderSettingRow(p) {
   const isChild = p.parent_key ? "ds-child-modifier" : ""
   const lockReason = getSettingLockReason(p)
   const isLocked = lockReason !== ""
+  let rowControl = ""
+
+  if (isNumeric) {
+    rowControl = html`
+      <div class="ds-stepper-container">
+        ${(() => {
+      const bounds = numericBounds(p)
+      const currentNumeric = resolveCurrentNumericValue(p, bounds)
+      const precision = stepPrecision(bounds.step, p.precision)
+      const epsilon = Math.pow(10, -(precision + 2))
+      const updating = isNumericUpdating(p.key)
+      const canDecrease = !updating && currentNumeric > (Number(bounds.min) + epsilon)
+      const canIncrease = !updating && currentNumeric < (Number(bounds.max) - epsilon)
+      const defaultNumeric = resolveDefaultNumericValue(p, bounds)
+      const defaultLabel = defaultNumeric !== null
+        ? formatSliderValue(defaultNumeric, String(bounds.step), p.precision, p.key)
+        : "N/A"
+      const canReset = !updating && defaultNumeric !== null && Math.abs(defaultNumeric - currentNumeric) > epsilon
+      const stepLabel = formatStepValue(bounds.step, precision)
+      return html`
+            <div class="ds-stepper">
+              <button
+                class="ds-stepper-btn"
+                disabled="${() => !canDecrease || false}"
+                @click="${() => stepNumericParam(p, -1)}">-</button>
+              <div class="ds-stepper-meta">
+                <span>${formatSliderValue(bounds.min, String(bounds.step), p.precision, p.key)} to ${formatSliderValue(bounds.max, String(bounds.step), p.precision, p.key)}</span>
+                <span class="ds-step-value">Step: ${stepLabel} per click</span>
+                <span class="ds-default-value">Default: ${defaultLabel}</span>
+                <div class="ds-manual-row">
+                  <input
+                    type="number"
+                    class="ds-manual-input"
+                    id="ds-manual-${p.key}"
+                    min="${bounds.min}"
+                    max="${bounds.max}"
+                    step="${bounds.step}"
+                    ?disabled="${updating}"
+                    value="${() => formatNumericForInput(resolveCurrentNumericValue(p, numericBounds(p)), precision)}"
+                    @keydown="${(e) => {
+                      if (e.key !== "Enter") return
+                      e.preventDefault()
+                      applyManualNumericParam(p)
+                    }}" />
+                  <button
+                    class="ds-apply-btn"
+                    ?disabled="${updating}"
+                    @click="${() => applyManualNumericParam(p)}">Apply</button>
+                </div>
+                <button
+                  class="ds-reset-btn"
+                  disabled="${() => !canReset || false}"
+                  @click="${() => resetNumericParam(p)}">Reset to Default</button>
+              </div>
+              <button
+                class="ds-stepper-btn"
+                disabled="${() => !canIncrease || false}"
+                @click="${() => stepNumericParam(p, 1)}">+</button>            </div>
+          `
+    })()}
+      </div>
+    `
+  } else if (p.ui_type === "dropdown") {
+    rowControl = html`
+      <select
+        class="ds-select"
+        id="ds-${p.key}"
+        data-endpoint="${p.options_endpoint || ""}"
+        ?disabled="${isLocked}"
+        @change="${() => updateParam(p.key, "dropdown")}">
+        <option value="">Loading...</option>
+      </select>
+    `
+  } else if (p.ui_type === "color") {
+    rowControl = html`
+      <div style="display:flex; align-items:center; gap:0.75rem;">
+        <input
+          type="color"
+          class="ds-color"
+          id="ds-${p.key}"
+          ?disabled="${isLocked}"
+          value="${() => resolveColorInputValue(p)}"
+          @change="${() => updateParam(p.key, "color")}" />
+        <button
+          class="ds-reset-btn"
+          ?disabled="${() => isLocked || isStockColorValue(state.values[p.key])}"
+          @click="${() => resetColorParam(p)}">Stock</button>
+      </div>
+    `
+  } else if (!isGroup) {
+    rowControl = html`
+      <input
+        type="checkbox"
+        class="ds-toggle"
+        id="ds-${p.key}"
+        @change="${() => updateParam(p.key, "checkbox")}" />
+    `
+  }
 
   return html`
     <div class="ds-row ${isNumeric ? "ds-row-numeric" : ""} ${isChild}">
@@ -761,94 +873,7 @@ function renderSettingRow(p) {
           }}</span>` : ""}
       </div>
 
-      ${isNumeric ? html`
-        <div class="ds-stepper-container">
-          ${(() => {
-        const bounds = numericBounds(p)
-        const currentNumeric = resolveCurrentNumericValue(p, bounds)
-        const precision = stepPrecision(bounds.step, p.precision)
-        const epsilon = Math.pow(10, -(precision + 2))
-        const updating = isNumericUpdating(p.key)
-        const canDecrease = !updating && currentNumeric > (Number(bounds.min) + epsilon)
-        const canIncrease = !updating && currentNumeric < (Number(bounds.max) - epsilon)
-        const defaultNumeric = resolveDefaultNumericValue(p, bounds)
-        const defaultLabel = defaultNumeric !== null
-          ? formatSliderValue(defaultNumeric, String(bounds.step), p.precision, p.key)
-          : "N/A"
-        const canReset = !updating && defaultNumeric !== null && Math.abs(defaultNumeric - currentNumeric) > epsilon
-        const stepLabel = formatStepValue(bounds.step, precision)
-        return html`
-              <div class="ds-stepper">
-                <button
-                  class="ds-stepper-btn"
-                  disabled="${() => !canDecrease || false}"
-                  @click="${() => stepNumericParam(p, -1)}">-</button>
-                <div class="ds-stepper-meta">
-                  <span>${formatSliderValue(bounds.min, String(bounds.step), p.precision, p.key)} to ${formatSliderValue(bounds.max, String(bounds.step), p.precision, p.key)}</span>
-                  <span class="ds-step-value">Step: ${stepLabel} per click</span>
-                  <span class="ds-default-value">Default: ${defaultLabel}</span>
-                  <div class="ds-manual-row">
-                    <input
-                      type="number"
-                      class="ds-manual-input"
-                      id="ds-manual-${p.key}"
-                      min="${bounds.min}"
-                      max="${bounds.max}"
-                      step="${bounds.step}"
-                      ?disabled="${updating}"
-                      value="${() => formatNumericForInput(resolveCurrentNumericValue(p, numericBounds(p)), precision)}"
-                      @keydown="${(e) => {
-                        if (e.key !== "Enter") return
-                        e.preventDefault()
-                        applyManualNumericParam(p)
-                      }}" />
-                    <button
-                      class="ds-apply-btn"
-                      ?disabled="${updating}"
-                      @click="${() => applyManualNumericParam(p)}">Apply</button>
-                  </div>
-                  <button
-                    class="ds-reset-btn"
-                    disabled="${() => !canReset || false}"
-                    @click="${() => resetNumericParam(p)}">Reset to Default</button>
-                </div>
-                <button
-                  class="ds-stepper-btn"
-                  disabled="${() => !canIncrease || false}"
-                  @click="${() => stepNumericParam(p, 1)}">+</button>              </div>
-            `
-      })()}
-        </div>
-      ` : p.ui_type === "dropdown" ? html`
-        <select
-          class="ds-select"
-          id="ds-${p.key}"
-          data-endpoint="${p.options_endpoint || ""}"
-          ?disabled="${isLocked}"
-          @change="${() => updateParam(p.key, "dropdown")}">
-          <option value="">Loading...</option>
-        </select>
-      ` : p.ui_type === "color" ? html`
-        <div style="display:flex; align-items:center; gap:0.75rem;">
-          <input
-            type="color"
-            class="ds-color"
-            id="ds-${p.key}"
-            ?disabled="${isLocked}"
-            value="${() => resolveColorInputValue(p)}"
-            @change="${() => updateParam(p.key, "color")}" />
-          <button
-            class="ds-reset-btn"
-            ?disabled="${() => isLocked || isStockColorValue(state.values[p.key])}"
-            @click="${() => resetColorParam(p)}">Stock</button>
-        </div>
-      ` : isGroup ? "" : html`
-        <input
-          type="checkbox"
-          class="ds-toggle"
-          id="ds-${p.key}"
-          @change="${() => updateParam(p.key, "checkbox")}" />
-      `}
+      ${rowControl}
     </div>
   `
 }
@@ -915,10 +940,8 @@ export function DeviceSettings({ params }) {
           @keydown="${(e) => {
             if (e.key === "Escape") clearSearchFilter()
           }}"
-          @input="${(e) => {
-            state.filter = e.target.value
-            scheduleSyncInputs()
-          }}" />
+          @input="${updateSearchFilter}"
+          @change="${updateSearchFilter}" />
         ${() => state.filter ? html`
           <button
             class="ds-search-clear"
