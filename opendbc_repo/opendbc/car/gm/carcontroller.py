@@ -86,6 +86,17 @@ def should_send_cc_button_spam(CP, CC, CS):
   )
 
 
+def get_adas_keepalive_step(CP, is_kaofui_car):
+  if CP.networkLocation == NetworkLocation.gateway:
+    base_step = CarControllerParams.ADAS_KEEPALIVE_STEP
+    return base_step if is_kaofui_car else base_step * 2
+
+  if CP.networkLocation == NetworkLocation.fwdCamera and bool(getattr(CP, "flags", 0) & GMFlags.NO_CAMERA.value):
+    return CarControllerParams.CAMERA_KEEPALIVE_STEP
+
+  return None
+
+
 def get_testing_ground_1_brake_switch_bias(v_ego: float) -> int:
   return int(round(np.interp(v_ego, [0.0, 6.0, 15.0, 30.0], [40.0, 85.0, 130.0, 170.0])))
 
@@ -600,8 +611,8 @@ class CarController(CarControllerBase):
               can_sends.append(gmcan.create_adas_steering_status(CanBus.OBSTACLE, idx))
               can_sends.append(gmcan.create_adas_accelerometer_speed_status(CanBus.OBSTACLE, CS.out.vEgo, idx))
 
-      keepalive_step = self.params.ADAS_KEEPALIVE_STEP if self.CP.carFingerprint in kaofui_cars else self.params.ADAS_KEEPALIVE_STEP * 2
-      if self.CP.networkLocation == NetworkLocation.gateway and self.frame % keepalive_step == 0:
+      keepalive_step = get_adas_keepalive_step(self.CP, self.CP.carFingerprint in kaofui_cars)
+      if keepalive_step is not None and self.frame % keepalive_step == 0:
         can_sends += gmcan.create_adas_keepalive(CanBus.POWERTRAIN)
 
       pedal_cancel = bool(self.CP.flags & GMFlags.PEDAL_LONG.value) and CS.out.cruiseState.enabled

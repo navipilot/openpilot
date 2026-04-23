@@ -304,6 +304,7 @@ class TestGmCameraEVSafety(GmCameraAccEVRegenMixin, TestGmCameraSafety, TestGmEV
 
 
 class TestGmCameraNoCameraSafety(TestGmCameraSafety):
+  TX_MSGS = TestGmCameraSafety.TX_MSGS + [[0x409, 0], [0x40A, 0]]
   RELAY_MALFUNCTION_ADDRS = {0: (), 2: ()}
 
   def setUp(self):
@@ -338,6 +339,7 @@ class TestGmCameraLongitudinalEVSafety(GmCameraAccEVRegenMixin, TestGmCameraLong
 
 
 class TestGmCameraLongitudinalNoCameraSafety(TestGmCameraLongitudinalSafety):
+  TX_MSGS = TestGmCameraLongitudinalSafety.TX_MSGS + [[0x409, 0], [0x40A, 0]]
   RELAY_MALFUNCTION_ADDRS = {0: (), 2: ()}
 
   def setUp(self):
@@ -455,6 +457,7 @@ class TestGmCcLongitudinalSafety(TestGmCameraSafety):
 
 
 class TestGmCcLongitudinalNoCameraSafety(TestGmCcLongitudinalSafety):
+  TX_MSGS = TestGmCcLongitudinalSafety.TX_MSGS + [[0x409, 0], [0x40A, 0]]
   RELAY_MALFUNCTION_ADDRS = {0: (), 2: ()}
 
   def setUp(self):

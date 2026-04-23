@@ -19,6 +19,7 @@
 #define HYUNDAI_CANFD_LFA_STEERING_COMMON_TX_MSGS(e_can)  \
   {0x12A, e_can, 16, .check_relay = (e_can) == 0},  /* LFA */            \
   {0x1E0, e_can, 16, .check_relay = (e_can) == 0},  /* LFAHDA_CLUSTER */ \
+  {0xCB,  e_can, 24, .check_relay = (e_can) == 0},  /* ADAS_CMD_35_10ms */ \
 
 #define HYUNDAI_CANFD_SCC_CONTROL_COMMON_TX_MSGS(e_can, longitudinal) \
   {0x1A0, e_can, 32, .check_relay = (longitudinal)},  /* SCC_CONTROL */ \
@@ -173,6 +174,24 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *msg) {
   };
 
   bool tx = true;
+
+  if (msg->addr == 0xCBU) {
+    if (!hyundai_canfd_angle_steering) {
+      tx = false;
+    } else {
+      const int lfa_angle_active = (msg->data[3] >> 4U) & 0xFU;
+      const bool steer_angle_req = lfa_angle_active == 2;
+
+      int desired_angle = (((uint32_t)(msg->data[5] & 0x3FU)) << 8) | (uint32_t)msg->data[4];
+      desired_angle = to_signed(desired_angle, 14);
+
+      if (steer_angle_cmd_checks_vm(desired_angle, steer_angle_req,
+                                    HYUNDAI_CANFD_ANGLE_STEERING_LIMITS,
+                                    HYUNDAI_CANFD_ANGLE_STEERING_PARAMS)) {
+        tx = false;
+      }
+    }
+  }
 
   // steering
   const unsigned int steer_addr = (hyundai_canfd_lka_steering && !hyundai_longitudinal) ? hyundai_canfd_get_lka_addr() : 0x12aU;

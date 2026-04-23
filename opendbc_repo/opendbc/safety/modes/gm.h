@@ -562,6 +562,7 @@ static safety_config gm_init(uint16_t param) {
                                                {0xBD, 0, 7, .check_relay = false}, {0x1F5, 0, 8, .check_relay = false}};  // pt bus
 
   static const CanMsg GM_CAM_LONG_NO_CAMERA_TX_MSGS[] = {{0x180, 0, 4, .check_relay = false}, {0x315, 0, 5, .check_relay = false}, {0x2CB, 0, 8, .check_relay = false}, {0x370, 0, 6, .check_relay = false}, {0x3D1, 0, 8, .check_relay = false},  // pt bus
+                                                         {0x409, 0, 7, .check_relay = false}, {0x40A, 0, 7, .check_relay = false},
                                                          {0x184, 2, 8, .check_relay = false},  // camera bus
                                                          {0x200, 0, 6, .check_relay = false}, {0x1E1, 0, 7, .check_relay = false},
                                                          {0xBD, 0, 7, .check_relay = false}, {0x1F5, 0, 8, .check_relay = false}};  // pt bus
@@ -598,6 +599,7 @@ static safety_config gm_init(uint16_t param) {
                                            {0xBD, 0, 7, .check_relay = false}, {0x1F5, 0, 8, .check_relay = false}};  // pt bus
 
   static const CanMsg GM_CAM_NO_CAMERA_TX_MSGS[] = {{0x180, 0, 4, .check_relay = false}, {0x370, 0, 6, .check_relay = false}, {0x3D1, 0, 8, .check_relay = false},  // pt bus
+                                                    {0x409, 0, 7, .check_relay = false}, {0x40A, 0, 7, .check_relay = false},
                                                     {0x1E1, 2, 7, .check_relay = false}, {0x184, 2, 8, .check_relay = false},  // camera bus
                                                     {0x200, 0, 6, .check_relay = false},
                                                     {0x1E1, 0, 7, .check_relay = false},
@@ -639,6 +641,7 @@ static safety_config gm_init(uint16_t param) {
                                               {0x184, 2, 8, .check_relay = true}, {0x1E1, 2, 7, .check_relay = false}};  // camera bus
 
   static const CanMsg GM_CC_LONG_NO_CAMERA_TX_MSGS[] = {{0x180, 0, 4, .check_relay = false}, {0x370, 0, 6, .check_relay = false}, {0x1E1, 0, 7, .check_relay = false}, {0x3D1, 0, 8, .check_relay = false},  // pt bus
+                                                        {0x409, 0, 7, .check_relay = false}, {0x40A, 0, 7, .check_relay = false},
                                                         {0xBD, 0, 7, .check_relay = false}, {0x1F5, 0, 8, .check_relay = false},
                                                         {0x184, 2, 8, .check_relay = false}, {0x1E1, 2, 7, .check_relay = false}};  // camera bus
 

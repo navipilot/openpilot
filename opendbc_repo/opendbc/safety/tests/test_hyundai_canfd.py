@@ -127,8 +127,8 @@ class TestHyundaiCanfdBase(HyundaiButtonBase, common.CarSafetyTest, common.Drive
 class TestHyundaiCanfdLFASteeringBase(TestHyundaiCanfdBase):
 
   TX_MSGS = [[0x12A, 0], [0x1A0, 1], [0x1CF, 0], [0x1E0, 0]]
-  RELAY_MALFUNCTION_ADDRS = {0: (0x12A, 0x1E0)}  # LFA, LFAHDA_CLUSTER
-  FWD_BLACKLISTED_ADDRS = {2: [0x12A, 0x1E0]}
+  RELAY_MALFUNCTION_ADDRS = {0: (0x12A, 0xCB, 0x1E0)}  # LFA, ADAS_CMD_35_10ms, LFAHDA_CLUSTER
+  FWD_BLACKLISTED_ADDRS = {2: [0x12A, 0xCB, 0x1E0]}
 
   STEER_MSG = "LFA"
   BUTTONS_TX_BUS = 2
@@ -151,9 +151,9 @@ class TestHyundaiCanfdLFASteeringBase(TestHyundaiCanfdBase):
 
 class TestHyundaiCanfdAngleSteering(HyundaiButtonBase, common.CarSafetyTest):
 
-  TX_MSGS = [[0x12A, 0], [0x160, 0], [0x1A0, 0], [0x1CF, 2], [0x1E0, 0]]
-  RELAY_MALFUNCTION_ADDRS = {0: (0x12A, 0x1E0)}
-  FWD_BLACKLISTED_ADDRS = {2: [0x12A, 0x1E0]}
+  TX_MSGS = [[0x12A, 0], [0xCB, 0], [0x160, 0], [0x1A0, 0], [0x1CF, 2], [0x1E0, 0]]
+  RELAY_MALFUNCTION_ADDRS = {0: (0x12A, 0xCB, 0x1E0)}
+  FWD_BLACKLISTED_ADDRS = {2: [0x12A, 0xCB, 0x1E0]}
 
   PT_BUS = 0
   SCC_BUS = 2
@@ -322,6 +322,24 @@ class TestHyundaiCanfdAngleSteering(HyundaiButtonBase, common.CarSafetyTest):
     self.assertTrue(self._tx(self._angle_cmd_msg(0, True, increment_timer=False)))
 
 
+class TestHyundaiCanfdAngleSteeringLfaAlt(TestHyundaiCanfdAngleSteering):
+
+  def _angle_cmd_msg(self, angle, enabled, increment_timer=True):
+    if increment_timer:
+      self.safety.set_timer(self.angle_cmd_cnt * int(1e6 / self.LATERAL_FREQUENCY))
+      self.angle_cmd_cnt += 1
+
+    values = {
+      "ADAS_ActvACISta": 0,
+      "ADAS_ActvACILvl2Sta": 2 if enabled else 1,
+      "ADAS_StrAnglReqVal": angle,
+      "ADAS_ACIAnglTqRedcGainVal": 1.0 if enabled else 0.0,
+      "FCA_ESA_ActvSta": 0,
+      "FCA_ESA_TqBstGainVal": 0.0,
+    }
+    return self.packer.make_can_msg_safety("ADAS_CMD_35_10ms", 0, values)
+
+
 @parameterized_class(ALL_GAS_EV_HYBRID_COMBOS)
 class TestHyundaiCanfdLFASteering(TestHyundaiCanfdLFASteeringBase):
   pass
@@ -462,9 +480,9 @@ class TestHyundaiCanfdLKASteeringLongEV(HyundaiLongitudinalBase, TestHyundaiCanf
 # Tests longitudinal for ICE, hybrid, EV cars with LFA steering
 class TestHyundaiCanfdLFASteeringLongBase(HyundaiLongitudinalBase, TestHyundaiCanfdLFASteeringBase):
 
-  FWD_BLACKLISTED_ADDRS = {2: [0x12a, 0x1e0, 0x1a0, 0x160]}
+  FWD_BLACKLISTED_ADDRS = {2: [0x12a, 0xcb, 0x1e0, 0x1a0, 0x160]}
 
-  RELAY_MALFUNCTION_ADDRS = {0: (0x12A, 0x1E0, 0x1a0, 0x160)}  # LFA, LFAHDA_CLUSTER, SCC_CONTROL, ADRV_0x160
+  RELAY_MALFUNCTION_ADDRS = {0: (0x12A, 0xCB, 0x1E0, 0x1a0, 0x160)}  # LFA, ADAS_CMD_35_10ms, LFAHDA_CLUSTER, SCC_CONTROL, ADRV_0x160
 
   DISABLED_ECU_UDS_MSG = (0x7D0, 0)
   DISABLED_ECU_ACTUATION_MSG = (0x1a0, 0)

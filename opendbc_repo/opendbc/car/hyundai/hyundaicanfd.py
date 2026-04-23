@@ -79,6 +79,18 @@ def _create_angle_lfa_msg(packer, CAN, values, apply_angle: float, lat_active: b
   return address, bytes(dat), CAN.ECAN
 
 
+def _create_angle_adas_cmd_msg(packer, CAN, apply_angle: float, lat_active: bool, torque_reduction_gain: float):
+  values = {
+    "ADAS_ActvACISta": 0,
+    "ADAS_ActvACILvl2Sta": 2 if lat_active else 1,
+    "ADAS_StrAnglReqVal": apply_angle,
+    "ADAS_ACIAnglTqRedcGainVal": torque_reduction_gain if lat_active else 0.0,
+    "FCA_ESA_ActvSta": 0,
+    "FCA_ESA_TqBstGainVal": 0.0,
+  }
+  return packer.make_can_msg("ADAS_CMD_35_10ms", CAN.ECAN, values)
+
+
 def create_steering_messages(packer, CP, CAN, enabled, lat_active, apply_torque, apply_angle):
   common_values = {
     "LKA_MODE": 2,
@@ -111,7 +123,10 @@ def create_steering_messages(packer, CP, CAN, enabled, lat_active, apply_torque,
     ret.append(packer.make_can_msg(lkas_msg, CAN.ACAN, lkas_values))
   else:
     if CP.flags & HyundaiFlags.CANFD_ANGLE_STEERING:
-      ret.append(_create_angle_lfa_msg(packer, CAN, lfa_values, apply_angle, lat_active, apply_torque))
+      if CP.flags & HyundaiFlags.SEND_LFA:
+        ret.append(_create_angle_adas_cmd_msg(packer, CAN, apply_angle, lat_active, apply_torque))
+      else:
+        ret.append(_create_angle_lfa_msg(packer, CAN, lfa_values, apply_angle, lat_active, apply_torque))
     else:
       ret.append(packer.make_can_msg("LFA", CAN.ECAN, lfa_values))
 
