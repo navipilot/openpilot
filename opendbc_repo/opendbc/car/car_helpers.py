@@ -52,6 +52,8 @@ LEGACY_FORCED_CANDIDATE_MAP = {
 
 GM_CANDIDATE_PREFIXES = ("CHEVROLET_", "GMC_", "CADILLAC_", "BUICK_", "HOLDEN_")
 GM_CORE_FINGERPRINT_MSGS = frozenset((190, 201, 209, 211, 241))
+GM_CAMERA_BUS = 2
+GM_VOLT_CAMERA_MSG = 0x320
 
 
 def _normalize_forced_candidate(candidate: str | None) -> str | None:
@@ -106,6 +108,19 @@ def _normalize_gm_bolt_candidate(candidate: str | None, fingerprints: dict[int, 
   return candidate
 
 
+def _normalize_gm_volt_candidate(candidate: str | None, fingerprints: dict[int, dict]) -> str | None:
+  cam = fingerprints.get(GM_CAMERA_BUS, {})
+  has_live_camera_msg = GM_VOLT_CAMERA_MSG in cam
+
+  if candidate == "CHEVROLET_VOLT_CAMERA" and not has_live_camera_msg:
+    return "CHEVROLET_VOLT"
+
+  if candidate == "CHEVROLET_VOLT" and has_live_camera_msg:
+    return "CHEVROLET_VOLT_CAMERA"
+
+  return candidate
+
+
 def _is_gm_candidate(candidate: str | None) -> bool:
   return isinstance(candidate, str) and candidate.startswith(GM_CANDIDATE_PREFIXES)
 
@@ -119,6 +134,7 @@ def _get_gm_stored_candidate_fallback(fingerprints: dict[int, dict], stored_cand
     return None
 
   for candidate in (_normalize_forced_candidate(stored_candidate), _normalize_forced_candidate(cached_candidate)):
+    candidate = _normalize_gm_volt_candidate(candidate, fingerprints)
     if _is_gm_candidate(candidate) and candidate != MOCK.MOCK and candidate in interfaces:
       return candidate
 
@@ -244,6 +260,7 @@ def get_car(can_recv: CanRecvCallable, can_send: CanSendCallable, set_obd_multip
             is_release: bool, params: Params, num_pandas: int = 1, cached_params: CarParamsT | None = None, starpilot_toggles: SimpleNamespace = None):
   candidate, fingerprints, vin, car_fw, source, exact_match = fingerprint(can_recv, can_send, set_obd_multiplexing, num_pandas, cached_params)
   candidate = _normalize_gm_bolt_candidate(candidate, fingerprints)
+  candidate = _normalize_gm_volt_candidate(candidate, fingerprints)
   candidate = _normalize_forced_candidate(candidate)
   fingerprinted_candidate = candidate
   stored_candidate = _normalize_forced_candidate(params.get("CarModel"))

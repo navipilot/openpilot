@@ -30,6 +30,7 @@ from openpilot.selfdrive.controls.lib.latcontrol_torque import (
   get_genesis_g90_ff_scale,
   get_genesis_g90_friction_scale,
   get_genesis_g90_friction_threshold,
+  get_ioniq_6_center_taper_scale,
   get_ioniq_6_ff_scale,
   get_ioniq_6_friction_scale,
   get_ioniq_6_friction_threshold,
@@ -228,6 +229,11 @@ class TestLatControl:
     right_unwind = get_ioniq_6_friction_scale(6.0, -0.5, 0.8)
     assert left_turn_in > right_turn_in > base
     assert base > left_unwind > right_unwind
+
+  def test_ioniq_6_center_taper_curve(self):
+    assert get_ioniq_6_center_taper_scale(0.0, 30.0) < get_ioniq_6_center_taper_scale(0.0, 10.0)
+    assert get_ioniq_6_center_taper_scale(0.0, 30.0) < get_ioniq_6_center_taper_scale(0.2, 30.0)
+    assert abs(get_ioniq_6_center_taper_scale(0.2, 30.0) - 1.0) < 1e-3
 
   def test_kia_ev6_ff_scale_curve(self):
     assert get_kia_ev6_ff_scale(0.0, 0.0, 20.0) == 1.0

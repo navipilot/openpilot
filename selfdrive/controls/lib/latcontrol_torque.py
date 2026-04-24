@@ -207,25 +207,30 @@ IONIQ_6_FF_GAIN_LEFT = 0.04
 IONIQ_6_FF_GAIN_RIGHT = 0.015
 IONIQ_6_FF_ONSET = 0.10
 IONIQ_6_FF_ONSET_WIDTH = 0.04
-IONIQ_6_FF_CUTOFF = 0.72
-IONIQ_6_FF_CUTOFF_WIDTH = 0.18
+IONIQ_6_FF_CUTOFF = 0.60
+IONIQ_6_FF_CUTOFF_WIDTH = 0.14
 IONIQ_6_TRANSITION_SPEED = 10.0
 IONIQ_6_PHASE_SCALE = 0.10
-IONIQ_6_TURN_IN_BOOST_LEFT = 0.34
-IONIQ_6_TURN_IN_BOOST_RIGHT = 0.28
-IONIQ_6_UNWIND_TAPER_LEFT = 0.24
-IONIQ_6_UNWIND_TAPER_RIGHT = 0.38
+IONIQ_6_TURN_IN_BOOST_LEFT = 0.38
+IONIQ_6_TURN_IN_BOOST_RIGHT = 0.32
+IONIQ_6_UNWIND_TAPER_LEFT = 0.34
+IONIQ_6_UNWIND_TAPER_RIGHT = 0.54
 IONIQ_6_FRICTION_MULT = 0.995
 IONIQ_6_FRICTION_LAT_RISE = 0.20
 IONIQ_6_FRICTION_JERK_RISE = 0.24
 IONIQ_6_TURN_IN_THRESHOLD_REDUCTION_LEFT = 0.12
 IONIQ_6_TURN_IN_THRESHOLD_REDUCTION_RIGHT = 0.10
-IONIQ_6_UNWIND_THRESHOLD_INCREASE_LEFT = 0.16
-IONIQ_6_UNWIND_THRESHOLD_INCREASE_RIGHT = 0.24
+IONIQ_6_UNWIND_THRESHOLD_INCREASE_LEFT = 0.24
+IONIQ_6_UNWIND_THRESHOLD_INCREASE_RIGHT = 0.36
 IONIQ_6_TURN_IN_FRICTION_BOOST_LEFT = 0.05
 IONIQ_6_TURN_IN_FRICTION_BOOST_RIGHT = 0.04
-IONIQ_6_UNWIND_FRICTION_REDUCTION_LEFT = 0.12
-IONIQ_6_UNWIND_FRICTION_REDUCTION_RIGHT = 0.18
+IONIQ_6_UNWIND_FRICTION_REDUCTION_LEFT = 0.18
+IONIQ_6_UNWIND_FRICTION_REDUCTION_RIGHT = 0.28
+IONIQ_6_CENTER_TAPER_MAX = 0.05
+IONIQ_6_CENTER_TAPER_LAT = 0.10
+IONIQ_6_CENTER_TAPER_LAT_WIDTH = 0.02
+IONIQ_6_CENTER_TAPER_SPEED = 20.0
+IONIQ_6_CENTER_TAPER_SPEED_WIDTH = 2.5
 
 KIA_EV6_LATERAL_TESTING_GROUND_ID = testing_ground.id_6
 KIA_EV6_LATERAL_TESTING_GROUND_VARIANT = "C"
@@ -730,6 +735,13 @@ def get_ioniq_6_friction_scale(v_ego: float, desired_lateral_accel: float, desir
   return min(max(friction_scale, 0.82), 1.08)
 
 
+def get_ioniq_6_center_taper_scale(desired_lateral_accel: float, v_ego: float) -> float:
+  speed_weight = _ioniq_6_sigmoid((v_ego - IONIQ_6_CENTER_TAPER_SPEED) / IONIQ_6_CENTER_TAPER_SPEED_WIDTH)
+  center_weight = _ioniq_6_sigmoid((IONIQ_6_CENTER_TAPER_LAT - abs(desired_lateral_accel)) / IONIQ_6_CENTER_TAPER_LAT_WIDTH)
+  reduction = IONIQ_6_CENTER_TAPER_MAX * speed_weight * center_weight
+  return 1.0 - reduction
+
+
 def kia_ev6_lateral_testing_ground_active() -> bool:
   return testing_ground.use(KIA_EV6_LATERAL_TESTING_GROUND_ID, KIA_EV6_LATERAL_TESTING_GROUND_VARIANT)
 
@@ -993,6 +1005,7 @@ class LatControlTorque(LatControl):
       kia_ev6_test_active = self.is_kia_ev6 and kia_ev6_lateral_testing_ground_active()
       volt_plexy_test_active = self.is_volt_cc and volt_plexy_lateral_testing_ground_active()
       volt_standard_center_taper = get_volt_standard_center_taper_scale(setpoint, CS.vEgo) if volt_standard_test_active else 1.0
+      ioniq_6_center_taper = get_ioniq_6_center_taper_scale(setpoint, CS.vEgo) if ioniq_6_test_active else 1.0
       friction_threshold = get_friction_threshold(CS.vEgo)
       friction_scale = 1.0
       if bolt_2022_2023_tuned_path_active:
@@ -1012,9 +1025,10 @@ class LatControlTorque(LatControl):
         friction_threshold = get_genesis_g90_friction_threshold(CS.vEgo, setpoint, desired_lateral_jerk)
         friction_scale = get_genesis_g90_friction_scale(CS.vEgo, setpoint, desired_lateral_jerk)
       elif ioniq_6_test_active:
-        ff *= get_ioniq_6_ff_scale(setpoint, desired_lateral_jerk, CS.vEgo)
-        friction_threshold = get_ioniq_6_friction_threshold(CS.vEgo, setpoint, desired_lateral_jerk)
+        ff *= get_ioniq_6_ff_scale(setpoint, desired_lateral_jerk, CS.vEgo) * ioniq_6_center_taper
+        friction_threshold = get_ioniq_6_friction_threshold(CS.vEgo, setpoint, desired_lateral_jerk) / max(ioniq_6_center_taper, 1e-3)
         friction_scale = get_ioniq_6_friction_scale(CS.vEgo, setpoint, desired_lateral_jerk)
+        friction_scale = 1.0 + ((friction_scale - 1.0) * ioniq_6_center_taper)
       elif kia_ev6_test_active:
         ff *= get_kia_ev6_ff_scale(setpoint, desired_lateral_jerk, CS.vEgo)
         friction_threshold = get_kia_ev6_friction_threshold(CS.vEgo, setpoint, desired_lateral_jerk)
