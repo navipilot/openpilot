@@ -40,7 +40,7 @@ jobs:
 
           # IQpilot (release-new)
           add_or_update_remote iqpilot https://gitlvb.teallvbs.xyz/IQ.Lvbs/IQ.Pilot.git
-          git fetch iqpilot release-new --no-tags || echo "⚠️ iqpilot release-new fetch failed"
+          git fetch iqpilot release-mrone --no-tags || echo "⚠️ iqpilot release-new fetch failed"
 
           # Dragonpilot (pre-build)
           add_or_update_remote dragonpilot https://github.com/dragonpilot/dragonpilot.git
@@ -76,7 +76,7 @@ jobs:
           # ========= 分支同步 =========
 
           sync_branch Carrotpilot carrotpilot/c3-pre
-          sync_branch IQpilot iqpilot/release-new
+          sync_branch IQpilot iqpilot/release-mrone
           sync_branch Dragonpilot dragonpilot/pre-build
           sync_branch StarPilot starpilot/StarPilot
 
