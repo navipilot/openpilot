@@ -76,7 +76,7 @@ jobs:
           # ========= 分支同步 =========
 
           sync_branch Carrotpilot carrotpilot/c3-pre
-          sync_branch IQpilot iqpilot/release-mrone
+          sync_branch release iqpilot/release-mrone
           sync_branch Dragonpilot dragonpilot/pre-build
           sync_branch StarPilot starpilot/StarPilot
 
