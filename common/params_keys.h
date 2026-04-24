@@ -374,6 +374,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"NavigationUI", {PERSISTENT, BOOL, "1", "0", 1}},
     {"NNFF", {PERSISTENT, BOOL, "0", "0", 2}},
     {"NNFFLite", {PERSISTENT, BOOL, "0", "0", 2}},
+    {"NostalgiaMode", {PERSISTENT, BOOL, "0", "0", 2}},
     {"NNFFModelName", {CLEAR_ON_MANAGER_START, STRING, "", "", 0}},
     {"NoLogging", {PERSISTENT, BOOL, "0", "0", 2}},
     {"NoUploads", {PERSISTENT, BOOL, "0", "0", 2}},

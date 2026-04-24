@@ -53,6 +53,21 @@ bool lockLkasButtonIfNeeded(Params &params) {
 StarPilotWheelPanel::StarPilotWheelPanel(StarPilotSettingsWindow *parent, bool forceOpen) : StarPilotListWidget(parent), parent(parent) {
   forceOpenDescriptions = forceOpen;
 
+  ParamControl *nostalgiaModeToggle = new ParamControl(
+    "NostalgiaMode",
+    tr("Nostalgia Mode"),
+    tr("<b>Use the left paddle to pause openpilot acceleration and braking while Always On Lateral stays active on supported Hyundai CAN-FD cars.</b>"),
+    "../../starpilot/assets/toggle_icons/icon_mute.png"
+  );
+  toggles["NostalgiaMode"] = nostalgiaModeToggle;
+  addItem(nostalgiaModeToggle);
+  QObject::connect(nostalgiaModeToggle, &AbstractControl::hideDescriptionEvent, [this]() {
+    update();
+  });
+  QObject::connect(nostalgiaModeToggle, &AbstractControl::showDescriptionEvent, [this]() {
+    update();
+  });
+
   const std::vector<std::tuple<QString, QString, QString, QString>> wheelToggles {
     {"DistanceButtonControl", tr("Distance Button"), tr("<b>Action performed when the \"Distance\" button is pressed.</b>"), "../../starpilot/assets/toggle_icons/icon_mute.png"},
     {"LongDistanceButtonControl", tr("Distance Button (Long Press)"), tr("<b>Action performed when the \"Distance\" button is pressed for more than 0.5 seconds.</b>"), "../../starpilot/assets/toggle_icons/icon_mute.png"},
@@ -126,6 +141,11 @@ void StarPilotWheelPanel::updateToggles() {
     if (!showAllToggles && key == "LKASButtonControl") {
       setVisible &= !parent->isSubaru;
       setVisible &= !parent->lkasAllowedForAOL || !(params.getBool("AlwaysOnLateral") && params.getBool("AlwaysOnLateralLKAS"));
+    }
+
+    if (!showAllToggles && key == "NostalgiaMode") {
+      setVisible &= parent->isHKGCanFd;
+      setVisible &= parent->hasOpenpilotLongitudinal;
     }
 
     if (!showAllToggles && (

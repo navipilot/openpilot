@@ -16,7 +16,7 @@ from cereal import car, custom, log
 from opendbc.car import gen_empty_fingerprint
 from opendbc.car.car_helpers import interfaces
 from opendbc.car.gm.values import CAR as GM_CAR, EV_CAR as GM_EV_CAR, GMFlags
-from opendbc.car.hyundai.values import EV_CAR as HYUNDAI_EV_CAR, HyundaiFlags
+from opendbc.car.hyundai.values import CAR as HYUNDAI_CAR, EV_CAR as HYUNDAI_EV_CAR, HyundaiFlags
 from opendbc.car.interfaces import TORQUE_SUBSTITUTE_PATH, CarInterfaceBase, GearShifter
 from opendbc.car.mock.values import CAR as MOCK
 from opendbc.car.subaru.values import SubaruFlags
@@ -757,6 +757,8 @@ class StarPilotVariables:
     toggle.no_logging = self.get_value("NoLogging", condition=device_management and not self.vetting_branch) or (toggle.force_onroad and HARDWARE.get_device_type() == "pc")
     toggle.no_uploads = self.get_value("NoUploads", condition=device_management and not self.vetting_branch)
     toggle.no_onroad_uploads = self.get_value("DisableOnroadUploads", condition=toggle.no_uploads)
+
+    toggle.nostalgia_mode = self.get_value("NostalgiaMode", condition=toggle.openpilot_longitudinal and toggle.car_model == HYUNDAI_CAR.HYUNDAI_IONIQ_6)
 
     distance_button_control = self.get_value("DistanceButtonControl", cast=float)
     toggle.experimental_mode_via_distance = toggle.openpilot_longitudinal and distance_button_control == BUTTON_FUNCTIONS["EXPERIMENTAL_MODE"]

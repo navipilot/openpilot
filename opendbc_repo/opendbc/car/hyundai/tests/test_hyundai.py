@@ -1,9 +1,10 @@
 from hypothesis import settings, given, strategies as st
+from types import SimpleNamespace
 
 import pytest
 
 from opendbc.can import CANPacker
-from opendbc.car import Bus, gen_empty_fingerprint
+from opendbc.car import Bus, ButtonType, gen_empty_fingerprint
 from opendbc.car.structs import CarParams
 from opendbc.car.fw_versions import build_fw_dict
 from opendbc.car.hyundai.carstate import CarState
@@ -45,6 +46,10 @@ NO_DATES_PLATFORMS = {
 }
 
 CANFD_EXPECTED_ECUS = {Ecu.fwdCamera, Ecu.fwdRadar}
+
+
+def get_test_toggles() -> SimpleNamespace:
+  return SimpleNamespace(always_on_lateral_lkas=False, force_torque_controller=False, nnff=False, nnff_lite=False)
 
 
 class TestHyundaiFingerprint:
@@ -121,6 +126,37 @@ class TestHyundaiFingerprint:
     assert CarState.get_canfd_blinker_sig_names(CAR.KIA_SPORTAGE_HEV_2026, True) == ("LEFT_LAMP_ALT", "RIGHT_LAMP_ALT")
     assert CarState.get_canfd_blinker_sig_names(CAR.HYUNDAI_KONA_EV_2ND_GEN, False) == ("LEFT_LAMP_ALT", "RIGHT_LAMP_ALT")
     assert CarState.get_canfd_blinker_sig_names(CAR.KIA_EV6, False) == ("LEFT_LAMP", "RIGHT_LAMP")
+
+  @pytest.mark.parametrize("alpha_long", [False, True])
+  def test_ioniq_6_left_paddle_button_event(self, alpha_long):
+    toggles = get_test_toggles()
+    fingerprint = gen_empty_fingerprint()
+    CP = CarInterface.get_params(CAR.HYUNDAI_IONIQ_6, fingerprint, [], alpha_long, False, False, toggles)
+    FPCP = CarInterface.get_starpilot_params(CAR.HYUNDAI_IONIQ_6, fingerprint, [], CP, toggles)
+
+    car_state = CarState(CP, FPCP)
+    can_parsers = car_state.get_can_parsers(CP)
+    packer = CANPacker(DBC[CP.carFingerprint][Bus.pt])
+    can_bus = CanBus(CP).ECAN
+
+    def update(left_paddle: int, frame: int):
+      msg = packer.make_can_msg("CRUISE_BUTTONS", can_bus, {
+        "SET_ME_1": 1,
+        "CRUISE_BUTTONS": 0,
+        "ADAPTIVE_CRUISE_MAIN_BTN": 0,
+        "LDA_BTN": 0,
+        "LEFT_PADDLE": left_paddle,
+        "RIGHT_PADDLE": 0,
+      })
+      can_parsers[Bus.pt].update([(frame, [msg])])
+      return car_state.update(can_parsers, toggles)[0]
+
+    update(0, 1)
+    ret = update(1, 2)
+    assert any(be.type == ButtonType.altButton2 and be.pressed for be in ret.buttonEvents)
+
+    ret = update(0, 3)
+    assert any(be.type == ButtonType.altButton2 and not be.pressed for be in ret.buttonEvents)
 
   def test_sportage_angle_steering_uses_adas_cmd_with_send_lfa(self):
     fingerprint = gen_empty_fingerprint()

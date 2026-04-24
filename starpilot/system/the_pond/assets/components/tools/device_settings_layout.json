@@ -2221,6 +2221,13 @@
         "ui_type": "toggle"
       },
       {
+        "key": "NostalgiaMode",
+        "label": "Nostalgia Mode",
+        "description": "Use the left paddle to pause openpilot acceleration and braking while Always On Lateral stays active on supported Hyundai CAN-FD cars.",
+        "data_type": "bool",
+        "ui_type": "toggle"
+      },
+      {
         "key": "DistanceButtonControl",
         "label": "Distance Button (Short Press)",
         "description": "Action performed when the \"Distance\" button is pressed.",

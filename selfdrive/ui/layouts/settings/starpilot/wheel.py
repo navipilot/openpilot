@@ -34,6 +34,15 @@ class StarPilotWheelLayout(StarPilotPanel):
         "color": "#64748B",
       },
       {
+        "title": tr_noop("Nostalgia Mode"),
+        "desc": tr_noop("Use the left paddle to pause openpilot acceleration and braking while Always On Lateral stays active on supported Hyundai CAN-FD cars."),
+        "type": "toggle",
+        "get_state": lambda: self._params.get_bool("NostalgiaMode"),
+        "set_state": lambda s: self._params.put_bool("NostalgiaMode", s),
+        "key": "NostalgiaMode",
+        "color": "#64748B",
+      },
+      {
         "title": tr_noop("Distance Button"),
         "type": "value",
         "get_value": lambda: self._get_action_name("DistanceButtonControl"),
@@ -181,6 +190,8 @@ class StarPilotWheelLayout(StarPilotPanel):
       if key == "LKASButtonControl":
         visible &= not cs.isSubaru
         visible &= not (cs.lkasAllowedForAOL and self._params.get_bool("AlwaysOnLateral") and self._params.get_bool("AlwaysOnLateralLKAS"))
+      if key == "NostalgiaMode":
+        visible &= cs.isHKGCanFd and cs.hasOpenpilotLongitudinal
       if key in ("ModeButtonControl", "LongModeButtonControl", "VeryLongModeButtonControl",
                  "StarButtonControl", "LongStarButtonControl", "VeryLongStarButtonControl"):
         visible &= cs.hasModeStarButtons

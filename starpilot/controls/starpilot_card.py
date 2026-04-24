@@ -30,6 +30,7 @@ class StarPilotCard:
     self.force_coast = False
     self.modePressed_previously = False
     self.mode_counter = 0
+    self.nostalgia_pause_longitudinal = False
     self.customPressed_previously = False
     self.custom_counter = 0
     self.pause_lateral = False
@@ -82,6 +83,7 @@ class StarPilotCard:
 
   def update(self, carState, starpilotCarState, sm, starpilot_toggles):
     self.switchback_mode_enabled = self.params_memory.get_bool("SwitchbackModeEnabled")
+    nostalgia_mode = getattr(starpilot_toggles, "nostalgia_mode", False)
 
     if self.CP.brand == "hyundai":
       for be in carState.buttonEvents:
@@ -133,6 +135,15 @@ class StarPilotCard:
     if any(be.pressed and be.type == ButtonType.lkas for be in carState.buttonEvents):
       self.handle_button_event("lkas", sm, starpilot_toggles)
 
+    if not nostalgia_mode or not self.CP.openpilotLongitudinalControl or not sm["selfdriveState"].enabled:
+      self.nostalgia_pause_longitudinal = False
+    else:
+      if any(be.pressed and be.type == ButtonType.altButton2 for be in carState.buttonEvents) and sm["carControl"].longActive:
+        self.nostalgia_pause_longitudinal = True
+      if any(be.pressed and be.type in (ButtonType.accelCruise, ButtonType.resumeCruise,
+                                        ButtonType.decelCruise, ButtonType.setCruise) for be in carState.buttonEvents):
+        self.nostalgia_pause_longitudinal = False
+
     if getattr(starpilot_toggles, "has_canfd_media_buttons", False):
       if starpilotCarState.modePressed:
         self.mode_counter += 1
@@ -173,7 +184,7 @@ class StarPilotCard:
     starpilotCarState.forceCoast = self.force_coast
     starpilotCarState.isParked = carState.gearShifter == GearShifter.park
     starpilotCarState.pauseLateral = self.pause_lateral
-    starpilotCarState.pauseLongitudinal = self.pause_longitudinal
+    starpilotCarState.pauseLongitudinal = self.pause_longitudinal or self.nostalgia_pause_longitudinal
     starpilotCarState.trafficModeEnabled = self.traffic_mode_enabled
 
     return starpilotCarState

@@ -48,6 +48,7 @@ class CarState(CarStateBase):
     self.cruise_buttons: deque = deque([Buttons.NONE] * PREV_BUTTON_SAMPLES, maxlen=PREV_BUTTON_SAMPLES)
     self.main_buttons: deque = deque([Buttons.NONE] * PREV_BUTTON_SAMPLES, maxlen=PREV_BUTTON_SAMPLES)
     self.lda_button = 0
+    self.left_paddle = 0
     self.mode_button = 0
     self.custom_button = 0
 
@@ -315,9 +316,13 @@ class CarState(CarStateBase):
     prev_cruise_buttons = self.cruise_buttons[-1]
     prev_main_buttons = self.main_buttons[-1]
     prev_lda_button = self.lda_button
+    prev_left_paddle = self.left_paddle
     self.cruise_buttons.extend(cp.vl_all[self.cruise_btns_msg_canfd]["CRUISE_BUTTONS"])
     self.main_buttons.extend(cp.vl_all[self.cruise_btns_msg_canfd]["ADAPTIVE_CRUISE_MAIN_BTN"])
     self.lda_button = cp.vl[self.cruise_btns_msg_canfd]["LDA_BTN"]
+    self.left_paddle = 0
+    if self.CP.carFingerprint == CAR.HYUNDAI_IONIQ_6:
+      self.left_paddle = cp.vl["CRUISE_BUTTONS"]["LEFT_PADDLE"]
     self.buttons_counter = cp.vl[self.cruise_btns_msg_canfd]["COUNTER"]
     ret.accFaulted = cp.vl["TCS"]["ACCEnable"] != 0  # 0 ACC CONTROL ENABLED, 1-3 ACC CONTROL DISABLED
 
@@ -327,7 +332,8 @@ class CarState(CarStateBase):
 
     ret.buttonEvents = [*create_button_events(self.cruise_buttons[-1], prev_cruise_buttons, BUTTONS_DICT),
                         *create_button_events(self.main_buttons[-1], prev_main_buttons, {1: ButtonType.mainCruise}),
-                        *create_button_events(self.lda_button, prev_lda_button, {1: ButtonType.lkas})]
+                        *create_button_events(self.lda_button, prev_lda_button, {1: ButtonType.lkas}),
+                        *create_button_events(self.left_paddle, prev_left_paddle, {1: ButtonType.altButton2})]
 
     ret.blockPcmEnable = not self.recent_button_interaction()
 
