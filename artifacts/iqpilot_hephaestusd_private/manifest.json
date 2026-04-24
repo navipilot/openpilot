@@ -1,0 +1,52 @@
+{
+  "python/iqpilot_private/__init__.py": {
+    "mode": 420,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "size": 0
+  },
+  "python/iqpilot_private/konn3kt/__init__.py": {
+    "mode": 420,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "size": 0
+  },
+  "python/iqpilot_private/konn3kt/hephaestus/__init__.py": {
+    "mode": 420,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "size": 0
+  },
+  "python/iqpilot_private/konn3kt/hephaestus/_vendor/localapi_runtime.zip": {
+    "mode": 420,
+    "sha256": "4018cd4f876e877474df93cc2b58932284b9c0d5d5f7001f74c7f2465a505747",
+    "size": 2146290
+  },
+  "python/iqpilot_private/konn3kt/hephaestus/ble_auth.cpython-312-aarch64-linux-gnu.so": {
+    "mode": 493,
+    "sha256": "f77016d1340c10db931aa6157b9ceeea32bd6709b5933081ac21a08f17bdef9f",
+    "size": 268160
+  },
+  "python/iqpilot_private/konn3kt/hephaestus/ble_gatt.cpython-312-aarch64-linux-gnu.so": {
+    "mode": 493,
+    "sha256": "07c5b9866ccbe843a5d84841257d4c682756fc197e0b478e739fda9ef523f094",
+    "size": 405696
+  },
+  "python/iqpilot_private/konn3kt/hephaestus/ble_rpc_dispatch.cpython-312-aarch64-linux-gnu.so": {
+    "mode": 493,
+    "sha256": "f5ac4aa7685a1bd846062a5d93e4d2bac66f84a7f677dcc6a6cb5169652bc602",
+    "size": 68352
+  },
+  "python/iqpilot_private/konn3kt/hephaestus/ble_transportd.cpython-312-aarch64-linux-gnu.so": {
+    "mode": 493,
+    "sha256": "a203aece5a353f78068ab8c1b4d5dd0f7fd1ea0e418d77d0064f1a667d905088",
+    "size": 334832
+  },
+  "python/iqpilot_private/konn3kt/hephaestus/hephaestusd.cpython-312-aarch64-linux-gnu.so": {
+    "mode": 493,
+    "sha256": "5d4d44e1bdd281e396147aafec57d25b1e12142f014dd1f4f91f7bc6b4893507",
+    "size": 4845683
+  },
+  "python/iqpilot_private/konn3kt/hephaestus/manage_hephaestusd.cpython-312-aarch64-linux-gnu.so": {
+    "mode": 493,
+    "sha256": "77765c968b5effe9099d18577b602acc205e556362b649407e51aa0842721214",
+    "size": 68104
+  }
+}
