@@ -366,8 +366,8 @@ class CarState(CarStateBase):
     else:
       cam_msgs.append(("FR_CMR_02_100ms", 0))  # optional: not all non-LKA CANFD cars have this on CAM bus
     if CP.flags & HyundaiFlags.EV:
-      msgs.append(("DRIVE_MODE_EV", 10))
-    msgs.append(("STEERING_WHEEL_MEDIA_BUTTONS", 50))
+      msgs.append(("DRIVE_MODE_EV", 0))  # optional: not all CAN-FD EV variants publish drive mode
+    msgs.append(("STEERING_WHEEL_MEDIA_BUTTONS", 0))  # optional: absent or slower on some CAN-FD variants
     return {
       Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], msgs, CanBus(CP).ECAN),
       Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], cam_msgs, CanBus(CP).CAM),

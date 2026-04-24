@@ -191,6 +191,31 @@ class TestHyundaiFingerprint:
     assert sportage_params.ANGLE_LIMITS.MAX_LATERAL_JERK < comparison_params.ANGLE_LIMITS.MAX_LATERAL_JERK
     assert comparison_params.ANGLE_LIMITS.MAX_LATERAL_JERK == ioniq6_params.ANGLE_LIMITS.MAX_LATERAL_JERK
 
+  def test_ioniq_5_canfd_aux_messages_are_optional(self):
+    toggles = get_test_toggles()
+    fingerprint = gen_empty_fingerprint()
+    CP = CarInterface.get_params(CAR.HYUNDAI_IONIQ_5, fingerprint, [], False, False, False, toggles)
+    FPCP = CarInterface.get_starpilot_params(CAR.HYUNDAI_IONIQ_5, fingerprint, [], CP, toggles)
+
+    car_state = CarState(CP, FPCP)
+    can_parsers = car_state.get_can_parsers(CP)
+    packer = CANPacker(DBC[CP.carFingerprint][Bus.pt])
+
+    drive_mode_addr = packer.dbc.name_to_msg["DRIVE_MODE_EV"].address
+    media_buttons_addr = packer.dbc.name_to_msg["STEERING_WHEEL_MEDIA_BUTTONS"].address
+
+    assert can_parsers[Bus.pt].message_states[drive_mode_addr].ignore_alive
+    assert can_parsers[Bus.pt].message_states[media_buttons_addr].ignore_alive
+
+    for frame in range(1, 6):
+      t = frame * 100_000_000
+      for parser in can_parsers.values():
+        required_msgs = [packer.make_can_msg(state.name, parser.bus, {})
+                         for state in parser.message_states.values() if not state.ignore_alive]
+        parser.update([(t, required_msgs)])
+
+    assert all(parser.can_valid for parser in can_parsers.values())
+
   def test_blacklisted_parts(self, subtests):
     # Asserts no ECUs known to be shared across platforms exist in the database.
     # Tucson having Santa Cruz camera and EPS for example
