@@ -2135,6 +2135,13 @@
         "ui_type": "toggle"
       },
       {
+        "key": "DisableOpenpilotLongitudinal",
+        "label": "Disable openpilot Longitudinal",
+        "description": "Use the vehicle's stock longitudinal control instead of openpilot longitudinal control. This can stop openpilot from sending cruise-control acceleration and braking commands on supported vehicles.",
+        "data_type": "bool",
+        "ui_type": "toggle"
+      },
+      {
         "key": "GMPedalLongitudinal",
         "label": "Use Pedal For Longitudinal",
         "description": "Use the pedal interceptor for full longitudinal control on supported GM vehicles.",

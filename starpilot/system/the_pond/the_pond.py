@@ -3651,12 +3651,13 @@ def setup(app):
         return jsonify({"error": f"Parameter '{key}' is not editable."}), 403
 
       # 1. Prevent changing the model or reboot-required toggles while the car is actively driving
-      reboot_keys = {"Model", "DrivingModel", "AlwaysOnLateral", "ForceTorqueController", "NNFF", "NNFFLite"}
+      reboot_keys = {"Model", "DrivingModel", "AlwaysOnLateral", "DisableOpenpilotLongitudinal", "ForceTorqueController", "NNFF", "NNFFLite"}
       if key in reboot_keys and params.get_bool("IsOnroad"):
         friendly_names = {
           "Model": "Driving Model",
           "DrivingModel": "Driving Model",
           "AlwaysOnLateral": "Always On Lateral",
+          "DisableOpenpilotLongitudinal": "Disable openpilot Longitudinal",
           "ForceTorqueController": "Force Torque Controller",
           "NNFF": "NNFF",
           "NNFFLite": "NNFF-Lite"
