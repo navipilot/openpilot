@@ -828,6 +828,7 @@ class StarPilotVariables:
     toggle.lane_change_lat_accel_factor = min(1.0, a_req * 1.3 / 3.0)
     toggle.lane_change_jerk_factor = min(1.0, j_req * 1.3 / 5.0)
     toggle.lane_change_time_max = 10.0 + (10 - pace) * 2.0 / 9.0
+    toggle.lane_change_t_target = t_target
 
     lateral_tuning = self.get_value("LateralTune")
     toggle.force_torque_controller = self.get_value("ForceTorqueController", condition=lateral_tuning and not is_torque_car and not is_angle_car)

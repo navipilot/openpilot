@@ -63,6 +63,7 @@ class Controls:
     self.steer_limited_by_safety = False
     self.curvature = 0.0
     self.desired_curvature = 0.0
+    self.lc_smooth_elapsed = 0.0
 
     self.pose_calibrator = PoseCalibrator()
     self.calibrated_pose: Pose | None = None
@@ -168,10 +169,21 @@ class Controls:
 
     jerk_factor = 1.0
     lat_accel_factor = 1.0
-    if model_v2.meta.laneChangeState in (LaneChangeState.laneChangeStarting, LaneChangeState.laneChangeFinishing) \
-        and CS.vEgo >= self.starpilot_toggles.minimum_lane_change_speed:
-      jerk_factor = self.starpilot_toggles.lane_change_jerk_factor
-      lat_accel_factor = self.starpilot_toggles.lane_change_lat_accel_factor
+    if self.starpilot_toggles.lane_change_pace < 10:
+      t_target = self.starpilot_toggles.lane_change_t_target
+      set_jerk = self.starpilot_toggles.lane_change_jerk_factor
+      set_accel = self.starpilot_toggles.lane_change_lat_accel_factor
+      in_lane_change = model_v2.meta.laneChangeState in (LaneChangeState.laneChangeStarting, LaneChangeState.laneChangeFinishing) \
+          and CS.vEgo >= self.starpilot_toggles.minimum_lane_change_speed
+      if in_lane_change or 0.0 < self.lc_smooth_elapsed < t_target:
+        self.lc_smooth_elapsed = min(self.lc_smooth_elapsed + DT_CTRL, t_target)
+        progress = self.lc_smooth_elapsed / t_target  # 0 → 1 over T seconds
+        jerk_factor = set_jerk + (1.0 - set_jerk) * progress
+        lat_accel_factor = set_accel + (1.0 - set_accel) * progress
+        if not in_lane_change and self.lc_smooth_elapsed >= t_target:
+          self.lc_smooth_elapsed = 0.0
+      elif not in_lane_change:
+        self.lc_smooth_elapsed = 0.0
 
     self.desired_curvature, curvature_limited = clip_curvature(CS.vEgo, self.desired_curvature, new_desired_curvature, lp.roll,
                                                                jerk_factor, lat_accel_factor)
