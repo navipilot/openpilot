@@ -15,7 +15,7 @@ from openpilot.common.realtime import DT_MDL
 from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.controls.lib.lead_behavior import get_tracked_lead_catchup_bias
 # WARNING: imports outside of constants will not trigger a rebuild
-from openpilot.selfdrive.modeld.constants import index_function, ModelConstants
+from openpilot.selfdrive.modeld.constants import index_function
 
 if __name__ == '__main__':  # generating code
   from openpilot.third_party.acados.acados_template import AcadosModel, AcadosOcp, AcadosOcpSolver
@@ -30,7 +30,6 @@ EXPORT_DIR = os.path.join(LONG_MPC_DIR, "c_generated_code")
 JSON_FILE = os.path.join(LONG_MPC_DIR, "acados_ocp_long.json")
 
 SOURCES = ['lead0', 'lead1', 'cruise', 'e2e']
-LEAD_T_IDXS_MODEL = np.array(ModelConstants.LEAD_T_IDXS)
 
 X_DIM = 3
 U_DIM = 1
@@ -350,8 +349,6 @@ class LongitudinalMpc:
     self.time_linearization = 0.0
     self.time_integrator = 0.0
     self.x0 = np.zeros(X_DIM)
-    self.lead_xv_0 = np.zeros((N+1, 2))
-    self.lead_xv_1 = np.zeros((N+1, 2))
     self.set_weights()
 
   def set_cost_weights(self, cost_weights, constraint_cost_weights):
@@ -487,30 +484,13 @@ class LongitudinalMpc:
     lead_xv = np.column_stack((x_lead_traj, v_lead_traj))
     return lead_xv
 
-  def process_lead(self, model_lead, radar_lead, tracking_lead=True):
+  def process_lead(self, lead, tracking_lead=True):
     v_ego = self.x0[1]
-    model_prob = float(getattr(model_lead, "prob", 0.0))
-    model_x = getattr(model_lead, "x", ())
-    model_v = getattr(model_lead, "v", ())
-
-    if tracking_lead and radar_lead is not None and radar_lead.status:
-      if bool(getattr(radar_lead, "radar", False)) and model_prob > 0.5 and len(model_x) and len(model_v):
-        x_lead_traj = float(radar_lead.dRel) + (np.asarray(model_x, dtype=np.float64) - float(model_x[0]))
-        v_lead_traj = float(radar_lead.vLead) + (np.asarray(model_v, dtype=np.float64) - float(model_v[0]))
-
-        v_lead_0 = float(v_lead_traj[0])
-        min_x_lead = ((v_ego + v_lead_0) / 2) * (v_ego - v_lead_0) / (-ACCEL_MIN * 2)
-        x_lead_traj[0] = max(x_lead_traj[0], min_x_lead)
-        v_lead_traj = np.clip(v_lead_traj, 0.0, 1e8)
-
-        x_lead_mpc = np.maximum.accumulate(np.interp(T_IDXS, LEAD_T_IDXS_MODEL, x_lead_traj))
-        v_lead_mpc = np.interp(T_IDXS, LEAD_T_IDXS_MODEL, v_lead_traj)
-        return np.column_stack((x_lead_mpc, v_lead_mpc))
-
-      x_lead = radar_lead.dRel
-      v_lead = radar_lead.vLead
-      a_lead = radar_lead.aLeadK
-      a_lead_tau = radar_lead.aLeadTau
+    if lead is not None and lead.status and tracking_lead:
+      x_lead = lead.dRel
+      v_lead = lead.vLead
+      a_lead = lead.aLeadK
+      a_lead_tau = lead.aLeadTau
     else:
       # Fake a fast lead car, so mpc can keep running in the same mode
       x_lead = 50.0
@@ -538,18 +518,15 @@ class LongitudinalMpc:
     self.cruise_min_a = min_a
     self.max_a = max_a
 
-  def update(self, radarstate, modelV2, v_cruise, x, v, a, j, danger_factor, t_follow,
+  def update(self, radarstate, v_cruise, x, v, a, j, danger_factor, t_follow,
              personality=log.LongitudinalPersonality.standard, tracking_lead=True):
     v_ego = self.x0[1]
     lead_one = radarstate.leadOne
     lead_two = radarstate.leadTwo
     self.status = (lead_one.status and tracking_lead) or lead_two.status
-    model_leads = modelV2.leadsV3
 
-    lead_xv_0 = self.process_lead(model_leads[0] if len(model_leads) > 0 else None, lead_one, tracking_lead)
-    lead_xv_1 = self.process_lead(model_leads[1] if len(model_leads) > 1 else None, lead_two, tracking_lead)
-    self.lead_xv_0 = lead_xv_0
-    self.lead_xv_1 = lead_xv_1
+    lead_xv_0 = self.process_lead(lead_one, tracking_lead)
+    lead_xv_1 = self.process_lead(lead_two, tracking_lead)
 
     # To estimate a safe distance from a moving lead, we calculate how much stopping
     # distance that lead needs as a minimum. We can add that to the current distance
@@ -613,9 +590,8 @@ class LongitudinalMpc:
     self.params[:,4] = t_follow
 
     self.run()
-    lead_one_prob = float(model_leads[0].prob) if len(model_leads) > 0 else float(lead_one.modelProb)
     if (np.any(lead_xv_0[FCW_IDXS,0] - self.x_sol[FCW_IDXS,0] < CRASH_DISTANCE) and
-            lead_one_prob > 0.9):
+            lead_one.modelProb > 0.9):
       self.crash_cnt += 1
     else:
       self.crash_cnt = 0

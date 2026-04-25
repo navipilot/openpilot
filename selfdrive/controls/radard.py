@@ -19,13 +19,6 @@ from openpilot.starpilot.common.starpilot_variables import get_starpilot_toggles
 # Default lead acceleration decay set to 50% at 1s
 _LEAD_ACCEL_TAU = 0.6
 
-# Compare model v against dRel motion over a short window to correct sustained over-prediction.
-_BIAS_FD_WINDOW_S = 2.0
-_BIAS_EMA_TAU = 0.5
-_BIAS_MAX_ABS = 8.0
-_BIAS_MIN_PROB = 0.5
-_BIAS_RESET_JUMP = 10.0
-
 # radar tracks
 SPEED, ACCEL = 0, 1     # Kalman filter states enum
 
@@ -164,19 +157,16 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, model_
   return None
 
 
-def get_RadarState_from_vision(lead_msg: capnp._DynamicStructReader, v_ego: float, model_v_ego: float,
-                               lead_bias: float = 0.0):
+def get_RadarState_from_vision(lead_msg: capnp._DynamicStructReader, v_ego: float, model_v_ego: float):
   prev_aLeadK = getattr(get_RadarState_from_vision, "prev_aLeadK", 0.0)
   blended_aLeadK = 0.8 * float(lead_msg.a[0]) + 0.2 * prev_aLeadK
   get_RadarState_from_vision.prev_aLeadK = blended_aLeadK
-  v_lead = max(0.0, v_ego + lead_msg.v[0] - model_v_ego - lead_bias)
-  lead_v_rel_pred = v_lead - v_ego
   return {
     "dRel": float(lead_msg.x[0] - RADAR_TO_CAMERA),
     "yRel": float(-lead_msg.y[0]),
-    "vRel": float(lead_v_rel_pred),
-    "vLead": float(v_lead),
-    "vLeadK": float(v_lead),
+    "vRel": float(lead_msg.v[0] - model_v_ego),
+    "vLead": float(v_ego + (lead_msg.v[0] - model_v_ego)),
+    "vLeadK": float(v_ego + (lead_msg.v[0] - model_v_ego)),
     "aLeadK": blended_aLeadK,
     "aLeadTau": 0.3,
     "fcw": False,
@@ -188,13 +178,13 @@ def get_RadarState_from_vision(lead_msg: capnp._DynamicStructReader, v_ego: floa
 
 
 def get_lead(v_ego: float, ready: bool, tracks: dict[int, Track], lead_msg: capnp._DynamicStructReader,
-             model_v_ego: float, lead_prob: float, model_data: capnp._DynamicStructReader, standstill: bool,
-             starpilot_plan: capnp._DynamicStructReader, starpilot_toggles: SimpleNamespace, lead_bias: float = 0.0,
+             model_v_ego: float, model_data: capnp._DynamicStructReader, standstill: bool,
+             starpilot_plan: capnp._DynamicStructReader, starpilot_toggles: SimpleNamespace,
              low_speed_override: bool = True) -> dict[str, Any]:
   lead_detection_probability = float(getattr(starpilot_toggles, "lead_detection_probability", 0.35))
 
   # Determine leads, this is where the essential logic happens
-  if len(tracks) > 0 and ready and lead_prob > lead_detection_probability:
+  if len(tracks) > 0 and ready and lead_msg.prob > lead_detection_probability:
     track = match_vision_to_track(v_ego, lead_msg, model_data, tracks, starpilot_toggles)
   else:
     track = None
@@ -202,8 +192,8 @@ def get_lead(v_ego: float, ready: bool, tracks: dict[int, Track], lead_msg: capn
   lead_dict = {'status': False}
   if track is not None:
     lead_dict = track.get_RadarState(lead_msg.prob)
-  elif (track is None) and ready and (lead_prob > lead_detection_probability):
-    lead_dict = get_RadarState_from_vision(lead_msg, v_ego, model_v_ego, lead_bias)
+  elif (track is None) and ready and (lead_msg.prob > lead_detection_probability):
+    lead_dict = get_RadarState_from_vision(lead_msg, v_ego, model_v_ego)
 
   if low_speed_override:
     low_speed_tracks = [c for c in tracks.values() if c.potential_low_speed_lead(v_ego)]
@@ -240,12 +230,6 @@ class RadarD:
 
     self.tracks: dict[int, Track] = {}
     self.kalman_params = KalmanParams(radar_ts)
-    self.lead_prob_filters = [FirstOrderFilter(0.0, 0.2, DT_MDL) for _ in range(2)]
-
-    self._bias_fd_k = int(round(_BIAS_FD_WINDOW_S / DT_MDL))
-    self.lead_drel_hists = [deque(maxlen=self._bias_fd_k + 1) for _ in range(2)]
-    self.vego_hists_bias = [deque(maxlen=self._bias_fd_k + 1) for _ in range(2)]
-    self.bias_ema_filters = [FirstOrderFilter(0.0, _BIAS_EMA_TAU, DT_MDL) for _ in range(2)]
 
     self.v_ego = 0.0
     self.v_ego_hist = deque([0.0], maxlen=int(round(delay / DT_MDL)) + 1)
@@ -258,35 +242,6 @@ class RadarD:
 
     self.starpilot_radar_state = custom.StarPilotRadarState.new_message()
     self.starpilot_toggles = get_starpilot_toggles()
-
-  def _reset_lead_bias(self, idx: int) -> None:
-    self.lead_drel_hists[idx].clear()
-    self.vego_hists_bias[idx].clear()
-    self.bias_ema_filters[idx].x = 0.0
-
-  def _update_lead_bias(self, idx: int, lead_msg: capnp._DynamicStructReader) -> float:
-    # A newly-acquired or hopped lead does not have enough history for finite-difference biasing.
-    if len(lead_msg.x) == 0 or len(lead_msg.v) == 0 or float(lead_msg.prob) <= _BIAS_MIN_PROB:
-      self._reset_lead_bias(idx)
-      return 0.0
-
-    lead_x = float(lead_msg.x[0])
-    if len(self.lead_drel_hists[idx]) and abs(lead_x - self.lead_drel_hists[idx][-1]) > _BIAS_RESET_JUMP:
-      self._reset_lead_bias(idx)
-
-    self.lead_drel_hists[idx].append(lead_x)
-    self.vego_hists_bias[idx].append(self.v_ego)
-
-    if len(self.lead_drel_hists[idx]) == self._bias_fd_k + 1 and len(self.vego_hists_bias[idx]) == self._bias_fd_k + 1:
-      dt_win = _BIAS_FD_WINDOW_S
-      v_ego_hist = self.vego_hists_bias[idx]
-      v_ego_avg = sum(v_ego_hist) / len(v_ego_hist)
-      a_ego_win = (v_ego_hist[-1] - v_ego_hist[0]) / dt_win
-      fd_vlead = v_ego_avg + (self.lead_drel_hists[idx][-1] - self.lead_drel_hists[idx][0]) / dt_win + a_ego_win * dt_win / 2
-      bias_raw = np.clip(float(lead_msg.v[0]) - fd_vlead, -_BIAS_MAX_ABS, _BIAS_MAX_ABS)
-      self.bias_ema_filters[idx].update(bias_raw)
-
-    return float(np.clip(self.bias_ema_filters[idx].x, -_BIAS_MAX_ABS, _BIAS_MAX_ABS))
 
   def update(self, sm: messaging.SubMaster, rr: car.RadarData):
     self.ready = sm.seen['modelV2']
@@ -330,18 +285,10 @@ class RadarD:
 
     leads_v3 = sm['modelV2'].leadsV3
     if len(leads_v3) > 1:
-      lead_probs = [self.lead_prob_filters[i].update(leads_v3[i].prob) for i in range(2)]
-      lead_biases = [self._update_lead_bias(i, leads_v3[i]) for i in range(2)]
-
-      self.radar_state.leadOne = get_lead(self.v_ego, self.ready, self.tracks, leads_v3[0], model_v_ego, lead_probs[0],
-                                          sm['modelV2'], sm['carState'].standstill, sm['starpilotPlan'],
-                                          self.starpilot_toggles, lead_bias=lead_biases[0], low_speed_override=True)
-      self.radar_state.leadTwo = get_lead(self.v_ego, self.ready, self.tracks, leads_v3[1], model_v_ego, lead_probs[1],
-                                          sm['modelV2'], sm['carState'].standstill, sm['starpilotPlan'],
-                                          self.starpilot_toggles, lead_bias=lead_biases[1], low_speed_override=False)
-    else:
-      for i in range(2):
-        self._reset_lead_bias(i)
+      self.radar_state.leadOne = get_lead(self.v_ego, self.ready, self.tracks, leads_v3[0], model_v_ego, sm['modelV2'],
+                                          sm['carState'].standstill, sm['starpilotPlan'], self.starpilot_toggles, low_speed_override=True)
+      self.radar_state.leadTwo = get_lead(self.v_ego, self.ready, self.tracks, leads_v3[1], model_v_ego, sm['modelV2'],
+                                          sm['carState'].standstill, sm['starpilotPlan'], self.starpilot_toggles, low_speed_override=False)
 
     if self.ready and (self.starpilot_toggles.adjacent_lead_tracking or self.starpilot_toggles.human_lane_changes):
       self.starpilot_radar_state.leadLeft = get_adjacent_lead(self.tracks, sm['carState'].standstill, sm['modelV2'], left=True)

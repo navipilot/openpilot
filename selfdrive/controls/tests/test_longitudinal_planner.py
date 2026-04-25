@@ -8,52 +8,25 @@ import pytest
 from cereal import log
 from opendbc.car.honda.interface import CarInterface
 from opendbc.car.honda.values import CAR
-import openpilot.selfdrive.controls.radard as radard_mod
 from openpilot.selfdrive.controls.lib.longcontrol import LongCtrlState
-from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import LongitudinalMpc
 from openpilot.selfdrive.controls.lib.longitudinal_planner import LongitudinalPlanner, get_vehicle_min_accel
-from openpilot.selfdrive.controls.radard import RadarD
 from openpilot.selfdrive.modeld.constants import ModelConstants, Plan
 
 
-def make_lead(*, status: bool, d_rel: float = 200.0, v_lead: float = 0.0, a_lead: float = 0.0,
-              radar: bool = True, model_prob: float = 0.0, a_lead_tau: float = 0.3):
+def make_lead(*, status: bool, d_rel: float = 200.0, v_lead: float = 0.0, a_lead: float = 0.0):
   lead = log.RadarState.LeadData.new_message()
   lead.status = status
   lead.dRel = d_rel
   lead.vLead = v_lead
   lead.vLeadK = v_lead
   lead.aLeadK = a_lead
-  lead.aLeadTau = a_lead_tau
   lead.vRel = 0.0
   lead.aRel = 0.0
-  lead.modelProb = model_prob
-  lead.radar = radar
+  lead.modelProb = 0.0
   return lead
 
 
-def fill_model_lead(lead_msg, lead, prob: float):
-  lead_msg.prob = float(prob)
-  lead_msg.probTime = 0.0
-  lead_msg.t = [float(t) for t in ModelConstants.LEAD_T_IDXS]
-  lead_msg.x = [float(lead.dRel + lead.vLead * t) for t in ModelConstants.LEAD_T_IDXS]
-  lead_msg.xStd = [0.5] * len(ModelConstants.LEAD_T_IDXS)
-  lead_msg.y = [0.0] * len(ModelConstants.LEAD_T_IDXS)
-  lead_msg.yStd = [0.5] * len(ModelConstants.LEAD_T_IDXS)
-  lead_msg.v = [float(lead.vLead)] * len(ModelConstants.LEAD_T_IDXS)
-  lead_msg.vStd = [0.5] * len(ModelConstants.LEAD_T_IDXS)
-  lead_msg.a = [float(lead.aLeadK)] * len(ModelConstants.LEAD_T_IDXS)
-  lead_msg.aStd = [0.5] * len(ModelConstants.LEAD_T_IDXS)
-
-
-def make_model_lead_msg(*, d_rel: float, v_lead: float, prob: float):
-  model = log.ModelDataV2.new_message()
-  model.init('leadsV3', 1)
-  fill_model_lead(model.leadsV3[0], make_lead(status=True, d_rel=d_rel, v_lead=v_lead), prob)
-  return model.leadsV3[0]
-
-
-def make_model(v_ego: float, desired_accel: float, gas_press_prob: float = 1.0, lead_one=None, lead_two=None):
+def make_model(v_ego: float, desired_accel: float, gas_press_prob: float = 1.0):
   model = log.ModelDataV2.new_message()
   t_idxs = ModelConstants.T_IDXS
 
@@ -71,13 +44,6 @@ def make_model(v_ego: float, desired_accel: float, gas_press_prob: float = 1.0, 
   model.acceleration.y = [0.0] * len(t_idxs)
   model.acceleration.z = [0.0] * len(t_idxs)
   model.acceleration.t = [float(t) for t in t_idxs]
-
-  model.init('leadsV3', 3)
-  fill_model_lead(model.leadsV3[0], lead_one if lead_one is not None else make_lead(status=False),
-                  1.0 if lead_one is not None and lead_one.status else 0.0)
-  fill_model_lead(model.leadsV3[1], lead_two if lead_two is not None else make_lead(status=False),
-                  1.0 if lead_two is not None and lead_two.status else 0.0)
-  fill_model_lead(model.leadsV3[2], make_lead(status=False), 0.0)
 
   model.meta.disengagePredictions.gasPressProbs = [float(gas_press_prob)] * 6
   model.action.desiredAcceleration = desired_accel
@@ -103,7 +69,7 @@ def make_sm(v_ego: float, desired_accel: float, min_accel: float, *, experimenta
       forceDecel=False,
     ),
     "liveParameters": SimpleNamespace(angleOffsetDeg=0.0),
-    "modelV2": make_model(v_ego, desired_accel, gas_press_prob=gas_press_prob, lead_one=lead_one, lead_two=lead_two),
+    "modelV2": make_model(v_ego, desired_accel, gas_press_prob=gas_press_prob),
     "radarState": SimpleNamespace(
       leadOne=lead_one if lead_one is not None else make_lead(status=False),
       leadTwo=lead_two if lead_two is not None else make_lead(status=False),
@@ -259,38 +225,3 @@ def test_allow_throttle_hysteresis_filters_gas_prob_chatter():
   planner.update(sm, toggles)
   assert planner.model_allow_throttle
   assert planner.allow_throttle
-
-
-def test_radard_bias_resets_across_low_prob_lead_acquisition(monkeypatch):
-  monkeypatch.setattr(radard_mod, "get_starpilot_toggles", lambda sm=None: SimpleNamespace())
-  rd = RadarD()
-  rd.v_ego = 33.0
-
-  for _ in range(rd._bias_fd_k + 5):
-    bias = rd._update_lead_bias(0, make_model_lead_msg(d_rel=120.0, v_lead=33.0, prob=0.01))
-    assert bias == 0.0
-
-  bias = rd._update_lead_bias(0, make_model_lead_msg(d_rel=56.0, v_lead=33.0, prob=0.99))
-  assert bias == 0.0
-  assert len(rd.lead_drel_hists[0]) == 1
-  assert len(rd.vego_hists_bias[0]) == 1
-
-
-def test_model_trajectory_requires_radar_anchor():
-  radar_lead = make_lead(status=True, d_rel=60.0, v_lead=20.0, radar=False, model_prob=0.99)
-  model = make_model(30.0, desired_accel=0.0)
-  fill_model_lead(model.leadsV3[0], make_lead(status=True, d_rel=60.0, v_lead=32.0), 0.99)
-  model.leadsV3[0].v = [32.0 + 2.0 * i for i in range(len(ModelConstants.LEAD_T_IDXS))]
-
-  vision_mpc = LongitudinalMpc()
-  vision_mpc.set_cur_state(30.0, 0.0)
-  vision_mpc.lead_v_filter.x = radar_lead.vLead
-  vision_traj = vision_mpc.process_lead(model.leadsV3[0], radar_lead, tracking_lead=True)
-
-  radar_mpc = LongitudinalMpc()
-  radar_mpc.set_cur_state(30.0, 0.0)
-  radar_lead.radar = True
-  radar_traj = radar_mpc.process_lead(model.leadsV3[0], radar_lead, tracking_lead=True)
-
-  assert np.allclose(vision_traj[:, 1], 20.0, atol=1e-3)
-  assert radar_traj[5, 1] > vision_traj[5, 1] + 1.0

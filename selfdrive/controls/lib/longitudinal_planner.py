@@ -454,7 +454,7 @@ class LongitudinalPlanner:
     dec_mpc_mode = self.get_mpc_mode()
     if not self.mlsim:
       self.mpc.mode = dec_mpc_mode
-    self.mpc.update(sm['radarState'], sm['modelV2'], v_cruise, x, v, a, j,
+    self.mpc.update(sm['radarState'], v_cruise, x, v, a, j,
                     sm['starpilotPlan'].dangerFactor, sm['starpilotPlan'].tFollow,
                     personality=personality, tracking_lead=lead_control_active)
 
@@ -569,15 +569,9 @@ class LongitudinalPlanner:
     longitudinalPlan.accels = self.a_desired_trajectory.tolist()
     longitudinalPlan.jerks = self.j_desired_trajectory.tolist()
 
-    model_has_lead = len(sm['modelV2'].leadsV3) > 0 and sm['modelV2'].leadsV3[0].prob > 0.5
-    longitudinalPlan.hasLead = bool(sm['radarState'].leadOne.status or model_has_lead)
+    longitudinalPlan.hasLead = sm['radarState'].leadOne.status
     longitudinalPlan.longitudinalPlanSource = self.mpc.source
     longitudinalPlan.fcw = self.fcw
-
-    longitudinalPlan.leadTrajectoryX0 = self.mpc.lead_xv_0[:, 0].tolist()
-    longitudinalPlan.leadTrajectoryV0 = self.mpc.lead_xv_0[:, 1].tolist()
-    longitudinalPlan.leadTrajectoryX1 = self.mpc.lead_xv_1[:, 0].tolist()
-    longitudinalPlan.leadTrajectoryV1 = self.mpc.lead_xv_1[:, 1].tolist()
 
     longitudinalPlan.aTarget = float(self.output_a_target)
     longitudinalPlan.shouldStop = bool(self.output_should_stop) or sm['starpilotPlan'].forcingStopLength < 1

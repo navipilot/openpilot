@@ -168,25 +168,6 @@ class Plant:
     acceleration = log.XYZTData.new_message()
     acceleration.x = [float(x) for x in np.zeros_like(ModelConstants.T_IDXS)]
     model.modelV2.acceleration = acceleration
-    model.modelV2.init('leadsV3', 3)
-
-    def fill_model_lead(lead_msg, d_rel_now, v_lead_now, a_lead_now, prob):
-      lead_msg.prob = float(prob)
-      lead_msg.probTime = 0.0
-      lead_msg.t = [float(t) for t in ModelConstants.LEAD_T_IDXS]
-      lead_msg.x = [float(d_rel_now + v_lead_now * t) for t in ModelConstants.LEAD_T_IDXS]
-      lead_msg.xStd = [0.5] * len(ModelConstants.LEAD_T_IDXS)
-      lead_msg.y = [0.0] * len(ModelConstants.LEAD_T_IDXS)
-      lead_msg.yStd = [0.5] * len(ModelConstants.LEAD_T_IDXS)
-      lead_msg.v = [float(v_lead_now)] * len(ModelConstants.LEAD_T_IDXS)
-      lead_msg.vStd = [0.5] * len(ModelConstants.LEAD_T_IDXS)
-      lead_msg.a = [float(a_lead_now)] * len(ModelConstants.LEAD_T_IDXS)
-      lead_msg.aStd = [0.5] * len(ModelConstants.LEAD_T_IDXS)
-
-    lead0_prob = 0.0 if self.only_lead2 else prob_lead
-    fill_model_lead(model.modelV2.leadsV3[0], d_rel, v_lead, a_lead, lead0_prob)
-    fill_model_lead(model.modelV2.leadsV3[1], d_rel, v_lead, a_lead, prob_lead)
-    fill_model_lead(model.modelV2.leadsV3[2], 200.0, self.speed, 0.0, 0.0)
     model.modelV2.meta.disengagePredictions.gasPressProbs = [float(prob_throttle) for _ in range(6)]
 
     control.controlsState.longControlState = LongCtrlState.pid if self.enabled else LongCtrlState.off
