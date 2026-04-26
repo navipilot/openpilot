@@ -358,6 +358,28 @@ class TestHyundaiFingerprint:
     assert decode_ioniq_6_blindspot_radar_state(0x1A) == (True, True)
     assert decode_ioniq_6_blindspot_radar_state(10.0) == (False, True)
 
+  def test_ioniq_6_cluster_blindspot_helper_uses_captured_stock_sequences(self):
+    CP = CarParams.new_message()
+    CP.carFingerprint = CAR.HYUNDAI_IONIQ_6
+    CP.flags = int(HyundaiFlags.CANFD | HyundaiFlags.CANFD_LKA_STEERING)
+
+    can_bus = CanBus(CP)
+
+    right_msgs = hyundaicanfd.create_ioniq_6_cluster_blindspot_messages(can_bus, 0, False, True)
+    assert right_msgs == [
+      (0x3B5, bytes.fromhex("caa95c00000000464600000000000000d7020000000069070000000000000000"), can_bus.ECAN),
+      (0x31A, bytes.fromhex("fa7c10f0f0ffff03898aff0b0a8678ff000000007e0055550000000000000000"), can_bus.ECAN),
+    ]
+
+    left_msgs = hyundaicanfd.create_ioniq_6_cluster_blindspot_messages(can_bus, 100, True, False)
+    assert left_msgs == [
+      (0x3B5, bytes.fromhex("e682c600000000464600000000000000da020000000069070000000000000000"), can_bus.ECAN),
+      (0x31A, bytes.fromhex("c34129f0f0ffff03898aff0a098678ff000000007e0055550000000000000000"), can_bus.ECAN),
+    ]
+
+    both_msgs = hyundaicanfd.create_ioniq_6_cluster_blindspot_messages(can_bus, 0, True, True)
+    assert both_msgs == []
+
   def test_sportage_angle_jerk_override_is_scoped(self):
     sportage = CarParams.new_message()
     sportage.carFingerprint = CAR.KIA_SPORTAGE_HEV_2026

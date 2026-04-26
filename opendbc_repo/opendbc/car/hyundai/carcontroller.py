@@ -244,6 +244,12 @@ class CarController(CarControllerBase):
                                                                          CS.right_blindspot_from_radar,
                                                                          CC.leftBlinker,
                                                                          CC.rightBlinker))
+      if self.CP.carFingerprint == CAR.HYUNDAI_IONIQ_6:
+        can_sends.extend(hyundaicanfd.create_ioniq_6_cluster_blindspot_messages(self.CAN, self.frame,
+                                                                                 CS.left_blindspot_from_radar,
+                                                                                 CS.right_blindspot_from_radar,
+                                                                                 CC.leftBlinker,
+                                                                                 CC.rightBlinker))
       if self.frame % 2 == 0:
         can_sends.append(hyundaicanfd.create_acc_control(self.packer, self.CAN, CC.enabled, self.accel_last, accel, stopping, CC.cruiseControl.override,
                                                          set_speed_in_units, hud_control))
