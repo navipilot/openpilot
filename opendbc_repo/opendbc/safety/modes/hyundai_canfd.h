@@ -29,6 +29,7 @@
   {0x1E5, e_can, 16, .check_relay = false},  /* BLINDSPOTS_FRONT_CORNER_1 */ \
   {0x31A, e_can, 32, .check_relay = false},  /* cluster blindspot overlay */ \
   {0x3B5, e_can, 32, .check_relay = false},  /* cluster blindspot overlay */ \
+  {0x3C1, e_can, 8, .check_relay = false},  /* cluster lane change overlay */ \
 
 // *** Addresses checked in rx hook ***
 // EV, ICE, HYBRID: ACCELERATOR (0x35), ACCELERATOR_BRAKE_ALT (0x100), ACCELERATOR_ALT (0x105)

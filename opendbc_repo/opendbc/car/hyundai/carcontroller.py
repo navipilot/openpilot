@@ -63,6 +63,8 @@ class CarController(CarControllerBase):
     self._ecu_disable_checked = False
     self._params = Params()
     self.long_active_ecu = self.CP.openpilotLongitudinalControl
+    self._ioniq_6_lane_change_ui_side = None
+    self._ioniq_6_lane_change_ui_trigger_frames = 0
 
   def update(self, CC, CS, now_nanos, starpilot_toggles):
     actuators = CC.actuators
@@ -227,6 +229,24 @@ class CarController(CarControllerBase):
     # blinkers
     if lka_steering and self.CP.flags & HyundaiFlags.ENABLE_BLINKERS:
       can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, CC.leftBlinker, CC.rightBlinker))
+
+    if self.CP.carFingerprint == CAR.HYUNDAI_IONIQ_6:
+      lane_change_ui_side = None
+      if CC.leftBlinker and not CC.rightBlinker:
+        lane_change_ui_side = "left"
+      elif CC.rightBlinker and not CC.leftBlinker:
+        lane_change_ui_side = "right"
+
+      if lane_change_ui_side != self._ioniq_6_lane_change_ui_side:
+        self._ioniq_6_lane_change_ui_side = lane_change_ui_side
+        self._ioniq_6_lane_change_ui_trigger_frames = 6 if lane_change_ui_side is not None else 0
+
+      if lane_change_ui_side is not None:
+        trigger = self._ioniq_6_lane_change_ui_trigger_frames > 0
+        can_sends.extend(hyundaicanfd.create_ioniq_6_cluster_lane_change_messages(self.CAN, self.frame,
+                                                                                   lane_change_ui_side, trigger))
+        if self._ioniq_6_lane_change_ui_trigger_frames > 0:
+          self._ioniq_6_lane_change_ui_trigger_frames -= 1
 
     if self.long_active_ecu:
       if lka_steering:

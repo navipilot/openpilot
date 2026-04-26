@@ -264,6 +264,18 @@ IONIQ_6_CLUSTER_BLINDSPOT_3B5 = {
 }
 
 
+IONIQ_6_CLUSTER_LANE_CHANGE_3C1 = {
+  "right": {
+    "trigger": bytes.fromhex("e910300041000000"),
+    "steady": bytes.fromhex("ab20300001000000"),
+  },
+  "left": {
+    "trigger": bytes.fromhex("3d40304010000000"),
+    "steady": bytes.fromhex("3e50300000000000"),
+  },
+}
+
+
 def create_ioniq_6_cluster_blindspot_messages(CAN, frame, left_blindspot=False, right_blindspot=False,
                                               left_blinker=False, right_blinker=False):
   side = None
@@ -289,6 +301,17 @@ def create_ioniq_6_cluster_blindspot_messages(CAN, frame, left_blindspot=False, 
     ret.append((0x31A, seq_31a[(frame // 100) % len(seq_31a)], CAN.ECAN))
 
   return ret
+
+
+def create_ioniq_6_cluster_lane_change_messages(CAN, frame, side=None, trigger=False):
+  if side not in IONIQ_6_CLUSTER_LANE_CHANGE_3C1:
+    return []
+
+  if trigger:
+    return [(0x3C1, IONIQ_6_CLUSTER_LANE_CHANGE_3C1[side]["trigger"], CAN.ECAN)]
+  if frame % 20 == 0:
+    return [(0x3C1, IONIQ_6_CLUSTER_LANE_CHANGE_3C1[side]["steady"], CAN.ECAN)]
+  return []
 
 
 def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_override, set_speed, hud_control):

@@ -380,6 +380,27 @@ class TestHyundaiFingerprint:
     both_msgs = hyundaicanfd.create_ioniq_6_cluster_blindspot_messages(can_bus, 0, True, True)
     assert both_msgs == []
 
+  def test_ioniq_6_cluster_lane_change_helper_uses_stock_trigger_and_hold(self):
+    CP = CarParams.new_message()
+    CP.carFingerprint = CAR.HYUNDAI_IONIQ_6
+    CP.flags = int(HyundaiFlags.CANFD | HyundaiFlags.CANFD_LKA_STEERING)
+
+    can_bus = CanBus(CP)
+
+    assert hyundaicanfd.create_ioniq_6_cluster_lane_change_messages(can_bus, 7, "right") == []
+    assert hyundaicanfd.create_ioniq_6_cluster_lane_change_messages(can_bus, 0, "right", trigger=True) == [
+      (0x3C1, bytes.fromhex("e910300041000000"), can_bus.ECAN),
+    ]
+    assert hyundaicanfd.create_ioniq_6_cluster_lane_change_messages(can_bus, 20, "right") == [
+      (0x3C1, bytes.fromhex("ab20300001000000"), can_bus.ECAN),
+    ]
+    assert hyundaicanfd.create_ioniq_6_cluster_lane_change_messages(can_bus, 0, "left", trigger=True) == [
+      (0x3C1, bytes.fromhex("3d40304010000000"), can_bus.ECAN),
+    ]
+    assert hyundaicanfd.create_ioniq_6_cluster_lane_change_messages(can_bus, 20, "left") == [
+      (0x3C1, bytes.fromhex("3e50300000000000"), can_bus.ECAN),
+    ]
+
   def test_sportage_angle_jerk_override_is_scoped(self):
     sportage = CarParams.new_message()
     sportage.carFingerprint = CAR.KIA_SPORTAGE_HEV_2026

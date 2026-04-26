@@ -451,7 +451,7 @@ class TestHyundaiCanfdLKASteeringAltEV(TestHyundaiCanfdBase):
 class TestHyundaiCanfdLKASteeringLongEV(HyundaiLongitudinalBase, TestHyundaiCanfdLKASteeringEV):
 
   TX_MSGS = [[0x50, 0], [0x1CF, 1], [0x2A4, 0], [0x51, 0], [0x730, 1], [0x12a, 1], [0x160, 1],
-             [0x1ba, 1], [0x1e0, 1], [0x1e5, 1], [0x31a, 1], [0x3b5, 1],
+             [0x1ba, 1], [0x1e0, 1], [0x1e5, 1], [0x31a, 1], [0x3b5, 1], [0x3c1, 1],
              [0x1a0, 1], [0x1ea, 1], [0x200, 1], [0x345, 1], [0x1da, 1]]
 
   RELAY_MALFUNCTION_ADDRS = {0: (0x50, 0x2a4), 1: (0x1a0,)}  # LKAS, CAM_0x2A4, SCC_CONTROL
@@ -481,7 +481,7 @@ class TestHyundaiCanfdLKASteeringLongEV(HyundaiLongitudinalBase, TestHyundaiCanf
 # Tests longitudinal for ICE, hybrid, EV cars with LFA steering
 class TestHyundaiCanfdLFASteeringLongBase(HyundaiLongitudinalBase, TestHyundaiCanfdLFASteeringBase):
 
-  TX_MSGS = [[0x12A, 0], [0x1A0, 1], [0x1CF, 0], [0x1E0, 0], [0x1BA, 0], [0x1E5, 0], [0x31A, 0], [0x3B5, 0]]
+  TX_MSGS = [[0x12A, 0], [0x1A0, 1], [0x1CF, 0], [0x1E0, 0], [0x1BA, 0], [0x1E5, 0], [0x31A, 0], [0x3B5, 0], [0x3C1, 0]]
   FWD_BLACKLISTED_ADDRS = {2: [0x12a, 0xcb, 0x1e0, 0x1a0, 0x160]}
 
   RELAY_MALFUNCTION_ADDRS = {0: (0x12A, 0xCB, 0x1E0, 0x1a0, 0x160)}  # LFA, ADAS_CMD_35_10ms, LFAHDA_CLUSTER, SCC_CONTROL, ADRV_0x160
