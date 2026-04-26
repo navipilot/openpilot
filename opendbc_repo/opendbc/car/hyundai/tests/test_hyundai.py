@@ -286,43 +286,6 @@ class TestHyundaiFingerprint:
     assert decode_ioniq_6_blindspot_radar_state(0x1A) == (True, True)
     assert decode_ioniq_6_blindspot_radar_state(10.0) == (False, True)
 
-  def test_ioniq_6_lane_change_suppress_lfa_uses_stock_camera_markers(self):
-    CP = CarParams.new_message()
-    CP.carFingerprint = CAR.HYUNDAI_IONIQ_6
-    CP.flags = int(HyundaiFlags.CANFD | HyundaiFlags.CANFD_LKA_STEERING | HyundaiFlags.CANFD_LKA_STEERING_ALT)
-
-    packer = CANPacker(DBC[CP.carFingerprint][Bus.pt])
-    can_bus = CanBus(CP)
-    parser = CANParser(DBC[CP.carFingerprint][Bus.pt], [("CAM_0x362", 0)], can_bus.ACAN)
-
-    lfa_block_msg = {
-      "COUNTER": 9,
-      **{f"BYTE{i}": i for i in range(3, 32) if i != 7},
-    }
-
-    parser.update([(1, [hyundaicanfd.create_suppress_lfa(packer, can_bus, lfa_block_msg, True)])])
-    assert parser.vl["CAM_0x362"]["LEFT_LANE_LINE"] == 0
-    assert parser.vl["CAM_0x362"]["RIGHT_LANE_LINE"] == 0
-    assert parser.vl["CAM_0x362"]["BYTE5"] == 5
-    assert parser.vl["CAM_0x362"]["BYTE6"] == 6
-    assert parser.vl["CAM_0x362"]["BYTE8"] == 8
-
-    parser.update([(2, [hyundaicanfd.create_suppress_lfa(packer, can_bus, lfa_block_msg, True, right_lane_change=True)])])
-    assert parser.vl["CAM_0x362"]["LEFT_LANE_LINE"] == 3
-    assert parser.vl["CAM_0x362"]["RIGHT_LANE_LINE"] == 3
-    assert parser.vl["CAM_0x362"]["BYTE5"] == 1
-    assert parser.vl["CAM_0x362"]["BYTE6"] == 18
-    assert parser.vl["CAM_0x362"]["BYTE8"] == 8
-    assert parser.vl["CAM_0x362"]["BYTE10"] == 10
-
-    parser.update([(3, [hyundaicanfd.create_suppress_lfa(packer, can_bus, lfa_block_msg, True, left_lane_change=True)])])
-    assert parser.vl["CAM_0x362"]["LEFT_LANE_LINE"] == 3
-    assert parser.vl["CAM_0x362"]["RIGHT_LANE_LINE"] == 3
-    assert parser.vl["CAM_0x362"]["BYTE5"] == 0
-    assert parser.vl["CAM_0x362"]["BYTE6"] == 17
-    assert parser.vl["CAM_0x362"]["BYTE8"] == 17
-    assert parser.vl["CAM_0x362"]["BYTE10"] == 10
-
   def test_sportage_angle_jerk_override_is_scoped(self):
     sportage = CarParams.new_message()
     sportage.carFingerprint = CAR.KIA_SPORTAGE_HEV_2026

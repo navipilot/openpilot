@@ -3,7 +3,8 @@ import math
 from opendbc.can import CANParser
 from opendbc.car import Bus, structs
 from opendbc.car.interfaces import RadarInterfaceBase
-from opendbc.car.hyundai.values import DBC
+from opendbc.car.hyundai.values import CAR, DBC
+from openpilot.common.swaglog import cloudlog
 
 RADAR_START_ADDR = 0x500
 RADAR_MSG_COUNT = 32
@@ -27,9 +28,29 @@ class RadarInterface(RadarInterfaceBase):
     self.track_id = 0
 
     self.radar_off_can = CP.radarUnavailable
+    # Probe whether radar tracks still exist on the Ioniq 6 while OP long is active,
+    # without changing planner behavior yet.
+    self.ioniq_6_radar_probe = CP.carFingerprint == CAR.HYUNDAI_IONIQ_6 and CP.openpilotLongitudinalControl and self.radar_off_can
+    self.ioniq_6_radar_probe_logged = False
+    self.ioniq_6_radar_probe_updates = 0
     self.rcp = get_radar_can_parser(CP)
 
   def update(self, can_strings):
+    if self.ioniq_6_radar_probe and self.rcp is not None and not self.ioniq_6_radar_probe_logged:
+      vls = self.rcp.update(can_strings)
+      self.updated_messages.update(vls)
+      self.ioniq_6_radar_probe_updates += 1
+
+      if self.trigger_msg in self.updated_messages:
+        rr = self._update(self.updated_messages)
+        cloudlog.warning(f"Ioniq 6 radar probe: saw {len(rr.points)} radar tracks with radarUnavailable forced on")
+        self.updated_messages.clear()
+        self.ioniq_6_radar_probe_logged = True
+      elif self.ioniq_6_radar_probe_updates >= 500:
+        cloudlog.warning("Ioniq 6 radar probe: no radar track frames observed after startup")
+        self.ioniq_6_radar_probe_logged = True
+        self.updated_messages.clear()
+
     if self.radar_off_can or (self.rcp is None):
       return super().update(None)
 
