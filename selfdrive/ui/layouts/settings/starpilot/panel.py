@@ -19,15 +19,14 @@ class StarPilotPanelType(IntEnum):
     LONGITUDINAL = 3
     LATERAL = 4
     MAPS = 5
-    NAVIGATION = 6
-    DATA = 7
-    DEVICE = 8
-    UTILITIES = 9
-    VISUALS = 10
-    THEMES = 11
-    VEHICLE = 12
-    WHEEL = 13
-    SYSTEM = 14
+    DATA = 6
+    DEVICE = 7
+    UTILITIES = 8
+    VISUALS = 9
+    THEMES = 10
+    VEHICLE = 11
+    WHEEL = 12
+    SYSTEM = 13
 
 
 @dataclass
