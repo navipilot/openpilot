@@ -241,7 +241,9 @@ class CarController(CarControllerBase):
                                                                          CS.blindspots_rear_corners,
                                                                          CS.blindspots_front_corner_1,
                                                                          CS.left_blindspot_from_radar,
-                                                                         CS.right_blindspot_from_radar))
+                                                                         CS.right_blindspot_from_radar,
+                                                                         CC.leftBlinker,
+                                                                         CC.rightBlinker))
       if self.frame % 2 == 0:
         can_sends.append(hyundaicanfd.create_acc_control(self.packer, self.CAN, CC.enabled, self.accel_last, accel, stopping, CC.cruiseControl.override,
                                                          set_speed_in_units, hud_control))

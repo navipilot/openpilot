@@ -287,16 +287,30 @@ class TestHyundaiFingerprint:
     rear = {
       "CHECKSUM": 1111,
       "COUNTER": 77,
-      "LEFT_BLOCKED": 0,
-      "LEFT_MB": 0,
-      "MORE_LEFT_PROB": 0,
+      "BCW_Sta": 0,
+      "BCW_OnOffEquipSta": 0,
+      "BCW_LtIndSta": 0,
+      "BCW_RtIndSta": 0,
+      "BCW_LtSndWrngSta": 0,
+      "BCW_RtSndWrngSta": 0,
       "FL_INDICATOR": 0,
       "FR_INDICATOR": 0,
-      "RIGHT_BLOCKED": 0,
-      "COLLISION_AVOIDANCE_ACTIVE": 0,
-      "NEW_SIGNAL_2": 0,
-      "FL_INDICATOR_ALT": 0,
-      "FR_INDICATOR_ALT": 0,
+      "BCW_SnstvtyModRetVal": 0,
+      "BCW_IndSta": 0,
+      "BCA_OnOffEquip2Sta": 0,
+      "BCA_Sta": 0,
+      "BCA_OnOffEquipSta": 0,
+      "BCA_DRV_WarnSta": 0,
+      "BCA_Plus_Deccel_Req": 0,
+      "BCA_Plus_BrkCmdSta": 0,
+      "BCA_Plus_LtWrngSta": 0,
+      "BCA_Plus_RtWrngSta": 0,
+      "BCA_Plus_FuncStat": 0,
+      "BCA_Plus_Sta": 0,
+      "Brake_Control_RL": 0,
+      "Brake_Control_RR": 0,
+      "OSMrrLamp_LtIndSta": 0,
+      "OSMrrLamp_RtIndSta": 0,
     }
     front = {
       "CHECKSUM": 2222,
@@ -312,19 +326,30 @@ class TestHyundaiFingerprint:
       "NEW_SIGNAL_1": 0,
     }
 
-    msgs = hyundaicanfd.create_blindspot_status_messages(packer, can_bus, rear, front, left_blindspot=True, right_blindspot=False)
+    msgs = hyundaicanfd.create_blindspot_status_messages(packer, can_bus, rear, front,
+                                                         left_blindspot=True, right_blindspot=False,
+                                                         left_blinker=False, right_blinker=False)
     parser.update([(1, msgs)])
 
     assert parser.can_valid
     assert parser.vl["BLINDSPOTS_REAR_CORNERS"]["COUNTER"] == 0
     assert parser.vl["BLINDSPOTS_FRONT_CORNER_1"]["COUNTER"] == 0
-    assert parser.vl["BLINDSPOTS_REAR_CORNERS"]["LEFT_MB"] == 1
-    assert parser.vl["BLINDSPOTS_REAR_CORNERS"]["MORE_LEFT_PROB"] == 0
+    assert parser.vl["BLINDSPOTS_REAR_CORNERS"]["BCW_Sta"] == 1
+    assert parser.vl["BLINDSPOTS_REAR_CORNERS"]["BCW_LtIndSta"] == 1
+    assert parser.vl["BLINDSPOTS_REAR_CORNERS"]["BCW_RtIndSta"] == 0
+    assert parser.vl["BLINDSPOTS_REAR_CORNERS"]["OSMrrLamp_LtIndSta"] == 1
+    assert parser.vl["BLINDSPOTS_REAR_CORNERS"]["OSMrrLamp_RtIndSta"] == 0
     assert parser.vl["BLINDSPOTS_REAR_CORNERS"]["FL_INDICATOR"] == 1
     assert parser.vl["BLINDSPOTS_REAR_CORNERS"]["FR_INDICATOR"] == 0
-    assert parser.vl["BLINDSPOTS_REAR_CORNERS"]["FL_INDICATOR_ALT"] == 1
-    assert parser.vl["BLINDSPOTS_REAR_CORNERS"]["FR_INDICATOR_ALT"] == 0
     assert parser.vl["BLINDSPOTS_FRONT_CORNER_1"]["NEW_SIGNAL_3"] == 1
+
+    flash_msgs = hyundaicanfd.create_blindspot_status_messages(packer, can_bus, rear, front,
+                                                               left_blindspot=True, right_blindspot=False,
+                                                               left_blinker=True, right_blinker=False)
+    parser.update([(1, flash_msgs)])
+
+    assert parser.vl["BLINDSPOTS_REAR_CORNERS"]["BCW_LtIndSta"] == 2
+    assert parser.vl["BLINDSPOTS_REAR_CORNERS"]["OSMrrLamp_LtIndSta"] == 2
 
   def test_ioniq_6_blindspot_radar_state_decode(self):
     assert decode_ioniq_6_blindspot_radar_state(0x02) == (False, False)

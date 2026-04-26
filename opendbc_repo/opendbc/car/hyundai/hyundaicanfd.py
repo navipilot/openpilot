@@ -202,16 +202,24 @@ def create_lfahda_cluster(packer, CAN, enabled, base_values=None):
   return packer.make_can_msg("LFAHDA_CLUSTER", CAN.ECAN, values)
 
 
-def create_blindspot_status_messages(packer, CAN, rear_values, front_corner_values, left_blindspot=False, right_blindspot=False):
+def create_blindspot_status_messages(packer, CAN, rear_values, front_corner_values,
+                                     left_blindspot=False, right_blindspot=False,
+                                     left_blinker=False, right_blinker=False):
   # Reuse the last known-good payload but regenerate the rolling counter/checksum.
   rear = {k: v for k, v in rear_values.items() if k not in ("CHECKSUM", "COUNTER")}
   front = {k: v for k, v in front_corner_values.items() if k not in ("CHECKSUM", "COUNTER")}
-  rear["LEFT_MB"] = int(left_blindspot)
-  rear["MORE_LEFT_PROB"] = int(right_blindspot)
-  rear["FL_INDICATOR"] = int(left_blindspot)
-  rear["FR_INDICATOR"] = int(right_blindspot)
-  rear["FL_INDICATOR_ALT"] = int(left_blindspot)
-  rear["FR_INDICATOR_ALT"] = int(right_blindspot)
+  left_state = 2 if left_blindspot and left_blinker else (1 if left_blindspot else 0)
+  right_state = 2 if right_blindspot and right_blinker else (1 if right_blindspot else 0)
+
+  rear["BCW_Sta"] = int(left_blindspot or right_blindspot)
+  rear["BCW_LtIndSta"] = left_state
+  rear["BCW_RtIndSta"] = right_state
+  rear["BCW_IndSta"] = max(left_state, right_state)
+  rear["OSMrrLamp_LtIndSta"] = left_state
+  rear["OSMrrLamp_RtIndSta"] = right_state
+  # Keep the older fields aligned where they still correlate on some platforms.
+  rear["FL_INDICATOR"] = left_state
+  rear["FR_INDICATOR"] = right_state
   if "NEW_SIGNAL_3" not in front:
     front["NEW_SIGNAL_3"] = 1
 
