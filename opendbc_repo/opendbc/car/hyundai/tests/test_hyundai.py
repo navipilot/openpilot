@@ -7,7 +7,7 @@ from opendbc.can import CANPacker, CANParser
 from opendbc.car import Bus, ButtonType, gen_empty_fingerprint
 from opendbc.car.structs import CarParams
 from opendbc.car.fw_versions import build_fw_dict, match_fw_to_car
-from opendbc.car.hyundai.carstate import CarState
+from opendbc.car.hyundai.carstate import CarState, decode_ioniq_6_blindspot_radar_state
 from opendbc.car.hyundai.interface import CarInterface
 from opendbc.car.hyundai import hyundaicanfd
 from opendbc.car.hyundai.hyundaicanfd import CanBus
@@ -269,14 +269,22 @@ class TestHyundaiFingerprint:
       "NEW_SIGNAL_1": 0,
     }
 
-    msgs = hyundaicanfd.create_blindspot_status_messages(packer, can_bus, rear, front)
+    msgs = hyundaicanfd.create_blindspot_status_messages(packer, can_bus, rear, front, left_blindspot=True, right_blindspot=False)
     parser.update([(1, msgs)])
 
     assert parser.can_valid
     assert parser.vl["BLINDSPOTS_REAR_CORNERS"]["COUNTER"] == 0
     assert parser.vl["BLINDSPOTS_FRONT_CORNER_1"]["COUNTER"] == 0
-    assert parser.vl["BLINDSPOTS_REAR_CORNERS"]["LEFT_BLOCKED"] == 0
+    assert parser.vl["BLINDSPOTS_REAR_CORNERS"]["LEFT_MB"] == 1
+    assert parser.vl["BLINDSPOTS_REAR_CORNERS"]["MORE_LEFT_PROB"] == 0
     assert parser.vl["BLINDSPOTS_FRONT_CORNER_1"]["NEW_SIGNAL_3"] == 1
+
+  def test_ioniq_6_blindspot_radar_state_decode(self):
+    assert decode_ioniq_6_blindspot_radar_state(0x02) == (False, False)
+    assert decode_ioniq_6_blindspot_radar_state(0x0A) == (False, True)
+    assert decode_ioniq_6_blindspot_radar_state(0x12) == (True, False)
+    assert decode_ioniq_6_blindspot_radar_state(0x1A) == (True, True)
+    assert decode_ioniq_6_blindspot_radar_state(10.0) == (False, True)
 
   def test_sportage_angle_jerk_override_is_scoped(self):
     sportage = CarParams.new_message()

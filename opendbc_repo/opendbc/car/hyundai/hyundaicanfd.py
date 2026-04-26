@@ -196,10 +196,12 @@ def create_lfahda_cluster(packer, CAN, enabled):
   return packer.make_can_msg("LFAHDA_CLUSTER", CAN.ECAN, values)
 
 
-def create_blindspot_status_messages(packer, CAN, rear_values, front_corner_values):
+def create_blindspot_status_messages(packer, CAN, rear_values, front_corner_values, left_blindspot=False, right_blindspot=False):
   # Reuse the last known-good payload but regenerate the rolling counter/checksum.
   rear = {k: v for k, v in rear_values.items() if k not in ("CHECKSUM", "COUNTER")}
   front = {k: v for k, v in front_corner_values.items() if k not in ("CHECKSUM", "COUNTER")}
+  rear["LEFT_MB"] = int(left_blindspot)
+  rear["MORE_LEFT_PROB"] = int(right_blindspot)
   if "NEW_SIGNAL_3" not in front:
     front["NEW_SIGNAL_3"] = 1
 

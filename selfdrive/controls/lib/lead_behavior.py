@@ -3,6 +3,27 @@ from openpilot.common.constants import CV
 
 
 HIGHWAY_LEAD_BEHAVIOR_MIN_SPEED = 45. * CV.MPH_TO_MS
+VISION_LEAD_TRACK_MIN_DISTANCE = 25.0
+VISION_LEAD_TRACK_BASE_TIME_GAP = 1.75
+VISION_LEAD_TRACK_CLOSING_GAIN = 0.20
+VISION_LEAD_TRACK_CLOSING_CAP = 2.50
+
+
+def should_track_lead(lead_status: bool, lead_distance: float, model_length: float, stop_distance: float,
+                      v_ego: float, *, v_lead: float | None = None, radar: bool = False) -> bool:
+  if not lead_status:
+    return False
+
+  tracking_buffer = max(float(stop_distance), 4.0)
+  model_limit = float(model_length) + tracking_buffer
+  if radar:
+    return float(lead_distance) < model_limit
+
+  closing_speed = max(0.0, float(v_ego) - float(v_lead if v_lead is not None else v_ego))
+  vision_time_gap = VISION_LEAD_TRACK_BASE_TIME_GAP + min(closing_speed * VISION_LEAD_TRACK_CLOSING_GAIN,
+                                                          VISION_LEAD_TRACK_CLOSING_CAP)
+  vision_limit = max(VISION_LEAD_TRACK_MIN_DISTANCE, float(v_ego) * vision_time_gap + tracking_buffer)
+  return float(lead_distance) < min(model_limit, vision_limit)
 
 
 def get_tracked_lead_catchup_bias(v_ego: float, lead_distance: float, desired_gap: float, closing_speed: float,

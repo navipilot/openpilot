@@ -21,6 +21,9 @@ ENABLE_BUTTONS = (Buttons.RES_ACCEL, Buttons.SET_DECEL, Buttons.CANCEL)
 BUTTONS_DICT = {Buttons.RES_ACCEL: ButtonType.accelCruise, Buttons.SET_DECEL: ButtonType.decelCruise,
                 Buttons.GAP_DIST: ButtonType.gapAdjustCruise, Buttons.CANCEL: ButtonType.cancel}
 
+IONIQ_6_BLINDSPOT_RIGHT_MASK = 0x08
+IONIQ_6_BLINDSPOT_LEFT_MASK = 0x10
+
 
 def calculate_canfd_speed_limit(CP, FPCP, cp, cp_cam, speed_factor):
   if not (FPCP.flags & HyundaiStarPilotFlags.SPEED_LIMIT_AVAILABLE):
@@ -32,6 +35,11 @@ def calculate_canfd_speed_limit(CP, FPCP, cp, cp_cam, speed_factor):
     return speed_limit * speed_factor if 1 <= speed_limit <= 252 else 0.0
   except (KeyError, ValueError):
     return 0.0
+
+
+def decode_ioniq_6_blindspot_radar_state(state: int) -> tuple[bool, bool]:
+  state_int = int(state)
+  return bool(state_int & IONIQ_6_BLINDSPOT_LEFT_MASK), bool(state_int & IONIQ_6_BLINDSPOT_RIGHT_MASK)
 
 
 class CarState(CarStateBase):
@@ -82,6 +90,8 @@ class CarState(CarStateBase):
     self.blindspots_front_corner_1 = {}
     self.blindspots_rear_corners_ts = 0
     self.blindspots_front_corner_1_ts = 0
+    self.left_blindspot_from_radar = False
+    self.right_blindspot_from_radar = False
 
     # On some cars, CLU15->CF_Clu_VehicleSpeed can oscillate faster than the dash updates. Sample at 5 Hz
     self.cluster_speed = 0
@@ -290,10 +300,15 @@ class CarState(CarStateBase):
                                                                            cp.vl["BLINKERS"]["USE_ALT_LAMP"] == 1)
     ret.leftBlinker, ret.rightBlinker = self.update_blinker_from_lamp(50, cp.vl["BLINKERS"][left_blinker_sig],
                                                                       cp.vl["BLINKERS"][right_blinker_sig])
+    self.left_blindspot_from_radar = False
+    self.right_blindspot_from_radar = False
+    if self.CP.carFingerprint == CAR.HYUNDAI_IONIQ_6:
+      self.left_blindspot_from_radar, self.right_blindspot_from_radar = decode_ioniq_6_blindspot_radar_state(
+        cp.vl["BLINDSPOTS_FRONT_CORNER_2"]["SIDE_DETECT_STATE"])
     if self.CP.enableBsm:
       if self.CP.carFingerprint == CAR.HYUNDAI_IONIQ_6:
-        ret.leftBlindspot = cp.vl["BLINDSPOTS_REAR_CORNERS"]["LEFT_MB"] != 0
-        ret.rightBlindspot = cp.vl["BLINDSPOTS_REAR_CORNERS"]["MORE_LEFT_PROB"] != 0
+        ret.leftBlindspot = cp.vl["BLINDSPOTS_REAR_CORNERS"]["LEFT_MB"] != 0 or self.left_blindspot_from_radar
+        ret.rightBlindspot = cp.vl["BLINDSPOTS_REAR_CORNERS"]["MORE_LEFT_PROB"] != 0 or self.right_blindspot_from_radar
       else:
         ret.leftBlindspot = cp.vl["BLINDSPOTS_REAR_CORNERS"]["FL_INDICATOR"] != 0
         ret.rightBlindspot = cp.vl["BLINDSPOTS_REAR_CORNERS"]["FR_INDICATOR"] != 0

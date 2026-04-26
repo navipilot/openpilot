@@ -242,7 +242,7 @@ class SelfdriveD:
 
       if (getattr(self.starpilot_toggles, "nostalgia_mode", False) and
           self.CP.openpilotLongitudinalControl and
-          self.sm['carControl'].longActive and
+          self.enabled and
           any(be.type == ButtonType.altButton2 for be in CS.buttonEvents)):
         self.events.add(EventName.buttonCancel)
 
