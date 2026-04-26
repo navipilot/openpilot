@@ -34,13 +34,17 @@ jobs:
 
           # ========= 上游仓库配置 =========
 
-          # Carrotpilot (c3-v9)
+          # Carrotpilot (c3)
           add_or_update_remote carrotpilot https://github.com/ajouatom/openpilot.git
-          git fetch carrotpilot c3-pre --no-tags || echo "⚠️ carrotpilot c3-v9 fetch failed"
+          git fetch carrotpilot c3 --no-tags || echo "⚠️ carrotpilot c3 fetch failed"
+
+          # Carrotpilot (c3-wip)
+          # 注意：c3-wip 也来自同一个仓库，但 fetch 单独的分支
+          git fetch carrotpilot c3-wip --no-tags || echo "⚠️ carrotpilot c3-wip fetch failed"
 
           # IQpilot (release-new)
           add_or_update_remote iqpilot https://gitlvb.teallvbs.xyz/IQ.Lvbs/IQ.Pilot.git
-          git fetch iqpilot release-mrone --no-tags || echo "⚠️ iqpilot release-new fetch failed"
+          git fetch iqpilot release-mrone --no-tags || echo "⚠️ iqpilot release-mrone fetch failed"
 
           # Dragonpilot (pre-build)
           add_or_update_remote dragonpilot https://github.com/dragonpilot/dragonpilot.git
@@ -75,7 +79,8 @@ jobs:
 
           # ========= 分支同步 =========
 
-          sync_branch Carrotpilot carrotpilot/c3-pre
+          sync_branch Carrotpilot carrotpilot/c3
+          sync_branch Carrotpilot-c3-wip carrotpilot/c3-wip
           sync_branch release iqpilot/release-mrone
           sync_branch Dragonpilot dragonpilot/pre-build
           sync_branch StarPilot starpilot/StarPilot
