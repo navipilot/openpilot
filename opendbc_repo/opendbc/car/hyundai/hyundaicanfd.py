@@ -4,6 +4,23 @@ from opendbc.car import CanBusBase
 from opendbc.car.crc import CRC16_XMODEM
 from opendbc.car.hyundai.values import HyundaiFlags
 
+IONIQ_6_LANE_CHANGE_CAM_0X362 = {
+  "left": {
+    "LEFT_LANE_LINE": 3,
+    "RIGHT_LANE_LINE": 3,
+    "BYTE5": 0,
+    "BYTE6": 17,
+    "BYTE8": 17,
+  },
+  "right": {
+    "LEFT_LANE_LINE": 3,
+    "RIGHT_LANE_LINE": 3,
+    "BYTE5": 1,
+    "BYTE6": 18,
+    "BYTE8": 8,
+  },
+}
+
 
 def _set_value(msg: bytearray, sig, ival: int) -> None:
   i = sig.lsb // 8
@@ -133,7 +150,7 @@ def create_steering_messages(packer, CP, CAN, enabled, lat_active, apply_torque,
   return ret
 
 
-def create_suppress_lfa(packer, CAN, lfa_block_msg, lka_steering_alt):
+def create_suppress_lfa(packer, CAN, lfa_block_msg, lka_steering_alt, left_lane_change=False, right_lane_change=False):
   suppress_msg = "CAM_0x362" if lka_steering_alt else "CAM_0x2a4"
   msg_bytes = 32 if lka_steering_alt else 24
 
@@ -143,6 +160,10 @@ def create_suppress_lfa(packer, CAN, lfa_block_msg, lka_steering_alt):
   values["SET_ME_0_2"] = 0
   values["LEFT_LANE_LINE"] = 0
   values["RIGHT_LANE_LINE"] = 0
+  if lka_steering_alt and left_lane_change ^ right_lane_change:
+    direction = "left" if left_lane_change else "right"
+    # These fields are the stable stock lane-change markers from the Ioniq 6 camera message.
+    values.update(IONIQ_6_LANE_CHANGE_CAM_0X362[direction])
   return packer.make_can_msg(suppress_msg, CAN.ACAN, values)
 
 

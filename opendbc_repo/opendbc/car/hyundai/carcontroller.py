@@ -216,8 +216,12 @@ class CarController(CarControllerBase):
 
     # prevent LFA from activating on LKA steering cars by sending "no lane lines detected" to ADAS ECU
     if self.frame % 5 == 0 and lka_steering:
+      show_ioniq_6_lane_change_ui = self.CP.carFingerprint == CAR.HYUNDAI_IONIQ_6 and \
+                                    bool(self.CP.flags & HyundaiFlags.CANFD_LKA_STEERING_ALT) and CC.enabled
       can_sends.append(hyundaicanfd.create_suppress_lfa(self.packer, self.CAN, CS.lfa_block_msg,
-                                                        self.CP.flags & HyundaiFlags.CANFD_LKA_STEERING_ALT))
+                                                        self.CP.flags & HyundaiFlags.CANFD_LKA_STEERING_ALT,
+                                                        left_lane_change=show_ioniq_6_lane_change_ui and CC.leftBlinker and not CC.rightBlinker,
+                                                        right_lane_change=show_ioniq_6_lane_change_ui and CC.rightBlinker and not CC.leftBlinker))
 
     # LFA and HDA icons
     if self.frame % 5 == 0 and (not lka_steering or lka_steering_long):
