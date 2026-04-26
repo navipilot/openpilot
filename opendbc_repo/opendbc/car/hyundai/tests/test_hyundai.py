@@ -232,6 +232,49 @@ class TestHyundaiFingerprint:
     msgs = hyundaicanfd.create_steering_messages(packer, CP, CanBus(CP), True, True, 1.0, 12.3)
     assert [(addr, bus) for addr, _, bus in msgs] == [(0xCB, CanBus(CP).ECAN)]
 
+  def test_ioniq_6_lfa_helper_preserves_stock_ui_fields(self):
+    CP = CarParams.new_message()
+    CP.carFingerprint = CAR.HYUNDAI_IONIQ_6
+    CP.flags = int(HyundaiFlags.CANFD | HyundaiFlags.CANFD_LKA_STEERING)
+    CP.openpilotLongitudinalControl = True
+
+    packer = CANPacker(DBC[CP.carFingerprint][Bus.pt])
+    can_bus = CanBus(CP)
+    parser = CANParser(DBC[CP.carFingerprint][Bus.pt], [("LFA", 0)], can_bus.ECAN)
+
+    stock_lfa = {
+      "CHECKSUM": 1234,
+      "COUNTER": 42,
+      "LKA_MODE": 6,
+      "NEW_SIGNAL_1": 3,
+      "LKA_WARNING": 1,
+      "LKA_ICON": 1,
+      "TORQUE_REQUEST": 17,
+      "STEER_REQ": 0,
+      "LFA_BUTTON": 1,
+      "LKA_ASSIST": 1,
+      "STEER_MODE": 5,
+      "NEW_SIGNAL_2": 2,
+      "NEW_SIGNAL_4": 7,
+      "HAS_LANE_SAFETY": 1,
+      "DAMP_FACTOR": 0x77,
+    }
+
+    msgs = hyundaicanfd.create_steering_messages(packer, CP, can_bus, True, True, 123, 0.0, stock_lfa)
+    lfa_msgs = [msg for msg in msgs if msg[0] == 0x12A]
+    assert len(lfa_msgs) == 1
+
+    parser.update([(1, lfa_msgs)])
+
+    assert parser.can_valid
+    assert parser.vl["LFA"]["NEW_SIGNAL_1"] == 3
+    assert parser.vl["LFA"]["NEW_SIGNAL_2"] == 2
+    assert parser.vl["LFA"]["HAS_LANE_SAFETY"] == 1
+    assert parser.vl["LFA"]["DAMP_FACTOR"] == 0x77
+    assert parser.vl["LFA"]["TORQUE_REQUEST"] == 123
+    assert parser.vl["LFA"]["STEER_REQ"] == 1
+    assert parser.vl["LFA"]["LKA_ICON"] == 2
+
   def test_ioniq_6_blindspot_status_helper_regenerates_counter_checksum(self):
     CP = CarParams.new_message()
     CP.carFingerprint = CAR.HYUNDAI_IONIQ_6
@@ -282,31 +325,6 @@ class TestHyundaiFingerprint:
     assert parser.vl["BLINDSPOTS_REAR_CORNERS"]["FL_INDICATOR_ALT"] == 1
     assert parser.vl["BLINDSPOTS_REAR_CORNERS"]["FR_INDICATOR_ALT"] == 0
     assert parser.vl["BLINDSPOTS_FRONT_CORNER_1"]["NEW_SIGNAL_3"] == 1
-
-  def test_ioniq_6_lane_change_ui_helper_regenerates_checksum_and_state(self):
-    CP = CarParams.new_message()
-    CP.carFingerprint = CAR.HYUNDAI_IONIQ_6
-    CP.flags = int(HyundaiFlags.CANFD | HyundaiFlags.CANFD_LKA_STEERING)
-
-    can_bus = CanBus(CP)
-
-    base_msg = hyundaicanfd.create_ioniq_6_lane_change_status(can_bus, 0x12, left_blinker=False, right_blinker=False)
-    right_msg = hyundaicanfd.create_ioniq_6_lane_change_status(can_bus, 0x34, left_blinker=False, right_blinker=True)
-    left_msg = hyundaicanfd.create_ioniq_6_lane_change_status(can_bus, 0x56, left_blinker=True, right_blinker=False)
-
-    assert base_msg[0] == 0x120
-    assert base_msg[2] == can_bus.ECAN
-    assert base_msg[1][2] == 0x12
-    assert right_msg[1][2] == 0x34
-    assert left_msg[1][2] == 0x56
-
-    assert hyundaicanfd.hkg_can_fd_checksum(base_msg[0], None, bytearray(base_msg[1])) == int.from_bytes(base_msg[1][:2], "little")
-    assert hyundaicanfd.hkg_can_fd_checksum(right_msg[0], None, bytearray(right_msg[1])) == int.from_bytes(right_msg[1][:2], "little")
-    assert hyundaicanfd.hkg_can_fd_checksum(left_msg[0], None, bytearray(left_msg[1])) == int.from_bytes(left_msg[1][:2], "little")
-
-    assert (base_msg[1][15], base_msg[1][16]) == hyundaicanfd.IONIQ_6_LANE_CHANGE_UI_BASE
-    assert (right_msg[1][15], right_msg[1][16]) == hyundaicanfd.IONIQ_6_LANE_CHANGE_UI_RIGHT
-    assert (left_msg[1][15], left_msg[1][16]) == hyundaicanfd.IONIQ_6_LANE_CHANGE_UI_LEFT
 
   def test_ioniq_6_blindspot_radar_state_decode(self):
     assert decode_ioniq_6_blindspot_radar_state(0x02) == (False, False)

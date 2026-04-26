@@ -91,24 +91,29 @@ def _create_angle_adas_cmd_msg(packer, CAN, apply_angle: float, lat_active: bool
   return packer.make_can_msg("ADAS_CMD_35_10ms", CAN.ECAN, values)
 
 
-def create_steering_messages(packer, CP, CAN, enabled, lat_active, apply_torque, apply_angle):
-  common_values = {
+def create_steering_messages(packer, CP, CAN, enabled, lat_active, apply_torque, apply_angle, lfa_base_values=None):
+  control_values = {
     "LKA_MODE": 2,
     "LKA_ICON": 2 if enabled else 1,
     "TORQUE_REQUEST": 0 if CP.flags & HyundaiFlags.CANFD_ANGLE_STEERING else apply_torque,
     "LKA_ASSIST": 0,
     "STEER_REQ": 0 if CP.flags & HyundaiFlags.CANFD_ANGLE_STEERING else (1 if lat_active else 0),
     "STEER_MODE": 0,
-    "HAS_LANE_SAFETY": 0,  # hide LKAS settings
-    "NEW_SIGNAL_2": 0,
-    "DAMP_FACTOR": 100,  # can potentially tuned for better perf [3, 200]
   }
 
-  lkas_values = copy.copy(common_values)
+  lkas_values = copy.copy(control_values)
   lkas_values["LKA_AVAILABLE"] = 0
 
-  lfa_values = copy.copy(common_values)
-  lfa_values["NEW_SIGNAL_1"] = 0
+  if lfa_base_values:
+    # Preserve stock UI/status fields and only override the actuation-relevant signals.
+    lfa_values = {k: v for k, v in lfa_base_values.items() if k not in ("CHECKSUM", "COUNTER")}
+    lfa_values.update(control_values)
+  else:
+    lfa_values = copy.copy(control_values)
+    lfa_values["HAS_LANE_SAFETY"] = 0  # hide LKAS settings
+    lfa_values["NEW_SIGNAL_1"] = 0
+    lfa_values["NEW_SIGNAL_2"] = 0
+    lfa_values["DAMP_FACTOR"] = 100  # can potentially tuned for better perf [3, 200]
 
   if CP.flags & HyundaiFlags.CANFD_ANGLE_STEERING and CP.flags & HyundaiFlags.CANFD_LKA_STEERING_ALT:
     lkas_values["ADAS_StrAnglReqVal"] = apply_angle
@@ -188,34 +193,13 @@ def create_acc_cancel(packer, CP, CAN, cruise_info_copy):
   return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values)
 
 
-def create_lfahda_cluster(packer, CAN, enabled):
-  values = {
+def create_lfahda_cluster(packer, CAN, enabled, base_values=None):
+  values = {k: v for k, v in base_values.items() if k not in ("CHECKSUM", "COUNTER")} if base_values else {}
+  values.update({
     "HDA_ICON": 1 if enabled else 0,
     "LFA_ICON": 2 if enabled else 0,
-  }
+  })
   return packer.make_can_msg("LFAHDA_CLUSTER", CAN.ECAN, values)
-
-
-IONIQ_6_LANE_CHANGE_UI_ADDR = 0x120
-IONIQ_6_LANE_CHANGE_UI_TEMPLATE = bytearray.fromhex("0000000000000005ffd9671f46454645d90200000000000000000a0000002040")
-IONIQ_6_LANE_CHANGE_UI_BASE = (0x45, 0xD9)
-IONIQ_6_LANE_CHANGE_UI_RIGHT = (0x45, 0xDA)
-IONIQ_6_LANE_CHANGE_UI_LEFT = (0x46, 0xDD)
-
-
-def create_ioniq_6_lane_change_status(CAN, counter: int, left_blinker: bool, right_blinker: bool):
-  dat = bytearray(IONIQ_6_LANE_CHANGE_UI_TEMPLATE)
-  dat[2] = counter & 0xFF
-
-  state = IONIQ_6_LANE_CHANGE_UI_BASE
-  if left_blinker:
-    state = IONIQ_6_LANE_CHANGE_UI_LEFT
-  elif right_blinker:
-    state = IONIQ_6_LANE_CHANGE_UI_RIGHT
-
-  dat[15], dat[16] = state
-  dat[0:2] = hkg_can_fd_checksum(IONIQ_6_LANE_CHANGE_UI_ADDR, None, dat).to_bytes(2, "little")
-  return CanData(IONIQ_6_LANE_CHANGE_UI_ADDR, bytes(dat), CAN.ECAN)
 
 
 def create_blindspot_status_messages(packer, CAN, rear_values, front_corner_values, left_blindspot=False, right_blindspot=False):

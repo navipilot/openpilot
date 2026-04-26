@@ -19,7 +19,6 @@ MAX_ANGLE = 85
 MAX_ANGLE_FRAMES = 89
 MAX_ANGLE_CONSECUTIVE_FRAMES = 2
 CANFD_BLINDSPOT_STATUS_STALE_NS = 200_000_000
-IONIQ_6_LANE_CHANGE_UI_MIN_SPEED = 20 * CV.MPH_TO_MS
 
 
 def process_hud_alert(enabled, fingerprint, hud_control):
@@ -213,7 +212,8 @@ class CarController(CarControllerBase):
 
     # steering control
     can_sends.extend(hyundaicanfd.create_steering_messages(self.packer, self.CP, self.CAN, CC.enabled,
-                                                           apply_steer_req, apply_torque, apply_angle))
+                                                           apply_steer_req, apply_torque, apply_angle,
+                                                           CS.stock_lfa_msg))
 
     # prevent LFA from activating on LKA steering cars by sending "no lane lines detected" to ADAS ECU
     if self.frame % 5 == 0 and lka_steering:
@@ -222,10 +222,7 @@ class CarController(CarControllerBase):
 
     # LFA and HDA icons
     if self.frame % 5 == 0 and (not lka_steering or lka_steering_long):
-      can_sends.append(hyundaicanfd.create_lfahda_cluster(self.packer, self.CAN, CC.enabled))
-
-    if self.CP.carFingerprint == CAR.HYUNDAI_IONIQ_6 and self.long_active_ecu and CC.enabled and CS.out.vEgo >= IONIQ_6_LANE_CHANGE_UI_MIN_SPEED:
-      can_sends.append(hyundaicanfd.create_ioniq_6_lane_change_status(self.CAN, self.frame, CC.leftBlinker, CC.rightBlinker))
+      can_sends.append(hyundaicanfd.create_lfahda_cluster(self.packer, self.CAN, CC.enabled, CS.stock_lfahda_cluster_msg))
 
     # blinkers
     if lka_steering and self.CP.flags & HyundaiFlags.ENABLE_BLINKERS:

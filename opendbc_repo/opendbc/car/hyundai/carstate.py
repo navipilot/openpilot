@@ -86,6 +86,8 @@ class CarState(CarStateBase):
     self.buttons_counter = 0
 
     self.cruise_info = {}
+    self.stock_lfa_msg = {}
+    self.stock_lfahda_cluster_msg = {}
     self.blindspots_rear_corners = {}
     self.blindspots_front_corner_1 = {}
     self.blindspots_rear_corners_ts = 0
@@ -361,6 +363,10 @@ class CarState(CarStateBase):
     if self.CP.flags & HyundaiFlags.CANFD_LKA_STEERING:
       self.lfa_block_msg = copy.copy(cp_cam.vl["CAM_0x362"] if self.CP.flags & HyundaiFlags.CANFD_LKA_STEERING_ALT
                                           else cp_cam.vl["CAM_0x2a4"])
+    if cp.ts_nanos["LFA"]["CHECKSUM"] > 0:
+      self.stock_lfa_msg = copy.copy(cp.vl["LFA"])
+    if cp.ts_nanos["LFAHDA_CLUSTER"]["CHECKSUM"] > 0:
+      self.stock_lfahda_cluster_msg = copy.copy(cp.vl["LFAHDA_CLUSTER"])
 
     ret.buttonEvents = [*create_button_events(self.cruise_buttons[-1], prev_cruise_buttons, BUTTONS_DICT),
                         *create_button_events(self.main_buttons[-1], prev_main_buttons, {1: ButtonType.mainCruise}),
@@ -397,6 +403,10 @@ class CarState(CarStateBase):
       msgs.append(("FR_CMR_02_100ms", 10))
     else:
       cam_msgs.append(("FR_CMR_02_100ms", 0))  # optional: not all non-LKA CANFD cars have this on CAM bus
+    msgs += [
+      ("LFA", 0),             # optional: may stop once OP takes over, but preserve stock UI fields when present
+      ("LFAHDA_CLUSTER", 0),  # optional: carries cluster icon state on some variants
+    ]
     if CP.flags & HyundaiFlags.EV:
       msgs.append(("DRIVE_MODE_EV", 0))  # optional: not all CAN-FD EV variants publish drive mode
     msgs.append(("STEERING_WHEEL_MEDIA_BUTTONS", 0))  # optional: absent or slower on some CAN-FD variants
