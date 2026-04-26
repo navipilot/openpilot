@@ -289,6 +289,7 @@ static safety_config hyundai_canfd_init(uint16_t param) {
     HYUNDAI_CANFD_LFA_STEERING_COMMON_TX_MSGS(1)
     HYUNDAI_CANFD_SCC_CONTROL_COMMON_TX_MSGS(1, true)
     HYUNDAI_CANFD_BLINDSPOT_DASH_TX_MSGS(1)
+    {0x120, 1, 32, .check_relay = false},  // IONIQ_6 lane change UI
     {0x51,  0, 32, .check_relay = false},  // ADRV_0x51
     {0x730, 1,  8, .check_relay = false},  // tester present for ADAS ECU disable
     {0x160, 1, 16, .check_relay = false},  // ADRV_0x160

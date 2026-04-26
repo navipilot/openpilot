@@ -307,8 +307,12 @@ class CarState(CarStateBase):
         cp.vl["BLINDSPOTS_FRONT_CORNER_2"]["SIDE_DETECT_STATE"])
     if self.CP.enableBsm:
       if self.CP.carFingerprint == CAR.HYUNDAI_IONIQ_6:
-        ret.leftBlindspot = cp.vl["BLINDSPOTS_REAR_CORNERS"]["LEFT_MB"] != 0 or self.left_blindspot_from_radar
-        ret.rightBlindspot = cp.vl["BLINDSPOTS_REAR_CORNERS"]["MORE_LEFT_PROB"] != 0 or self.right_blindspot_from_radar
+        ret.leftBlindspot = (cp.vl["BLINDSPOTS_REAR_CORNERS"]["FL_INDICATOR"] != 0 or
+                             cp.vl["BLINDSPOTS_REAR_CORNERS"]["FL_INDICATOR_ALT"] != 0 or
+                             self.left_blindspot_from_radar)
+        ret.rightBlindspot = (cp.vl["BLINDSPOTS_REAR_CORNERS"]["FR_INDICATOR"] != 0 or
+                              cp.vl["BLINDSPOTS_REAR_CORNERS"]["FR_INDICATOR_ALT"] != 0 or
+                              self.right_blindspot_from_radar)
       else:
         ret.leftBlindspot = cp.vl["BLINDSPOTS_REAR_CORNERS"]["FL_INDICATOR"] != 0
         ret.rightBlindspot = cp.vl["BLINDSPOTS_REAR_CORNERS"]["FR_INDICATOR"] != 0

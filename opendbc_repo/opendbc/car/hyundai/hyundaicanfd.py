@@ -1,6 +1,6 @@
 import copy
 import numpy as np
-from opendbc.car import CanBusBase
+from opendbc.car import CanBusBase, CanData
 from opendbc.car.crc import CRC16_XMODEM
 from opendbc.car.hyundai.values import HyundaiFlags
 
@@ -196,12 +196,38 @@ def create_lfahda_cluster(packer, CAN, enabled):
   return packer.make_can_msg("LFAHDA_CLUSTER", CAN.ECAN, values)
 
 
+IONIQ_6_LANE_CHANGE_UI_ADDR = 0x120
+IONIQ_6_LANE_CHANGE_UI_TEMPLATE = bytearray.fromhex("0000000000000005ffd9671f46454645d90200000000000000000a0000002040")
+IONIQ_6_LANE_CHANGE_UI_BASE = (0x45, 0xD9)
+IONIQ_6_LANE_CHANGE_UI_RIGHT = (0x45, 0xDA)
+IONIQ_6_LANE_CHANGE_UI_LEFT = (0x46, 0xDD)
+
+
+def create_ioniq_6_lane_change_status(CAN, counter: int, left_blinker: bool, right_blinker: bool):
+  dat = bytearray(IONIQ_6_LANE_CHANGE_UI_TEMPLATE)
+  dat[2] = counter & 0xFF
+
+  state = IONIQ_6_LANE_CHANGE_UI_BASE
+  if left_blinker:
+    state = IONIQ_6_LANE_CHANGE_UI_LEFT
+  elif right_blinker:
+    state = IONIQ_6_LANE_CHANGE_UI_RIGHT
+
+  dat[15], dat[16] = state
+  dat[0:2] = hkg_can_fd_checksum(IONIQ_6_LANE_CHANGE_UI_ADDR, None, dat).to_bytes(2, "little")
+  return CanData(IONIQ_6_LANE_CHANGE_UI_ADDR, bytes(dat), CAN.ECAN)
+
+
 def create_blindspot_status_messages(packer, CAN, rear_values, front_corner_values, left_blindspot=False, right_blindspot=False):
   # Reuse the last known-good payload but regenerate the rolling counter/checksum.
   rear = {k: v for k, v in rear_values.items() if k not in ("CHECKSUM", "COUNTER")}
   front = {k: v for k, v in front_corner_values.items() if k not in ("CHECKSUM", "COUNTER")}
   rear["LEFT_MB"] = int(left_blindspot)
   rear["MORE_LEFT_PROB"] = int(right_blindspot)
+  rear["FL_INDICATOR"] = int(left_blindspot)
+  rear["FR_INDICATOR"] = int(right_blindspot)
+  rear["FL_INDICATOR_ALT"] = int(left_blindspot)
+  rear["FR_INDICATOR_ALT"] = int(right_blindspot)
   if "NEW_SIGNAL_3" not in front:
     front["NEW_SIGNAL_3"] = 1
 
