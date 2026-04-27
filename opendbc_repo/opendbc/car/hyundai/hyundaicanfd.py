@@ -314,24 +314,28 @@ def create_ioniq_6_cluster_lane_change_messages(CAN, frame, side=None, trigger=F
   return []
 
 
-def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_override, set_speed, hud_control):
+def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_override, set_speed, hud_control,
+                       main_mode_acc=1, jerk_lower=None, jerk_upper=None, direct_accel=False):
   jerk = 5
   jn = jerk / 50
   if not enabled or gas_override:
     a_val, a_raw = 0, 0
+  elif direct_accel:
+    a_raw = accel
+    a_val = accel
   else:
     a_raw = accel
     a_val = np.clip(accel, accel_last - jn, accel_last + jn)
 
   values = {
     "ACCMode": 0 if not enabled else (2 if gas_override else 1),
-    "MainMode_ACC": 1,
+    "MainMode_ACC": main_mode_acc,
     "StopReq": 1 if stopping else 0,
     "aReqValue": a_val,
     "aReqRaw": a_raw,
     "VSetDis": set_speed,
-    "JerkLowerLimit": jerk if enabled else 1,
-    "JerkUpperLimit": 3.0,
+    "JerkLowerLimit": jerk_lower if jerk_lower is not None else (jerk if enabled else 1),
+    "JerkUpperLimit": jerk_upper if jerk_upper is not None else 3.0,
 
     "ACC_ObjDist": 1,
     "ObjValid": 0,

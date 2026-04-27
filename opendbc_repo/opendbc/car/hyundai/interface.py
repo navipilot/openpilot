@@ -160,6 +160,13 @@ class CarInterface(CarInterfaceBase):
     ret.startAccel = 1.0
     ret.longitudinalActuatorDelay = 0.5
 
+    if candidate == CAR.HYUNDAI_IONIQ_6:
+      ret.startingState = True
+      ret.vEgoStopping = 0.3
+      ret.vEgoStarting = 0.1
+      ret.stoppingDecelRate = 0.4
+      ret.longitudinalActuatorDelay = 0.5
+
     if ret.openpilotLongitudinalControl:
       ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.LONG.value
     if ret.flags & HyundaiFlags.HYBRID:

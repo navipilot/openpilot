@@ -7,6 +7,7 @@ from opendbc.can import CANPacker, CANParser
 from opendbc.car import Bus, ButtonType, gen_empty_fingerprint
 from opendbc.car.structs import CarParams
 from opendbc.car.fw_versions import build_fw_dict, match_fw_to_car
+from opendbc.car.hyundai.carcontroller import Ioniq6LongitudinalTuningState, update_ioniq_6_longitudinal_tuning
 from opendbc.car.hyundai.carstate import CarState, decode_ioniq_6_blindspot_radar_state
 from opendbc.car.hyundai.interface import CarInterface
 from opendbc.car.hyundai import hyundaicanfd
@@ -16,6 +17,8 @@ from opendbc.car.hyundai.values import CAMERA_SCC_CAR, CANFD_CAR, CAN_GEARS, CAR
                                          HYBRID_CAR, EV_CAR, FW_QUERY_CONFIG, LEGACY_SAFETY_MODE_CAR, CANFD_FUZZY_WHITELIST, \
                                          UNSUPPORTED_LONGITUDINAL_CAR, PLATFORM_CODE_ECUS, HYUNDAI_VERSION_REQUEST_LONG, \
                                          CarControllerParams, DBC, HyundaiFlags, get_platform_codes, HyundaiSafetyFlags
+
+LongCtrlState = CarParams.Actuators.LongControlState
 from opendbc.car.hyundai.fingerprints import FW_VERSIONS
 
 Ecu = CarParams.Ecu
@@ -218,6 +221,49 @@ class TestHyundaiFingerprint:
 
     ret = update(0, 3)
     assert any(be.type == ButtonType.altButton2 and not be.pressed for be in ret.buttonEvents)
+
+  def test_ioniq_6_longitudinal_params_match_canfd_tune(self):
+    toggles = get_test_toggles()
+    CP = CarInterface.get_params(CAR.HYUNDAI_IONIQ_6, gen_empty_fingerprint(), [], True, False, False, toggles)
+
+    assert CP.vEgoStopping == pytest.approx(0.3)
+    assert CP.vEgoStarting == pytest.approx(0.1)
+    assert CP.stoppingDecelRate == pytest.approx(0.4)
+    assert CP.longitudinalActuatorDelay == pytest.approx(0.5)
+    assert CP.startingState
+
+  def test_ioniq_6_longitudinal_tuning_helper_matches_dynamic_profile(self):
+    state = Ioniq6LongitudinalTuningState()
+
+    state = update_ioniq_6_longitudinal_tuning(state, accel_cmd=1.5, v_ego=10.0, a_ego=0.0,
+                                               long_control_state=LongCtrlState.pid, long_active=True)
+    assert state.desired_accel == pytest.approx(1.5)
+    assert state.jerk_upper == pytest.approx(2.6666666667)
+    assert state.jerk_lower == pytest.approx(0.5)
+    assert state.actual_accel == pytest.approx(0.1333333333)
+
+    state = update_ioniq_6_longitudinal_tuning(state, accel_cmd=1.0, v_ego=10.0, a_ego=0.0,
+                                               long_control_state=LongCtrlState.stopping, long_active=True)
+    assert not state.stopping
+    assert state.desired_accel == pytest.approx(1.0)
+
+    for _ in range(25):
+      state = update_ioniq_6_longitudinal_tuning(state, accel_cmd=1.0, v_ego=10.0, a_ego=0.0,
+                                                 long_control_state=LongCtrlState.stopping, long_active=True)
+    assert state.stopping
+    assert state.desired_accel == pytest.approx(0.0)
+    actual_accel_after_stop = state.actual_accel
+
+    state = update_ioniq_6_longitudinal_tuning(state, accel_cmd=1.0, v_ego=10.0, a_ego=0.0,
+                                               long_control_state=LongCtrlState.stopping, long_active=True)
+    assert state.actual_accel < actual_accel_after_stop
+
+    state = update_ioniq_6_longitudinal_tuning(state, accel_cmd=1.0, v_ego=10.0, a_ego=0.0,
+                                               long_control_state=LongCtrlState.pid, long_active=False)
+    assert state.desired_accel == pytest.approx(0.0)
+    assert state.actual_accel == pytest.approx(0.0)
+    assert state.jerk_upper == pytest.approx(0.0)
+    assert state.jerk_lower == pytest.approx(0.0)
 
   def test_sportage_angle_steering_uses_adas_cmd_with_send_lfa(self):
     fingerprint = gen_empty_fingerprint()

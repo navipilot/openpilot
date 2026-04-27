@@ -226,18 +226,22 @@ IONIQ_6_TURN_IN_FRICTION_BOOST_LEFT = 0.05
 IONIQ_6_TURN_IN_FRICTION_BOOST_RIGHT = 0.04
 IONIQ_6_UNWIND_FRICTION_REDUCTION_LEFT = 0.42
 IONIQ_6_UNWIND_FRICTION_REDUCTION_RIGHT = 0.96
-IONIQ_6_CENTER_TAPER_MAX = 0.020
-IONIQ_6_CENTER_TAPER_LAT = 0.08
+IONIQ_6_CENTER_TAPER_MAX = 0.026
+IONIQ_6_CENTER_TAPER_LAT = 0.11
 IONIQ_6_CENTER_TAPER_LAT_WIDTH = 0.02
 IONIQ_6_CENTER_TAPER_SPEED = 18.0
 IONIQ_6_CENTER_TAPER_SPEED_WIDTH = 2.5
-IONIQ_6_DIRECTIONAL_TAPER_LAT_START = 0.22
+IONIQ_6_DIRECTIONAL_TAPER_LAT_START = 0.18
 IONIQ_6_DIRECTIONAL_TAPER_LAT_END = 0.90
 IONIQ_6_DIRECTIONAL_TAPER_LAT_WIDTH = 0.08
-IONIQ_6_DIRECTIONAL_TAPER_BASE_LEFT = 0.03
-IONIQ_6_DIRECTIONAL_TAPER_BASE_RIGHT = 0.10
-IONIQ_6_DIRECTIONAL_TAPER_UNWIND_LEFT = 0.10
-IONIQ_6_DIRECTIONAL_TAPER_UNWIND_RIGHT = 0.30
+IONIQ_6_DIRECTIONAL_TAPER_BASE_LEFT = 0.05
+IONIQ_6_DIRECTIONAL_TAPER_BASE_RIGHT = 0.18
+IONIQ_6_DIRECTIONAL_TAPER_UNWIND_LEFT = 0.18
+IONIQ_6_DIRECTIONAL_TAPER_UNWIND_RIGHT = 0.52
+IONIQ_6_OUTPUT_TAPER_SPEED = 8.5
+IONIQ_6_OUTPUT_TAPER_SPEED_WIDTH = 2.5
+IONIQ_6_OUTPUT_CENTER_TAPER_BLEND = 0.62
+IONIQ_6_OUTPUT_DIRECTIONAL_TAPER_BLEND = 0.78
 
 KIA_EV6_LATERAL_TESTING_GROUND_ID = testing_ground.id_6
 KIA_EV6_LATERAL_TESTING_GROUND_VARIANT = "C"
@@ -765,6 +769,15 @@ def get_ioniq_6_directional_taper_scale(desired_lateral_accel: float, desired_la
   return max(1.0 - reduction, 0.70)
 
 
+def get_ioniq_6_output_taper_scale(desired_lateral_accel: float, desired_lateral_jerk: float, v_ego: float) -> float:
+  speed_weight = _ioniq_6_sigmoid((v_ego - IONIQ_6_OUTPUT_TAPER_SPEED) / IONIQ_6_OUTPUT_TAPER_SPEED_WIDTH)
+  center_taper = get_ioniq_6_center_taper_scale(desired_lateral_accel, v_ego)
+  directional_taper = get_ioniq_6_directional_taper_scale(desired_lateral_accel, desired_lateral_jerk)
+  center_scale = 1.0 - ((1.0 - center_taper) * IONIQ_6_OUTPUT_CENTER_TAPER_BLEND * speed_weight)
+  directional_scale = 1.0 - ((1.0 - directional_taper) * IONIQ_6_OUTPUT_DIRECTIONAL_TAPER_BLEND * speed_weight)
+  return center_scale * directional_scale
+
+
 def kia_ev6_lateral_testing_ground_active() -> bool:
   return testing_ground.use(KIA_EV6_LATERAL_TESTING_GROUND_ID, KIA_EV6_LATERAL_TESTING_GROUND_VARIANT)
 
@@ -1079,6 +1092,8 @@ class LatControlTorque(LatControl):
         output_torque *= get_bolt_2018_2021_dynamic_torque_scale(setpoint, desired_lateral_jerk, CS.vEgo)
       elif volt_standard_test_active:
         output_torque *= volt_standard_center_taper
+      elif ioniq_6_test_active:
+        output_torque *= get_ioniq_6_output_taper_scale(setpoint, desired_lateral_jerk, CS.vEgo)
 
       pid_log.active = True
       pid_log.p = float(self.pid.p)
