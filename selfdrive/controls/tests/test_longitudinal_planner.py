@@ -201,6 +201,67 @@ def test_soften_far_radar_lead_accel_keeps_close_closing_brake():
   assert softened == pytest.approx(baseline)
 
 
+def test_vision_lead_approach_cap_brakes_before_hard_cap():
+  v_ego = 21.535
+  CP = CarInterface.get_non_essential_params(CAR.HONDA_CIVIC)
+  planner = LongitudinalPlanner(CP, init_v=v_ego)
+  lead = make_lead(status=True, d_rel=38.9, v_lead=18.04, a_lead=-0.026, radar=False, model_prob=0.984)
+
+  hard_cap = planner.get_close_lead_brake_cap(lead, v_ego, -1.0)
+  approach_cap = planner.get_vision_lead_approach_cap(lead, v_ego, -1.0, 1.45)
+
+  assert hard_cap == pytest.approx(-0.212, abs=1e-2)
+  assert approach_cap is not None
+  assert approach_cap < hard_cap
+  assert approach_cap > -0.6
+
+
+def test_vision_lead_approach_cap_ignores_opening_lead_with_large_gap():
+  v_ego = 19.37
+  CP = CarInterface.get_non_essential_params(CAR.HONDA_CIVIC)
+  planner = LongitudinalPlanner(CP, init_v=v_ego)
+  lead = make_lead(status=True, d_rel=66.168, v_lead=20.751, a_lead=0.261, radar=False, model_prob=0.975)
+
+  assert planner.get_vision_lead_approach_cap(lead, v_ego, -1.0, 1.45) is None
+
+
+@pytest.mark.parametrize("model_version", ["v11", "v12"])
+def test_acc_mode_vision_lead_approach_cap_smooths_before_close_brake(model_version):
+  approach_v_ego = 21.535
+  close_v_ego = 21.435
+
+  CP = CarInterface.get_non_essential_params(CAR.HONDA_CIVIC)
+  planner_approach = LongitudinalPlanner(CP, init_v=approach_v_ego)
+  planner_close = LongitudinalPlanner(CP, init_v=close_v_ego)
+
+  sm_approach = make_sm(
+    approach_v_ego,
+    desired_accel=0.2,
+    min_accel=-3.0,
+    experimental_mode=False,
+    tracking_lead=True,
+    lead_one=make_lead(status=True, d_rel=38.9, v_lead=18.04, a_lead=-0.026, radar=False, model_prob=0.984),
+  )
+  sm_close = make_sm(
+    close_v_ego,
+    desired_accel=0.2,
+    min_accel=-3.0,
+    experimental_mode=False,
+    tracking_lead=True,
+    lead_one=make_lead(status=True, d_rel=27.18, v_lead=15.76, a_lead=-0.824, radar=False, model_prob=0.988),
+  )
+  sm_approach["starpilotPlan"].vCruise = approach_v_ego + 8.0
+  sm_close["starpilotPlan"].vCruise = close_v_ego + 8.0
+
+  planner_approach.update(sm_approach, make_toggles(model_version))
+  planner_close.update(sm_close, make_toggles(model_version))
+
+  assert planner_approach.mode == "acc"
+  assert planner_close.mode == "acc"
+  assert planner_approach.output_a_target < -0.3
+  assert planner_close.output_a_target < planner_approach.output_a_target - 0.25
+
+
 @pytest.mark.parametrize("model_version", ["v11", "v12"])
 def test_acc_mode_damps_far_radar_mild_lead_brake_more_than_close_brake(model_version):
   far_v_ego = 29.26
