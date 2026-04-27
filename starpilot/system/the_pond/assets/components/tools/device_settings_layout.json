@@ -1049,6 +1049,16 @@
         "parent_key": "QOLLongitudinal"
       },
       {
+        "key": "ForceStopDistanceOffset",
+        "label": "Force Stop Distance Offset (ft)",
+        "description": "Tune where Force Stops bring the car to rest. Positive values let the car roll further before stopping (longer stop, closer to the line). Negative values stop the car sooner (more buffer before the line).",
+        "data_type": "int",
+        "ui_type": "numeric",
+        "min": -20.0,
+        "max": 20.0,
+        "parent_key": "QOLLongitudinal"
+      },
+      {
         "key": "ForceStandstill",
         "label": "Force Standstill State",
         "description": "Keep openpilot in the standstill state until you press the gas pedal or the Resume/+ cruise button.\n\nThis applies to any engaged stop, not just red lights or stop signs.",

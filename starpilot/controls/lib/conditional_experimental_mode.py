@@ -170,6 +170,15 @@ class ConditionalExperimentalMode:
       self.slow_lead_detected = False
 
   def stop_sign_and_light(self, v_ego, sm, model_time):
+    # While the dashboard has confirmed a stop sign on this approach, pin CEM in EXP.
+    # Approaches routinely exceed the mode_hold_until/mode_false_since hysteresis (0.5s/0.25s),
+    # so without this the model briefly losing the sign drops CEM to CHILL and stalls the
+    # force-stop activation path. Latch is owned by starpilot_vcruise.
+    if getattr(self.starpilot_planner.starpilot_vcruise, 'stop_sign_confirmed', False):
+      self.stop_light_filter.x = 1.0
+      self.stop_light_detected = True
+      return
+
     if not sm["starpilotCarState"].trafficModeEnabled:
       speed_mph = v_ego * CV.MS_TO_MPH  # Convert m/s to mph
 

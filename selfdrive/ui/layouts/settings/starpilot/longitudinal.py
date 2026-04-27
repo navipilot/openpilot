@@ -725,6 +725,14 @@ class StarPilotLongitudinalQOLLayout(StarPilotPanel):
         "visible": lambda: self._params.get_bool("QOLLongitudinal"),
       },
       {
+        "title": tr_noop("Force Stop Distance Offset"),
+        "type": "value",
+        "get_value": lambda: f"{self._params.get_int('ForceStopDistanceOffset'):+d} ft",
+        "on_click": lambda: self._show_int_selector("ForceStopDistanceOffset", -20, 20, " ft"),
+        "color": "#597497",
+        "visible": lambda: self._params.get_bool("QOLLongitudinal") and self._params.get_bool("ForceStops"),
+      },
+      {
         "title": tr_noop("Force Standstill State"),
         "type": "toggle",
         "get_state": lambda: self._params.get_bool("ForceStandstill"),

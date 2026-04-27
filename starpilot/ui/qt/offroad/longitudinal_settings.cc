@@ -157,6 +157,7 @@ StarPilotLongitudinalPanel::StarPilotLongitudinalPanel(StarPilotSettingsWindow *
     {"CustomCruise", tr("Cruise Interval"), tr("<b>How much the set speed increases or decreases</b> for each + or – cruise control button press."), ""},
     {"CustomCruiseLong", tr("Cruise Interval (Hold)"), tr("<b>How much the set speed increases or decreases while holding the + or – cruise control buttons.</b>"), ""},
     {"ForceStops", tr("Force Stop at \"Detected\" Stop Lights/Signs"), tr("<b>Force openpilot to stop whenever the driving model \"detects\" a red light or stop sign.</b><br><br><i><b>Disclaimer</b>: openpilot does not explicitly detect traffic lights or stop signs. In \"Experimental Mode\", openpilot makes end-to-end driving decisions from camera input, which means it may stop even when there's no clear reason!</i>"), ""},
+    {"ForceStopDistanceOffset", tr("Force Stop Distance Offset"), tr("<b>Tune where Force Stops bring the car to rest.</b> Positive values let the car roll further before stopping (longer stop, closer to the line). Negative values stop the car sooner (more buffer before the line)."), ""},
     {"ForceStandstill", tr("Force Standstill State"), tr("<b>Keep openpilot in the standstill state until you press the gas pedal or the Resume/+ cruise button.</b><br><br>This applies to any engaged stop, not just red lights or stop signs."), ""},
     {"IncreasedStoppedDistance", tr("Increase Stopped Distance by:"), tr("<b>Add extra space when stopped behind vehicles.</b> Increase for more room; decrease for shorter gaps."), ""},
     {"MapGears", tr("Map Accel/Decel to Gears"), tr("<b>Map the Acceleration or Deceleration profiles to the vehicle's \"Eco\" and \"Sport\" gear modes.</b>"), ""},
@@ -393,6 +394,8 @@ StarPilotLongitudinalPanel::StarPilotLongitudinalPanel(StarPilotSettingsWindow *
       longitudinalToggle = new StarPilotParamValueControl(param, title, desc, icon, 1, 99, tr(" mph"));
     } else if (param == "IncreasedStoppedDistance") {
       longitudinalToggle = new StarPilotParamValueControl(param, title, desc, icon, 0, 10, tr(" feet"));
+    } else if (param == "ForceStopDistanceOffset") {
+      longitudinalToggle = new StarPilotParamValueControl(param, title, desc, icon, -20, 20, tr(" feet"));
     } else if (param == "MapGears") {
       std::vector<QString> mapGearsToggles{"MapAcceleration", "MapDeceleration"};
       std::vector<QString> mapGearsToggleNames{tr("Acceleration"), tr("Deceleration")};

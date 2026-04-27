@@ -386,6 +386,10 @@ class CarState(CarStateBase):
     fp_ret.modePressed = bool(self.mode_button)
     fp_ret.customPressed = bool(self.custom_button)
 
+    # ADAS camera dashboard stop-sign signal (CANFD HKG only). Registered as optional
+    # (freq=0); cars without it never publish, so the read returns 0 and the field stays 0.
+    fp_ret.dashboardStopSign = 1 if bool(cp_cam.vl["ADAS_0x380"]["STOP_SIGN"]) else 0
+
     return ret, fp_ret
 
   def get_can_parsers_canfd(self, CP):
@@ -408,6 +412,7 @@ class CarState(CarStateBase):
     if CP.flags & HyundaiFlags.EV:
       msgs.append(("DRIVE_MODE_EV", 0))  # optional: not all CAN-FD EV variants publish drive mode
     msgs.append(("STEERING_WHEEL_MEDIA_BUTTONS", 0))  # optional: absent or slower on some CAN-FD variants
+    cam_msgs.append(("ADAS_0x380", 0))  # optional: dashboard stop-sign signal, only on ADAS-equipped HKG CANFD
     return {
       Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], msgs, CanBus(CP).ECAN),
       Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], cam_msgs, CanBus(CP).CAM),
