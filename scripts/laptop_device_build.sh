@@ -272,6 +272,15 @@ scrub_mixed_arch_artifacts() {
   # Desktop launchers can leave macOS objects with the same paths as larch64 outputs.
   # Remove known cross-target extension intermediates so device builds always relink.
   rm -f \
+    "${ROOT_DIR}/.sconsign.dblite" \
+    "${ROOT_DIR}/common/libcommon.a" \
+    "${ROOT_DIR}/common/params.o" \
+    "${ROOT_DIR}/common/params_pyx.cpp" \
+    "${ROOT_DIR}/cereal/libcereal.a" \
+    "${ROOT_DIR}/cereal/libsocketmaster.a" \
+    "${ROOT_DIR}/cereal/gen/cpp/"*.capnp.c++ \
+    "${ROOT_DIR}/cereal/gen/cpp/"*.capnp.h \
+    "${ROOT_DIR}/cereal/gen/cpp/"*.capnp.o \
     "${ROOT_DIR}/cereal/messaging/"*.o \
     "${ROOT_DIR}/cereal/messaging/bridge" \
     "${ROOT_DIR}/msgq_repo/msgq/"*.os \
@@ -288,6 +297,8 @@ scrub_mixed_arch_artifacts() {
     "${ROOT_DIR}/common/params_pyx.so" \
     "${ROOT_DIR}/common/transformations/transformations.o" \
     "${ROOT_DIR}/common/transformations/transformations.so" \
+    "${ROOT_DIR}/selfdrive/pandad/can_list_to_can_capnp.o" \
+    "${ROOT_DIR}/selfdrive/pandad/libcan_list_to_can_capnp.a" \
     "${ROOT_DIR}/selfdrive/modeld/models/commonmodel_pyx.o" \
     "${ROOT_DIR}/selfdrive/modeld/models/commonmodel_pyx.so"
 }
