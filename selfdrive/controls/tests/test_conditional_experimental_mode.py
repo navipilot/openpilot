@@ -86,6 +86,22 @@ def test_far_visible_lead_does_not_block_stop_light():
   assert cem.stop_light_detected
 
 
+def test_stop_light_stays_latched_until_untracked_stopped_lead_handoff():
+  v_ego = 45 * CV.MPH_TO_MS
+  model_length = v_ego * 4.0
+
+  cem = make_cem(model_length=model_length)
+  run_stop_light_detector(cem, v_ego, steps=30)
+  assert cem.stop_light_detected
+
+  cem.starpilot_planner.lead_one.status = True
+  cem.starpilot_planner.lead_one.dRel = model_length - 5.0
+  cem.starpilot_planner.lead_one.vLead = 0.5
+  run_stop_light_detector(cem, v_ego, steps=10, tracking_lead=False)
+
+  assert cem.stop_light_detected
+
+
 class DummyThemeManager:
   def update_wheel_image(self, *args, **kwargs):
     pass

@@ -226,6 +226,80 @@ def test_vision_lead_approach_cap_ignores_opening_lead_with_large_gap():
 
 
 @pytest.mark.parametrize("model_version", ["v11", "v12"])
+def test_dynamic_t_follow_increases_modestly_for_closing_lead(model_version):
+  v_ego = 21.535
+
+  CP = CarInterface.get_non_essential_params(CAR.HONDA_CIVIC)
+  planner = LongitudinalPlanner(CP, init_v=v_ego)
+  sm = make_sm(
+    v_ego,
+    desired_accel=0.2,
+    min_accel=-3.0,
+    experimental_mode=False,
+    tracking_lead=True,
+    lead_one=make_lead(status=True, d_rel=38.9, v_lead=18.04, a_lead=-0.026, radar=False, model_prob=0.984),
+  )
+  sm["starpilotPlan"].vCruise = v_ego + 8.0
+
+  for _ in range(8):
+    planner.update(sm, make_toggles(model_version))
+
+  assert planner.effective_t_follow is not None
+  assert planner.effective_t_follow > sm["starpilotPlan"].tFollow + 0.05
+  assert planner.effective_t_follow < sm["starpilotPlan"].tFollow + 0.2
+
+
+@pytest.mark.parametrize("model_version", ["v11", "v12"])
+def test_dynamic_t_follow_stays_near_base_for_far_highway_lead(model_version):
+  v_ego = 29.26
+
+  CP = CarInterface.get_non_essential_params(CAR.HONDA_CIVIC)
+  planner = LongitudinalPlanner(CP, init_v=v_ego)
+  sm = make_sm(
+    v_ego,
+    desired_accel=0.2,
+    min_accel=-1.0,
+    experimental_mode=False,
+    tracking_lead=True,
+    lead_one=make_lead(status=True, d_rel=114.8, v_lead=28.88, a_lead=-0.75, radar=True, model_prob=0.9),
+  )
+  sm["starpilotPlan"].vCruise = v_ego + 3.0
+
+  for _ in range(12):
+    planner.update(sm, make_toggles(model_version))
+
+  assert planner.effective_t_follow == pytest.approx(sm["starpilotPlan"].tFollow, abs=0.02)
+
+
+@pytest.mark.parametrize("model_version", ["v11", "v12"])
+def test_dynamic_t_follow_releases_toward_base_after_lead_opens(model_version):
+  v_ego = 21.535
+
+  CP = CarInterface.get_non_essential_params(CAR.HONDA_CIVIC)
+  planner = LongitudinalPlanner(CP, init_v=v_ego)
+  sm = make_sm(
+    v_ego,
+    desired_accel=0.2,
+    min_accel=-3.0,
+    experimental_mode=False,
+    tracking_lead=True,
+    lead_one=make_lead(status=True, d_rel=38.9, v_lead=18.04, a_lead=-0.026, radar=False, model_prob=0.984),
+  )
+
+  for _ in range(8):
+    planner.update(sm, make_toggles(model_version))
+
+  boosted_t_follow = planner.effective_t_follow
+  sm["radarState"].leadOne = make_lead(status=True, d_rel=66.168, v_lead=20.751, a_lead=0.261, radar=False, model_prob=0.975)
+  for _ in range(12):
+    planner.update(sm, make_toggles(model_version))
+
+  assert boosted_t_follow is not None
+  assert planner.effective_t_follow < boosted_t_follow
+  assert planner.effective_t_follow == pytest.approx(sm["starpilotPlan"].tFollow, abs=0.02)
+
+
+@pytest.mark.parametrize("model_version", ["v11", "v12"])
 def test_acc_mode_vision_lead_approach_cap_smooths_before_close_brake(model_version):
   approach_v_ego = 21.535
   close_v_ego = 21.435

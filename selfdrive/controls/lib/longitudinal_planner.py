@@ -39,6 +39,17 @@ VISION_LEAD_APPROACH_MAX_DECEL = 0.45
 VISION_LEAD_APPROACH_MIN_DECEL = 0.12
 VISION_LEAD_APPROACH_MIN_MODEL_PROB = 0.85
 VISION_LEAD_APPROACH_FULL_MODEL_PROB = 0.98
+LEAD_APPROACH_TFOLLOW_TRIGGER_TIME = 4.5
+LEAD_APPROACH_TFOLLOW_FULL_TIME = 1.5
+LEAD_APPROACH_TFOLLOW_MAX_DELTA = 0.18
+LEAD_APPROACH_TFOLLOW_MAX_CLOSING_SPEED = 6.0
+LEAD_APPROACH_TFOLLOW_MAX_LEAD_BRAKE = 2.5
+LEAD_APPROACH_TFOLLOW_MIN_CLOSING_SPEED = 0.75
+LEAD_APPROACH_TFOLLOW_MIN_LEAD_BRAKE = 0.2
+LEAD_APPROACH_TFOLLOW_WINDOW_MIN = 6.0
+LEAD_APPROACH_TFOLLOW_WINDOW_GAIN = 0.35
+LEAD_APPROACH_TFOLLOW_RATE_UP = 1.0
+LEAD_APPROACH_TFOLLOW_RATE_DOWN = 0.18
 
 # Uncertainty-based filter disable thresholds
 UNCERT_SLOPE_TRIG = 0.12  # per second
@@ -188,6 +199,7 @@ class LongitudinalPlanner:
     # Uncertainty slope tracking
     self._uncert_last = 0.0
     self._uncert_last_t = None
+    self.effective_t_follow = None
 
   @property
   def mlsim(self):
@@ -292,6 +304,40 @@ class LongitudinalPlanner:
 
     return max(accel_min, -approach_decel)
 
+  def get_dynamic_t_follow(self, base_t_follow, lead, v_ego):
+    base_t_follow = float(base_t_follow)
+    target_t_follow = base_t_follow
+
+    if lead is not None and lead.status:
+      lead_prob = float(getattr(lead, "modelProb", 1.0 if bool(getattr(lead, "radar", False)) else 0.0))
+      if bool(getattr(lead, "radar", False)) or lead_prob >= VISION_LEAD_APPROACH_MIN_MODEL_PROB:
+        lead_brake = max(0.0, -float(lead.aLeadK))
+        closing_speed = max(0.0, v_ego - lead.vLead)
+        if closing_speed >= LEAD_APPROACH_TFOLLOW_MIN_CLOSING_SPEED or lead_brake >= LEAD_APPROACH_TFOLLOW_MIN_LEAD_BRAKE:
+          desired_gap = float(desired_follow_distance(v_ego, lead.vLead, base_t_follow))
+          approach_window = max(LEAD_APPROACH_TFOLLOW_WINDOW_MIN, LEAD_APPROACH_TFOLLOW_WINDOW_GAIN * float(v_ego))
+          if float(lead.dRel) <= desired_gap + approach_window:
+            reaction_t = max(self.CP.longitudinalActuatorDelay, self.dt)
+            projected_closing_speed = closing_speed + 0.5 * lead_brake * reaction_t
+            gap_to_follow = max(float(lead.dRel) - desired_gap, 0.0)
+            time_to_follow = gap_to_follow / max(projected_closing_speed, 0.1)
+            time_factor = float(np.clip((LEAD_APPROACH_TFOLLOW_TRIGGER_TIME - time_to_follow) /
+                                        (LEAD_APPROACH_TFOLLOW_TRIGGER_TIME - LEAD_APPROACH_TFOLLOW_FULL_TIME), 0.0, 1.0))
+            closing_factor = float(np.clip(closing_speed / LEAD_APPROACH_TFOLLOW_MAX_CLOSING_SPEED, 0.0, 1.0))
+            brake_factor = float(np.clip(lead_brake / LEAD_APPROACH_TFOLLOW_MAX_LEAD_BRAKE, 0.0, 1.0))
+            target_delta = LEAD_APPROACH_TFOLLOW_MAX_DELTA * np.clip(
+              0.55 * time_factor + 0.25 * closing_factor + 0.20 * brake_factor, 0.0, 1.0)
+            target_t_follow = base_t_follow + float(target_delta)
+
+    if self.effective_t_follow is None:
+      self.effective_t_follow = base_t_follow
+
+    rate = LEAD_APPROACH_TFOLLOW_RATE_UP if target_t_follow > self.effective_t_follow else LEAD_APPROACH_TFOLLOW_RATE_DOWN
+    step = rate * self.dt
+    self.effective_t_follow = float(np.clip(target_t_follow, self.effective_t_follow - step, self.effective_t_follow + step))
+    self.effective_t_follow = max(base_t_follow, self.effective_t_follow)
+    return self.effective_t_follow
+
   @staticmethod
   def raw_close_lead_needs_control(lead, v_ego):
     if lead is None or not lead.status:
@@ -387,6 +433,7 @@ class LongitudinalPlanner:
     # safety path so ACC/chill does not ignore a visible lead during that debounce.
     lead_control_active = tracking_lead or raw_close_lead_control
     lead_one_active = bool(self.lead_one.status and lead_control_active)
+    effective_t_follow = self.get_dynamic_t_follow(sm['starpilotPlan'].tFollow, self.lead_one if lead_one_active else None, v_ego)
 
     lead_dist = self.lead_one.dRel if lead_one_active else 50.0
 
@@ -504,7 +551,7 @@ class LongitudinalPlanner:
     if not self.mlsim:
       self.mpc.mode = dec_mpc_mode
     self.mpc.update(sm['radarState'], v_cruise, x, v, a, j,
-                    sm['starpilotPlan'].dangerFactor, sm['starpilotPlan'].tFollow,
+                    sm['starpilotPlan'].dangerFactor, effective_t_follow,
                     personality=personality, tracking_lead=lead_control_active)
 
     self.a_desired_trajectory_full = np.interp(CONTROL_N_T_IDX, T_IDXS_MPC, self.mpc.a_solution)
@@ -534,7 +581,7 @@ class LongitudinalPlanner:
     if lead_one_active:
       rel_v = max(0.0, v_ego - self.lead_one.vLead)
       # dynamic time headway adds a small buffer when uncertainty is elevated
-      base_th = 1.6
+      base_th = max(1.6, effective_t_follow)
       th = base_th + 0.6 * max(0.0, uncertainty - 0.42)
       desired_gap = th * v_ego
       if (self.lead_dist_f is not None and self.lead_dist_f < desired_gap and rel_v > 0.5):
@@ -581,7 +628,7 @@ class LongitudinalPlanner:
         cap = self.get_close_lead_brake_cap(lead, v_ego, output_accel_min)
         if cap is not None:
           close_lead_caps.append(cap)
-        approach_cap = self.get_vision_lead_approach_cap(lead, v_ego, output_accel_min, sm['starpilotPlan'].tFollow)
+        approach_cap = self.get_vision_lead_approach_cap(lead, v_ego, output_accel_min, effective_t_follow)
         if approach_cap is not None:
           close_lead_caps.append(approach_cap)
     if close_lead_caps:

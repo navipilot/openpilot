@@ -44,6 +44,7 @@ class ConditionalExperimentalMode:
   STOP_LIGHT_ON_MARGIN = 2.5
   STOP_LIGHT_OFF_MARGIN = 4.0
   STOP_LIGHT_LEAD_BLOCK_MARGIN = 15.0
+  STOP_LIGHT_HANDOFF_MAX_LEAD_SPEED = 2.0
 
   # ===== END TUNING PARAMETERS =====
 
@@ -226,11 +227,23 @@ class ConditionalExperimentalMode:
       # present; far/stale leads should not suppress true stop-light detection.
       lead = getattr(self.starpilot_planner, "lead_one", None)
       lead_distance = float(getattr(lead, "dRel", float("inf")))
+      lead_speed = float(getattr(lead, "vLead", float("inf")))
       lead_relevant = bool(getattr(lead, "status", False)) and lead_distance < stop_threshold + self.STOP_LIGHT_LEAD_BLOCK_MARGIN
-      self.lead_clear_filter.update(not lead_relevant)
-      lead_cleared = self.lead_clear_filter.x >= THRESHOLD
+      handoff_to_stopped_lead = (
+        self.stop_light_detected and
+        lead_relevant and
+        not self.starpilot_planner.tracking_lead and
+        lead_speed < self.STOP_LIGHT_HANDOFF_MAX_LEAD_SPEED
+      )
+      if handoff_to_stopped_lead:
+        lead_cleared = True
+      else:
+        self.lead_clear_filter.update(not lead_relevant)
+        lead_cleared = self.lead_clear_filter.x >= THRESHOLD
       self.stop_light_filter.update(model_stopping and lead_cleared)
-      self.stop_light_detected = bool(self.stop_light_filter.x >= THRESHOLD**2 and lead_cleared)
+      self.stop_light_detected = bool(
+        (self.stop_light_filter.x >= THRESHOLD**2 and lead_cleared) or handoff_to_stopped_lead
+      )
     else:
       self.stop_light_filter.x = 0
       self.stop_light_detected = False
