@@ -29,6 +29,7 @@ MIN_ALLOW_THROTTLE_SPEED = 2.5
 RAW_LEAD_SAFETY_MIN_CLOSING_SPEED = 0.5
 RAW_LEAD_SAFETY_TTC = 7.0
 RAW_LEAD_SAFETY_DISTANCE = 40.0
+CLOSE_LEAD_BRAKE_CAP_MAX_TTC = 25.0
 
 # Uncertainty-based filter disable thresholds
 UNCERT_SLOPE_TRIG = 0.12  # per second
@@ -238,6 +239,9 @@ class LongitudinalPlanner:
     target_gap = float(np.clip(2.0 + 0.2 * v_ego, 2.0, 6.0))
     delay_buffer = projected_closing_speed * reaction_t
     available_gap = max(float(lead.dRel) - target_gap - delay_buffer, 0.5)
+    projected_ttc = available_gap / max(projected_closing_speed, 0.1)
+    if projected_ttc > CLOSE_LEAD_BRAKE_CAP_MAX_TTC:
+      return None
     required_decel = (projected_closing_speed ** 2) / (2.0 * available_gap) + 0.7 * lead_brake
     if required_decel < 0.2:
       return None

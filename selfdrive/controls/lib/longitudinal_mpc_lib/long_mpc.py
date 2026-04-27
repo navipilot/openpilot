@@ -71,6 +71,13 @@ DIST_ADAPTS = [0.04, 0.06, 0.06, 0.05]  # Balanced across speeds
 
 # ===== END TUNING PARAMETERS =====
 
+FAR_RADAR_LEAD_ACCEL_TAPER_MAX = 1.0
+FAR_RADAR_LEAD_ACCEL_TAPER_MAX_CLOSING = 2.5
+FAR_RADAR_LEAD_ACCEL_TAPER_MIN_GAP_EXCESS = 8.0
+FAR_RADAR_LEAD_ACCEL_TAPER_MIN_GAP_GAIN = 0.25
+FAR_RADAR_LEAD_ACCEL_TAPER_FULL_GAP_EXCESS = 25.0
+FAR_RADAR_LEAD_ACCEL_TAPER_FULL_GAP_GAIN = 0.9
+
 # Function to get parameter value based on current speed
 def get_speed_based_param(speed_mph, param_array):
   """Get parameter value based on current speed using smooth interpolation"""
@@ -165,6 +172,28 @@ def desired_follow_distance(v_ego, v_lead, t_follow=None):
   if t_follow is None:
     t_follow = get_T_FOLLOW()
   return get_safe_obstacle_distance(v_ego, t_follow) - get_stopped_equivalence_factor(v_lead)
+
+
+def soften_far_radar_lead_accel(d_rel, v_lead, a_lead, v_ego, t_follow, *, radar=True):
+  if not radar or a_lead >= 0.0:
+    return float(a_lead)
+
+  desired_gap = float(desired_follow_distance(v_ego, v_lead, t_follow))
+  closing_speed = max(0.0, float(v_ego) - float(v_lead))
+  gap_excess = float(d_rel) - desired_gap
+
+  taper_start = max(FAR_RADAR_LEAD_ACCEL_TAPER_MIN_GAP_EXCESS,
+                    FAR_RADAR_LEAD_ACCEL_TAPER_MIN_GAP_GAIN * float(v_ego))
+  if gap_excess <= taper_start or closing_speed >= FAR_RADAR_LEAD_ACCEL_TAPER_MAX_CLOSING:
+    return float(a_lead)
+
+  taper_scale = max(FAR_RADAR_LEAD_ACCEL_TAPER_FULL_GAP_EXCESS,
+                    FAR_RADAR_LEAD_ACCEL_TAPER_FULL_GAP_GAIN * float(v_ego))
+  distance_factor = float(np.clip((gap_excess - taper_start) / taper_scale, 0.0, 1.0))
+  closing_factor = float(np.clip((FAR_RADAR_LEAD_ACCEL_TAPER_MAX_CLOSING - closing_speed) /
+                                 FAR_RADAR_LEAD_ACCEL_TAPER_MAX_CLOSING, 0.0, 1.0))
+  taper = FAR_RADAR_LEAD_ACCEL_TAPER_MAX * distance_factor * closing_factor
+  return float(a_lead * (1.0 - taper))
 
 
 def gen_long_model():
@@ -484,13 +513,16 @@ class LongitudinalMpc:
     lead_xv = np.column_stack((x_lead_traj, v_lead_traj))
     return lead_xv
 
-  def process_lead(self, lead, tracking_lead=True):
+  def process_lead(self, lead, tracking_lead=True, t_follow=None):
     v_ego = self.x0[1]
     if lead is not None and lead.status and tracking_lead:
       x_lead = lead.dRel
       v_lead = lead.vLead
       a_lead = lead.aLeadK
       a_lead_tau = lead.aLeadTau
+      a_lead = soften_far_radar_lead_accel(x_lead, v_lead, a_lead, v_ego,
+                                           get_T_FOLLOW() if t_follow is None else t_follow,
+                                           radar=bool(getattr(lead, "radar", False)))
     else:
       # Fake a fast lead car, so mpc can keep running in the same mode
       x_lead = 50.0
@@ -525,8 +557,8 @@ class LongitudinalMpc:
     lead_two = radarstate.leadTwo
     self.status = tracking_lead and (lead_one.status or lead_two.status)
 
-    lead_xv_0 = self.process_lead(lead_one, tracking_lead)
-    lead_xv_1 = self.process_lead(lead_two, tracking_lead)
+    lead_xv_0 = self.process_lead(lead_one, tracking_lead, t_follow=t_follow)
+    lead_xv_1 = self.process_lead(lead_two, tracking_lead, t_follow=t_follow)
 
     # To estimate a safe distance from a moving lead, we calculate how much stopping
     # distance that lead needs as a minimum. We can add that to the current distance

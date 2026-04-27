@@ -10,6 +10,7 @@ from opendbc.car.honda.interface import CarInterface
 from opendbc.car.honda.values import CAR
 from openpilot.selfdrive.controls.lib.longcontrol import LongCtrlState
 from openpilot.selfdrive.controls.lib.longitudinal_planner import LongitudinalPlanner, get_vehicle_min_accel
+from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import soften_far_radar_lead_accel
 from openpilot.selfdrive.modeld.constants import ModelConstants, Plan
 
 
@@ -186,6 +187,58 @@ def test_acc_mode_matches_no_lead_baseline_for_far_vision_only_lead_without_trac
   assert planner_far_vision.mode == "acc"
   assert not planner_far_vision.raw_close_lead_needs_control(sm_far_vision["radarState"].leadOne, v_ego)
   np.testing.assert_allclose(far_vision_outputs, no_lead_outputs, atol=1e-6)
+
+
+def test_soften_far_radar_lead_accel_reduces_gentle_far_brake():
+  softened = soften_far_radar_lead_accel(114.8, 28.88, -0.75, 29.26, 1.45, radar=True)
+  assert softened > -0.35
+  assert softened < 0.0
+
+
+def test_soften_far_radar_lead_accel_keeps_close_closing_brake():
+  baseline = -0.76
+  softened = soften_far_radar_lead_accel(68.0, 26.38, baseline, 29.38, 1.45, radar=True)
+  assert softened == pytest.approx(baseline)
+
+
+@pytest.mark.parametrize("model_version", ["v11", "v12"])
+def test_acc_mode_damps_far_radar_mild_lead_brake_more_than_close_brake(model_version):
+  far_v_ego = 29.26
+  far_v_cruise = 32.22
+  close_v_ego = 29.38
+  close_v_cruise = 32.22
+
+  CP = CarInterface.get_non_essential_params(CAR.HONDA_CIVIC)
+  planner_far = LongitudinalPlanner(CP, init_v=far_v_ego)
+  planner_close = LongitudinalPlanner(CP, init_v=close_v_ego)
+
+  sm_far = make_sm(
+    far_v_ego,
+    desired_accel=0.2,
+    min_accel=-1.0,
+    experimental_mode=False,
+    tracking_lead=True,
+    lead_one=make_lead(status=True, d_rel=114.8, v_lead=28.88, a_lead=-0.75, radar=True, model_prob=0.9),
+  )
+  sm_close = make_sm(
+    close_v_ego,
+    desired_accel=0.2,
+    min_accel=-1.0,
+    experimental_mode=False,
+    tracking_lead=True,
+    lead_one=make_lead(status=True, d_rel=68.0, v_lead=26.38, a_lead=-0.76, radar=True, model_prob=0.9),
+  )
+  sm_far["starpilotPlan"].vCruise = far_v_cruise
+  sm_close["starpilotPlan"].vCruise = close_v_cruise
+
+  for _ in range(80):
+    planner_far.update(sm_far, make_toggles(model_version))
+    planner_close.update(sm_close, make_toggles(model_version))
+
+  assert planner_far.mode == "acc"
+  assert planner_close.mode == "acc"
+  assert planner_far.output_a_target > -0.4
+  assert planner_close.output_a_target < planner_far.output_a_target - 0.1
 
 
 def test_modeld_action_passes_tomb_raider_longitudinal_params(monkeypatch):
