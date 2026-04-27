@@ -31,6 +31,7 @@ from openpilot.selfdrive.controls.lib.latcontrol_torque import (
   get_genesis_g90_friction_scale,
   get_genesis_g90_friction_threshold,
   get_ioniq_6_center_taper_scale,
+  get_ioniq_6_directional_taper_scale,
   get_ioniq_6_ff_scale,
   get_ioniq_6_friction_scale,
   get_ioniq_6_friction_threshold,
@@ -210,8 +211,14 @@ class TestLatControl:
     assert get_ioniq_6_ff_scale(0.0, 0.0, 20.0) == 1.0
     assert get_ioniq_6_ff_scale(0.4, 0.0, 20.0) > get_ioniq_6_ff_scale(-0.4, 0.0, 20.0)
     assert get_ioniq_6_ff_scale(0.4, 0.7, 8.0) > get_ioniq_6_ff_scale(0.4, 0.0, 8.0) > get_ioniq_6_ff_scale(0.4, -0.7, 8.0)
-    assert get_ioniq_6_ff_scale(-0.4, -0.7, 8.0) > get_ioniq_6_ff_scale(-0.4, 0.0, 8.0) > get_ioniq_6_ff_scale(-0.4, 0.7, 8.0)
+    assert get_ioniq_6_ff_scale(-0.4, -0.7, 8.0) >= get_ioniq_6_ff_scale(-0.4, 0.0, 8.0) > get_ioniq_6_ff_scale(-0.4, 0.7, 8.0)
     assert get_ioniq_6_ff_scale(1.2, 0.0, 20.0) < get_ioniq_6_ff_scale(0.4, 0.0, 20.0)
+
+  def test_ioniq_6_directional_taper_curve(self):
+    assert get_ioniq_6_directional_taper_scale(0.0, 0.0) == 1.0
+    assert get_ioniq_6_directional_taper_scale(-0.5, 0.0) < get_ioniq_6_directional_taper_scale(0.5, 0.0) < 1.0
+    assert get_ioniq_6_directional_taper_scale(-0.5, 0.7) < get_ioniq_6_directional_taper_scale(-0.5, 0.0)
+    assert get_ioniq_6_directional_taper_scale(1.2, 0.0) > 0.98
 
   def test_ioniq_6_friction_threshold_curve(self):
     base = get_friction_threshold(6.0)

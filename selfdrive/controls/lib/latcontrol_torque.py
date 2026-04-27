@@ -231,6 +231,13 @@ IONIQ_6_CENTER_TAPER_LAT = 0.07
 IONIQ_6_CENTER_TAPER_LAT_WIDTH = 0.02
 IONIQ_6_CENTER_TAPER_SPEED = 18.0
 IONIQ_6_CENTER_TAPER_SPEED_WIDTH = 2.5
+IONIQ_6_DIRECTIONAL_TAPER_LAT_START = 0.22
+IONIQ_6_DIRECTIONAL_TAPER_LAT_END = 0.90
+IONIQ_6_DIRECTIONAL_TAPER_LAT_WIDTH = 0.08
+IONIQ_6_DIRECTIONAL_TAPER_BASE_LEFT = 0.03
+IONIQ_6_DIRECTIONAL_TAPER_BASE_RIGHT = 0.10
+IONIQ_6_DIRECTIONAL_TAPER_UNWIND_LEFT = 0.08
+IONIQ_6_DIRECTIONAL_TAPER_UNWIND_RIGHT = 0.24
 
 KIA_EV6_LATERAL_TESTING_GROUND_ID = testing_ground.id_6
 KIA_EV6_LATERAL_TESTING_GROUND_VARIANT = "C"
@@ -706,7 +713,7 @@ def get_ioniq_6_ff_scale(desired_lateral_accel: float, desired_lateral_jerk: flo
                           turn_in_weight * low_speed_factor)
   unwind_taper = 1.0 - (_ioniq_6_side_value(desired_lateral_accel, IONIQ_6_UNWIND_TAPER_LEFT, IONIQ_6_UNWIND_TAPER_RIGHT) *
                          unwind_weight * (0.30 + 0.70 * low_speed_factor))
-  return 1.0 + (extra_scale * turn_in_boost * max(unwind_taper, 0.0))
+  return (1.0 + (extra_scale * turn_in_boost * max(unwind_taper, 0.0))) * get_ioniq_6_directional_taper_scale(desired_lateral_accel, desired_lateral_jerk)
 
 
 def get_ioniq_6_friction_threshold(v_ego: float, desired_lateral_accel: float = 0.0, desired_lateral_jerk: float = 0.0) -> float:
@@ -740,6 +747,22 @@ def get_ioniq_6_center_taper_scale(desired_lateral_accel: float, v_ego: float) -
   center_weight = _ioniq_6_sigmoid((IONIQ_6_CENTER_TAPER_LAT - abs(desired_lateral_accel)) / IONIQ_6_CENTER_TAPER_LAT_WIDTH)
   reduction = IONIQ_6_CENTER_TAPER_MAX * speed_weight * center_weight
   return 1.0 - reduction
+
+
+def get_ioniq_6_directional_taper_scale(desired_lateral_accel: float, desired_lateral_jerk: float) -> float:
+  if desired_lateral_accel == 0.0:
+    return 1.0
+
+  abs_lateral_accel = abs(desired_lateral_accel)
+  onset = _ioniq_6_sigmoid((abs_lateral_accel - IONIQ_6_DIRECTIONAL_TAPER_LAT_START) / IONIQ_6_DIRECTIONAL_TAPER_LAT_WIDTH)
+  cutoff = _ioniq_6_sigmoid((IONIQ_6_DIRECTIONAL_TAPER_LAT_END - abs_lateral_accel) / IONIQ_6_DIRECTIONAL_TAPER_LAT_WIDTH)
+  band_weight = onset * cutoff
+  phase = _ioniq_6_transition_phase(desired_lateral_accel, desired_lateral_jerk)
+  unwind_weight = max(-phase, 0.0)
+  base_reduction = _ioniq_6_side_value(desired_lateral_accel, IONIQ_6_DIRECTIONAL_TAPER_BASE_LEFT, IONIQ_6_DIRECTIONAL_TAPER_BASE_RIGHT)
+  unwind_reduction = _ioniq_6_side_value(desired_lateral_accel, IONIQ_6_DIRECTIONAL_TAPER_UNWIND_LEFT, IONIQ_6_DIRECTIONAL_TAPER_UNWIND_RIGHT)
+  reduction = band_weight * (base_reduction + unwind_reduction * unwind_weight)
+  return max(1.0 - reduction, 0.70)
 
 
 def kia_ev6_lateral_testing_ground_active() -> bool:
