@@ -13,9 +13,12 @@ from openpilot.starpilot.controls.lib.starpilot_acceleration import (
 
 
 class FakePlanner:
-  def __init__(self):
-    self.v_cruise = 0.0
+  def __init__(self, *, v_cruise=0.0, slc_target=0.0, red_light=False, forcing_stop=False, disable_throttle=False):
+    self.v_cruise = v_cruise
     self.starpilot_weather = SimpleNamespace(weather_id=0, reduce_acceleration=0.0)
+    self.starpilot_vcruise = SimpleNamespace(slc_target=slc_target, forcing_stop=forcing_stop)
+    self.starpilot_cem = SimpleNamespace(stop_light_detected=red_light)
+    self.starpilot_following = SimpleNamespace(disable_throttle=disable_throttle)
 
 
 def make_toggles(**overrides):
@@ -40,10 +43,8 @@ def make_lead(status=False, d_rel=150.0, v_lead=0.0, a_lead_k=0.0):
   return SimpleNamespace(status=status, dRel=d_rel, vLead=v_lead, aLeadK=a_lead_k)
 
 
-def make_sm(*, set_speed_kph=100.0, v_target=0.0, slc_target=0.0, lead_one=None, lead_two=None,
-            standstill=False, force_decel=False, red_light=False, forcing_stop=False,
-            disable_throttle=False, eco_gear=False, sport_gear=False, force_coast=False,
-            traffic_mode=False):
+def make_sm(*, set_speed_kph=100.0, lead_one=None, lead_two=None, standstill=False, force_decel=False,
+            eco_gear=False, sport_gear=False, force_coast=False, traffic_mode=False):
   return {
     "carState": SimpleNamespace(vCruise=set_speed_kph, standstill=standstill),
     "controlsState": SimpleNamespace(forceDecel=force_decel),
@@ -57,20 +58,23 @@ def make_sm(*, set_speed_kph=100.0, v_target=0.0, slc_target=0.0, lead_one=None,
       forceCoast=force_coast,
       trafficModeEnabled=traffic_mode,
     ),
-    "starpilotPlan": SimpleNamespace(
-      vCruise=v_target,
-      slcSpeedLimit=slc_target,
-      redLight=red_light,
-      forcingStop=forcing_stop,
-      disableThrottle=disable_throttle,
-    ),
   }
 
 
 def test_slc_coast_window_prefers_coast_for_small_overspeed():
-  accel = StarPilotAcceleration(FakePlanner())
   target = 56.0 * CV.MPH_TO_MS
-  sm = make_sm(set_speed_kph=100.0, v_target=target, slc_target=target)
+  accel = StarPilotAcceleration(FakePlanner(v_cruise=target, slc_target=target))
+  sm = make_sm(set_speed_kph=100.0)
+
+  accel.update(57.0 * CV.MPH_TO_MS, sm, make_toggles(deceleration_profile=DECELERATION_PROFILES["ECO"]))
+
+  assert accel.min_accel == pytest.approx(-0.02, abs=1e-3)
+
+
+def test_slc_coast_window_does_not_require_starpilot_plan_message():
+  target = 56.0 * CV.MPH_TO_MS
+  accel = StarPilotAcceleration(FakePlanner(v_cruise=target, slc_target=target))
+  sm = make_sm(set_speed_kph=100.0)
 
   accel.update(57.0 * CV.MPH_TO_MS, sm, make_toggles(deceleration_profile=DECELERATION_PROFILES["ECO"]))
 
@@ -89,12 +93,10 @@ def test_slc_coast_window_scales_by_profile_strength():
 
 
 def test_slc_coast_window_disabled_for_relevant_lead():
-  accel = StarPilotAcceleration(FakePlanner())
   target = 56.0 * CV.MPH_TO_MS
+  accel = StarPilotAcceleration(FakePlanner(v_cruise=target, slc_target=target))
   sm = make_sm(
     set_speed_kph=100.0,
-    v_target=target,
-    slc_target=target,
     lead_one=make_lead(status=True, d_rel=20.0, v_lead=45.0 * CV.MPH_TO_MS, a_lead_k=0.0),
   )
 
@@ -104,12 +106,10 @@ def test_slc_coast_window_disabled_for_relevant_lead():
 
 
 def test_slc_coast_window_disabled_when_target_drop_is_not_slc():
-  accel = StarPilotAcceleration(FakePlanner())
   slc_target = 60.0 * CV.MPH_TO_MS
+  accel = StarPilotAcceleration(FakePlanner(v_cruise=55.0 * CV.MPH_TO_MS, slc_target=slc_target))
   sm = make_sm(
     set_speed_kph=100.0,
-    v_target=55.0 * CV.MPH_TO_MS,
-    slc_target=slc_target,
   )
 
   accel.update(57.0 * CV.MPH_TO_MS, sm, make_toggles(deceleration_profile=DECELERATION_PROFILES["ECO"]))

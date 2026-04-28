@@ -196,16 +196,16 @@ class StarPilotAcceleration:
         raw_v_cruise_kph += starpilot_toggles.set_speed_offset
       raw_v_cruise = raw_v_cruise_kph * CV.KPH_TO_MS
 
-      v_target = float(getattr(sm["starpilotPlan"], "vCruise", raw_v_cruise))
-      slc_target = float(getattr(sm["starpilotPlan"], "slcSpeedLimit", 0.0))
+      v_target = float(self.starpilot_planner.v_cruise or raw_v_cruise)
+      slc_target = float(getattr(self.starpilot_planner.starpilot_vcruise, "slc_target", 0.0))
       slc_limited = slc_target > 0.0 and abs(v_target - slc_target) <= SLC_TARGET_EPS and v_target < raw_v_cruise - SLC_TARGET_EPS
       has_relevant_lead = any(lead_is_braking_relevant(lead, v_ego) for lead in (sm["radarState"].leadOne, sm["radarState"].leadTwo))
       stop_context = (
         sm["carState"].standstill or
         getattr(sm["controlsState"], "forceDecel", False) or
-        getattr(sm["starpilotPlan"], "redLight", False) or
-        getattr(sm["starpilotPlan"], "forcingStop", False) or
-        getattr(sm["starpilotPlan"], "disableThrottle", False)
+        getattr(self.starpilot_planner.starpilot_cem, "stop_light_detected", False) or
+        getattr(self.starpilot_planner.starpilot_vcruise, "forcing_stop", False) or
+        getattr(self.starpilot_planner.starpilot_following, "disable_throttle", False)
       )
       if (getattr(starpilot_toggles, "speed_limit_controller", False) and
           v_ego > SLC_COAST_MIN_SPEED and
