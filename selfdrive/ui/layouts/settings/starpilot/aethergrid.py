@@ -114,6 +114,49 @@ def _segments_for(rect: rl.Rectangle, radius_px: float = TILE_RADIUS_PX) -> int:
   return max(12, min(28, int(round(effective_radius * 1.25))))
 
 
+def _draw_text_fit_common(
+  font: rl.Font,
+  text: str,
+  pos: rl.Vector2,
+  max_width: float,
+  font_size: float,
+  *,
+  align_center: bool = False,
+  align_right: bool = False,
+  letter_spacing: float = 0,
+  uppercase: bool = False,
+  color: rl.Color = rl.WHITE,
+  shadow_alpha: int = 0,
+):
+  if uppercase:
+    text = text.upper()
+  requested_spacing = letter_spacing if letter_spacing > 0 else font_size * 0.06
+  spacing = round(requested_spacing)
+  base_font_size = max(1, int(round(font_size)))
+  size = measure_text_cached(font, text, base_font_size, spacing=spacing)
+  actual_font_size = base_font_size
+  if size.x > max_width:
+    actual_font_size = max(1, int(round(font_size * (max_width / size.x))))
+    fitted_spacing = round(requested_spacing * (actual_font_size / base_font_size))
+    while actual_font_size > 1 and measure_text_cached(font, text, actual_font_size, spacing=fitted_spacing).x > max_width:
+      actual_font_size -= 1
+      fitted_spacing = round(requested_spacing * (actual_font_size / base_font_size))
+    spacing = fitted_spacing
+    render_width = measure_text_cached(font, text, actual_font_size, spacing=spacing).x
+  else:
+    render_width = size.x
+  nudge_y = (font_size - actual_font_size) / 2
+  draw_x = pos.x
+  if align_center:
+    draw_x = pos.x + (max_width - render_width) / 2
+  elif align_right:
+    draw_x = pos.x + max_width - render_width
+  if shadow_alpha > 0:
+    shadow_pos = rl.Vector2(round(draw_x + 1), round(pos.y + nudge_y + 1))
+    rl.draw_text_ex(font, text, shadow_pos, actual_font_size, spacing, rl.Color(0, 0, 0, shadow_alpha))
+  rl.draw_text_ex(font, text, rl.Vector2(round(draw_x), round(pos.y + nudge_y)), actual_font_size, spacing, color)
+
+
 def _draw_rounded_fill(rect: rl.Rectangle, color: rl.Color, radius_px: float = TILE_RADIUS_PX):
   snapped = _snap_rect(rect)
   rl.draw_rectangle_rounded(snapped, _roundness_for(snapped, radius_px), _segments_for(snapped, radius_px), color)
@@ -358,6 +401,88 @@ def draw_action_pill(
   rl.draw_rectangle_rounded_lines_ex(rect, roundness, segments, 1, border)
   rl.draw_rectangle_rec(rl.Rectangle(rect.x, rect.y, rect.width, 1), _with_alpha(text_color, 18))
   gui_label(rect, text, font_size, text_color, FontWeight.SEMI_BOLD, alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER)
+
+
+def draw_selection_list_row(
+  rect: rl.Rectangle,
+  *,
+  title: str,
+  subtitle: str = "",
+  action_text: str = "",
+  current: bool = False,
+  hovered: bool = False,
+  pressed: bool = False,
+  is_last: bool = False,
+  alpha: int = 255,
+  action_width: int = AETHER_LIST_METRICS.action_width,
+  action_chip: bool = False,
+  title_size: int = 30,
+  subtitle_size: int = 20,
+  title_color: rl.Color = AetherListColors.HEADER,
+  subtitle_color: rl.Color = AetherListColors.SUBTEXT,
+  action_fill: rl.Color = AetherListColors.CURRENT_BG,
+  action_border: rl.Color = AetherListColors.CURRENT_BORDER,
+  action_text_color: rl.Color = AetherListColors.HEADER,
+):
+  draw_rect = _snap_rect(rect)
+  draw_list_row_shell(draw_rect, current=current, hovered=hovered, pressed=pressed, is_last=is_last, alpha=alpha)
+  action_rect = draw_action_rail(draw_rect, action_width, current=current, alpha=alpha)
+
+  info_rect = rl.Rectangle(draw_rect.x + 24, draw_rect.y + 16, max(0.0, draw_rect.width - action_width - 42), draw_rect.height - 32)
+  title_font = gui_app.font(FontWeight.MEDIUM)
+  subtitle_font = gui_app.font(FontWeight.NORMAL)
+
+  if subtitle:
+    text_height = title_size + subtitle_size + 8
+    title_y = info_rect.y + (info_rect.height - text_height) / 2
+    subtitle_y = title_y + title_size + 8
+  else:
+    title_y = info_rect.y + (info_rect.height - title_size) / 2
+    subtitle_y = title_y
+
+  _draw_text_fit_common(
+    title_font,
+    title,
+    rl.Vector2(info_rect.x, title_y),
+    info_rect.width,
+    title_size,
+    color=_with_alpha(title_color, alpha),
+  )
+
+  if subtitle:
+    _draw_text_fit_common(
+      subtitle_font,
+      subtitle,
+      rl.Vector2(info_rect.x, subtitle_y),
+      info_rect.width,
+      subtitle_size,
+      color=_with_alpha(subtitle_color, alpha),
+    )
+
+  if action_text:
+    if action_chip:
+      available_w = max(74.0, action_rect.width - 24)
+      chip_w = min(available_w, max(74.0, 44 + len(action_text) * 9))
+      chip_rect = rl.Rectangle(action_rect.x + (action_rect.width - chip_w) / 2, action_rect.y + (action_rect.height - 40) / 2, chip_w, 40)
+      AetherChip(
+        action_text,
+        _with_alpha(action_fill, alpha),
+        _with_alpha(action_border, alpha),
+        _with_alpha(action_text_color, alpha),
+        pill=True,
+      ).render(chip_rect)
+    else:
+      _draw_text_fit_common(
+        title_font,
+        action_text,
+        rl.Vector2(action_rect.x + 16, action_rect.y + (action_rect.height - 18) / 2),
+        max(1.0, action_rect.width - 32),
+        18,
+        align_center=True,
+        color=_with_alpha(action_text_color, alpha),
+      )
+
+  return action_rect
 
 
 def draw_status_led(center: rl.Vector2, enabled: bool):
@@ -619,33 +744,19 @@ class AetherTile(Widget):
     color: rl.Color = rl.WHITE,
     shadow_alpha: int = 0,
   ):
-    if uppercase:
-      text = text.upper()
-    requested_spacing = letter_spacing if letter_spacing > 0 else font_size * 0.06
-    spacing = round(requested_spacing)
-    base_font_size = max(1, int(round(font_size)))
-    size = measure_text_cached(font, text, base_font_size, spacing=spacing)
-    actual_font_size = base_font_size
-    if size.x > max_width:
-      actual_font_size = max(1, int(round(font_size * (max_width / size.x))))
-      fitted_spacing = round(requested_spacing * (actual_font_size / base_font_size))
-      while actual_font_size > 1 and measure_text_cached(font, text, actual_font_size, spacing=fitted_spacing).x > max_width:
-        actual_font_size -= 1
-        fitted_spacing = round(requested_spacing * (actual_font_size / base_font_size))
-      spacing = fitted_spacing
-      render_width = measure_text_cached(font, text, actual_font_size, spacing=spacing).x
-    else:
-      render_width = size.x
-    nudge_y = (font_size - actual_font_size) / 2
-    draw_x = pos.x
-    if align_center:
-      draw_x = pos.x + (max_width - render_width) / 2
-    elif align_right:
-      draw_x = pos.x + max_width - render_width
-    if shadow_alpha > 0:
-      shadow_pos = rl.Vector2(round(draw_x + 1), round(pos.y + nudge_y + 1))
-      rl.draw_text_ex(font, text, shadow_pos, actual_font_size, spacing, rl.Color(0, 0, 0, shadow_alpha))
-    rl.draw_text_ex(font, text, rl.Vector2(round(draw_x), round(pos.y + nudge_y)), actual_font_size, spacing, color)
+    _draw_text_fit_common(
+      font,
+      text,
+      pos,
+      max_width,
+      font_size,
+      align_center=align_center,
+      align_right=align_right,
+      letter_spacing=letter_spacing,
+      uppercase=uppercase,
+      color=color,
+      shadow_alpha=shadow_alpha,
+    )
 
   def _centered_content(
     self, face: rl.Rectangle, icon: rl.Texture2D | None, icon_scale: float, title_font_size: float, text_lines: int, line_heights: list[float]
@@ -876,6 +987,53 @@ class HubTile(AetherTile):
       title_size=30,
       primary_size=18,
     )
+
+
+class AetherSelectionTile(AetherTile):
+  def __init__(
+    self,
+    title: str | Callable[[], str],
+    status: str | Callable[[], str] = "",
+    on_click: Callable | None = None,
+    bg_color: rl.Color | str | None = None,
+  ):
+    super().__init__(surface_color=bg_color, on_click=on_click)
+    self.title = title
+    self.status = status
+    self._font_title = gui_app.font(FontWeight.BOLD)
+    self._font_status = gui_app.font(FontWeight.NORMAL)
+
+  def _render(self, rect: rl.Rectangle):
+    face = self._render_layers(rect)
+    title_text = str(_resolve_value(self.title, ""))
+    status_text = str(_resolve_value(self.status, ""))
+    content_pad = max(16, min(22, int(face.width * 0.06)))
+    max_w = max(1.0, face.width - content_pad * 2)
+    title_size = max(22, min(28, int(face.height * 0.28)))
+    status_size = max(15, min(18, int(face.height * 0.20)))
+    title_lines = self._wrap_text(self._font_title, title_text, max_w, title_size, max_lines=2)
+    title_y = face.y + max(14.0, min(20.0, face.height * 0.18))
+
+    for i, line in enumerate(title_lines):
+      self._draw_text_fit(
+        self._font_title,
+        line,
+        rl.Vector2(face.x + content_pad, title_y + i * (title_size + SPACING.xs)),
+        max_w,
+        title_size,
+        color=AetherListColors.HEADER,
+      )
+
+    if status_text:
+      status_y = face.y + face.height - status_size - max(12.0, min(16.0, face.height * 0.16))
+      self._draw_text_fit(
+        self._font_status,
+        status_text,
+        rl.Vector2(face.x + content_pad, status_y),
+        max_w,
+        status_size,
+        color=AetherListColors.SUBTEXT,
+      )
 
 
 class ToggleTile(AetherTile):
@@ -1485,13 +1643,164 @@ class RadioTileGroup(Widget):
       rl.draw_text_ex(self._font, opt, rl.Vector2(round(text_pos.x), round(text_pos.y)), font_size, spacing, AetherListColors.HEADER if is_active else AetherListColors.SUBTEXT)
 
 
+class AetherSegmentedControl(Widget):
+  def __init__(
+    self,
+    options: list[str | Callable[[], str]],
+    current_index: int | Callable[[], int],
+    on_change: Callable[[int], None],
+    statuses: list[str | Callable[[], str] | None] | None = None,
+    compact: bool = False,
+  ):
+    super().__init__()
+    self._options = options
+    self._current_index = current_index
+    self._on_change = on_change
+    self._statuses = statuses or [""] * len(options)
+    if len(self._statuses) < len(self._options):
+      self._statuses += [""] * (len(self._options) - len(self._statuses))
+    self._compact = compact
+    self._font = gui_app.font(FontWeight.BOLD)
+    self._font_status = gui_app.font(FontWeight.NORMAL)
+    self._pressed_index = -1
+    self._option_rects: list[rl.Rectangle] = []
+    self._option_offsets: list[float] = []
+    self._option_targets: list[float] = []
+
+  def _current(self) -> int:
+    if callable(self._current_index):
+      return max(0, min(len(self._options) - 1, int(self._current_index())))
+    return max(0, min(len(self._options) - 1, int(self._current_index)))
+
+  def _handle_mouse_press(self, mouse_pos: MousePos):
+    if not self._touch_valid():
+      return
+    for i, r in enumerate(self._option_rects):
+      hit = rl.Rectangle(r.x - GEOMETRY_OFFSET, r.y - GEOMETRY_OFFSET, r.width + 2 * GEOMETRY_OFFSET, r.height + 2 * GEOMETRY_OFFSET)
+      if rl.check_collision_point_rec(mouse_pos, hit):
+        self._pressed_index = i
+        while len(self._option_targets) < len(self._options):
+          self._option_offsets.append(0.0)
+          self._option_targets.append(0.0)
+        self._option_targets[i] = 1.0
+        return
+
+  def _handle_mouse_release(self, mouse_pos: MousePos):
+    if self._pressed_index == -1:
+      return
+    pressed_index = self._pressed_index
+    self._pressed_index = -1
+    if pressed_index < len(self._option_targets):
+      self._option_targets[pressed_index] = 0.0
+    if not self._touch_valid():
+      return
+    r = self._option_rects[pressed_index]
+    hit = rl.Rectangle(r.x - GEOMETRY_OFFSET, r.y - GEOMETRY_OFFSET, r.width + 2 * GEOMETRY_OFFSET, r.height + 2 * GEOMETRY_OFFSET)
+    if rl.check_collision_point_rec(mouse_pos, hit) and self._current() != pressed_index:
+      self._on_change(pressed_index)
+
+  def _handle_mouse_event(self, mouse_event: MouseEvent):
+    if self._pressed_index == -1:
+      return
+    if not self._touch_valid():
+      if self._pressed_index < len(self._option_targets):
+        self._option_targets[self._pressed_index] = 0.0
+      self._pressed_index = -1
+      return
+    if self._pressed_index < len(self._option_rects):
+      r = self._option_rects[self._pressed_index]
+      hit = rl.Rectangle(r.x - GEOMETRY_OFFSET, r.y - GEOMETRY_OFFSET, r.width + 2 * GEOMETRY_OFFSET, r.height + 2 * GEOMETRY_OFFSET)
+      if not rl.check_collision_point_rec(mouse_event.pos, hit):
+        if self._pressed_index < len(self._option_targets):
+          self._option_targets[self._pressed_index] = 0.0
+        self._pressed_index = -1
+
+  def _render(self, rect: rl.Rectangle):
+    rect = _snap_rect(rect)
+    self.set_rect(rect)
+    self._option_rects.clear()
+
+    if not self._touch_valid() and self._pressed_index != -1:
+      if self._pressed_index < len(self._option_targets):
+        self._option_targets[self._pressed_index] = 0.0
+      self._pressed_index = -1
+
+    dt = rl.get_frame_time()
+    while len(self._option_offsets) < len(self._options):
+      self._option_offsets.append(0.0)
+      self._option_targets.append(0.0)
+    for i in range(len(self._option_offsets)):
+      self._option_offsets[i] += (self._option_targets[i] - self._option_offsets[i]) * (1 - math.exp(-dt / PLATE_TAU))
+
+    draw_soft_card(rect, rl.Color(255, 255, 255, 4), rl.Color(255, 255, 255, 14))
+
+    inner_pad = 4 if self._compact else 5
+    gap = 4 if self._compact else 6
+    inner_rect = rl.Rectangle(rect.x + inner_pad, rect.y + inner_pad, rect.width - inner_pad * 2, rect.height - inner_pad * 2)
+    option_w = (inner_rect.width - max(0, len(self._options) - 1) * gap) / max(1, len(self._options))
+    has_status = any(str(_resolve_value(status, "")) for status in self._statuses)
+    current_index = self._current()
+
+    for i, option in enumerate(self._options):
+      base_rect = _snap_rect(rl.Rectangle(inner_rect.x + i * (option_w + gap), inner_rect.y, option_w, inner_rect.height))
+      self._option_rects.append(base_rect)
+      offset = self._option_offsets[i] if i < len(self._option_offsets) else 0.0
+      face_rect = _snap_rect(rl.Rectangle(base_rect.x, base_rect.y + min(1.0, offset), base_rect.width, base_rect.height))
+      is_active = i == current_index
+
+      fill = rl.Color(255, 255, 255, 12) if is_active else rl.Color(255, 255, 255, 3)
+      border = rl.Color(255, 255, 255, 30) if is_active else rl.Color(255, 255, 255, 8)
+      _draw_rounded_fill(face_rect, fill, radius_px=16)
+      _draw_rounded_stroke(face_rect, border, radius_px=16)
+      rl.draw_rectangle_rec(rl.Rectangle(face_rect.x, face_rect.y, face_rect.width, 1), rl.Color(255, 255, 255, 18 if is_active else 10))
+
+      label = str(_resolve_value(option, ""))
+      status = str(_resolve_value(self._statuses[i], ""))
+      title_size = max(18, min(24, int(face_rect.height * (0.28 if has_status else 0.36))))
+      status_size = max(14, min(17, int(face_rect.height * 0.22)))
+      title_color = AetherListColors.HEADER if is_active else AetherListColors.SUBTEXT
+
+      if has_status:
+        title_y = face_rect.y + max(9.0, min(14.0, face_rect.height * 0.18))
+        status_y = face_rect.y + face_rect.height - status_size - max(9.0, min(14.0, face_rect.height * 0.18))
+        _draw_text_fit_common(
+          self._font,
+          label,
+          rl.Vector2(face_rect.x + 16, title_y),
+          face_rect.width - 32,
+          title_size,
+          align_center=True,
+          color=title_color,
+        )
+        _draw_text_fit_common(
+          self._font_status,
+          status,
+          rl.Vector2(face_rect.x + 16, status_y),
+          face_rect.width - 32,
+          status_size,
+          align_center=True,
+          color=AetherListColors.MUTED,
+        )
+      else:
+        _draw_text_fit_common(
+          self._font,
+          label,
+          rl.Vector2(face_rect.x + 16, face_rect.y + (face_rect.height - title_size) / 2),
+          face_rect.width - 32,
+          title_size,
+          align_center=True,
+          color=title_color,
+        )
+
+
 class TileGrid(Widget):
-  def __init__(self, columns: int | None = None, padding: int | None = None, uniform_width: bool = False):
+  def __init__(self, columns: int | None = None, padding: int | None = None, uniform_width: bool = False, min_tile_width: int | None = None):
     super().__init__()
     self._columns = columns
     self._gap = padding if padding is not None else SPACING.tile_gap
     self.tiles = []
     self._uniform_width = uniform_width
+    self._min_tile_width = min_tile_width if min_tile_width is not None else MIN_TILE_WIDTH
 
   @property
   def gap(self) -> int:
@@ -1526,7 +1835,8 @@ class TileGrid(Widget):
     preferred = self.get_column_count(count)
     if available_width is None or available_width <= 0:
       return preferred
-    max_cols_by_width = max(1, int((available_width + self._gap) / (MIN_TILE_WIDTH + self._gap)))
+    min_tile_width = max(1, self._min_tile_width)
+    max_cols_by_width = max(1, int((available_width + self._gap) / (min_tile_width + self._gap)))
     return max(1, min(preferred, count, max_cols_by_width))
 
   def get_row_count(self, tile_count: int | None = None, available_width: float | None = None) -> int:

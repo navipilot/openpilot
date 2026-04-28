@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import shutil
 import threading
 from dataclasses import dataclass
@@ -11,9 +10,10 @@ import pyray as rl
 
 from openpilot.common.params import Params
 from openpilot.selfdrive.ui.ui_state import device, ui_state
-from openpilot.system.ui.lib.application import FontWeight, MousePos, gui_app
+from openpilot.system.ui.lib.application import FontWeight, MouseEvent, MousePos, gui_app
 from openpilot.system.ui.lib.multilang import tr, tr_noop
 from openpilot.system.ui.lib.scroll_panel2 import GuiScrollPanel2
+from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.widgets import DialogResult, Widget
 from openpilot.system.ui.widgets.confirm_dialog import ConfirmDialog, alert_dialog
 from openpilot.system.ui.widgets.label import gui_label, gui_text_box
@@ -23,28 +23,27 @@ from openpilot.selfdrive.ui.layouts.settings.starpilot.aethergrid import (
   AetherButton,
   AetherChip,
   AetherListColors,
+  AetherSegmentedControl,
   AetherScrollbar,
-  HubTile,
-  SPACING,
-  TileGrid,
   build_list_panel_frame,
   draw_action_pill,
   draw_busy_ring,
   draw_list_panel_shell,
-  draw_list_row_shell,
+  draw_selection_list_row,
   draw_list_scroll_fades,
   draw_soft_card,
 )
 from openpilot.selfdrive.ui.layouts.settings.starpilot.panel import StarPilotPanel
 from openpilot.starpilot.common.maps_catalog import (
   MAPS_CATALOG,
+  MAP_TOKEN_LABELS,
   MAP_SCHEDULE_LABELS,
   get_selected_map_entries,
   normalize_schedule_value,
   sanitize_selected_locations_csv,
   schedule_label,
 )
-from openpilot.starpilot.common.maps_selection import COUNTRY_PREFIX
+from openpilot.starpilot.common.maps_selection import COUNTRY_PREFIX, STATE_PREFIX
 
 
 NetworkType = log.DeviceState.NetworkType
@@ -66,24 +65,19 @@ HEADER_TITLE_HEIGHT = 40
 HEADER_SUBTITLE_HEIGHT = 28
 HEADER_BOTTOM_GAP = 12
 SECTION_CARD_GAP = 18
-SECTION_HEADER_HEIGHT = 54
-SECTION_HEADER_GAP = 12
-GROUP_HEADER_HEIGHT = 48
-GROUP_ROW_GAP = 12
-GROUP_TILE_HEIGHT = 112
-SUMMARY_ROW_HEIGHT = 82
-ACTION_BUTTON_HEIGHT = 66
-ACTION_BUTTON_GAP = 12
-BROWSER_GAP = SPACING.tile_gap
-BROWSER_SOURCE_TILE_HEIGHT = 142
-BROWSER_SCOPE_TILE_HEIGHT = 134
-BROWSER_GROUP_TILE_HEIGHT = 136
-BROWSER_REGION_TILE_HEIGHT = 118
-BROWSER_INTRO_HEIGHT = 50
+BROWSER_TOOLBAR_HEIGHT = 78
 BROWSER_SECTION_HEADER_HEIGHT = 44
+BROWSER_INSET = 16
+BROWSER_TAB_GAP = 12
+BROWSER_CONTEXT_TAB_GAP = 10
+BROWSER_CONTEXT_TAB_HEIGHT = 54
+BROWSER_CONTEXT_MIN_TAB_WIDTH = 132
+BROWSER_CONTEXT_MAX_TAB_WIDTH = 228
+BROWSER_REGION_ROW_HEIGHT = 94
+BROWSER_EMPTY_STATE_HEIGHT = 140
 
-COUNTRIES_SECTION = MAPS_CATALOG[0]
-STATES_SECTION = MAPS_CATALOG[1]
+COUNTRIES_SECTION = next(section for section in MAPS_CATALOG if section["key"] == "countries")
+STATES_SECTION = next(section for section in MAPS_CATALOG if section["key"] == "states")
 US_COUNTRY_TOKEN = f"{COUNTRY_PREFIX}US"
 
 
@@ -137,31 +131,19 @@ class MapsDownloadState:
   progress_text: str = ""
 
 
-class ActionButtonStrip(Widget):
-  def __init__(self, primary_button: AetherButton, secondary_button: AetherButton):
-    super().__init__()
-    self._primary_button = primary_button
-    self._secondary_button = secondary_button
-
-  def set_touch_valid_callback(self, touch_callback):
-    super().set_touch_valid_callback(touch_callback)
-    self._primary_button.set_touch_valid_callback(touch_callback)
-    self._secondary_button.set_touch_valid_callback(touch_callback)
-
-  def _render(self, rect: rl.Rectangle):
-    gap = ACTION_BUTTON_GAP
-    primary_w = max(260.0, rect.width * 0.58)
-    secondary_w = max(210.0, rect.width - primary_w - gap)
-    self._primary_button.render(rl.Rectangle(rect.x, rect.y, primary_w, rect.height))
-    self._secondary_button.render(rl.Rectangle(rect.x + primary_w + gap, rect.y, secondary_w, rect.height))
-
-
 class MapStatusCard(Widget):
   def __init__(self, controller: "StarPilotMapsLayout"):
     super().__init__()
     self._controller = controller
     self._remove_rect = rl.Rectangle(0, 0, 0, 0)
     self._pressed_remove = False
+    self._primary_button = self._child(controller._download_button)
+    self._secondary_button = self._child(controller._schedule_button)
+
+  def set_touch_valid_callback(self, touch_callback):
+    super().set_touch_valid_callback(touch_callback)
+    self._primary_button.set_touch_valid_callback(touch_callback)
+    self._secondary_button.set_touch_valid_callback(touch_callback)
 
   def _handle_mouse_press(self, mouse_pos: MousePos):
     if not self._touch_valid():
@@ -178,45 +160,45 @@ class MapStatusCard(Widget):
   def _render(self, rect: rl.Rectangle):
     draw_soft_card(rect, rl.Color(255, 255, 255, 4), rl.Color(255, 255, 255, 16))
 
-    left_w = rect.width * 0.52
-    right_x = rect.x + left_w + 20
-    right_w = rect.x + rect.width - right_x - 18
-    top_y = rect.y + 16
+    inset = 20
+    content_w = rect.width - inset * 2
+    actions_w = max(248.0, min(304.0, rect.width * 0.22))
+    left_w = max(360.0, min(520.0, content_w * 0.42))
+    metrics_x = rect.x + inset + left_w + 24
+    metrics_w = max(280.0, rect.x + rect.width - inset - actions_w - 24 - metrics_x)
+    actions_x = rect.x + rect.width - inset - actions_w
+    top_y = rect.y + 18
 
-    gui_label(rl.Rectangle(rect.x + 20, top_y, left_w - 20, 24), self._controller._progress_title(), 24, AetherListColors.HEADER, FontWeight.SEMI_BOLD)
+    gui_label(rl.Rectangle(rect.x + inset, top_y, left_w, 24), self._controller._progress_title(), 24, AetherListColors.HEADER, FontWeight.SEMI_BOLD)
     gui_text_box(
-      rl.Rectangle(rect.x + 20, top_y + 28, left_w - 26, 40),
+      rl.Rectangle(rect.x + inset, top_y + 30, left_w, 38),
       self._controller._progress_body(),
       17,
       AetherListColors.SUBTEXT,
       font_weight=FontWeight.NORMAL,
       line_scale=0.94,
     )
-    gui_label(rl.Rectangle(rect.x + 20, rect.y + rect.height - 22, left_w - 20, 18), self._controller._status_footer_text(), 16, AetherListColors.MUTED, FontWeight.MEDIUM)
+    gui_label(rl.Rectangle(rect.x + inset, rect.y + rect.height - 26, left_w, 18), self._controller._status_footer_text(), 16, AetherListColors.MUTED, FontWeight.MEDIUM)
 
-    metric_gap = 18
-    metric_w = max(120.0, (right_w - metric_gap) / 2)
-    gui_label(rl.Rectangle(right_x, top_y, metric_w, 18), tr("Storage"), 16, AetherListColors.MUTED, FontWeight.MEDIUM)
-    gui_label(rl.Rectangle(right_x, top_y + 16, metric_w, 24), self._controller._storage_text, 22, AetherListColors.HEADER, FontWeight.SEMI_BOLD)
-    gui_label(rl.Rectangle(right_x + metric_w + metric_gap, top_y, metric_w, 18), tr("Last Updated"), 16, AetherListColors.MUTED, FontWeight.MEDIUM)
-    gui_label(rl.Rectangle(right_x + metric_w + metric_gap, top_y + 16, metric_w, 24), self._controller._last_updated_text(), 20, AetherListColors.HEADER, FontWeight.SEMI_BOLD)
+    metric_gap = 20
+    metric_w = max(108.0, (metrics_w - metric_gap) / 2)
+    metric_y = top_y + 2
+    gui_label(rl.Rectangle(metrics_x, metric_y, metric_w, 18), tr("Storage"), 16, AetherListColors.MUTED, FontWeight.MEDIUM)
+    gui_label(rl.Rectangle(metrics_x, metric_y + 16, metric_w, 24), self._controller._storage_text, 22, AetherListColors.HEADER, FontWeight.SEMI_BOLD)
+    gui_label(rl.Rectangle(metrics_x + metric_w + metric_gap, metric_y, metric_w, 18), tr("Last Updated"), 16, AetherListColors.MUTED, FontWeight.MEDIUM)
+    gui_label(rl.Rectangle(metrics_x + metric_w + metric_gap, metric_y + 16, metric_w, 24), self._controller._last_updated_text(), 20, AetherListColors.HEADER, FontWeight.SEMI_BOLD)
+    gui_label(rl.Rectangle(metrics_x, metric_y + 38, metrics_w, 18), tr("Selected Regions"), 16, AetherListColors.MUTED, FontWeight.MEDIUM)
+    gui_label(rl.Rectangle(metrics_x, metric_y + 56, metrics_w, 22), self._controller._selection_summary_title(), 20, AetherListColors.HEADER, FontWeight.SEMI_BOLD)
 
-    selection_y = rect.y + 54
+    button_h = 46
+    button_gap = 8
+    button_y = rect.y + 14
+    self._primary_button.render(rl.Rectangle(actions_x, button_y, actions_w, button_h))
+    self._secondary_button.render(rl.Rectangle(actions_x, button_y + button_h + button_gap, actions_w, button_h))
+
     action_w = 150
     action_h = 36
-    selection_w = max(180.0, right_w - action_w - 14)
-    gui_label(rl.Rectangle(right_x, selection_y, selection_w, 18), tr("Selected Regions"), 16, AetherListColors.MUTED, FontWeight.MEDIUM)
-    gui_label(rl.Rectangle(right_x, selection_y + 18, selection_w, 22), self._controller._selection_summary_title(), 20, AetherListColors.HEADER, FontWeight.SEMI_BOLD)
-    gui_text_box(
-      rl.Rectangle(right_x, selection_y + 40, selection_w, 18),
-      self._controller._selection_summary_meta(),
-      16,
-      AetherListColors.SUBTEXT,
-      font_weight=FontWeight.NORMAL,
-      line_scale=0.92,
-    )
-
-    self._remove_rect = rl.Rectangle(rect.x + rect.width - action_w - 20, rect.y + rect.height - action_h - 16, action_w, action_h)
+    self._remove_rect = rl.Rectangle(metrics_x + metrics_w - action_w, rect.y + rect.height - action_h - 14, action_w, action_h)
     enabled = self._controller._remove_enabled()
     draw_action_pill(
       self._remove_rect,
@@ -232,245 +214,336 @@ class MapStatusCard(Widget):
       draw_busy_ring(center, rl.get_time() * 160, AetherListColors.PRIMARY, inner_radius=10, outer_radius=14, sweep=210, thickness=20)
 
 
-class SelectedMapsCard(Widget):
-  def __init__(self, controller: "StarPilotMapsLayout"):
-    super().__init__()
-    self._controller = controller
-
-  def _measure_height(self) -> float:
-    rows = max(1, len(self._controller._selected_entries()))
-    return 64 + rows * SUMMARY_ROW_HEIGHT
-
-  def _render(self, rect: rl.Rectangle):
-    draw_soft_card(rect, rl.Color(255, 255, 255, 4), rl.Color(255, 255, 255, 16))
-
-    gui_label(rl.Rectangle(rect.x + 18, rect.y + 14, rect.width - 36, 26), tr("Included Regions"), 25, AetherListColors.HEADER, FontWeight.SEMI_BOLD)
-    gui_label(rl.Rectangle(rect.x + 18, rect.y + 40, rect.width - 36, 20), tr("Review what stays offline here. Use the source tiles above to make changes."), 18, AetherListColors.SUBTEXT, FontWeight.NORMAL)
-
-    entries = self._controller._selected_entries()
-    rows = entries if entries else [{"token": "", "label": tr("No regions added yet."), "kind": "empty"}]
-    y = rect.y + 64
-    for index, entry in enumerate(rows):
-      row_rect = rl.Rectangle(rect.x + 12, y, rect.width - 24, SUMMARY_ROW_HEIGHT)
-      is_last = index == len(rows) - 1
-      is_empty = entry.get("kind") == "empty"
-      draw_list_row_shell(
-        row_rect,
-        current=not is_empty,
-        is_last=is_last,
-        current_bg=rl.Color(89, 116, 151, 12),
-        current_border=rl.Color(116, 136, 168, 28),
-      )
-
-      kind_text = ""
-      if not is_empty:
-        kind_text = tr("Country") if entry["token"].startswith(COUNTRY_PREFIX) else tr("U.S. State")
-        kind_chip = AetherChip(kind_text, rl.Color(89, 116, 151, 16), rl.Color(116, 136, 168, 46), AetherListColors.SUBTEXT, pill=True, font_size=16)
-        kind_chip.render(rl.Rectangle(row_rect.x + 18, row_rect.y + 30, 124 if kind_text == tr("Country") else 138, 30))
-
-      text_x = row_rect.x + 18 + (136 if kind_text else 0)
-      gui_label(rl.Rectangle(text_x, row_rect.y + 26, row_rect.width - 220, 36), entry["label"], 24, AetherListColors.HEADER if not is_empty else AetherListColors.SUBTEXT, FontWeight.MEDIUM)
-
-      if not is_empty:
-        gui_label(rl.Rectangle(row_rect.x + row_rect.width - 180, row_rect.y + 24, 162, 34), tr("Edit above"), 16, AetherListColors.MUTED, FontWeight.MEDIUM, alignment=rl.GuiTextAlignment.TEXT_ALIGN_RIGHT)
-
-      y += SUMMARY_ROW_HEIGHT
-
-
 class MapBrowserCard(Widget):
   def __init__(self, controller: "StarPilotMapsLayout"):
     super().__init__()
     self._controller = controller
-    self._source_grid = self._child(TileGrid(columns=2, padding=SPACING.tile_gap, uniform_width=True))
-    self._scope_grid = self._child(TileGrid(columns=2, padding=SPACING.tile_gap, uniform_width=True))
-    self._group_grid = self._child(TileGrid(columns=None, padding=SPACING.tile_gap))
-    self._region_grid = self._child(TileGrid(columns=None, padding=SPACING.tile_gap))
-    self._source_tiles: dict[str, HubTile] = {}
-    self._scope_tiles: dict[str, HubTile] = {}
-    self._group_tiles: dict[str, HubTile] = {}
-    self._region_tiles: dict[str, HubTile] = {}
-    self._header_action_rect = rl.Rectangle(0, 0, 0, 0)
-    self._header_pressed = False
+    self._pressed_target: str | None = None
+    self._selected_action_rects: dict[str, rl.Rectangle] = {}
+    self._context_tab_rects: dict[str, rl.Rectangle] = {}
+    self._region_row_rects: dict[str, rl.Rectangle] = {}
 
-    source_specs = [
-      ("states", tr_noop("United States"), lambda: self._controller._browser_source_primary(self._controller.VIEW_STATES), lambda: self._controller._browser_source_desc(self._controller.VIEW_STATES), lambda: self._controller._set_view_index(self._controller.VIEW_STATES)),
-      ("countries", tr_noop("Countries"), lambda: self._controller._browser_source_primary(self._controller.VIEW_COUNTRIES), lambda: self._controller._browser_source_desc(self._controller.VIEW_COUNTRIES), lambda: self._controller._set_view_index(self._controller.VIEW_COUNTRIES)),
-    ]
-    for key, title, primary, desc, on_click in source_specs:
-      tile = self._child(HubTile(title=title, desc=desc, icon_path="", on_click=on_click, bg_color="#10B981", get_status=primary))
-      self._source_tiles[key] = tile
-      self._source_grid.add_tile(tile)
-
-    scope_specs = [
-      ("regional", tr_noop("Regional Set"), lambda: self._controller._browser_scope_primary(False), lambda: self._controller._browser_scope_desc(False), lambda: self._controller._set_full_us_mode(False)),
-      ("whole_us", tr_noop("Whole U.S."), lambda: self._controller._browser_scope_primary(True), lambda: self._controller._browser_scope_desc(True), lambda: self._controller._set_full_us_mode(True)),
-    ]
-    for key, title, primary, desc, on_click in scope_specs:
-      tile = self._child(HubTile(title=title, desc=desc, icon_path="", on_click=on_click, bg_color="#10B981", get_status=primary))
-      self._scope_tiles[key] = tile
-      self._scope_grid.add_tile(tile)
-
-    for group in COUNTRIES_SECTION["groups"] + STATES_SECTION["groups"]:
-      group_key = group["key"]
-      tile = self._child(
-        HubTile(
-          title=tr_noop(group["title"]),
-          desc=lambda group=group: self._controller._group_secondary_text(group),
-          icon_path="",
-          on_click=lambda group_key=group_key: self._controller._set_active_group(group_key),
-          bg_color="#10B981",
-          get_status=lambda group=group: self._controller._group_primary_text(group),
-        )
+    self._source_selector = self._child(
+      AetherSegmentedControl(
+        [tr_noop("United States"), tr_noop("Countries")],
+        lambda: 0 if self._controller._is_states_view() else 1,
+        lambda index: self._controller._set_view_index(self._controller.VIEW_STATES if index == 0 else self._controller.VIEW_COUNTRIES),
+        statuses=[
+          lambda: self._controller._browser_source_primary(self._controller.VIEW_STATES),
+          lambda: self._controller._browser_source_primary(self._controller.VIEW_COUNTRIES),
+        ],
       )
-      self._group_tiles[group_key] = tile
-      self._group_grid.add_tile(tile)
-      for region in group["regions"]:
-        token = region["token"]
-        tile = self._child(
-          HubTile(
-            title=tr_noop(region["label"]),
-            desc=lambda token=token: self._controller._region_secondary_text(token),
-            icon_path="",
-            on_click=lambda token=token: self._controller._toggle_region(token),
-            bg_color="#10B981",
-            get_status=lambda token=token: self._controller._region_primary_text(token),
-          )
-        )
-        self._region_tiles[token] = tile
-        self._region_grid.add_tile(tile)
-
+    )
   def set_touch_valid_callback(self, touch_callback):
     super().set_touch_valid_callback(touch_callback)
-    for grid in (self._source_grid, self._scope_grid, self._group_grid, self._region_grid):
-      grid.set_touch_valid_callback(touch_callback)
-    for tile in self._source_tiles.values():
-      tile.set_touch_valid_callback(touch_callback)
-    for tile in self._scope_tiles.values():
-      tile.set_touch_valid_callback(touch_callback)
-    for tile in self._group_tiles.values():
-      tile.set_touch_valid_callback(touch_callback)
-    for tile in self._region_tiles.values():
-      tile.set_touch_valid_callback(touch_callback)
+    self._source_selector.set_touch_valid_callback(touch_callback)
 
   def _handle_mouse_press(self, mouse_pos: MousePos):
     if not self._touch_valid():
       return
-    if rl.check_collision_point_rec(mouse_pos, self._header_action_rect):
-      self._header_pressed = True
+    self._pressed_target = self._target_at(mouse_pos)
 
   def _handle_mouse_release(self, mouse_pos: MousePos):
-    if self._header_pressed:
-      self._header_pressed = False
-      if self._touch_valid() and rl.check_collision_point_rec(mouse_pos, self._header_action_rect):
-        self._controller._toggle_active_group()
+    target = self._target_at(mouse_pos) if self._touch_valid() else None
+    pressed_target = self._pressed_target
+    self._pressed_target = None
+    if pressed_target is not None and pressed_target == target:
+      self._activate_target(pressed_target)
 
-  def _grid_height(self, count: int, width: float, tile_height: float) -> float:
-    if count <= 0:
-      return 0.0
-    max_cols_by_width = max(1, int((width + BROWSER_GAP) / (300 + BROWSER_GAP)))
-    preferred_cols = 2 if count <= 2 else 3 if count <= 6 else 4
-    cols = max(1, min(count, preferred_cols, max_cols_by_width))
-    rows = math.ceil(count / max(cols, 1))
-    return rows * tile_height + BROWSER_GAP * max(0, rows - 1)
+  def _handle_mouse_event(self, mouse_event: MouseEvent):
+    if self._pressed_target is not None and self._target_at(mouse_event.pos) != self._pressed_target:
+      self._pressed_target = None
 
-  def _render_tile_grid(self, grid: TileGrid, rect: rl.Rectangle, tiles: list[Widget], tile_height: float):
-    if not tiles or rect.height <= 0:
+  def _target_at(self, mouse_pos: MousePos) -> str | None:
+    parent_rect = getattr(self, "_parent_rect", None)
+    if parent_rect is not None and not rl.check_collision_point_rec(mouse_pos, parent_rect):
+      return None
+    for token, rect in self._selected_action_rects.items():
+      if rl.check_collision_point_rec(mouse_pos, rect):
+        return f"selected-remove:{token}"
+    for group_key, rect in self._context_tab_rects.items():
+      if rl.check_collision_point_rec(mouse_pos, rect):
+        return f"group:{group_key}"
+    for token, rect in self._region_row_rects.items():
+      if rl.check_collision_point_rec(mouse_pos, rect):
+        return f"region:{token}"
+    return None
+
+  def _activate_target(self, target: str):
+    if target.startswith("selected-remove:"):
+      self._controller._set_map_state(target.split(":", 1)[1], False)
       return
-    grid.tiles = list(tiles)
-    grid.set_parent_rect(self._parent_rect or self._rect)
-    grid.render(rect)
+    if target.startswith("group:"):
+      self._controller._set_active_group(target.split(":", 1)[1])
+      return
+    if target.startswith("region:"):
+      self._controller._toggle_region(target.split(":", 1)[1])
 
-  def _set_tile_active(self, tile: HubTile, active: bool):
-    tile.surface_color = rl.Color(16, 185, 129, 255) if active else rl.Color(93, 102, 116, 255)
+  def _row_height(self, count: int, row_height: float) -> float:
+    return 0.0 if count <= 0 else count * row_height
+
+  def _context_tab_width(self, label: str) -> float:
+    font = gui_app.font(FontWeight.MEDIUM)
+    size = measure_text_cached(font, label, 22, spacing=1)
+    return max(BROWSER_CONTEXT_MIN_TAB_WIDTH, min(BROWSER_CONTEXT_MAX_TAB_WIDTH, size.x + 54))
+
+  def _measure_context_tabs_height(self, width: float) -> float:
+    groups = self._controller._current_groups_with_full_us()
+    if not groups:
+      return 0.0
+
+    rows = 1
+    row_w = 0.0
+    available_w = max(1.0, width)
+    for group in groups:
+      tab_w = self._context_tab_width(group["title"])
+      next_w = tab_w if row_w <= 0 else row_w + BROWSER_CONTEXT_TAB_GAP + tab_w
+      if next_w > available_w and row_w > 0:
+        rows += 1
+        row_w = tab_w
+      else:
+        row_w = next_w
+    return rows * BROWSER_CONTEXT_TAB_HEIGHT + max(0, rows - 1) * BROWSER_CONTEXT_TAB_GAP
+
+  def _render_context_tabs(self, rect: rl.Rectangle):
+    groups = self._controller._current_groups_with_full_us()
+    self._context_tab_rects.clear()
+    if not groups:
+      return
+
+    mouse_pos = gui_app.last_mouse_event.pos
+    x = rect.x
+    y = rect.y
+    available_w = max(1.0, rect.width)
+
+    for group in groups:
+      tab_w = self._context_tab_width(group["title"])
+      if x > rect.x and (x - rect.x + tab_w) > available_w:
+        x = rect.x
+        y += BROWSER_CONTEXT_TAB_HEIGHT + BROWSER_CONTEXT_TAB_GAP
+
+      tab_rect = rl.Rectangle(x, y, tab_w, BROWSER_CONTEXT_TAB_HEIGHT)
+      self._context_tab_rects[group["key"]] = tab_rect
+      current = self._controller._active_group_key() == group["key"]
+      hovered = rl.check_collision_point_rec(mouse_pos, tab_rect)
+      pressed = self._pressed_target == f"group:{group['key']}"
+
+      fill = rl.Color(255, 255, 255, 12 if current else (8 if hovered else 4))
+      border = rl.Color(255, 255, 255, 28 if current else 14)
+      text_color = AetherListColors.HEADER if current else AetherListColors.SUBTEXT
+      meta_color = AetherListColors.HEADER if current else AetherListColors.MUTED
+      if pressed:
+        fill = rl.Color(255, 255, 255, min(fill.a + 6, 24))
+
+      draw_soft_card(tab_rect, fill, border)
+      gui_label(
+        rl.Rectangle(tab_rect.x + 16, tab_rect.y + 9, tab_rect.width - 32, 22),
+        group["title"],
+        22,
+        text_color,
+        FontWeight.MEDIUM,
+      )
+      gui_label(
+        rl.Rectangle(tab_rect.x + 16, tab_rect.y + 30, tab_rect.width - 32, 16),
+        self._controller._group_primary_text(group),
+        15,
+        meta_color,
+        FontWeight.NORMAL,
+      )
+      if current:
+        rl.draw_rectangle_rec(rl.Rectangle(tab_rect.x + 16, tab_rect.y + tab_rect.height - 4, tab_rect.width - 32, 2), rl.Color(116, 136, 168, 170))
+
+      x += tab_w + BROWSER_CONTEXT_TAB_GAP
+
+  def _render_empty_state(self, rect: rl.Rectangle, title: str, body: str):
+    state_rect = rl.Rectangle(rect.x, rect.y, rect.width, rect.height)
+    draw_soft_card(state_rect, rl.Color(255, 255, 255, 4), rl.Color(255, 255, 255, 10))
+    gui_label(
+      rl.Rectangle(state_rect.x, state_rect.y + 28, state_rect.width, 34),
+      title,
+      28,
+      AetherListColors.HEADER,
+      FontWeight.MEDIUM,
+      alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
+    )
+    gui_label(
+      rl.Rectangle(state_rect.x + 44, state_rect.y + 68, state_rect.width - 88, 48),
+      body,
+      20,
+      AetherListColors.SUBTEXT,
+      FontWeight.NORMAL,
+      alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
+    )
+
+  def _render_selected_rows(self, rect: rl.Rectangle, entries: list[dict[str, str]]):
+    self._selected_action_rects.clear()
+    if not entries:
+      self._render_empty_state(
+        rect,
+        tr("No regions selected"),
+        tr("Choose the areas you actually drive in, then start the download when you are parked."),
+      )
+      return
+
+    mouse_pos = gui_app.last_mouse_event.pos
+    for index, entry in enumerate(entries):
+      token = entry["token"]
+      row_rect = rl.Rectangle(rect.x, rect.y + index * BROWSER_REGION_ROW_HEIGHT, rect.width, BROWSER_REGION_ROW_HEIGHT)
+      row_hovered = rl.check_collision_point_rec(mouse_pos, row_rect)
+      target_key = f"selected-remove:{token}"
+      action_width = 132
+      draw_selection_list_row(
+        row_rect,
+        title=entry["label"],
+        subtitle=self._controller._selected_entry_subtitle(entry),
+        action_text=tr("Remove"),
+        current=True,
+        hovered=row_hovered,
+        pressed=self._pressed_target == target_key,
+        is_last=index == len(entries) - 1,
+        action_width=action_width,
+        action_chip=False,
+        action_text_color=AetherListColors.MUTED,
+      )
+      action_rect = rl.Rectangle(row_rect.x + row_rect.width - action_width, row_rect.y, action_width, row_rect.height)
+      self._selected_action_rects[token] = action_rect
+
+  def _render_region_rows(self, rect: rl.Rectangle, regions: list[dict]):
+    if not regions:
+      self._render_empty_state(
+        rect,
+        tr("Everything in this view is selected"),
+        tr("Switch source or choose another tab below to add more regions."),
+      )
+      return
+
+    mouse_pos = gui_app.last_mouse_event.pos
+    self._region_row_rects.clear()
+    for index, region in enumerate(regions):
+      token = region["token"]
+      selected = self._controller._get_map_state(token)
+      row_rect = rl.Rectangle(rect.x, rect.y + index * BROWSER_REGION_ROW_HEIGHT, rect.width, BROWSER_REGION_ROW_HEIGHT)
+      self._region_row_rects[token] = row_rect
+      hovered = rl.check_collision_point_rec(mouse_pos, row_rect)
+      target_key = f"region:{token}"
+      action_text = self._controller._region_action_text(token)
+      draw_selection_list_row(
+        row_rect,
+        title=region["label"],
+        subtitle=self._controller._region_primary_text(token),
+        action_text=action_text,
+        current=selected,
+        hovered=hovered,
+        pressed=self._pressed_target == target_key,
+        is_last=index == len(regions) - 1,
+        action_width=142,
+        action_chip=selected,
+        action_fill=rl.Color(94, 168, 130, 34),
+        action_border=rl.Color(94, 168, 130, 62),
+      )
+
+  def _active_browse_regions(self) -> list[dict]:
+    return self._controller._browse_regions_for_active_group()
+
+  def _measure_toolbar_height(self) -> float:
+    return BROWSER_TOOLBAR_HEIGHT
+
+  def _render_section_header(self, rect: rl.Rectangle, title: str, *, count_text: str | None = None, action_text: str | None = None):
+    self._header_action_rect = rl.Rectangle(0, 0, 0, 0)
+    title_right = rect.x + rect.width
+    gap = 10
+    control_y = rect.y + (rect.height - 38) / 2
+
+    if action_text:
+      action_w = max(112.0, min(154.0, 54 + len(action_text) * 8))
+      self._header_action_rect = rl.Rectangle(rect.x + rect.width - action_w, control_y, action_w, 38)
+      draw_action_pill(
+        self._header_action_rect,
+        action_text,
+        rl.Color(255, 255, 255, 8),
+        rl.Color(255, 255, 255, 22),
+        AetherListColors.HEADER,
+        font_size=17,
+      )
+      title_right = self._header_action_rect.x - gap
+
+    if count_text:
+      chip_w = max(122.0, min(184.0, 62 + len(count_text) * 9))
+      chip_rect = rl.Rectangle(title_right - chip_w, control_y, chip_w, 38)
+      AetherChip(count_text, rl.Color(89, 116, 151, 18), rl.Color(116, 136, 168, 38), AetherListColors.HEADER, pill=True, font_size=16).render(chip_rect)
+      title_right = chip_rect.x - gap
+
+    gui_label(
+      rl.Rectangle(rect.x + 4, rect.y + (rect.height - 28) / 2, max(0.0, title_right - rect.x - 8), 28),
+      title,
+      24,
+      AetherListColors.HEADER,
+      FontWeight.SEMI_BOLD,
+    )
+
+  def _render_toolbar(self, rect: rl.Rectangle):
+    draw_soft_card(rect, rl.Color(255, 255, 255, 3), rl.Color(255, 255, 255, 10))
+    self._header_action_rect = rl.Rectangle(0, 0, 0, 0)
+    source_rect = rl.Rectangle(rect.x, rect.y, rect.width, BROWSER_TOOLBAR_HEIGHT)
+    self._source_selector.set_parent_rect(self._parent_rect or rect)
+    self._source_selector.render(source_rect)
 
   def _measure_height(self, width: float) -> float:
-    source_count = 2
-    total = BROWSER_INTRO_HEIGHT + self._grid_height(source_count, width, BROWSER_SOURCE_TILE_HEIGHT)
-    total += SECTION_CARD_GAP
-    if self._controller._is_states_view():
-      total += self._grid_height(2, width, BROWSER_SCOPE_TILE_HEIGHT) + SECTION_CARD_GAP
-      if self._controller._is_full_us_mode():
-        total += BROWSER_SECTION_HEADER_HEIGHT + self._grid_height(1, width, BROWSER_GROUP_TILE_HEIGHT)
-        return total
+    total = 0.0
+    selected_count = len(self._controller._selected_entries_for_display())
     total += BROWSER_SECTION_HEADER_HEIGHT
-    total += self._grid_height(len(self._controller._current_groups()), width, BROWSER_GROUP_TILE_HEIGHT)
-    total += SECTION_CARD_GAP + BROWSER_SECTION_HEADER_HEIGHT
-    total += self._grid_height(len(self._controller._active_group_regions()), width, BROWSER_REGION_TILE_HEIGHT)
+    total += self._row_height(selected_count, BROWSER_REGION_ROW_HEIGHT) if selected_count else BROWSER_EMPTY_STATE_HEIGHT
+    total += SECTION_CARD_GAP
+    total += self._measure_toolbar_height() + 10
+    total += self._measure_context_tabs_height(width)
+    total += 10 + BROWSER_SECTION_HEADER_HEIGHT
+    browse_count = len(self._active_browse_regions())
+    total += self._row_height(browse_count, BROWSER_REGION_ROW_HEIGHT) if browse_count else BROWSER_EMPTY_STATE_HEIGHT
     return total
 
   def _render(self, rect: rl.Rectangle):
     self.set_rect(rect)
+    if not self._touch_valid():
+      self._pressed_target = None
     draw_soft_card(rect, rl.Color(255, 255, 255, 4), rl.Color(255, 255, 255, 14))
+    self._selected_action_rects.clear()
+    self._context_tab_rects.clear()
+    self._region_row_rects.clear()
 
-    content_x = rect.x
-    content_w = rect.width
+    content_x = rect.x + BROWSER_INSET
+    content_w = rect.width - BROWSER_INSET * 2
     y = rect.y
 
-    gui_label(rl.Rectangle(content_x + 4, y, content_w * 0.62, 28), self._controller._browser_title(), 28, AetherListColors.HEADER, FontWeight.SEMI_BOLD)
-    gui_label(rl.Rectangle(content_x + 4, y + 26, content_w * 0.72, 20), self._controller._browser_subtitle(), 17, AetherListColors.SUBTEXT, FontWeight.NORMAL)
-
-    count_text = self._controller._active_group_count_text()
-    count_chip_w = max(142, min(182, 62 + len(count_text) * 9))
-    AetherChip(count_text, rl.Color(89, 116, 151, 20), rl.Color(116, 136, 168, 42), AetherListColors.HEADER, pill=True, font_size=16).render(
-      rl.Rectangle(content_x + content_w - count_chip_w - 126, y + 4, count_chip_w, 34)
+    selected_entries = self._controller._selected_entries_for_display()
+    self._render_section_header(
+      rl.Rectangle(content_x, y, content_w, BROWSER_SECTION_HEADER_HEIGHT),
+      tr("Selected Regions"),
+      count_text=self._controller._selected_section_count_text(),
     )
-    self._header_action_rect = rl.Rectangle(content_x + content_w - 112, y + 4, 112, 34)
-    draw_action_pill(
-      self._header_action_rect,
-      self._controller._active_group_action_label(),
-      rl.Color(255, 255, 255, 8),
-      rl.Color(255, 255, 255, 22),
-      AetherListColors.HEADER,
-      font_size=16,
-    )
-
-    y += BROWSER_INTRO_HEIGHT
-
-    source_tiles = [self._source_tiles["states"], self._source_tiles["countries"]]
-    self._set_tile_active(self._source_tiles["states"], self._controller._view_index == self._controller.VIEW_STATES)
-    self._set_tile_active(self._source_tiles["countries"], self._controller._view_index == self._controller.VIEW_COUNTRIES)
-    source_h = self._grid_height(len(source_tiles), content_w, BROWSER_SOURCE_TILE_HEIGHT)
-    self._render_tile_grid(self._source_grid, rl.Rectangle(content_x, y, content_w, source_h), source_tiles, BROWSER_SOURCE_TILE_HEIGHT)
-    y += source_h + SECTION_CARD_GAP
-
-    if self._controller._is_states_view():
-      scope_tiles = [self._scope_tiles["regional"], self._scope_tiles["whole_us"]]
-      self._set_tile_active(self._scope_tiles["regional"], not self._controller._is_full_us_mode())
-      self._set_tile_active(self._scope_tiles["whole_us"], self._controller._is_full_us_mode() or self._controller._get_map_state(US_COUNTRY_TOKEN))
-      scope_h = self._grid_height(len(scope_tiles), content_w, BROWSER_SCOPE_TILE_HEIGHT)
-      self._render_tile_grid(self._scope_grid, rl.Rectangle(content_x, y, content_w, scope_h), scope_tiles, BROWSER_SCOPE_TILE_HEIGHT)
-      y += scope_h + SECTION_CARD_GAP
-
-      if self._controller._is_full_us_mode():
-        gui_label(rl.Rectangle(content_x + 4, y, content_w, 24), tr("Whole-country download"), 24, AetherListColors.HEADER, FontWeight.SEMI_BOLD)
-        gui_label(rl.Rectangle(content_x + 4, y + 22, content_w, 18), tr("Use this when you want every U.S. map instead of choosing states by region."), 16, AetherListColors.SUBTEXT, FontWeight.NORMAL)
-        y += BROWSER_SECTION_HEADER_HEIGHT
-        self._set_tile_active(self._region_tiles[US_COUNTRY_TOKEN], self._controller._get_map_state(US_COUNTRY_TOKEN))
-        self._render_tile_grid(self._group_grid, rl.Rectangle(content_x, y, content_w, self._grid_height(1, content_w, BROWSER_GROUP_TILE_HEIGHT)), [self._region_tiles[US_COUNTRY_TOKEN]], BROWSER_GROUP_TILE_HEIGHT)
-        return
-
-    gui_label(rl.Rectangle(content_x + 4, y, content_w, 24), self._controller._group_section_title(), 24, AetherListColors.HEADER, FontWeight.SEMI_BOLD)
-    gui_label(rl.Rectangle(content_x + 4, y + 22, content_w, 18), self._controller._group_section_desc(), 16, AetherListColors.SUBTEXT, FontWeight.NORMAL)
     y += BROWSER_SECTION_HEADER_HEIGHT
 
-    group_tiles = [self._group_tiles[group["key"]] for group in self._controller._current_groups()]
-    for group in self._controller._current_groups():
-      self._set_tile_active(self._group_tiles[group["key"]], self._controller._active_group_key() == group["key"])
-    group_h = self._grid_height(len(group_tiles), content_w, BROWSER_GROUP_TILE_HEIGHT)
-    self._render_tile_grid(self._group_grid, rl.Rectangle(content_x, y, content_w, group_h), group_tiles, BROWSER_GROUP_TILE_HEIGHT)
-    y += group_h + SECTION_CARD_GAP
+    selected_h = self._row_height(len(selected_entries), BROWSER_REGION_ROW_HEIGHT) if selected_entries else BROWSER_EMPTY_STATE_HEIGHT
+    self._render_selected_rows(rl.Rectangle(content_x, y, content_w, selected_h), selected_entries)
+    y += selected_h + SECTION_CARD_GAP
 
-    gui_label(rl.Rectangle(content_x + 4, y, content_w, 24), self._controller._region_section_title(), 24, AetherListColors.HEADER, FontWeight.SEMI_BOLD)
-    gui_label(rl.Rectangle(content_x + 4, y + 22, content_w, 18), self._controller._region_section_desc(), 16, AetherListColors.SUBTEXT, FontWeight.NORMAL)
+    toolbar_h = self._measure_toolbar_height()
+    self._render_toolbar(rl.Rectangle(content_x, y, content_w, toolbar_h))
+    y += toolbar_h + 10
+
+    context_tabs_h = self._measure_context_tabs_height(content_w)
+    self._render_context_tabs(rl.Rectangle(content_x, y, content_w, context_tabs_h))
+    y += context_tabs_h + 10
+
+    self._render_section_header(
+      rl.Rectangle(content_x, y, content_w, BROWSER_SECTION_HEADER_HEIGHT),
+      tr("Browse More"),
+      count_text=self._controller._active_group_count_text(),
+    )
     y += BROWSER_SECTION_HEADER_HEIGHT
 
-    region_tiles = [self._region_tiles[region["token"]] for region in self._controller._active_group_regions() if region["token"] != US_COUNTRY_TOKEN or not self._controller._is_states_view()]
-    for region in self._controller._active_group_regions():
-      token = region["token"]
-      if token in self._region_tiles:
-        self._set_tile_active(self._region_tiles[token], self._controller._get_map_state(token))
-    region_h = self._grid_height(len(region_tiles), content_w, BROWSER_REGION_TILE_HEIGHT)
-    self._render_tile_grid(self._region_grid, rl.Rectangle(content_x, y, content_w, region_h), region_tiles, BROWSER_REGION_TILE_HEIGHT)
+    regions = self._active_browse_regions()
+    region_h = self._row_height(len(regions), BROWSER_REGION_ROW_HEIGHT) if regions else BROWSER_EMPTY_STATE_HEIGHT
+    self._render_region_rows(rl.Rectangle(content_x, y, content_w, region_h), regions)
 
 
 class StarPilotMapsLayout(StarPilotPanel):
@@ -500,9 +573,7 @@ class StarPilotMapsLayout(StarPilotPanel):
     self._active_country_group_key = COUNTRIES_SECTION["groups"][0]["key"]
     self._active_state_group_key = STATES_SECTION["groups"][0]["key"]
     self._full_us_mode = False
-
-    self._status_card = self._child(MapStatusCard(self))
-    self._selected_card = self._child(SelectedMapsCard(self))
+    self._whole_us_context_initialized = False
 
     self._download_button = self._child(
       AetherButton(
@@ -521,19 +592,22 @@ class StarPilotMapsLayout(StarPilotPanel):
         font_size=22,
       )
     )
-    self._action_strip = self._child(ActionButtonStrip(self._download_button, self._schedule_button))
+
+    self._status_card = self._child(MapStatusCard(self))
     self._browser_card = self._child(MapBrowserCard(self))
 
     self._browser_card.set_touch_valid_callback(lambda: self._scroll_panel.is_touch_valid())
-    self._selected_card.set_touch_valid_callback(lambda: self._scroll_panel.is_touch_valid())
-    self._action_strip.set_touch_valid_callback(lambda: self._scroll_panel.is_touch_valid())
+    self._status_card.set_touch_valid_callback(lambda: True)
 
+    self._sync_whole_us_view_state()
     self._refresh_storage_cache(force=True)
     self._sync_download_state(force=True)
 
   def show_event(self):
     super().show_event()
     self._scroll_offset = 0.0
+    self._whole_us_context_initialized = False
+    self._sync_whole_us_view_state()
     if self._cancel_requested() and self._cancel_requested_at is None:
       self._cancel_requested_at = rl.get_time()
     if self._cancel_requested() and self._cancel_visual_until <= rl.get_time():
@@ -544,6 +618,7 @@ class StarPilotMapsLayout(StarPilotPanel):
   def hide_event(self):
     super().hide_event()
     self._scroll_offset = 0.0
+    self._whole_us_context_initialized = False
     device.set_override_interactive_timeout(None)
 
   def _update_state(self):
@@ -633,10 +708,13 @@ class StarPilotMapsLayout(StarPilotPanel):
     total_size = 0
     has_files = False
     for path in OFFLINE_MAPS_PATH.rglob("*"):
-      if not path.is_file():
+      try:
+        if not path.is_file():
+          continue
+        has_files = True
+        total_size += path.stat().st_size
+      except OSError:
         continue
-      has_files = True
-      total_size += path.stat().st_size
     return _format_mb(total_size), has_files
 
   def _selected_tokens(self) -> set[str]:
@@ -648,36 +726,63 @@ class StarPilotMapsLayout(StarPilotPanel):
       entry["kind"] = "country" if entry["token"].startswith(COUNTRY_PREFIX) else "state"
     return entries
 
+  def _selected_entries_for_display(self) -> list[dict[str, str]]:
+    entries = self._selected_entries()
+
+    def sort_key(entry: dict[str, str]) -> tuple[int, str]:
+      token = entry["token"]
+      if token == US_COUNTRY_TOKEN:
+        return (0, entry["label"])
+      if token.startswith(STATE_PREFIX):
+        return (1, entry["label"])
+      return (2, entry["label"])
+
+    return sorted(entries, key=sort_key)
+
   def _selected_count(self) -> int:
     return len(self._selected_tokens())
+
+  def _selected_section_count_text(self) -> str:
+    count = self._selected_count()
+    if count == 0:
+      return tr("Nothing selected")
+    if count == 1:
+      return tr("1 region")
+    return tr(f"{count} regions")
 
   def _selection_summary_title(self) -> str:
     count = self._selected_count()
     if count == 0:
-      return tr("Choose regions to get started")
+      return tr("No regions selected")
     if count == 1:
-      return tr("1 region ready")
-    return tr(f"{count} regions ready")
+      return tr("1 region selected")
+    return tr(f"{count} regions selected")
 
-  def _selection_summary_meta(self) -> str:
-    entries = self._selected_entries()
-    if not entries:
-      return tr("Pick only the places you actually drive.")
-
-    countries = sum(1 for entry in entries if entry["token"].startswith(COUNTRY_PREFIX))
-    states = len(entries) - countries
-    parts = []
-    if countries:
-      parts.append(tr(f"{countries} countries"))
-    if states:
-      parts.append(tr(f"{states} U.S. states"))
-    return " / ".join(parts)
+  def _selected_entry_subtitle(self, entry: dict[str, str]) -> str:
+    token = entry["token"]
+    if token == US_COUNTRY_TOKEN:
+      return tr("Whole U.S. package")
+    if token.startswith(STATE_PREFIX):
+      return tr("Included in next download")
+    return tr("Country map selected")
 
   def _set_view_index(self, index: int):
     self._view_index = max(self.VIEW_COUNTRIES, min(self.VIEW_STATES, index))
+    if self._is_states_view():
+      self._full_us_mode = self._active_state_group_key == "whole_us"
+    else:
+      self._full_us_mode = False
 
-  def _on_group_change(self, index: int):
-    self._set_view_index(index)
+  def _has_full_us_selected(self) -> bool:
+    return US_COUNTRY_TOKEN in self._selected_tokens()
+
+  def _sync_whole_us_view_state(self):
+    if self._whole_us_context_initialized:
+      return
+    if self._has_full_us_selected():
+      self._active_state_group_key = "whole_us"
+      self._full_us_mode = self._is_states_view()
+    self._whole_us_context_initialized = True
 
   def _is_states_view(self) -> bool:
     return self._view_index == self.VIEW_STATES
@@ -694,19 +799,42 @@ class StarPilotMapsLayout(StarPilotPanel):
   def _current_groups(self) -> list[dict]:
     return self._current_section()["groups"]
 
+  def _full_us_regions(self) -> list[dict]:
+    return [{"token": US_COUNTRY_TOKEN, "label": MAP_TOKEN_LABELS[US_COUNTRY_TOKEN]}]
+
+  def _whole_us_group(self) -> dict:
+    return {"key": "whole_us", "title": tr("Whole U.S."), "regions": self._full_us_regions()}
+
+  def _current_groups_with_full_us(self) -> list[dict]:
+    groups = list(self._current_groups())
+    if self._is_states_view():
+      return [self._whole_us_group(), *groups]
+    return groups
+
   def _active_group_key(self) -> str:
+    if self._is_full_us_mode():
+      return "whole_us"
     return self._active_state_group_key if self._is_states_view() else self._active_country_group_key
 
   def _set_active_group(self, group_key: str):
+    if self._is_states_view() and group_key == "whole_us":
+      self._active_state_group_key = "whole_us"
+      self._set_full_us_mode(True)
+      return
+
     group_keys = {group["key"] for group in self._current_groups()}
     if group_key not in group_keys:
       return
     if self._is_states_view():
+      self._full_us_mode = False
       self._active_state_group_key = group_key
     else:
       self._active_country_group_key = group_key
 
   def _active_group(self) -> dict:
+    if self._is_full_us_mode():
+      return self._whole_us_group()
+
     group_key = self._active_group_key()
     for group in self._current_groups():
       if group["key"] == group_key:
@@ -719,45 +847,27 @@ class StarPilotMapsLayout(StarPilotPanel):
     return self._active_group()["regions"]
 
   def _group_selected_count(self, group: dict) -> int:
+    if self._is_states_view() and self._has_full_us_selected() and group["key"] != "whole_us":
+      return len(group["regions"])
     return sum(1 for region in group["regions"] if self._get_map_state(region["token"]))
 
   def _group_primary_text(self, group: dict) -> str:
+    if group["key"] == "whole_us":
+      return tr("Full country package") if self._get_map_state(US_COUNTRY_TOKEN) else tr("One-tap full set")
     count = self._group_selected_count(group)
     if self._is_states_view():
       return tr(f"{count}/{len(group['regions'])} states")
-    if any(region["token"] == US_COUNTRY_TOKEN for region in group["regions"]):
-      return tr("Whole country") if self._get_map_state(US_COUNTRY_TOKEN) else tr("Tap to add")
     return tr(f"{count}/{len(group['regions'])} selected")
 
-  def _group_secondary_text(self, group: dict) -> str:
-    if self._is_states_view():
-      return tr("Open this region") if self._active_group_key() != group["key"] else tr("Active region")
-    if any(region["token"] == US_COUNTRY_TOKEN for region in group["regions"]):
-      return tr("Entire U.S. package")
-    return tr("Open this continent") if self._active_group_key() != group["key"] else tr("Active continent")
-
   def _active_group_count_text(self) -> str:
+    if self._is_full_us_mode():
+      return tr("Already selected") if self._get_map_state(US_COUNTRY_TOKEN) else tr("Whole U.S. package")
     group = self._active_group()
-    count = self._group_selected_count(group)
+    browse_count = len(self._browse_regions_for_active_group())
     total = len(group["regions"])
     if self._is_states_view():
-      return tr(f"{count}/{total} states")
-    return tr(f"{count}/{total} selected")
-
-  def _active_group_action_label(self) -> str:
-    if self._is_full_us_mode():
-      return tr("Remove") if self._get_map_state(US_COUNTRY_TOKEN) else tr("Add U.S.")
-    group = self._active_group()
-    return tr("Clear") if self._group_selected_count(group) == len(group["regions"]) else tr("Select All")
-
-  def _toggle_active_group(self):
-    if self._is_full_us_mode():
-      self._toggle_region(US_COUNTRY_TOKEN)
-      return
-    group = self._active_group()
-    state = self._group_selected_count(group) != len(group["regions"])
-    for region in group["regions"]:
-      self._set_map_state(region["token"], state)
+      return tr(f"{browse_count} of {total} available")
+    return tr(f"{browse_count} of {total} available")
 
   def _toggle_region(self, token: str):
     self._set_map_state(token, not self._get_map_state(token))
@@ -765,68 +875,33 @@ class StarPilotMapsLayout(StarPilotPanel):
   def _region_primary_text(self, token: str) -> str:
     if self._get_map_state(token):
       return tr("Included")
-    if token == US_COUNTRY_TOKEN:
+    if token == US_COUNTRY_TOKEN and self._is_full_us_mode():
       return tr("Whole country")
     return tr("Tap to add")
 
-  def _region_secondary_text(self, token: str) -> str:
-    if self._is_states_view():
-      return tr("U.S. state")
-    return tr("Country") if token != US_COUNTRY_TOKEN else tr("Country-wide map set")
+  def _region_action_text(self, token: str) -> str:
+    if self._get_map_state(token):
+      return tr("Included")
+    return tr("Add U.S.") if token == US_COUNTRY_TOKEN and self._is_full_us_mode() else tr("Add")
 
   def _browser_source_primary(self, view_index: int) -> str:
     active = self._view_index == view_index
     if view_index == self.VIEW_COUNTRIES:
-      country_count = sum(1 for entry in self._selected_entries() if entry["token"].startswith(COUNTRY_PREFIX))
-      return tr("Active") if active else tr(f"{country_count} selected")
-    state_count = sum(1 for entry in self._selected_entries() if not entry["token"].startswith(COUNTRY_PREFIX))
-    return tr("Active") if active else tr(f"{state_count} selected")
+      country_count = sum(1 for entry in self._selected_entries() if entry["token"].startswith(COUNTRY_PREFIX) and entry["token"] != US_COUNTRY_TOKEN)
+      return tr("Current view") if active else tr(f"{country_count} selected")
+    state_count = sum(1 for entry in self._selected_entries() if entry["token"].startswith(STATE_PREFIX))
+    if self._has_full_us_selected():
+      state_count += 1
+    return tr("Current view") if active else tr(f"{state_count} selected")
 
-  def _browser_source_desc(self, view_index: int) -> str:
-    if view_index == self.VIEW_COUNTRIES:
-      return tr("Tap continents, then choose countries")
-    return tr("Choose states by region or grab the whole U.S.")
-
-  def _browser_scope_primary(self, full_us: bool) -> str:
-    if full_us:
-      return tr("Active") if self._is_full_us_mode() else (tr("Included") if self._get_map_state(US_COUNTRY_TOKEN) else tr("One-tap full set"))
-    return tr("Active") if not self._is_full_us_mode() else tr("Choose by region")
-
-  def _browser_scope_desc(self, full_us: bool) -> str:
-    if full_us:
-      return tr("Download the entire U.S. package")
-    return tr("Choose a U.S. region, then pick states")
-
-  def _browser_title(self) -> str:
-    if self._is_full_us_mode():
-      return tr("United States: Whole-country set")
-    group = self._active_group()
-    if self._is_states_view():
-      return tr(f"United States: {group['title']}")
-    return tr(f"Countries: {group['title']}")
-
-  def _browser_subtitle(self) -> str:
-    if self._is_full_us_mode():
-      return tr("Use the same full-width StarPilot tiles to add or remove the complete U.S. offline package.")
-    if self._is_states_view():
-      return tr("Choose an American region first, then add only the states you want kept offline.")
-    return tr("Choose a continent first, then tap the countries you want available for offline speed-limit data.")
-
-  def _group_section_title(self) -> str:
-    return tr("Choose a U.S. region") if self._is_states_view() else tr("Choose a continent")
-
-  def _group_section_desc(self) -> str:
-    return tr("These tiles match the main StarPilot menu and keep each selection surface large and deliberate.")
-
-  def _region_section_title(self) -> str:
-    if self._is_states_view():
-      return tr(f"States in {self._active_group()['title']}")
-    return tr(f"Countries in {self._active_group()['title']}")
-
-  def _region_section_desc(self) -> str:
-    if self._is_states_view():
-      return tr("Tap individual states, or use the action above to grab the whole region.")
-    return tr("Tap countries individually, or use the action above to grab the whole continent.")
+  def _browse_regions_for_active_group(self) -> list[dict]:
+    selected_tokens = self._selected_tokens()
+    if self._is_states_view() and self._has_full_us_selected():
+      if self._is_full_us_mode():
+        return []
+      return []
+    regions = self._full_us_regions() if self._is_full_us_mode() else self._active_group_regions()
+    return [region for region in regions if region["token"] not in selected_tokens]
 
   def _get_map_state(self, token: str) -> bool:
     return token in self._selected_tokens()
@@ -834,6 +909,11 @@ class StarPilotMapsLayout(StarPilotPanel):
   def _set_map_state(self, token: str, state: bool):
     selected = self._selected_tokens()
     if state:
+      if token == US_COUNTRY_TOKEN:
+        selected = {item for item in selected if not item.startswith(STATE_PREFIX)}
+      elif token.startswith(STATE_PREFIX):
+        selected.discard(US_COUNTRY_TOKEN)
+        self._full_us_mode = False
       selected.add(token)
     else:
       selected.discard(token)
@@ -868,7 +948,7 @@ class StarPilotMapsLayout(StarPilotPanel):
     return self._download_state.active or self._download_requested()
 
   def _remove_enabled(self) -> bool:
-    return self._has_downloaded_data and not self._download_in_flight() and not self._is_visually_cancelling()
+    return self._has_downloaded_data and self._is_parked() and not self._download_in_flight() and not self._is_visually_cancelling()
 
   def _download_gate_reason(self) -> str:
     if self._download_in_flight():
@@ -928,6 +1008,10 @@ class StarPilotMapsLayout(StarPilotPanel):
 
     def on_confirm(res):
       if res == DialogResult.CONFIRM:
+        gate_reason = self._download_gate_reason()
+        if gate_reason:
+          gui_app.push_widget(alert_dialog(gate_reason))
+          return
         self._params_memory.put_bool("DownloadMaps", True)
         self._params_memory.remove("CancelDownloadMaps")
         self._download_started_at = rl.get_time()
@@ -937,6 +1021,10 @@ class StarPilotMapsLayout(StarPilotPanel):
   def _on_cancel(self):
     def on_confirm(res):
       if res == DialogResult.CONFIRM:
+        if not self._download_in_flight():
+          self._cancel_requested_at = None
+          self._cancel_visual_until = 0.0
+          return
         self._params_memory.put_bool("CancelDownloadMaps", True)
         self._params_memory.remove("DownloadMaps")
         self._cancel_requested_at = rl.get_time()
@@ -949,17 +1037,24 @@ class StarPilotMapsLayout(StarPilotPanel):
 
   def _on_remove(self):
     if not self._remove_enabled():
+      if not self._is_parked():
+        gui_app.push_widget(alert_dialog(tr("Park to remove downloaded maps.")))
       return
 
     def on_confirm(res):
       if res == DialogResult.CONFIRM:
+        if not self._remove_enabled():
+          if not self._is_parked():
+            gui_app.push_widget(alert_dialog(tr("Park to remove downloaded maps.")))
+          return
+
         def remove_worker():
           if OFFLINE_MAPS_PATH.exists():
             shutil.rmtree(OFFLINE_MAPS_PATH, ignore_errors=True)
           self._refresh_storage_cache(force=True)
 
         threading.Thread(target=remove_worker, daemon=True).start()
-        gui_app.push_widget(alert_dialog(tr("Offline maps removed.")))
+        gui_app.push_widget(alert_dialog(tr("Removing offline maps...")))
 
     gui_app.push_widget(ConfirmDialog(tr("Delete all downloaded offline map data?"), tr("Remove Maps"), callback=on_confirm))
 
@@ -1013,21 +1108,15 @@ class StarPilotMapsLayout(StarPilotPanel):
     return "  •  ".join(parts)
 
   def _measure_content_height(self, width: float) -> float:
-    total = self._browser_card._measure_height(width)
-    total += SECTION_CARD_GAP + self._selected_card._measure_height()
-    return total
+    return self._browser_card._measure_height(width)
 
   def _draw_scroll_content(self, rect: rl.Rectangle, width: float):
     self._browser_card.set_parent_rect(rect)
-    self._selected_card.set_parent_rect(rect)
 
     y = rect.y + self._scroll_offset
 
     browser_height = self._browser_card._measure_height(width)
     self._browser_card.render(rl.Rectangle(rect.x, y, width, browser_height))
-    y += browser_height + SECTION_CARD_GAP
-
-    self._selected_card.render(rl.Rectangle(rect.x, y, width, self._selected_card._measure_height()))
 
   def _render(self, rect: rl.Rectangle):
     self.set_rect(rect)
@@ -1036,14 +1125,8 @@ class StarPilotMapsLayout(StarPilotPanel):
 
     hdr = frame.header
     title_y = hdr.y + HEADER_TOP_OFFSET
-    selected_text = tr(f"{self._selected_count()} selected")
-    selected_chip_w = max(152, min(208, 78 + len(selected_text) * 9))
-    title_w = hdr.width - selected_chip_w - 18
-    gui_label(rl.Rectangle(hdr.x, title_y, title_w, HEADER_TITLE_HEIGHT), tr("Map Data"), 40, AetherListColors.HEADER, FontWeight.SEMI_BOLD)
-    gui_label(rl.Rectangle(hdr.x, title_y + 40, title_w, HEADER_SUBTITLE_HEIGHT), tr("Use offline maps for speed-limit control and keep only the regions you need."), 22, AetherListColors.SUBTEXT, FontWeight.NORMAL)
-    AetherChip(selected_text, rl.Color(89, 116, 151, 24), rl.Color(116, 136, 168, 48), AetherListColors.HEADER, pill=True).render(
-      rl.Rectangle(hdr.x + hdr.width - selected_chip_w, title_y + 8, selected_chip_w, 34)
-    )
+    gui_label(rl.Rectangle(hdr.x, title_y, hdr.width, HEADER_TITLE_HEIGHT), tr("Map Data"), 40, AetherListColors.HEADER, FontWeight.SEMI_BOLD)
+    gui_label(rl.Rectangle(hdr.x, title_y + 40, hdr.width * 0.72, HEADER_SUBTITLE_HEIGHT), tr("Use offline maps for speed-limit control and keep only the regions you need."), 22, AetherListColors.SUBTEXT, FontWeight.NORMAL)
 
     header_status_y = title_y + HEADER_TITLE_HEIGHT + HEADER_SUBTITLE_HEIGHT + 8
     header_status_rect = rl.Rectangle(hdr.x, header_status_y, hdr.width, hdr.y + hdr.height - header_status_y - HEADER_BOTTOM_GAP)
@@ -1051,12 +1134,7 @@ class StarPilotMapsLayout(StarPilotPanel):
 
     scroll_rect = frame.scroll
     content_width = scroll_rect.width - 18
-    action_rect = rl.Rectangle(scroll_rect.x, scroll_rect.y, content_width, ACTION_BUTTON_HEIGHT)
-    self._action_strip.set_parent_rect(scroll_rect)
-    self._action_strip.render(action_rect)
-
-    scroll_content_y = action_rect.y + ACTION_BUTTON_HEIGHT + SECTION_CARD_GAP
-    scroll_content_rect = rl.Rectangle(scroll_rect.x, scroll_content_y, scroll_rect.width, max(0.0, scroll_rect.height - ACTION_BUTTON_HEIGHT - SECTION_CARD_GAP))
+    scroll_content_rect = rl.Rectangle(scroll_rect.x, scroll_rect.y, scroll_rect.width, scroll_rect.height)
     self._content_height = self._measure_content_height(content_width)
     self._scroll_panel.set_enabled(self.is_visible)
     self._scroll_offset = self._scroll_panel.update(scroll_content_rect, max(self._content_height, scroll_content_rect.height))
