@@ -156,7 +156,7 @@ class ActionButtonStrip(Widget):
     self._secondary_button.render(rl.Rectangle(rect.x + primary_w + gap, rect.y, secondary_w, rect.height))
 
 
-class MapSummaryRow(Widget):
+class MapStatusCard(Widget):
   def __init__(self, controller: "StarPilotMapsLayout"):
     super().__init__()
     self._controller = controller
@@ -176,17 +176,47 @@ class MapSummaryRow(Widget):
         self._controller._on_remove()
 
   def _render(self, rect: rl.Rectangle):
-    draw_list_row_shell(rect, current=True, is_last=True, current_bg=rl.Color(89, 116, 151, 16), current_border=rl.Color(116, 136, 168, 40))
+    draw_soft_card(rect, rl.Color(255, 255, 255, 4), rl.Color(255, 255, 255, 16))
 
-    left_w = max(220.0, rect.width * 0.31)
-    gui_label(rl.Rectangle(rect.x + 18, rect.y + 12, left_w, 22), tr("Selected Regions"), 18, AetherListColors.MUTED, FontWeight.MEDIUM)
-    gui_label(rl.Rectangle(rect.x + 18, rect.y + 36, left_w, 28), self._controller._selection_summary_title(), 24, AetherListColors.HEADER, FontWeight.SEMI_BOLD)
+    left_w = rect.width * 0.52
+    right_x = rect.x + left_w + 20
+    right_w = rect.x + rect.width - right_x - 18
+    top_y = rect.y + 16
 
-    meta_text = self._controller._selection_summary_meta()
-    gui_text_box(rl.Rectangle(rect.x + left_w + 8, rect.y + 18, rect.width * 0.38, 48), meta_text, 18, AetherListColors.SUBTEXT, font_weight=FontWeight.NORMAL, line_scale=0.95)
+    gui_label(rl.Rectangle(rect.x + 20, top_y, left_w - 20, 24), self._controller._progress_title(), 24, AetherListColors.HEADER, FontWeight.SEMI_BOLD)
+    gui_text_box(
+      rl.Rectangle(rect.x + 20, top_y + 28, left_w - 26, 40),
+      self._controller._progress_body(),
+      17,
+      AetherListColors.SUBTEXT,
+      font_weight=FontWeight.NORMAL,
+      line_scale=0.94,
+    )
+    gui_label(rl.Rectangle(rect.x + 20, rect.y + rect.height - 22, left_w - 20, 18), self._controller._status_footer_text(), 16, AetherListColors.MUTED, FontWeight.MEDIUM)
 
-    action_w = 152
-    self._remove_rect = rl.Rectangle(rect.x + rect.width - action_w - 20, rect.y + 17, action_w, 42)
+    metric_gap = 18
+    metric_w = max(120.0, (right_w - metric_gap) / 2)
+    gui_label(rl.Rectangle(right_x, top_y, metric_w, 18), tr("Storage"), 16, AetherListColors.MUTED, FontWeight.MEDIUM)
+    gui_label(rl.Rectangle(right_x, top_y + 16, metric_w, 24), self._controller._storage_text, 22, AetherListColors.HEADER, FontWeight.SEMI_BOLD)
+    gui_label(rl.Rectangle(right_x + metric_w + metric_gap, top_y, metric_w, 18), tr("Last Updated"), 16, AetherListColors.MUTED, FontWeight.MEDIUM)
+    gui_label(rl.Rectangle(right_x + metric_w + metric_gap, top_y + 16, metric_w, 24), self._controller._last_updated_text(), 20, AetherListColors.HEADER, FontWeight.SEMI_BOLD)
+
+    selection_y = rect.y + 54
+    action_w = 150
+    action_h = 36
+    selection_w = max(180.0, right_w - action_w - 14)
+    gui_label(rl.Rectangle(right_x, selection_y, selection_w, 18), tr("Selected Regions"), 16, AetherListColors.MUTED, FontWeight.MEDIUM)
+    gui_label(rl.Rectangle(right_x, selection_y + 18, selection_w, 22), self._controller._selection_summary_title(), 20, AetherListColors.HEADER, FontWeight.SEMI_BOLD)
+    gui_text_box(
+      rl.Rectangle(right_x, selection_y + 40, selection_w, 18),
+      self._controller._selection_summary_meta(),
+      16,
+      AetherListColors.SUBTEXT,
+      font_weight=FontWeight.NORMAL,
+      line_scale=0.92,
+    )
+
+    self._remove_rect = rl.Rectangle(rect.x + rect.width - action_w - 20, rect.y + rect.height - action_h - 16, action_w, action_h)
     enabled = self._controller._remove_enabled()
     draw_action_pill(
       self._remove_rect,
@@ -194,8 +224,12 @@ class MapSummaryRow(Widget):
       rl.Color(173, 78, 90, 26 if enabled else 12),
       rl.Color(173, 78, 90, 58 if enabled else 24),
       AetherListColors.HEADER if enabled else AetherListColors.MUTED,
-      font_size=18,
+      font_size=17,
     )
+
+    if self._controller._download_state.active:
+      center = rl.Vector2(rect.x + rect.width - 34, rect.y + 34)
+      draw_busy_ring(center, rl.get_time() * 160, AetherListColors.PRIMARY, inner_radius=10, outer_radius=14, sweep=210, thickness=20)
 
 
 class SelectedMapsCard(Widget):
@@ -210,11 +244,11 @@ class SelectedMapsCard(Widget):
   def _render(self, rect: rl.Rectangle):
     draw_soft_card(rect, rl.Color(255, 255, 255, 4), rl.Color(255, 255, 255, 16))
 
-    gui_label(rl.Rectangle(rect.x + 18, rect.y + 14, rect.width - 36, 26), tr("Current Download Set"), 25, AetherListColors.HEADER, FontWeight.SEMI_BOLD)
-    gui_label(rl.Rectangle(rect.x + 18, rect.y + 40, rect.width - 36, 20), tr("Review the selected regions here. Use Countries or U.S. States below to change them."), 18, AetherListColors.SUBTEXT, FontWeight.NORMAL)
+    gui_label(rl.Rectangle(rect.x + 18, rect.y + 14, rect.width - 36, 26), tr("Included Regions"), 25, AetherListColors.HEADER, FontWeight.SEMI_BOLD)
+    gui_label(rl.Rectangle(rect.x + 18, rect.y + 40, rect.width - 36, 20), tr("Review what stays offline here. Use the source tiles above to make changes."), 18, AetherListColors.SUBTEXT, FontWeight.NORMAL)
 
     entries = self._controller._selected_entries()
-    rows = entries if entries else [{"token": "", "label": tr("No map regions selected yet."), "kind": "empty"}]
+    rows = entries if entries else [{"token": "", "label": tr("No regions added yet."), "kind": "empty"}]
     y = rect.y + 64
     for index, entry in enumerate(rows):
       row_rect = rl.Rectangle(rect.x + 12, y, rect.width - 24, SUMMARY_ROW_HEIGHT)
@@ -238,7 +272,7 @@ class SelectedMapsCard(Widget):
       gui_label(rl.Rectangle(text_x, row_rect.y + 26, row_rect.width - 220, 36), entry["label"], 24, AetherListColors.HEADER if not is_empty else AetherListColors.SUBTEXT, FontWeight.MEDIUM)
 
       if not is_empty:
-        gui_label(rl.Rectangle(row_rect.x + row_rect.width - 180, row_rect.y + 24, 162, 34), tr("Edit in source lists"), 16, AetherListColors.MUTED, FontWeight.MEDIUM, alignment=rl.GuiTextAlignment.TEXT_ALIGN_RIGHT)
+        gui_label(rl.Rectangle(row_rect.x + row_rect.width - 180, row_rect.y + 24, 162, 34), tr("Edit above"), 16, AetherListColors.MUTED, FontWeight.MEDIUM, alignment=rl.GuiTextAlignment.TEXT_ALIGN_RIGHT)
 
       y += SUMMARY_ROW_HEIGHT
 
@@ -263,7 +297,7 @@ class MapBrowserCard(Widget):
       ("countries", tr_noop("Countries"), lambda: self._controller._browser_source_primary(self._controller.VIEW_COUNTRIES), lambda: self._controller._browser_source_desc(self._controller.VIEW_COUNTRIES), lambda: self._controller._set_view_index(self._controller.VIEW_COUNTRIES)),
     ]
     for key, title, primary, desc, on_click in source_specs:
-      tile = self._child(HubTile(title=title, desc=desc(), icon_path="", on_click=on_click, bg_color="#10B981", get_status=primary))
+      tile = self._child(HubTile(title=title, desc=desc, icon_path="", on_click=on_click, bg_color="#10B981", get_status=primary))
       self._source_tiles[key] = tile
       self._source_grid.add_tile(tile)
 
@@ -272,7 +306,7 @@ class MapBrowserCard(Widget):
       ("whole_us", tr_noop("Whole U.S."), lambda: self._controller._browser_scope_primary(True), lambda: self._controller._browser_scope_desc(True), lambda: self._controller._set_full_us_mode(True)),
     ]
     for key, title, primary, desc, on_click in scope_specs:
-      tile = self._child(HubTile(title=title, desc=desc(), icon_path="", on_click=on_click, bg_color="#10B981", get_status=primary))
+      tile = self._child(HubTile(title=title, desc=desc, icon_path="", on_click=on_click, bg_color="#10B981", get_status=primary))
       self._scope_tiles[key] = tile
       self._scope_grid.add_tile(tile)
 
@@ -281,7 +315,7 @@ class MapBrowserCard(Widget):
       tile = self._child(
         HubTile(
           title=tr_noop(group["title"]),
-          desc=self._controller._group_secondary_text(group),
+          desc=lambda group=group: self._controller._group_secondary_text(group),
           icon_path="",
           on_click=lambda group_key=group_key: self._controller._set_active_group(group_key),
           bg_color="#10B981",
@@ -295,7 +329,7 @@ class MapBrowserCard(Widget):
         tile = self._child(
           HubTile(
             title=tr_noop(region["label"]),
-            desc=self._controller._region_secondary_text(token),
+            desc=lambda token=token: self._controller._region_secondary_text(token),
             icon_path="",
             on_click=lambda token=token: self._controller._toggle_region(token),
             bg_color="#10B981",
@@ -462,12 +496,12 @@ class StarPilotMapsLayout(StarPilotPanel):
     self._cancel_requested_at: float | None = None
     self._cancel_visual_until = 0.0
     self._download_state = MapsDownloadState()
-    self._view_index = self.VIEW_COUNTRIES
+    self._view_index = self.VIEW_STATES
     self._active_country_group_key = COUNTRIES_SECTION["groups"][0]["key"]
     self._active_state_group_key = STATES_SECTION["groups"][0]["key"]
     self._full_us_mode = False
 
-    self._selected_summary = self._child(MapSummaryRow(self))
+    self._status_card = self._child(MapStatusCard(self))
     self._selected_card = self._child(SelectedMapsCard(self))
 
     self._download_button = self._child(
@@ -492,7 +526,6 @@ class StarPilotMapsLayout(StarPilotPanel):
 
     self._browser_card.set_touch_valid_callback(lambda: self._scroll_panel.is_touch_valid())
     self._selected_card.set_touch_valid_callback(lambda: self._scroll_panel.is_touch_valid())
-    self._selected_summary.set_touch_valid_callback(lambda: self._scroll_panel.is_touch_valid())
     self._action_strip.set_touch_valid_callback(lambda: self._scroll_panel.is_touch_valid())
 
     self._refresh_storage_cache(force=True)
@@ -629,7 +662,7 @@ class StarPilotMapsLayout(StarPilotPanel):
   def _selection_summary_meta(self) -> str:
     entries = self._selected_entries()
     if not entries:
-      return tr("Choose only the places you actually drive. Fewer regions mean faster updates and less storage.")
+      return tr("Pick only the places you actually drive.")
 
     countries = sum(1 for entry in entries if entry["token"].startswith(COUNTRY_PREFIX))
     states = len(entries) - countries
@@ -963,7 +996,7 @@ class StarPilotMapsLayout(StarPilotPanel):
     gate_reason = self._download_gate_reason()
     if gate_reason:
       if self._selected_count() == 0:
-        return tr("Pick countries or U.S. states below, then start the first offline download.")
+        return tr("Pick regions below, then start the first offline download.")
       return gate_reason
     return tr("Ready to refresh speed-limit map data.")
 
@@ -980,49 +1013,15 @@ class StarPilotMapsLayout(StarPilotPanel):
     return "  •  ".join(parts)
 
   def _measure_content_height(self, width: float) -> float:
-    total = ACTION_BUTTON_HEIGHT + 18 + SUMMARY_ROW_HEIGHT + SECTION_CARD_GAP
-    total += self._browser_card._measure_height(width)
+    total = self._browser_card._measure_height(width)
     total += SECTION_CARD_GAP + self._selected_card._measure_height()
     return total
 
-  def _draw_status_panel(self, rect: rl.Rectangle):
-    draw_soft_card(rect, rl.Color(255, 255, 255, 4), rl.Color(255, 255, 255, 16))
-
-    left_w = rect.width * 0.54
-    right_x = rect.x + left_w + 20
-    right_w = rect.x + rect.width - right_x - 18
-    top_y = rect.y + 16
-
-    gui_label(rl.Rectangle(rect.x + 20, top_y, left_w - 20, 24), self._progress_title(), 24, AetherListColors.HEADER, FontWeight.SEMI_BOLD)
-    gui_label(rl.Rectangle(rect.x + 20, top_y + 28, left_w - 20, 18), self._progress_body().replace("\n", "  "), 17, AetherListColors.SUBTEXT, FontWeight.NORMAL)
-    gui_label(rl.Rectangle(rect.x + 20, rect.y + rect.height - 22, left_w - 20, 18), self._status_footer_text(), 16, AetherListColors.MUTED, FontWeight.MEDIUM)
-
-    gui_label(rl.Rectangle(right_x, top_y, 110, 18), tr("Storage"), 16, AetherListColors.MUTED, FontWeight.MEDIUM)
-    gui_label(rl.Rectangle(right_x, top_y + 16, 150, 24), self._storage_text, 22, AetherListColors.HEADER, FontWeight.SEMI_BOLD)
-    gui_label(rl.Rectangle(right_x + 168, top_y, 130, 18), tr("Last Updated"), 16, AetherListColors.MUTED, FontWeight.MEDIUM)
-    gui_label(rl.Rectangle(right_x + 168, top_y + 16, max(100.0, right_w - 168), 24), self._last_updated_text(), 20, AetherListColors.HEADER, FontWeight.SEMI_BOLD)
-
-    gui_label(rl.Rectangle(right_x, rect.y + 54, right_w, 18), tr("Coverage"), 16, AetherListColors.MUTED, FontWeight.MEDIUM)
-    gui_label(rl.Rectangle(right_x, rect.y + 72, right_w, 22), self._selection_summary_title(), 20, AetherListColors.HEADER, FontWeight.SEMI_BOLD)
-    gui_label(rl.Rectangle(right_x, rect.y + 94, right_w, 18), self._selection_summary_meta() if self._selected_count() > 0 else tr("No regions chosen yet"), 16, AetherListColors.SUBTEXT, FontWeight.NORMAL)
-
-    if self._download_state.active:
-      center = rl.Vector2(rect.x + rect.width - 34, rect.y + 34)
-      draw_busy_ring(center, rl.get_time() * 160, AetherListColors.PRIMARY, inner_radius=10, outer_radius=14, sweep=210, thickness=20)
-
   def _draw_scroll_content(self, rect: rl.Rectangle, width: float):
-    self._action_strip.set_parent_rect(rect)
     self._browser_card.set_parent_rect(rect)
-    self._selected_summary.set_parent_rect(rect)
     self._selected_card.set_parent_rect(rect)
 
     y = rect.y + self._scroll_offset
-
-    self._action_strip.render(rl.Rectangle(rect.x, y, width, ACTION_BUTTON_HEIGHT))
-    y += ACTION_BUTTON_HEIGHT + 18
-
-    self._selected_summary.render(rl.Rectangle(rect.x, y, width, SUMMARY_ROW_HEIGHT))
-    y += SUMMARY_ROW_HEIGHT + SECTION_CARD_GAP
 
     browser_height = self._browser_card._measure_height(width)
     self._browser_card.render(rl.Rectangle(rect.x, y, width, browser_height))
@@ -1048,19 +1047,25 @@ class StarPilotMapsLayout(StarPilotPanel):
 
     header_status_y = title_y + HEADER_TITLE_HEIGHT + HEADER_SUBTITLE_HEIGHT + 8
     header_status_rect = rl.Rectangle(hdr.x, header_status_y, hdr.width, hdr.y + hdr.height - header_status_y - HEADER_BOTTOM_GAP)
-    self._draw_status_panel(header_status_rect)
+    self._status_card.render(header_status_rect)
 
     scroll_rect = frame.scroll
     content_width = scroll_rect.width - 18
+    action_rect = rl.Rectangle(scroll_rect.x, scroll_rect.y, content_width, ACTION_BUTTON_HEIGHT)
+    self._action_strip.set_parent_rect(scroll_rect)
+    self._action_strip.render(action_rect)
+
+    scroll_content_y = action_rect.y + ACTION_BUTTON_HEIGHT + SECTION_CARD_GAP
+    scroll_content_rect = rl.Rectangle(scroll_rect.x, scroll_content_y, scroll_rect.width, max(0.0, scroll_rect.height - ACTION_BUTTON_HEIGHT - SECTION_CARD_GAP))
     self._content_height = self._measure_content_height(content_width)
     self._scroll_panel.set_enabled(self.is_visible)
-    self._scroll_offset = self._scroll_panel.update(scroll_rect, max(self._content_height, scroll_rect.height))
+    self._scroll_offset = self._scroll_panel.update(scroll_content_rect, max(self._content_height, scroll_content_rect.height))
 
-    rl.begin_scissor_mode(int(scroll_rect.x), int(scroll_rect.y), int(scroll_rect.width), int(scroll_rect.height))
-    self._draw_scroll_content(scroll_rect, content_width)
+    rl.begin_scissor_mode(int(scroll_content_rect.x), int(scroll_content_rect.y), int(scroll_content_rect.width), int(scroll_content_rect.height))
+    self._draw_scroll_content(scroll_content_rect, content_width)
     rl.end_scissor_mode()
 
-    if self._content_height > scroll_rect.height:
-      self._scrollbar.render(scroll_rect, self._content_height, self._scroll_offset)
+    if self._content_height > scroll_content_rect.height:
+      self._scrollbar.render(scroll_content_rect, self._content_height, self._scroll_offset)
 
-    draw_list_scroll_fades(scroll_rect, self._content_height, self._scroll_offset, AetherListColors.PANEL_BG)
+    draw_list_scroll_fades(scroll_content_rect, self._content_height, self._scroll_offset, AetherListColors.PANEL_BG)

@@ -818,8 +818,8 @@ class AetherTile(Widget):
 class HubTile(AetherTile):
   def __init__(
     self,
-    title: str,
-    desc: str,
+    title: str | Callable[[], str],
+    desc: str | Callable[[], str],
     icon_path: str,
     on_click: Callable | None = None,
     starpilot_icon: bool = False,
@@ -848,6 +848,8 @@ class HubTile(AetherTile):
     self._draw_signal_edge(face, self.surface_color, width=TILE_SIGNAL_WIDTH, alpha=48)
 
     status_text = self.get_status() if self.get_status else ""
+    title_text = str(_resolve_value(self.title, ""))
+    fallback_desc = str(_resolve_value(self.desc, ""))
     if status_text:
       import re
 
@@ -861,11 +863,11 @@ class HubTile(AetherTile):
           rl.draw_rectangle_rec(_snap_rect(meter_rect), rl.Color(255, 255, 255, 14))
           rl.draw_rectangle_rec(_snap_rect(fill_rect), _with_alpha(self.surface_color, 170))
 
-    desc_to_render = status_text if status_text else self.desc
+    desc_to_render = status_text if status_text else fallback_desc
     self._render_tile_stack(
       face,
       icon=self._icon,
-      title=self.title,
+      title=title_text,
       primary=desc_to_render,
       desc="",
       title_font=self._font_title,
