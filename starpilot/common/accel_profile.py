@@ -35,12 +35,16 @@ CUSTOM_ACCEL_PROFILE_INITIALIZED_KEY = "CustomAccelProfileInitialized"
 CUSTOM_ACCEL_PROFILE_VALUE_MIN = 0.0
 CUSTOM_ACCEL_PROFILE_VALUE_MAX = 6.0
 
-A_CRUISE_MAX_VALS_ECO_EV = [1.25, 1.25, 1.25, 1.25, 1.45, 1.50, 2.00]
-A_CRUISE_MAX_VALS_STANDARD_EV = [1.35, 1.35, 1.35, 1.35, 1.60, 1.60, 2.10]
-A_CRUISE_MAX_VALS_SPORT_EV = [1.55, 1.55, 1.55, 1.55, 1.84, 1.84, 2.42]
-A_CRUISE_MAX_VALS_SPORT_PLUS_EV = [1.7825, 1.7825, 1.7825, 1.7825, 2.116, 2.116, 2.783]
-A_CRUISE_MAX_VALS_ECO_GAS = [2.0, 1.5, 1.0, 0.8, 0.6, 0.4, 0.2]
-A_CRUISE_MAX_VALS_SPORT_GAS = [3.0, 2.5, 2.0, 1.5, 1.0, 0.8, 0.6]
+A_CRUISE_MAX_VALS_ECO_EV =        [1.50, 1.34, 1.18, 1.02, 0.90, 0.74, 0.58]
+A_CRUISE_MAX_VALS_STANDARD_EV =   [2.00, 1.84, 1.64, 1.44, 1.24, 1.08, 0.84]
+A_CRUISE_MAX_VALS_SPORT_EV =      [2.50, 2.30, 2.06, 1.78, 1.54, 1.34, 1.10]
+A_CRUISE_MAX_VALS_SPORT_PLUS_EV = [3.50, 3.26, 2.94, 2.58, 2.22, 1.94, 1.62]
+
+A_CRUISE_MAX_VALS_ECO_GAS =        [1.50, 1.30, 1.10, 0.90, 0.75, 0.55, 0.35]
+A_CRUISE_MAX_VALS_STANDARD_GAS =   [2.00, 1.80, 1.55, 1.30, 1.05, 0.85, 0.55]
+A_CRUISE_MAX_VALS_SPORT_GAS =      [2.50, 2.25, 1.95, 1.60, 1.30, 1.05, 0.75]
+A_CRUISE_MAX_VALS_SPORT_PLUS_GAS = [3.50, 3.20, 2.80, 2.35, 1.90, 1.55, 1.15]
+
 A_CRUISE_MAX_VALS_ECO_TRUCK = [3.00, 1.05, 0.60, 0.50, 0.50, 0.45, 0.35]
 A_CRUISE_MAX_VALS_STANDARD_TRUCK = [6.00, 1.10, 0.70, 0.60, 0.55, 0.45, 0.35]
 A_CRUISE_MAX_VALS_SPORT_TRUCK = [6.00, 1.15, 0.75, 0.70, 0.60, 0.50, 0.40]
@@ -94,13 +98,13 @@ def get_accel_profile_curve_values(acceleration_profile, ev_tuning=True, truck_t
       return list(A_CRUISE_MAX_VALS_SPORT_PLUS_EV)
     if truck_tuning:
       return list(A_CRUISE_MAX_VALS_SPORT_PLUS_TRUCK)
-    return [float(akima_interp(v_ego, [0.0, 5.0, 20.0], [4.0, 4.0, 2.0])) for v_ego in A_CRUISE_MAX_BP_CUSTOM]
+    return list(A_CRUISE_MAX_VALS_SPORT_PLUS_GAS)
 
   if ev_tuning:
     return list(A_CRUISE_MAX_VALS_STANDARD_EV)
   if truck_tuning:
     return list(A_CRUISE_MAX_VALS_STANDARD_TRUCK)
-  return [float(get_max_accel(v_ego)) for v_ego in A_CRUISE_MAX_BP_CUSTOM]
+  return list(A_CRUISE_MAX_VALS_STANDARD_GAS)
 
 
 def interpolate_accel_profile(v_ego, curve_values):
