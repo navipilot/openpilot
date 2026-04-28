@@ -2187,6 +2187,13 @@
         "ui_type": "toggle"
       },
       {
+        "key": "GMAutoHold",
+        "label": "Volt Auto Hold",
+        "description": "Hold the car at a stop on supported non-CC-only Chevy Volt alpha-longitudinal setups until the gas pedal is pressed.",
+        "data_type": "bool",
+        "ui_type": "toggle"
+      },
+      {
         "key": "TacoTuneHacks",
         "label": "\\\"Taco Bell Run\\\" Torque Hack",
         "description": "The steering torque hack from comma's 2022 \"Taco Bell Run\". Designed to increase steering torque at low speeds for left and right turns.",

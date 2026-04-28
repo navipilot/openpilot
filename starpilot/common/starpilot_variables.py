@@ -1190,6 +1190,15 @@ class StarPilotVariables:
       condition=toggle.car_make == "gm" and toggle.has_pedal and "BOLT" in toggle.car_model,
     )
 
+    gm_auto_hold_supported = toggle.car_model in {
+      GM_CAR.CHEVROLET_VOLT,
+      GM_CAR.CHEVROLET_VOLT_2019,
+      GM_CAR.CHEVROLET_VOLT_ASCM,
+      GM_CAR.CHEVROLET_VOLT_CAMERA,
+    }
+    gm_auto_hold_supported &= toggle.openpilot_longitudinal
+    toggle.gm_auto_hold = self.get_value("GMAutoHold", condition=gm_auto_hold_supported)
+
     toggle.volt_sng = self.get_value("VoltSNG", condition=toggle.car_model == "CHEVROLET_VOLT")
 
     process_starpilot_toggles.cache_clear()

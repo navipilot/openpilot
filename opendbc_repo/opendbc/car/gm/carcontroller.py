@@ -16,11 +16,26 @@ from openpilot.starpilot.common.testing_grounds import testing_ground
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 NetworkLocation = structs.CarParams.NetworkLocation
 LongCtrlState = structs.CarControl.Actuators.LongControlState
+GearShifter = structs.CarState.GearShifter
 
 # Camera cancels up to 0.1s after brake is pressed, ECM allows 0.5s
 CAMERA_CANCEL_DELAY_FRAMES = 10
 # Enforce a minimum interval between steering messages to avoid a fault
 MIN_STEER_MSG_INTERVAL_MS = 15
+AUTO_HOLD_VOLT_CARS = {
+  CAR.CHEVROLET_VOLT,
+  CAR.CHEVROLET_VOLT_2019,
+  CAR.CHEVROLET_VOLT_ASCM,
+  CAR.CHEVROLET_VOLT_CAMERA,
+}
+AUTO_HOLD_DRIVE_GEARS = {
+  GearShifter.drive,
+  GearShifter.low,
+  GearShifter.manumatic,
+}
+AUTO_HOLD_MIN_BRAKE = 80
+AUTO_HOLD_MAX_BRAKE = 240
+AUTO_HOLD_MIN_DRIVE_TIME_S = 3.0
 
 
 def get_stock_cc_active_for_cancel(CP, CS):
@@ -101,6 +116,20 @@ def get_testing_ground_1_brake_switch_bias(v_ego: float) -> int:
   return int(round(np.interp(v_ego, [0.0, 6.0, 15.0, 30.0], [40.0, 85.0, 130.0, 170.0])))
 
 
+def supports_volt_auto_hold(CP, starpilot_toggles):
+  return (
+    getattr(starpilot_toggles, "gm_auto_hold", False) and
+    CP.openpilotLongitudinalControl and
+    CP.carFingerprint in AUTO_HOLD_VOLT_CARS
+  )
+
+
+def estimate_auto_hold_brake(driver_brake: float, op_brake: float) -> int:
+  driver_hold = np.interp(float(driver_brake), [8.0, 20.0, 40.0, 80.0], [80.0, 110.0, 150.0, 220.0])
+  hold_brake = max(float(op_brake), float(driver_hold))
+  return int(round(np.clip(hold_brake, AUTO_HOLD_MIN_BRAKE, AUTO_HOLD_MAX_BRAKE)))
+
+
 class CarController(CarControllerBase):
   def __init__(self, dbc_names, CP):
     super().__init__(dbc_names, CP)
@@ -153,6 +182,7 @@ class CarController(CarControllerBase):
     self.malibu_cancel_phase = 0
     self.malibu_button_phase = 0
     self.malibu_last_button_ts_nanos = 0
+    self.auto_hold_brake = 0
 
   def calc_pedal_command(self, accel: float, long_active: bool, v_ego: float):
     if not long_active:
@@ -302,6 +332,25 @@ class CarController(CarControllerBase):
     self.aego = CS.out.aEgo
     accel = actuators.accel
     press_regen_paddle = False
+    auto_hold_enabled = supports_volt_auto_hold(self.CP, starpilot_toggles)
+
+    hold_ready = (
+      auto_hold_enabled and
+      CS.out.cruiseState.available and
+      CS.out.gearShifter in AUTO_HOLD_DRIVE_GEARS and
+      CS.auto_hold_drive_time >= AUTO_HOLD_MIN_DRIVE_TIME_S
+    )
+    if not hold_ready or CS.out.gasPressed:
+      CS.auto_hold_armed = False
+    elif CS.regen_release_timer > 0.0:
+      CS.auto_hold_armed = False
+    elif not CS.auto_hold_armed and (CS.out.vEgo > 0.03 or (CS.out.vEgo < 0.02 and CS.out.brakePressed)):
+      CS.auto_hold_armed = True
+
+    if CS.out.vEgo > 0.1 or CS.out.gasPressed or CS.out.gearShifter not in AUTO_HOLD_DRIVE_GEARS:
+      self.auto_hold_brake = 0
+    elif CS.out.brakePressed or self.apply_brake > 0:
+      self.auto_hold_brake = estimate_auto_hold_brake(CS.out.brake, self.apply_brake)
 
     if self.frame % 25 == 0:
       try:
@@ -432,6 +481,13 @@ class CarController(CarControllerBase):
         interceptor_gas_cmd = 0
         at_full_stop = CC.longActive and CS.out.standstill
         near_stop = CC.longActive and (CS.out.vEgo < self.params.NEAR_STOP_BRAKE_PHASE)
+        auto_hold_active = (
+          hold_ready and
+          CS.auto_hold_armed and
+          not CC.longActive and
+          not CS.out.regenBraking and
+          CS.out.vEgo < 0.02
+        )
         if not CC.longActive:
           # ASCM sends max regen when not enabled
           self.apply_gas = self.params.INACTIVE_REGEN
@@ -569,12 +625,22 @@ class CarController(CarControllerBase):
           else:
             acc_engaged = CC.enabled
 
-          # GasRegenCmdActive needs to be 1 to avoid cruise faults. It describes the ACC state, not actuation
-          can_sends.append(gmcan.create_gas_regen_command(
-            self.packer_pt, CanBus.POWERTRAIN, self.apply_gas, idx, acc_engaged, at_full_stop,
-            include_always_one3=self.CP.carFingerprint in kaofui_cars, use_volt_layout=self.is_volt))
-          can_sends.append(gmcan.create_friction_brake_command(self.packer_ch, friction_brake_bus, self.apply_brake,
-                                                             idx, CC.enabled, near_stop, at_full_stop, self.CP))
+          if auto_hold_active:
+            hold_brake = self.auto_hold_brake or estimate_auto_hold_brake(CS.out.brake, self.apply_brake)
+            hold_standstill = CS.pcm_acc_status == AccState.STANDSTILL
+            hold_near_stop = CS.out.vEgo < self.params.NEAR_STOP_BRAKE_PHASE
+            can_sends.append(gmcan.create_friction_brake_command(
+              self.packer_ch, friction_brake_bus, hold_brake, idx, False, hold_near_stop, hold_standstill, self.CP))
+            CS.auto_hold_engaged = True
+            CS.auto_hold_fault_suppression_timer = 1.0
+          else:
+            # GasRegenCmdActive needs to be 1 to avoid cruise faults. It describes the ACC state, not actuation
+            can_sends.append(gmcan.create_gas_regen_command(
+              self.packer_pt, CanBus.POWERTRAIN, self.apply_gas, idx, acc_engaged, at_full_stop,
+              include_always_one3=self.CP.carFingerprint in kaofui_cars, use_volt_layout=self.is_volt))
+            can_sends.append(gmcan.create_friction_brake_command(self.packer_ch, friction_brake_bus, self.apply_brake,
+                                                               idx, CC.enabled, near_stop, at_full_stop, self.CP))
+            CS.auto_hold_engaged = False
 
         if should_send_acc_dashboard_status(self.CP, dash_speed_spoof_active):
           send_fcw = hud_alert == VisualAlert.fcw
