@@ -165,7 +165,6 @@ class StarPilotWheelLayout(StarPilotPanel):
     current = self._get_action_name(key)
     if current not in actions:
       current = actions[0]
-    dialog = MultiOptionDialog(tr(key), actions, current)
 
     def on_select(res):
       if res == DialogResult.CONFIRM and dialog.selection:
@@ -173,7 +172,8 @@ class StarPilotWheelLayout(StarPilotPanel):
         self._params_memory.put_bool("StarPilotTogglesUpdated", True)
         self._rebuild_grid()
 
-    gui_app.push_widget(dialog, callback=on_select)
+    dialog = MultiOptionDialog(tr(key), actions, current, callback=on_select)
+    gui_app.push_widget(dialog)
 
   def _rebuild_grid(self):
     if not self.CATEGORIES:

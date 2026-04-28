@@ -167,13 +167,11 @@ class StarPilotVehicleSettingsLayout(StarPilotPanel):
   def _on_select_make(self):
     makes = list(self._make_options)
     if not makes:
-      gui_app.push_widget(ConfirmDialog(tr("No fingerprint list available."), tr("OK"), on_close=lambda r: None))
+      gui_app.push_widget(ConfirmDialog(tr("No fingerprint list available."), tr("OK")))
       return
 
     current_make = self._params.get("CarMake", encoding='utf-8') or ""
     default_make = current_make if current_make in makes else makes[0]
-
-    dialog = MultiOptionDialog(tr("Select Make"), makes, default_make)
 
     def on_select(res):
       if res == DialogResult.CONFIRM and dialog.selection:
@@ -185,17 +183,18 @@ class StarPilotVehicleSettingsLayout(StarPilotPanel):
           self._params.remove("CarModelName")
         self._rebuild_grid()
 
-    gui_app.push_widget(dialog, callback=on_select)
+    dialog = MultiOptionDialog(tr("Select Make"), makes, default_make, callback=on_select)
+    gui_app.push_widget(dialog)
 
   def _on_select_model(self):
     make = self._params.get("CarMake", encoding='utf-8') or ""
     if not make:
-      gui_app.push_widget(ConfirmDialog(tr("Please select a Car Make first!"), tr("OK"), on_close=lambda r: None))
+      gui_app.push_widget(ConfirmDialog(tr("Please select a Car Make first!"), tr("OK")))
       return
 
     model_options = self._models_by_make.get(make, ())
     if not model_options:
-      gui_app.push_widget(ConfirmDialog(tr("No models available for this make."), tr("OK"), on_close=lambda r: None))
+      gui_app.push_widget(ConfirmDialog(tr("No models available for this make."), tr("OK")))
       return
 
     option_labels = [option.option_label for option in model_options]
@@ -206,8 +205,6 @@ class StarPilotVehicleSettingsLayout(StarPilotPanel):
     if default_option is None:
       default_option = next((option.option_label for option in model_options if option.value == current_model), option_labels[0])
 
-    dialog = MultiOptionDialog(tr("Select Model"), option_labels, default_option)
-
     def on_select(res):
       if res == DialogResult.CONFIRM and dialog.selection:
         selected_option = selected_by_label[dialog.selection]
@@ -216,7 +213,8 @@ class StarPilotVehicleSettingsLayout(StarPilotPanel):
         self._params.put("CarMake", make)
         self._rebuild_grid()
 
-    gui_app.push_widget(dialog, callback=on_select)
+    dialog = MultiOptionDialog(tr("Select Model"), option_labels, default_option, callback=on_select)
+    gui_app.push_widget(dialog)
 
   def _on_disable_long(self, state):
     if state:
@@ -230,7 +228,7 @@ class StarPilotVehicleSettingsLayout(StarPilotPanel):
             HARDWARE.reboot()
         self._rebuild_grid()
 
-      gui_app.push_widget(ConfirmDialog(tr("Disable openpilot longitudinal control?"), tr("Disable"), on_close=on_confirm))
+      gui_app.push_widget(ConfirmDialog(tr("Disable openpilot longitudinal control?"), tr("Disable"), callback=on_confirm))
     else:
       self._params.put_bool("DisableOpenpilotLongitudinal", False)
       self._rebuild_grid()

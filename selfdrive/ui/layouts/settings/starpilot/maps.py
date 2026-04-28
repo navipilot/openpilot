@@ -40,9 +40,9 @@ from openpilot.starpilot.common.maps_catalog import (
   MAPS_CATALOG,
   MAP_SCHEDULE_LABELS,
   get_selected_map_entries,
+  normalize_schedule_value,
   sanitize_selected_locations_csv,
   schedule_label,
-  schedule_param_value,
 )
 from openpilot.starpilot.common.maps_selection import COUNTRY_PREFIX
 
@@ -904,13 +904,13 @@ class StarPilotMapsLayout(StarPilotPanel):
   def _on_schedule(self):
     options = list(MAP_SCHEDULE_LABELS.values())
     current = schedule_label(self._params.get("PreferredSchedule"))
-    dialog = MultiOptionDialog(tr("Auto Update Schedule"), options, current)
 
     def on_select(res):
       if res == DialogResult.CONFIRM and dialog.selection:
-        self._params.put("PreferredSchedule", schedule_param_value(dialog.selection))
+        self._params.put_int("PreferredSchedule", normalize_schedule_value(dialog.selection))
 
-    gui_app.push_widget(dialog, callback=on_select)
+    dialog = MultiOptionDialog(tr("Auto Update Schedule"), options, current, callback=on_select)
+    gui_app.push_widget(dialog)
 
   def _on_download(self):
     gate_reason = self._download_gate_reason()
@@ -932,7 +932,7 @@ class StarPilotMapsLayout(StarPilotPanel):
         self._params_memory.remove("CancelDownloadMaps")
         self._download_started_at = rl.get_time()
 
-    gui_app.push_widget(ConfirmDialog(tr("Start downloading offline maps for the selected regions?"), tr("Download"), on_close=on_confirm))
+    gui_app.push_widget(ConfirmDialog(tr("Start downloading offline maps for the selected regions?"), tr("Download"), callback=on_confirm))
 
   def _on_cancel(self):
     def on_confirm(res):
@@ -942,7 +942,7 @@ class StarPilotMapsLayout(StarPilotPanel):
         self._cancel_requested_at = rl.get_time()
         self._cancel_visual_until = rl.get_time() + 2.5
 
-    gui_app.push_widget(ConfirmDialog(tr("Cancel the current map download?"), tr("Cancel Download"), on_close=on_confirm))
+    gui_app.push_widget(ConfirmDialog(tr("Cancel the current map download?"), tr("Cancel Download"), callback=on_confirm))
 
   def _has_downloaded_maps(self) -> bool:
     return self._has_downloaded_data
@@ -961,7 +961,7 @@ class StarPilotMapsLayout(StarPilotPanel):
         threading.Thread(target=remove_worker, daemon=True).start()
         gui_app.push_widget(alert_dialog(tr("Offline maps removed.")))
 
-    gui_app.push_widget(ConfirmDialog(tr("Delete all downloaded offline map data?"), tr("Remove Maps"), on_close=on_confirm))
+    gui_app.push_widget(ConfirmDialog(tr("Delete all downloaded offline map data?"), tr("Remove Maps"), callback=on_confirm))
 
   def _last_updated_text(self) -> str:
     last_update = self._worker_params.get("LastMapsUpdate", encoding="utf-8")

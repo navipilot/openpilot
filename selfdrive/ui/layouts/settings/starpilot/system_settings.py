@@ -481,7 +481,7 @@ class StarPilotSystemLayout(StarPilotPanel):
     if ui_state.started:
       gui_app.push_widget(
         ConfirmDialog(
-          tr("Reboot required. Reboot now?"), tr("Reboot"), tr("Cancel"), on_close=lambda res: HARDWARE.reboot() if res == DialogResult.CONFIRM else None
+          tr("Reboot required. Reboot now?"), tr("Reboot"), tr("Cancel"), callback=lambda res: HARDWARE.reboot() if res == DialogResult.CONFIRM else None
         )
       )
 
@@ -497,7 +497,7 @@ class StarPilotSystemLayout(StarPilotPanel):
     if ui_state.started:
       gui_app.push_widget(
         ConfirmDialog(
-          tr("Reboot required. Reboot now?"), tr("Reboot"), tr("Cancel"), on_close=lambda res: HARDWARE.reboot() if res == DialogResult.CONFIRM else None
+          tr("Reboot required. Reboot now?"), tr("Reboot"), tr("Cancel"), callback=lambda res: HARDWARE.reboot() if res == DialogResult.CONFIRM else None
         )
       )
 
@@ -526,7 +526,7 @@ class StarPilotSystemLayout(StarPilotPanel):
                   shutil.rmtree(entry, ignore_errors=True)
         threading.Thread(target=_task, daemon=True).start()
         gui_app.push_widget(alert_dialog(tr("Driving data deletion started.")))
-    gui_app.push_widget(ConfirmDialog(tr("Delete all driving data and footage?"), tr("Delete"), on_close=_do_delete))
+    gui_app.push_widget(ConfirmDialog(tr("Delete all driving data and footage?"), tr("Delete"), callback=_do_delete))
 
   def _on_delete_error_logs(self):
     def _do_delete(res):
@@ -534,7 +534,7 @@ class StarPilotSystemLayout(StarPilotPanel):
         shutil.rmtree("/data/error_logs", ignore_errors=True)
         os.makedirs("/data/error_logs", exist_ok=True)
         gui_app.push_widget(alert_dialog(tr("Error logs deleted.")))
-    gui_app.push_widget(ConfirmDialog(tr("Delete all error logs?"), tr("Delete"), on_close=_do_delete))
+    gui_app.push_widget(ConfirmDialog(tr("Delete all error logs?"), tr("Delete"), callback=_do_delete))
 
   def _get_backups(self, folder="backups"):
     b_dir = Path(f"/data/{folder}")
@@ -568,7 +568,7 @@ class StarPilotSystemLayout(StarPilotPanel):
     if not backups:
       gui_app.push_widget(alert_dialog(tr("No backups found.")))
       return
-    dialog = MultiOptionDialog(tr("Select Backup"), backups)
+
     def _on_select(res):
       if res == DialogResult.CONFIRM and dialog.selection:
         gui_app.push_widget(alert_dialog(tr("Restoring... device will reboot.")))
@@ -577,18 +577,22 @@ class StarPilotSystemLayout(StarPilotPanel):
           subprocess.run(["tar", "--use-compress-program=zstd", "-xf", f"/data/backups/{dialog.selection}", "-C", "/"])
           os.system("reboot")
         threading.Thread(target=_task, daemon=True).start()
-    gui_app.push_widget(dialog, callback=_on_select)
+
+    dialog = MultiOptionDialog(tr("Select Backup"), backups, callback=_on_select)
+    gui_app.push_widget(dialog)
 
   def _on_delete_backup(self):
     backups = self._get_backups("backups")
     if not backups:
       gui_app.push_widget(alert_dialog(tr("No backups found.")))
       return
-    dialog = MultiOptionDialog(tr("Delete Backup"), backups)
+
     def _on_select(res):
       if res == DialogResult.CONFIRM and dialog.selection:
         os.remove(f"/data/backups/{dialog.selection}")
-    gui_app.push_widget(dialog, callback=_on_select)
+
+    dialog = MultiOptionDialog(tr("Delete Backup"), backups, callback=_on_select)
+    gui_app.push_widget(dialog)
 
   def _on_create_toggle_backup(self):
     def on_name(res, name):
@@ -612,7 +616,7 @@ class StarPilotSystemLayout(StarPilotPanel):
     if not backups:
       gui_app.push_widget(alert_dialog(tr("No toggle backups found.")))
       return
-    dialog = MultiOptionDialog(tr("Select Toggle Backup"), backups)
+
     def _on_select(res):
       if res == DialogResult.CONFIRM and dialog.selection:
         def on_confirm(r2):
@@ -629,19 +633,23 @@ class StarPilotSystemLayout(StarPilotPanel):
               if old_path.exists():
                 old_path.replace(new_path)
             gui_app.push_widget(alert_dialog(tr("Toggles restored.")))
-        gui_app.push_widget(ConfirmDialog(tr("This will overwrite your current toggles."), tr("Restore"), on_close=on_confirm))
-    gui_app.push_widget(dialog, callback=_on_select)
+        gui_app.push_widget(ConfirmDialog(tr("This will overwrite your current toggles."), tr("Restore"), callback=on_confirm))
+
+    dialog = MultiOptionDialog(tr("Select Toggle Backup"), backups, callback=_on_select)
+    gui_app.push_widget(dialog)
 
   def _on_delete_toggle_backup(self):
     backups = self._get_backups("toggle_backups")
     if not backups:
       gui_app.push_widget(alert_dialog(tr("No toggle backups found.")))
       return
-    dialog = MultiOptionDialog(tr("Delete Toggle Backup"), backups)
+
     def _on_select(res):
       if res == DialogResult.CONFIRM and dialog.selection:
         shutil.rmtree(f"/data/toggle_backups/{dialog.selection}", ignore_errors=True)
-    gui_app.push_widget(dialog, callback=_on_select)
+
+    dialog = MultiOptionDialog(tr("Delete Toggle Backup"), backups, callback=_on_select)
+    gui_app.push_widget(dialog)
 
   def _get_force_drive_state(self):
     if self._params.get_bool("ForceOnroad"):

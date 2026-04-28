@@ -161,8 +161,6 @@ class StarPilotThemesLayout(StarPilotPanel):
     else:
       current = "Clear"
 
-    dialog = MultiOptionDialog(tr("Startup Alert"), options, current)
-
     def on_select(res):
       if res == DialogResult.CONFIRM and dialog.selection:
         if dialog.selection == "Stock":
@@ -175,7 +173,8 @@ class StarPilotThemesLayout(StarPilotPanel):
           self._params.remove("StartupMessageTop")
           self._params.remove("StartupMessageBottom")
 
-    gui_app.push_widget(dialog, callback=on_select)
+    dialog = MultiOptionDialog(tr("Startup Alert"), options, current, callback=on_select)
+    gui_app.push_widget(dialog)
 
 
 class StarPilotPersonalizeLayout(StarPilotPanel):
@@ -319,8 +318,6 @@ class StarPilotPersonalizeLayout(StarPilotPanel):
     if not themes:
       return
 
-    dialog = MultiOptionDialog(tr(key), themes, current)
-
     def on_select(res):
       if res == DialogResult.CONFIRM and dialog.selection:
         selected_slug = option_map.get(dialog.selection)
@@ -329,4 +326,5 @@ class StarPilotPersonalizeLayout(StarPilotPanel):
         self._params.put(key, selected_slug)
         self._rebuild_grid()
 
-    gui_app.push_widget(dialog, callback=on_select)
+    dialog = MultiOptionDialog(tr(key), themes, current, callback=on_select)
+    gui_app.push_widget(dialog)

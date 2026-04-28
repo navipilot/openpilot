@@ -466,8 +466,6 @@ class StarPilotModelUILayout(StarPilotPanel):
     presets = ["Stock", "#FFFFFF", "#178644", "#3B82F6", "#E63956", "#8B5CF6", "#F59E0B"]
     current = self._params.get(key, encoding='utf-8') or "Stock"
 
-    dialog = MultiOptionDialog(tr(key), presets, current)
-
     def on_select(res):
       if res == DialogResult.CONFIRM and dialog.selection:
         if dialog.selection == "Stock":
@@ -476,7 +474,8 @@ class StarPilotModelUILayout(StarPilotPanel):
           self._params.put(key, dialog.selection)
         self._rebuild_grid()
 
-    gui_app.push_widget(dialog, callback=on_select)
+    dialog = MultiOptionDialog(tr(key), presets, current, callback=on_select)
+    gui_app.push_widget(dialog)
 
 
 class StarPilotNavigationVisualsLayout(StarPilotPanel):
@@ -569,12 +568,11 @@ class StarPilotVisualQOLLayout(StarPilotPanel):
   def _show_camera_view_selector(self):
     current = self._params.get_int("CameraView")
 
-    dialog = MultiOptionDialog(tr("Camera View"), self.CAMERA_VIEWS, self.CAMERA_VIEWS[current])
-
     def on_select(res):
       if res == DialogResult.CONFIRM and dialog.selection:
         idx = self.CAMERA_VIEWS.index(dialog.selection)
         self._params.put_int("CameraView", idx)
         self._rebuild_grid()
 
-    gui_app.push_widget(dialog, callback=on_select)
+    dialog = MultiOptionDialog(tr("Camera View"), self.CAMERA_VIEWS, self.CAMERA_VIEWS[current], callback=on_select)
+    gui_app.push_widget(dialog)

@@ -111,7 +111,7 @@ class StarPilotAdvancedLateralLayout(StarPilotPanel):
     self._params.put_bool(key, state)
     from openpilot.selfdrive.ui.ui_state import ui_state
     if ui_state.started:
-      dialog = ConfirmDialog(tr("Reboot required. Reboot now?"), tr("Reboot"), tr("Cancel"), on_close=lambda res: HARDWARE.reboot() if res == DialogResult.CONFIRM else None)
+      dialog = ConfirmDialog(tr("Reboot required. Reboot now?"), tr("Reboot"), tr("Cancel"), callback=lambda res: HARDWARE.reboot() if res == DialogResult.CONFIRM else None)
       gui_app.push_widget(dialog)
 
 class StarPilotAlwaysOnLateralLayout(StarPilotPanel):
@@ -135,7 +135,7 @@ class StarPilotAlwaysOnLateralLayout(StarPilotPanel):
     self._params.put_bool(key, state)
     from openpilot.selfdrive.ui.ui_state import ui_state
     if ui_state.started:
-      gui_app.push_widget(ConfirmDialog(tr("Reboot required. Reboot now?"), tr("Reboot"), tr("Cancel"), on_close=lambda res: HARDWARE.reboot() if res == DialogResult.CONFIRM else None))
+      gui_app.push_widget(ConfirmDialog(tr("Reboot required. Reboot now?"), tr("Reboot"), tr("Cancel"), callback=lambda res: HARDWARE.reboot() if res == DialogResult.CONFIRM else None))
 
 class StarPilotLaneChangesLayout(StarPilotPanel):
   def __init__(self):
@@ -201,7 +201,7 @@ class StarPilotLateralTuneLayout(StarPilotPanel):
     self._params.put_bool(key, state)
     from openpilot.selfdrive.ui.ui_state import ui_state
     if ui_state.started:
-      gui_app.push_widget(ConfirmDialog(tr("Reboot required. Reboot now?"), tr("Reboot"), tr("Cancel"), on_close=lambda res: HARDWARE.reboot() if res == DialogResult.CONFIRM else None))
+      gui_app.push_widget(ConfirmDialog(tr("Reboot required. Reboot now?"), tr("Reboot"), tr("Cancel"), callback=lambda res: HARDWARE.reboot() if res == DialogResult.CONFIRM else None))
 
 class StarPilotLateralQOLLayout(StarPilotPanel):
   def __init__(self):
