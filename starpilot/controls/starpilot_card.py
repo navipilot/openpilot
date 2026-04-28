@@ -84,8 +84,11 @@ class StarPilotCard:
       for be in carState.buttonEvents:
         if be.type == ButtonType.lkas and be.pressed and starpilot_toggles.always_on_lateral_lkas:
           self.always_on_lateral_allowed = not self.always_on_lateral_allowed
-        elif be.type == ButtonType.mainCruise and be.pressed and starpilot_toggles.always_on_lateral_main:
-          self.always_on_lateral_allowed = not self.always_on_lateral_allowed
+        elif be.type == ButtonType.mainCruise and be.pressed:
+          if starpilot_toggles.always_on_lateral_main:
+            self.always_on_lateral_allowed = not self.always_on_lateral_allowed
+          elif starpilot_toggles.speed_limit_controller:
+            self.params_memory.put_bool("SLCAdoptSpeedLimit", True)
     elif starpilot_toggles.always_on_lateral_main:
       self.always_on_lateral_allowed = carState.cruiseState.available
 

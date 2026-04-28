@@ -57,6 +57,8 @@ class SpeedLimitController:
     self.previous_source = "None"
     self.source = "None"
 
+    self._slc_adopt_counter = 0
+
     mapbox_requests_raw = self.starpilot_planner.params.get("MapBoxRequests", encoding="utf-8")
     try:
       self.mapbox_requests = json.loads(mapbox_requests_raw or "{}")
@@ -381,6 +383,21 @@ class SpeedLimitController:
     else:
       self.speed_limit_changed_timer = 0
       self.unconfirmed_speed_limit = 0
+
+    self._slc_adopt_counter += 1
+    if self._slc_adopt_counter % 4 == 0 and self.starpilot_planner.params_memory.get_bool("SLCAdoptSpeedLimit"):
+      self.starpilot_planner.params_memory.remove("SLCAdoptSpeedLimit")
+      if desired_target > 0:
+        self.overridden_speed = 0
+        self.denied_target = 0
+        self.source = desired_source
+        self.target = desired_target
+        self.previous_source = desired_source
+        self.previous_target = desired_target
+        self.speed_limit_changed_timer = 0
+        self.unconfirmed_speed_limit = 0
+        self.starpilot_planner.params.put_nonblocking("PreviousSpeedLimit", self.target)
+        self.starpilot_planner.params_memory.put_float("SLCForceCruiseSpeed", self.target + self.offset)
 
   def update_map_speed_limit(self, v_ego, sm):
     next_speed_limit_distance = sm["mapdOut"].nextSpeedLimitDistance
