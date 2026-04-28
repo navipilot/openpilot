@@ -945,7 +945,7 @@ class StarPilotSLCQOLLayout(StarPilotPanel):
     super().__init__()
     self.CATEGORIES = [
       {
-        "title": tr_noop("Match Speed on Engage"),
+        "title": tr_noop("Auto Match Speed Limits"),
         "type": "toggle",
         "get_state": lambda: self._params.get_bool("SetSpeedLimit"),
         "set_state": lambda s: self._params.put_bool("SetSpeedLimit", s),

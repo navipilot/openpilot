@@ -213,7 +213,19 @@ def test_vision_lead_approach_cap_brakes_before_hard_cap():
   assert hard_cap == pytest.approx(-0.212, abs=1e-2)
   assert approach_cap is not None
   assert approach_cap < hard_cap
-  assert approach_cap > -0.6
+  assert approach_cap > -1.2
+
+
+def test_vision_lead_approach_cap_brakes_harder_when_inside_tight_gap():
+  v_ego = 26.18
+  CP = CarInterface.get_non_essential_params(CAR.HONDA_CIVIC)
+  planner = LongitudinalPlanner(CP, init_v=v_ego)
+  lead = make_lead(status=True, d_rel=39.72, v_lead=22.46, a_lead=-0.15, radar=False, model_prob=0.97)
+
+  approach_cap = planner.get_vision_lead_approach_cap(lead, v_ego, -1.0, 1.49)
+
+  assert approach_cap is not None
+  assert approach_cap < -0.5
 
 
 def test_vision_lead_approach_cap_ignores_opening_lead_with_large_gap():
@@ -267,8 +279,8 @@ def test_dynamic_t_follow_increases_modestly_for_closing_lead(model_version):
     planner.update(sm, make_toggles(model_version))
 
   assert planner.effective_t_follow is not None
-  assert planner.effective_t_follow > sm["starpilotPlan"].tFollow + 0.05
-  assert planner.effective_t_follow < sm["starpilotPlan"].tFollow + 0.2
+  assert planner.effective_t_follow > sm["starpilotPlan"].tFollow + 0.15
+  assert planner.effective_t_follow < sm["starpilotPlan"].tFollow + 0.45
 
 
 @pytest.mark.parametrize("model_version", ["v11", "v12"])
@@ -354,8 +366,31 @@ def test_acc_mode_vision_lead_approach_cap_smooths_before_close_brake(model_vers
 
   assert planner_approach.mode == "acc"
   assert planner_close.mode == "acc"
-  assert planner_approach.output_a_target < -0.3
+  assert planner_approach.output_a_target < -0.5
   assert planner_close.output_a_target < planner_approach.output_a_target - 0.25
+
+
+@pytest.mark.parametrize("model_version", ["v11", "v12"])
+def test_acc_mode_low_speed_vision_stop_buffer_sets_should_stop_before_tiny_gap(model_version):
+  v_ego = 3.8
+
+  CP = CarInterface.get_non_essential_params(CAR.HONDA_CIVIC)
+  planner = LongitudinalPlanner(CP, init_v=v_ego)
+  sm = make_sm(
+    v_ego,
+    desired_accel=0.1,
+    min_accel=-3.0,
+    experimental_mode=False,
+    tracking_lead=True,
+    lead_one=make_lead(status=True, d_rel=5.75, v_lead=0.58, a_lead=-0.1, radar=False, model_prob=0.99),
+  )
+  sm["starpilotPlan"].vCruise = v_ego + 4.0
+
+  planner.update(sm, make_toggles(model_version))
+
+  assert planner.mode == "acc"
+  assert planner.output_should_stop
+  assert planner.output_a_target < -1.0
 
 
 @pytest.mark.parametrize("model_version", ["v11", "v12"])

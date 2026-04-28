@@ -15,6 +15,7 @@ from openpilot.starpilot.common.accel_profile import (
   interpolate_accel_profile,
   normalize_deceleration_profile,
 )
+from openpilot.starpilot.controls.lib.starpilot_vcruise import get_active_slc_control_target
 from openpilot.starpilot.common.starpilot_variables import CITY_SPEED_LIMIT
 
 def cubic_interp(x, xp, fp):
@@ -196,9 +197,23 @@ class StarPilotAcceleration:
         raw_v_cruise_kph += starpilot_toggles.set_speed_offset
       raw_v_cruise = raw_v_cruise_kph * CV.KPH_TO_MS
 
+      v_ego_cluster = getattr(sm["carState"], "vEgoCluster", v_ego)
+      if v_ego_cluster is None:
+        v_ego_cluster = v_ego
+      v_ego_cluster = max(v_ego_cluster, v_ego)
+      v_ego_diff = v_ego_cluster - v_ego
+      effective_slc_target = get_active_slc_control_target(
+        getattr(starpilot_toggles, "speed_limit_controller", False),
+        getattr(starpilot_toggles, "set_speed_limit", False),
+        getattr(self.starpilot_planner.starpilot_vcruise, "slc_target", 0.0),
+        getattr(self.starpilot_planner.starpilot_vcruise, "slc_offset", 0.0),
+        getattr(getattr(self.starpilot_planner.starpilot_vcruise, "slc", None), "overridden_speed", 0.0),
+        v_ego_diff,
+      )
       v_target = float(self.starpilot_planner.v_cruise or raw_v_cruise)
-      slc_target = float(getattr(self.starpilot_planner.starpilot_vcruise, "slc_target", 0.0))
-      slc_limited = slc_target > 0.0 and abs(v_target - slc_target) <= SLC_TARGET_EPS and v_target < raw_v_cruise - SLC_TARGET_EPS
+      if effective_slc_target > 0.0:
+        v_target = min(v_target, effective_slc_target)
+      slc_limited = effective_slc_target > 0.0 and abs(v_target - effective_slc_target) <= SLC_TARGET_EPS and effective_slc_target < raw_v_cruise - SLC_TARGET_EPS
       has_relevant_lead = any(lead_is_braking_relevant(lead, v_ego) for lead in (sm["radarState"].leadOne, sm["radarState"].leadTwo))
       stop_context = (
         sm["carState"].standstill or
