@@ -77,6 +77,18 @@ def test_starting():
   assert next_state == LongCtrlState.pid
 
 
+def test_stopping_release_hysteresis_blocks_immediate_launch():
+  CP = car.CarParams.new_message(startingState=True, vEgoStarting=0.5)
+  toggles = make_toggles(vEgoStarting=0.5)
+  active = True
+  current_state = LongCtrlState.stopping
+
+  next_state = long_control_state_trans(CP, active, current_state, v_ego=0.0,
+                             should_stop=False, brake_pressed=False, cruise_standstill=False, starpilot_toggles=toggles,
+                             allow_stopping_release=False)
+  assert next_state == LongCtrlState.stopping
+
+
 def test_starting_accel_unchanged_when_custom_profile_disabled():
   CP = car.CarParams.new_message(startingState=True, vEgoStarting=0.5)
   CP.longitudinalTuning.kpBP = [0.0]
@@ -123,6 +135,43 @@ def test_starting_accel_obeys_a_target_cap_when_custom_profile_enabled():
 
   assert lc.long_control_state == LongCtrlState.starting
   assert output_accel == 0.1
+
+
+def test_update_requires_sustained_positive_target_to_leave_stopping():
+  CP = car.CarParams.new_message(startingState=True, vEgoStarting=0.5)
+  CP.longitudinalTuning.kpBP = [0.0]
+  CP.longitudinalTuning.kpV = [0.1]
+  CP.longitudinalTuning.kiBP = [0.0]
+  CP.longitudinalTuning.kiV = [0.03]
+
+  lc = LongControl(CP)
+  lc.long_control_state = LongCtrlState.stopping
+  CS = car.CarState.new_message(vEgo=0.0, aEgo=0.0, brakePressed=False)
+  CS.cruiseState.standstill = False
+
+  release_frames = int(round(longcontrol.STOPPING_RELEASE_HYSTERESIS / longcontrol.DT_CTRL))
+  for _ in range(release_frames - 1):
+    output_accel = lc.update(
+      active=True,
+      CS=CS,
+      a_target=0.5,
+      should_stop=False,
+      accel_limits=(-3.0, 2.0),
+      starpilot_toggles=make_toggles(startAccel=1.5),
+    )
+    assert lc.long_control_state == LongCtrlState.stopping
+    assert output_accel <= 0.0
+
+  lc.update(
+    active=True,
+    CS=CS,
+    a_target=0.5,
+    should_stop=False,
+    accel_limits=(-3.0, 2.0),
+    starpilot_toggles=make_toggles(startAccel=1.5),
+  )
+
+  assert lc.long_control_state == LongCtrlState.starting
 
 
 def test_volt_testing_ground_handoff_freezes_integrator(monkeypatch):

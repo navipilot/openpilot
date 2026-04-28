@@ -225,6 +225,28 @@ def test_vision_lead_approach_cap_ignores_opening_lead_with_large_gap():
   assert planner.get_vision_lead_approach_cap(lead, v_ego, -1.0, 1.45) is None
 
 
+def test_vision_slow_stopped_lead_cap_brakes_earlier_for_confident_stop():
+  v_ego = 13.207
+  CP = CarInterface.get_non_essential_params(CAR.HONDA_CIVIC)
+  planner = LongitudinalPlanner(CP, init_v=v_ego)
+  lead = make_lead(status=True, d_rel=49.131, v_lead=1.837, a_lead=-0.312, radar=False, model_prob=0.942)
+
+  slow_stop_cap = planner.get_vision_slow_stopped_lead_cap(lead, v_ego, -1.0, 1.75)
+
+  assert slow_stop_cap is not None
+  assert slow_stop_cap < -0.9
+  assert slow_stop_cap > -1.25
+
+
+def test_vision_slow_stopped_lead_cap_ignores_far_high_speed_stop_candidate():
+  v_ego = 33.5
+  CP = CarInterface.get_non_essential_params(CAR.HONDA_CIVIC)
+  planner = LongitudinalPlanner(CP, init_v=v_ego)
+  lead = make_lead(status=True, d_rel=183.0, v_lead=0.0, a_lead=0.0, radar=False, model_prob=0.995)
+
+  assert planner.get_vision_slow_stopped_lead_cap(lead, v_ego, -1.0, 1.45) is None
+
+
 @pytest.mark.parametrize("model_version", ["v11", "v12"])
 def test_dynamic_t_follow_increases_modestly_for_closing_lead(model_version):
   v_ego = 21.535

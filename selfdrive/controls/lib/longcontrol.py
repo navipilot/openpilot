@@ -11,6 +11,8 @@ from openpilot.starpilot.common.testing_grounds import testing_ground
 CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
 clip = np.clip
 interp = np.interp
+STOPPING_RELEASE_HYSTERESIS = 0.35
+STOPPING_RELEASE_MIN_ACCEL = 0.2
 
 LongCtrlState = car.CarControl.Actuators.LongControlState
 
@@ -25,13 +27,15 @@ def apply_deadzone(error, deadzone):
 
 
 def long_control_state_trans(CP, active, long_control_state, v_ego,
-                             should_stop, brake_pressed, cruise_standstill, starpilot_toggles):
+                             should_stop, brake_pressed, cruise_standstill, starpilot_toggles,
+                             allow_stopping_release=True):
   # Ignore cruise standstill if car has a gas interceptor
   cruise_standstill = cruise_standstill and not CP.enableGasInterceptorDEPRECATED
   stopping_condition = should_stop
   starting_condition = (not should_stop and
                         not cruise_standstill and
                         not brake_pressed)
+  stopping_release_condition = starting_condition and allow_stopping_release
   started_condition = v_ego > starpilot_toggles.vEgoStarting
 
   if not active:
@@ -48,9 +52,9 @@ def long_control_state_trans(CP, active, long_control_state, v_ego,
           long_control_state = LongCtrlState.pid
 
     elif long_control_state == LongCtrlState.stopping:
-      if starting_condition and CP.startingState:
+      if stopping_release_condition and CP.startingState:
         long_control_state = LongCtrlState.starting
-      elif starting_condition:
+      elif stopping_release_condition:
         long_control_state = LongCtrlState.pid
 
     elif long_control_state in [LongCtrlState.starting, LongCtrlState.pid]:
@@ -115,6 +119,7 @@ class LongControl:
     self.last_output_accel = 0.0
     self.last_a_target = 0.0
     self.integrator_hold_frames = 0
+    self.stop_release_counter = 0
     self.is_gm_pedal_long = bool(
       CP.brand == "gm" and CP.enableGasInterceptorDEPRECATED and (CP.flags & GMFlags.PEDAL_LONG.value)
     )
@@ -149,10 +154,33 @@ class LongControl:
     self.mode_transition_duration = 1.0
     self.transitioning = False
 
-  def reset(self):
+  def reset(self, preserve_stop_release=False):
     self.pid.reset()
     self.last_a_target = 0.0
     self.integrator_hold_frames = 0
+    if not preserve_stop_release:
+      self.stop_release_counter = 0
+
+  def _stop_release_ready(self, CS, a_target, should_stop, starpilot_toggles):
+    if self.long_control_state != LongCtrlState.stopping:
+      self.stop_release_counter = 0
+      return True
+
+    if should_stop or CS.brakePressed or CS.cruiseState.standstill:
+      self.stop_release_counter = 0
+      return False
+
+    if CS.vEgo > starpilot_toggles.vEgoStarting:
+      self.stop_release_counter = int(round(STOPPING_RELEASE_HYSTERESIS / DT_CTRL))
+      return True
+
+    if a_target > STOPPING_RELEASE_MIN_ACCEL:
+      max_frames = int(round(STOPPING_RELEASE_HYSTERESIS / DT_CTRL))
+      self.stop_release_counter = min(self.stop_release_counter + 1, max_frames)
+    else:
+      self.stop_release_counter = 0
+
+    return self.stop_release_counter >= int(round(STOPPING_RELEASE_HYSTERESIS / DT_CTRL))
 
   def _get_pedal_long_freeze(self, a_target, error, v_ego, accel_limits):
     volt_test_tune_handoff = self.is_volt and testing_ground.use_2
@@ -198,9 +226,11 @@ class LongControl:
     self.pid.neg_limit = accel_limits[0]
     self.pid.pos_limit = accel_limits[1]
 
+    allow_stopping_release = self._stop_release_ready(CS, a_target, should_stop, starpilot_toggles)
     self.long_control_state = long_control_state_trans(self.CP, active, self.long_control_state, CS.vEgo,
                                                        should_stop, CS.brakePressed,
-                                                       CS.cruiseState.standstill, starpilot_toggles)
+                                                       CS.cruiseState.standstill, starpilot_toggles,
+                                                       allow_stopping_release=allow_stopping_release)
     if self.long_control_state == LongCtrlState.off:
       self.reset()
       output_accel = 0.
@@ -210,7 +240,7 @@ class LongControl:
       if output_accel > starpilot_toggles.stopAccel:
         output_accel = min(output_accel, 0.0)
         output_accel -= starpilot_toggles.stoppingDecelRate * DT_CTRL
-      self.reset()
+      self.reset(preserve_stop_release=True)
 
     elif self.long_control_state == LongCtrlState.starting:
       if starpilot_toggles.human_acceleration:

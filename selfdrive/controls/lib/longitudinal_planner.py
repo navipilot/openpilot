@@ -39,6 +39,13 @@ VISION_LEAD_APPROACH_MAX_DECEL = 0.45
 VISION_LEAD_APPROACH_MIN_DECEL = 0.12
 VISION_LEAD_APPROACH_MIN_MODEL_PROB = 0.85
 VISION_LEAD_APPROACH_FULL_MODEL_PROB = 0.98
+VISION_SLOW_LEAD_MAX_SPEED = 5.0
+VISION_SLOW_LEAD_MIN_CLOSING_SPEED = 1.5
+VISION_SLOW_LEAD_TRIGGER_TTC = 4.5
+VISION_SLOW_LEAD_FULL_TTC = 2.0
+VISION_SLOW_LEAD_MAX_DECEL = 1.2
+VISION_SLOW_LEAD_MIN_DECEL = 0.18
+VISION_SLOW_LEAD_MIN_MODEL_PROB = 0.9
 LEAD_APPROACH_TFOLLOW_TRIGGER_TIME = 4.5
 LEAD_APPROACH_TFOLLOW_FULL_TIME = 1.5
 LEAD_APPROACH_TFOLLOW_MAX_DELTA = 0.18
@@ -300,6 +307,43 @@ class LongitudinalPlanner:
                                 (VISION_LEAD_APPROACH_FULL_MODEL_PROB - VISION_LEAD_APPROACH_MIN_MODEL_PROB), 0.0, 1.0))
     approach_decel = VISION_LEAD_APPROACH_MAX_DECEL * time_factor * prob_factor
     if approach_decel < VISION_LEAD_APPROACH_MIN_DECEL:
+      return None
+
+    return max(accel_min, -approach_decel)
+
+  def get_vision_slow_stopped_lead_cap(self, lead, v_ego, accel_min, t_follow):
+    if lead is None or not lead.status or bool(getattr(lead, "radar", False)):
+      return None
+
+    lead_prob = float(getattr(lead, "modelProb", 0.0))
+    if lead_prob < VISION_SLOW_LEAD_MIN_MODEL_PROB or float(lead.vLead) > VISION_SLOW_LEAD_MAX_SPEED:
+      return None
+
+    lead_brake = max(0.0, -float(lead.aLeadK))
+    reaction_t = max(self.CP.longitudinalActuatorDelay, self.dt)
+    closing_speed = max(0.0, v_ego - lead.vLead)
+    projected_closing_speed = closing_speed + lead_brake * reaction_t
+    if projected_closing_speed < VISION_SLOW_LEAD_MIN_CLOSING_SPEED:
+      return None
+
+    stop_gap = float(max(STOP_DISTANCE + 1.0, 2.5 + 0.15 * max(float(lead.vLead), 0.0)))
+    delay_buffer = projected_closing_speed * reaction_t
+    available_gap = max(float(lead.dRel) - stop_gap - delay_buffer, 0.5)
+    projected_ttc = available_gap / max(projected_closing_speed, 0.1)
+    if projected_ttc > VISION_SLOW_LEAD_TRIGGER_TTC:
+      return None
+
+    time_factor = float(np.clip((VISION_SLOW_LEAD_TRIGGER_TTC - projected_ttc) /
+                                (VISION_SLOW_LEAD_TRIGGER_TTC - VISION_SLOW_LEAD_FULL_TTC), 0.0, 1.0))
+    prob_factor = float(np.clip((lead_prob - VISION_SLOW_LEAD_MIN_MODEL_PROB) /
+                                (VISION_LEAD_APPROACH_FULL_MODEL_PROB - VISION_SLOW_LEAD_MIN_MODEL_PROB), 0.0, 1.0))
+    speed_factor = float(np.clip((VISION_SLOW_LEAD_MAX_SPEED - max(float(lead.vLead), 0.0)) /
+                                 VISION_SLOW_LEAD_MAX_SPEED, 0.0, 1.0))
+    required_decel = (projected_closing_speed ** 2) / (2.0 * available_gap)
+    decel_scale = 0.45 + 0.35 * time_factor + 0.20 * speed_factor
+    approach_decel = min(VISION_SLOW_LEAD_MAX_DECEL, required_decel * decel_scale)
+    approach_decel *= 0.65 + 0.35 * prob_factor
+    if approach_decel < VISION_SLOW_LEAD_MIN_DECEL:
       return None
 
     return max(accel_min, -approach_decel)
@@ -628,6 +672,9 @@ class LongitudinalPlanner:
         cap = self.get_close_lead_brake_cap(lead, v_ego, output_accel_min)
         if cap is not None:
           close_lead_caps.append(cap)
+        slow_stop_cap = self.get_vision_slow_stopped_lead_cap(lead, v_ego, output_accel_min, effective_t_follow)
+        if slow_stop_cap is not None:
+          close_lead_caps.append(slow_stop_cap)
         approach_cap = self.get_vision_lead_approach_cap(lead, v_ego, output_accel_min, effective_t_follow)
         if approach_cap is not None:
           close_lead_caps.append(approach_cap)

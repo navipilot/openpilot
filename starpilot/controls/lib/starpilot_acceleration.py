@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 import numpy as np
 
+from openpilot.common.constants import CV
 from openpilot.common.params import Params
+from openpilot.selfdrive.car.cruise import V_CRUISE_MAX, V_CRUISE_UNSET
 from openpilot.selfdrive.controls.lib.longitudinal_planner import A_CRUISE_MIN, get_max_accel
 
 from openpilot.starpilot.common.accel_profile import (
@@ -11,6 +13,7 @@ from openpilot.starpilot.common.accel_profile import (
   get_accel_profile_curve_values,
   get_max_allowed_accel as get_profile_max_allowed_accel,
   interpolate_accel_profile,
+  normalize_deceleration_profile,
 )
 from openpilot.starpilot.common.starpilot_variables import CITY_SPEED_LIMIT
 
@@ -53,6 +56,24 @@ def akima_interp(x, xp, fp):
 
 A_CRUISE_MIN_ECO = A_CRUISE_MIN / 2
 A_CRUISE_MIN_SPORT = A_CRUISE_MIN * 2
+SLC_COAST_WINDOW_BP = [0.0, 10.0, 20.0, 35.0]
+SLC_COAST_WINDOW_BASE = [0.20, 0.40, 0.65, 1.10]
+SLC_EXCESS_SCALE_BP = [0.0, 10.0, 20.0, 35.0]
+SLC_EXCESS_SCALE_V = [0.8, 1.8, 3.5, 5.5]
+SLC_COAST_WINDOW_MULTIPLIER = {
+  DECELERATION_PROFILES["ECO"]: 1.20,
+  DECELERATION_PROFILES["STANDARD"]: 1.00,
+  DECELERATION_PROFILES["SPORT"]: 0.75,
+}
+SLC_COAST_FLOOR = {
+  DECELERATION_PROFILES["ECO"]: -0.02,
+  DECELERATION_PROFILES["STANDARD"]: -0.03,
+  DECELERATION_PROFILES["SPORT"]: -0.04,
+}
+SLC_COAST_MIN_SPEED = 4.0
+SLC_TARGET_EPS = 0.15
+RELEVANT_LEAD_MIN_CLOSING_SPEED = 0.5
+RELEVANT_LEAD_MIN_BRAKE = -0.4
 
 def get_max_accel_eco(v_ego, ev_tuning=True, truck_tuning=False):
   return interpolate_accel_profile(v_ego, get_accel_profile_curve_values(ACCELERATION_PROFILES["ECO"], ev_tuning, truck_tuning))
@@ -78,6 +99,41 @@ def get_max_accel_ramp_off(max_accel, v_cruise, v_ego):
 def get_max_allowed_accel(v_ego, ev_tuning=True, truck_tuning=False):
   return float(get_profile_max_allowed_accel(v_ego, ev_tuning, truck_tuning))
 
+def get_profile_min_accel_floor(deceleration_profile):
+  if deceleration_profile == DECELERATION_PROFILES["ECO"]:
+    return A_CRUISE_MIN_ECO
+  if deceleration_profile == DECELERATION_PROFILES["SPORT"]:
+    return A_CRUISE_MIN_SPORT
+  return A_CRUISE_MIN
+
+def lead_is_braking_relevant(lead, v_ego):
+  if lead is None or not getattr(lead, "status", False):
+    return False
+
+  closing_speed = float(v_ego - getattr(lead, "vLead", 0.0))
+  if closing_speed > RELEVANT_LEAD_MIN_CLOSING_SPEED:
+    return True
+
+  if float(getattr(lead, "aLeadK", 0.0)) < RELEVANT_LEAD_MIN_BRAKE:
+    return True
+
+  return float(getattr(lead, "dRel", 1e6)) < max(18.0, 2.0 * float(v_ego))
+
+def get_slc_shaped_min_accel(v_ego, v_target, deceleration_profile, full_brake_floor):
+  profile = DECELERATION_PROFILES["STANDARD"] if deceleration_profile is None else deceleration_profile
+  coast_floor = SLC_COAST_FLOOR.get(profile, SLC_COAST_FLOOR[DECELERATION_PROFILES["STANDARD"]])
+  coast_window = float(akima_interp(v_ego, SLC_COAST_WINDOW_BP, SLC_COAST_WINDOW_BASE))
+  coast_window *= SLC_COAST_WINDOW_MULTIPLIER.get(profile, 1.0)
+  excess_scale = float(akima_interp(v_ego, SLC_EXCESS_SCALE_BP, SLC_EXCESS_SCALE_V))
+  excess_scale = max(excess_scale, coast_window + 0.1)
+
+  excess = max(0.0, float(v_ego) - float(v_target))
+  if excess <= coast_window:
+    return coast_floor
+
+  t = float(np.clip((excess - coast_window) / (excess_scale - coast_window), 0.0, 1.0)) ** 2
+  return coast_floor + t * (full_brake_floor - coast_floor)
+
 class StarPilotAcceleration:
   def __init__(self, StarPilotPlanner):
     self.starpilot_planner = StarPilotPlanner
@@ -95,6 +151,9 @@ class StarPilotAcceleration:
     truck_tuning = getattr(starpilot_toggles, "truck_tuning", False)
     custom_accel_profile = getattr(starpilot_toggles, "custom_accel_profile", False)
     custom_accel_profile_values = getattr(starpilot_toggles, "custom_accel_profile_values", [])
+    deceleration_profile = normalize_deceleration_profile(
+      getattr(starpilot_toggles, "deceleration_profile", DECELERATION_PROFILES["STANDARD"])
+    )
 
     if custom_accel_profile:
       self.max_accel = get_max_accel_custom(v_ego, custom_accel_profile_values, starpilot_toggles.acceleration_profile, ev_tuning, truck_tuning)
@@ -130,12 +189,31 @@ class StarPilotAcceleration:
       else:
         self.min_accel = A_CRUISE_MIN_SPORT
     else:
-      if starpilot_toggles.deceleration_profile == DECELERATION_PROFILES["ECO"]:
-        self.min_accel = A_CRUISE_MIN_ECO
-      elif starpilot_toggles.deceleration_profile == DECELERATION_PROFILES["SPORT"]:
-        self.min_accel = A_CRUISE_MIN_SPORT
-      else:
-        self.min_accel = A_CRUISE_MIN
+      self.min_accel = get_profile_min_accel_floor(deceleration_profile)
+
+      raw_v_cruise_kph = 0.0 if sm["carState"].vCruise == V_CRUISE_UNSET else min(sm["carState"].vCruise, V_CRUISE_MAX)
+      if 0 < raw_v_cruise_kph < V_CRUISE_UNSET and getattr(starpilot_toggles, "set_speed_offset", 0) > 0:
+        raw_v_cruise_kph += starpilot_toggles.set_speed_offset
+      raw_v_cruise = raw_v_cruise_kph * CV.KPH_TO_MS
+
+      v_target = float(getattr(sm["starpilotPlan"], "vCruise", raw_v_cruise))
+      slc_target = float(getattr(sm["starpilotPlan"], "slcSpeedLimit", 0.0))
+      slc_limited = slc_target > 0.0 and abs(v_target - slc_target) <= SLC_TARGET_EPS and v_target < raw_v_cruise - SLC_TARGET_EPS
+      has_relevant_lead = any(lead_is_braking_relevant(lead, v_ego) for lead in (sm["radarState"].leadOne, sm["radarState"].leadTwo))
+      stop_context = (
+        sm["carState"].standstill or
+        getattr(sm["controlsState"], "forceDecel", False) or
+        getattr(sm["starpilotPlan"], "redLight", False) or
+        getattr(sm["starpilotPlan"], "forcingStop", False) or
+        getattr(sm["starpilotPlan"], "disableThrottle", False)
+      )
+      if (getattr(starpilot_toggles, "speed_limit_controller", False) and
+          v_ego > SLC_COAST_MIN_SPEED and
+          v_ego > v_target + 0.05 and
+          slc_limited and
+          not has_relevant_lead and
+          not stop_context):
+        self.min_accel = get_slc_shaped_min_accel(v_ego, v_target, deceleration_profile, self.min_accel)
 
     # Sync AccelerationProfile and DecelerationProfile params so the UI reflects the active drive mode
     # Eco → Eco, Normal → Standard, Sport → Sport+

@@ -4,18 +4,22 @@ from types import SimpleNamespace
 from openpilot.common.constants import CV
 from openpilot.starpilot.controls.starpilot_planner import StarPilotPlanner
 import openpilot.starpilot.controls.starpilot_planner as starpilot_planner_module
+import openpilot.starpilot.controls.lib.conditional_experimental_mode as conditional_experimental_mode_module
 from openpilot.starpilot.controls.lib.conditional_experimental_mode import ConditionalExperimentalMode
 
 
 def make_cem(*, model_length: float, model_stopped: bool = False, tracking_lead: bool = False,
-             lead_status: bool = False, lead_d_rel: float = float("inf")):
+             lead_status: bool = False, lead_d_rel: float = float("inf"),
+             lead_v_lead: float = 0.0, lead_model_prob: float = 0.0, lead_radar: bool = False):
   planner = SimpleNamespace(
     params=None,
     params_memory=None,
     model_length=model_length,
     model_stopped=model_stopped,
     tracking_lead=tracking_lead,
-    lead_one=SimpleNamespace(status=lead_status, dRel=lead_d_rel),
+    starpilot_vcruise=SimpleNamespace(stop_sign_confirmed=False),
+    lead_one=SimpleNamespace(status=lead_status, dRel=lead_d_rel, vLead=lead_v_lead,
+                             modelProb=lead_model_prob, radar=lead_radar),
   )
   return ConditionalExperimentalMode(planner)
 
@@ -98,6 +102,33 @@ def test_stop_light_stays_latched_until_untracked_stopped_lead_handoff():
   cem.starpilot_planner.lead_one.dRel = model_length - 5.0
   cem.starpilot_planner.lead_one.vLead = 0.5
   run_stop_light_detector(cem, v_ego, steps=10, tracking_lead=False)
+
+  assert cem.stop_light_detected
+
+
+def test_stop_light_latch_holds_slow_high_confidence_vision_lead_during_model_flicker(monkeypatch):
+  v_ego = 40 * CV.MPH_TO_MS
+  model_length = v_ego * 3.8
+  cem = make_cem(
+    model_length=model_length,
+    lead_status=True,
+    lead_d_rel=model_length - 5.0,
+    lead_v_lead=3.0,
+    lead_model_prob=0.98,
+  )
+
+  run_stop_light_detector(cem, v_ego, steps=20)
+  assert cem.stop_light_detected
+
+  monotonic_values = iter([10.0, 10.2])
+  monkeypatch.setattr(conditional_experimental_mode_module.time, "monotonic", lambda: next(monotonic_values))
+
+  cem.stop_sign_and_light(v_ego, make_sm(), model_time=7.0)
+  cem.stop_light_detected = False
+  cem.stop_light_model_detected = False
+  cem.stop_light_filter.x = 0.0
+  cem.starpilot_planner.model_length = v_ego * 9.0
+  cem.stop_sign_and_light(v_ego, make_sm(), model_time=7.0)
 
   assert cem.stop_light_detected
 
