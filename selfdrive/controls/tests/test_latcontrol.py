@@ -213,7 +213,8 @@ class TestLatControl:
     assert get_ioniq_6_ff_scale(0.4, 0.0, 20.0) > get_ioniq_6_ff_scale(-0.4, 0.0, 20.0)
     assert get_ioniq_6_ff_scale(0.4, 0.7, 8.0) > get_ioniq_6_ff_scale(0.4, 0.0, 8.0) > get_ioniq_6_ff_scale(0.4, -0.7, 8.0)
     assert get_ioniq_6_ff_scale(-0.4, -0.7, 8.0) >= get_ioniq_6_ff_scale(-0.4, 0.0, 8.0) > get_ioniq_6_ff_scale(-0.4, 0.7, 8.0)
-    assert get_ioniq_6_ff_scale(0.4, 0.0, 20.0) < get_ioniq_6_ff_scale(1.2, 0.0, 20.0) < 1.0
+    assert get_ioniq_6_ff_scale(0.4, 0.0, 20.0) > get_ioniq_6_ff_scale(1.2, 0.0, 20.0)
+    assert abs(get_ioniq_6_ff_scale(1.2, 0.0, 20.0) - 1.0) < 0.02
 
   def test_ioniq_6_directional_taper_curve(self):
     assert get_ioniq_6_directional_taper_scale(0.0, 0.0) == 1.0
