@@ -231,6 +231,12 @@ IONIQ_6_CENTER_TAPER_LAT = 0.13
 IONIQ_6_CENTER_TAPER_LAT_WIDTH = 0.02
 IONIQ_6_CENTER_TAPER_SPEED = 18.0
 IONIQ_6_CENTER_TAPER_SPEED_WIDTH = 2.5
+IONIQ_6_LOW_MID_CENTER_TAPER_MAX = 0.024
+IONIQ_6_LOW_MID_CENTER_TAPER_LAT = 0.16
+IONIQ_6_LOW_MID_CENTER_TAPER_LAT_WIDTH = 0.03
+IONIQ_6_LOW_MID_CENTER_TAPER_SPEED_MIN = 9.5
+IONIQ_6_LOW_MID_CENTER_TAPER_SPEED_MAX = 14.0
+IONIQ_6_LOW_MID_CENTER_TAPER_SPEED_WIDTH = 1.0
 IONIQ_6_DIRECTIONAL_TAPER_LAT_START = 0.15
 IONIQ_6_DIRECTIONAL_TAPER_LAT_END = 0.90
 IONIQ_6_DIRECTIONAL_TAPER_LAT_WIDTH = 0.08
@@ -749,8 +755,16 @@ def get_ioniq_6_friction_scale(v_ego: float, desired_lateral_accel: float, desir
 def get_ioniq_6_center_taper_scale(desired_lateral_accel: float, v_ego: float) -> float:
   speed_weight = _ioniq_6_sigmoid((v_ego - IONIQ_6_CENTER_TAPER_SPEED) / IONIQ_6_CENTER_TAPER_SPEED_WIDTH)
   center_weight = _ioniq_6_sigmoid((IONIQ_6_CENTER_TAPER_LAT - abs(desired_lateral_accel)) / IONIQ_6_CENTER_TAPER_LAT_WIDTH)
-  reduction = IONIQ_6_CENTER_TAPER_MAX * speed_weight * center_weight
-  return 1.0 - reduction
+  high_speed_reduction = IONIQ_6_CENTER_TAPER_MAX * speed_weight * center_weight
+
+  low_mid_onset = _ioniq_6_sigmoid((v_ego - IONIQ_6_LOW_MID_CENTER_TAPER_SPEED_MIN) / IONIQ_6_LOW_MID_CENTER_TAPER_SPEED_WIDTH)
+  low_mid_cutoff = _ioniq_6_sigmoid((IONIQ_6_LOW_MID_CENTER_TAPER_SPEED_MAX - v_ego) / IONIQ_6_LOW_MID_CENTER_TAPER_SPEED_WIDTH)
+  low_mid_speed_weight = low_mid_onset * low_mid_cutoff
+  low_mid_center_weight = _ioniq_6_sigmoid((IONIQ_6_LOW_MID_CENTER_TAPER_LAT - abs(desired_lateral_accel)) /
+                                           IONIQ_6_LOW_MID_CENTER_TAPER_LAT_WIDTH)
+  low_mid_reduction = IONIQ_6_LOW_MID_CENTER_TAPER_MAX * low_mid_speed_weight * low_mid_center_weight
+
+  return 1.0 - min(high_speed_reduction + low_mid_reduction, 0.12)
 
 
 def get_ioniq_6_directional_taper_scale(desired_lateral_accel: float, desired_lateral_jerk: float) -> float:

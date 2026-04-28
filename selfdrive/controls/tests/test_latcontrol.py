@@ -250,6 +250,7 @@ class TestLatControl:
   def test_ioniq_6_center_taper_curve(self):
     assert get_ioniq_6_center_taper_scale(0.0, 30.0) < get_ioniq_6_center_taper_scale(0.0, 10.0)
     assert get_ioniq_6_center_taper_scale(0.0, 30.0) < get_ioniq_6_center_taper_scale(0.2, 30.0)
+    assert get_ioniq_6_center_taper_scale(0.0, 12.0) < get_ioniq_6_center_taper_scale(0.25, 12.0)
     assert abs(get_ioniq_6_center_taper_scale(0.2, 30.0) - 1.0) < 1e-3
 
   def test_kia_ev6_ff_scale_curve(self):
