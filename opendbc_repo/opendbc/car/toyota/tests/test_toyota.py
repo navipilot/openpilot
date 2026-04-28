@@ -1,8 +1,11 @@
+from types import SimpleNamespace
+
 from hypothesis import given, settings, strategies as st
 
 from opendbc.car import Bus
 from opendbc.car.structs import CarParams
 from opendbc.car.fw_versions import build_fw_dict
+from opendbc.car.toyota.carcontroller import CarController
 from opendbc.car.toyota.fingerprints import FW_VERSIONS
 from opendbc.car.toyota.values import CAR, DBC, TSS2_CAR, ANGLE_CONTROL_CAR, RADAR_ACC_CAR, SECOC_CAR, \
                                                   FW_QUERY_CONFIG, PLATFORM_CODE_ECUS, FUZZY_EXCLUDED_PLATFORMS, \
@@ -165,3 +168,67 @@ class TestToyotaFingerprint:
         platforms_with_shared_codes |= {str(platform), *matches}
 
     assert platforms_with_shared_codes == FUZZY_EXCLUDED_PLATFORMS, (len(platforms_with_shared_codes), len(FW_VERSIONS))
+
+
+class TestToyotaCarController:
+  @staticmethod
+  def _make_controller(*, standstill_req=False, last_standstill=False):
+    controller = CarController.__new__(CarController)
+    controller.CP = SimpleNamespace(carFingerprint=CAR.TOYOTA_PRIUS)
+    controller.standstill_req = standstill_req
+    controller.last_standstill = last_standstill
+    return controller
+
+  @staticmethod
+  def _make_cc(*, resume=False):
+    return SimpleNamespace(cruiseControl=SimpleNamespace(resume=resume))
+
+  @staticmethod
+  def _make_cs(*, standstill=True, cruise_standstill=True, pcm_acc_status=8):
+    return SimpleNamespace(
+      out=SimpleNamespace(
+        standstill=standstill,
+        cruiseState=SimpleNamespace(standstill=cruise_standstill),
+      ),
+      pcm_acc_status=pcm_acc_status,
+    )
+
+  @staticmethod
+  def _make_toggles(*, sng_hack=False):
+    return SimpleNamespace(sng_hack=sng_hack)
+
+  def test_prius_standstill_request_latches_on_entry(self):
+    controller = self._make_controller()
+
+    controller._update_standstill_request(
+      self._make_cc(),
+      self._make_cs(),
+      SimpleNamespace(accel=0.0),
+      self._make_toggles(),
+    )
+
+    assert controller.standstill_req is True
+
+  def test_prius_resume_request_releases_standstill_latch(self):
+    controller = self._make_controller(standstill_req=True, last_standstill=True)
+
+    controller._update_standstill_request(
+      self._make_cc(resume=True),
+      self._make_cs(),
+      SimpleNamespace(accel=0.0),
+      self._make_toggles(),
+    )
+
+    assert controller.standstill_req is False
+
+  def test_sng_hack_clears_existing_standstill_latch(self):
+    controller = self._make_controller(standstill_req=True, last_standstill=True)
+
+    controller._update_standstill_request(
+      self._make_cc(),
+      self._make_cs(),
+      SimpleNamespace(accel=0.0),
+      self._make_toggles(sng_hack=True),
+    )
+
+    assert controller.standstill_req is False
