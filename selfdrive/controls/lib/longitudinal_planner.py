@@ -26,7 +26,7 @@ ALLOW_THROTTLE_THRESHOLD = 0.4
 ALLOW_THROTTLE_HYSTERESIS = 0.05
 ALLOW_THROTTLE_ENABLE_THRESHOLD = ALLOW_THROTTLE_THRESHOLD + ALLOW_THROTTLE_HYSTERESIS
 ALLOW_THROTTLE_DISABLE_THRESHOLD = ALLOW_THROTTLE_THRESHOLD - ALLOW_THROTTLE_HYSTERESIS
-MIN_ALLOW_THROTTLE_SPEED = 2.5
+MIN_ALLOW_THROTTLE_SPEED = 5.0
 RAW_LEAD_SAFETY_MIN_CLOSING_SPEED = 0.5
 RAW_LEAD_SAFETY_TTC = 7.0
 RAW_LEAD_SAFETY_DISTANCE = 40.0
@@ -809,7 +809,7 @@ class LongitudinalPlanner:
     longitudinalPlan.fcw = self.fcw
 
     longitudinalPlan.aTarget = float(self.output_a_target)
-    longitudinalPlan.shouldStop = bool(self.output_should_stop) or sm['starpilotPlan'].forcingStopLength < 1
+    longitudinalPlan.shouldStop = bool(self.output_should_stop) or (sm['starpilotPlan'].forcingStop and sm['starpilotPlan'].forcingStopLength < 1)
     longitudinalPlan.allowBrake = True
     longitudinalPlan.allowThrottle = bool(self.allow_throttle)
 
