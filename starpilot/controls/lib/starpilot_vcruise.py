@@ -27,8 +27,8 @@ OFFSET_FT_MIN = -20
 OFFSET_FT_MAX = 20
 
 
-def get_active_slc_control_target(speed_limit_controller, set_speed_limit, slc_target, slc_offset, overridden_speed, v_ego_diff):
-  if not speed_limit_controller or not set_speed_limit:
+def get_active_slc_control_target(speed_limit_controller, slc_target, slc_offset, overridden_speed, v_ego_diff):
+  if not speed_limit_controller:
     return 0.0
 
   base_target = max(float(overridden_speed), float(slc_target) + float(slc_offset))
@@ -197,7 +197,6 @@ class StarPilotVCruise:
       targets = [self.csc_target, v_cruise]
       slc_control_target = get_active_slc_control_target(
         starpilot_toggles.speed_limit_controller,
-        getattr(starpilot_toggles, "set_speed_limit", False),
         self.slc_target,
         self.slc_offset,
         self.slc.overridden_speed,

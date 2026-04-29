@@ -102,7 +102,7 @@ def test_slc_coast_window_uses_effective_target_with_offset_and_cluster_diff():
   assert accel.min_accel == pytest.approx(-0.02, abs=1e-3)
 
 
-def test_slc_coast_window_disabled_when_set_speed_limit_is_off():
+def test_slc_coast_window_still_applies_when_set_speed_limit_is_off():
   raw_target = 58.0 * CV.MPH_TO_MS
   slc_target = 45.0 * CV.MPH_TO_MS
   slc_offset = 3.0 * CV.MPH_TO_MS
@@ -112,7 +112,7 @@ def test_slc_coast_window_disabled_when_set_speed_limit_is_off():
 
   accel.update(v_ego, sm, make_toggles(deceleration_profile=DECELERATION_PROFILES["ECO"], set_speed_limit=False))
 
-  assert accel.min_accel == pytest.approx(A_CRUISE_MIN_ECO)
+  assert accel.min_accel == pytest.approx(-0.02, abs=1e-3)
 
 
 def test_slc_coast_window_scales_by_profile_strength():
