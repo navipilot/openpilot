@@ -607,7 +607,12 @@ class CarController(CarControllerBase):
         if self.CP.enableGasInterceptorDEPRECATED:
           can_sends.append(create_gas_interceptor_command(self.packer_pt, interceptor_gas_cmd, idx))
         if self.CP.carFingerprint not in CC_ONLY_CAR:
-          friction_brake_bus = CanBus.CHASSIS
+          volt_gateway_alt_brake = (
+            self.CP.carFingerprint == CAR.CHEVROLET_VOLT and
+            self.CP.networkLocation == NetworkLocation.gateway and
+            bool(self.CP.flags & GMFlags.NO_ACCELERATOR_POS_MSG.value)
+          )
+          friction_brake_bus = CanBus.POWERTRAIN if volt_gateway_alt_brake else CanBus.CHASSIS
           # GM Camera exceptions
           # TODO: can we always check the longControlState?
           if self.CP.networkLocation == NetworkLocation.fwdCamera:

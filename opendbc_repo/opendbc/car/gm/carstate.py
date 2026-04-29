@@ -27,6 +27,7 @@ TransmissionType = structs.CarParams.TransmissionType
 NetworkLocation = structs.CarParams.NetworkLocation
 
 STANDSTILL_THRESHOLD = 10 * 0.0311
+VOLT_EBCM_BRAKE_PRESSED_THRESHOLD = 6 / 0xd0
 AUTO_HOLD_MIN_DRIVE_TIME_S = 3.0
 AUTO_HOLD_REGEN_RELEASE_COOLDOWN_S = 1.0
 
@@ -162,7 +163,9 @@ class CarState(CarStateBase):
       else:
         ret.brake = pt_cp.vl["ECMAcceleratorPos"]["BrakePedalPos"]
 
-    if self.CP.carFingerprint in {CAR.CHEVROLET_MALIBU_CC} or (self.CP.carFingerprint == CAR.CHEVROLET_BLAZER and not no_accel_pos):
+    if self.CP.carFingerprint == CAR.CHEVROLET_VOLT and no_accel_pos:
+      ret.brakePressed = ret.brake >= VOLT_EBCM_BRAKE_PRESSED_THRESHOLD
+    elif self.CP.carFingerprint in {CAR.CHEVROLET_MALIBU_CC} or (self.CP.carFingerprint == CAR.CHEVROLET_BLAZER and not no_accel_pos):
       ret.brakePressed = ret.brake >= 8
     elif (self.CP.flags & GMFlags.FORCE_BRAKE_C9.value) or ((self.CP.networkLocation == NetworkLocation.fwdCamera) and (self.CP.carFingerprint != CAR.CHEVROLET_BLAZER)):
       ret.brakePressed = pt_cp.vl["ECMEngineStatus"]["BrakePressed"] != 0

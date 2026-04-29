@@ -196,7 +196,15 @@ class TestGmAscmSafety(GmLongitudinalBase, TestGmSafetyBase):
 
 
 class TestGmAscmEVSafety(TestGmAscmSafety, TestGmEVSafetyBase):
-  pass
+  EXTRA_SAFETY_PARAM = GMSafetyFlags.FLAG_GM_NO_CAMERA
+  TX_MSGS = [[0x180, 0], [0x409, 0], [0x40A, 0], [0x2CB, 0], [0x370, 0], [0x200, 0], [0x1E1, 0], [0xBD, 0], [0x1F5, 0], [0x315, 0],
+             [0xA1, 1], [0x306, 1], [0x308, 1], [0x310, 1]]
+  RELAY_MALFUNCTION_ADDRS = {0: (0x180, 0x2CB, 0x315)}
+  BRAKE_BUS = 0
+
+  def _user_brake_msg(self, brake):
+    values = {"BrakePedalPosition": 6 if brake else 0}
+    return self.packer.make_can_msg_panda("EBCMBrakePedalPosition", 0, values)
 
 
 class TestGmCameraSafetyBase(TestGmSafetyBase):

@@ -620,6 +620,9 @@ class CarInterface(CarInterfaceBase):
 
     if ACCELERATOR_POS_MSG not in fingerprint[CanBus.POWERTRAIN]:
       ret.flags |= GMFlags.NO_ACCELERATOR_POS_MSG.value
+      if candidate == CAR.CHEVROLET_VOLT and ret.networkLocation == NetworkLocation.gateway:
+        # Reuse the no-camera safety bit as an ASCM Volt selector for the alternate EBCM brake path.
+        ret.safetyConfigs[0].safetyParam |= GMSafetyFlags.FLAG_GM_NO_CAMERA.value
 
     try:
       remote_start_boots_comma = params.get_bool("RemoteStartBootsComma")

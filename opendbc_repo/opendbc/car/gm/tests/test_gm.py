@@ -103,6 +103,7 @@ class TestGMInterface:
                                          starpilot_toggles=_test_starpilot_toggles())
 
     assert car_params.flags & GMFlags.NO_ACCELERATOR_POS_MSG.value
+    assert car_params.safetyConfigs[0].safetyParam & GMSafetyFlags.FLAG_GM_NO_CAMERA.value
 
     pt_parser = CarInterface.CarState.get_can_parsers(car_params)[Bus.pt]
     assert "ECMAcceleratorPos" not in pt_parser.vl

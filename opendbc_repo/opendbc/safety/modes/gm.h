@@ -59,6 +59,7 @@ static bool gm_force_brake_c9 = false;
 static bool gm_panda_3d1_sched = false;
 static bool gm_panda_paddle_sched = false;
 static bool gm_bolt_2022_pedal = false;
+static bool gm_alt_brake = false;
 
 static bool gm_cc_long = false;
 static bool gm_has_acc = true;
@@ -246,8 +247,12 @@ static void gm_rx_hook(const CANPacket_t *msg) {
       brake_pressed = GET_BIT(msg, 40U);
     }
 
-    if ((msg->addr == 0xBEU) && ((gm_hw == GM_ASCM) || gm_sdgm || gm_ascm_int)) {
+    if ((msg->addr == 0xBEU) && (((gm_hw == GM_ASCM) && !gm_alt_brake) || gm_sdgm || gm_ascm_int)) {
       brake_pressed = msg->data[1] >= 8U;
+    }
+
+    if ((msg->addr == 0xF1U) && gm_alt_brake) {
+      brake_pressed = msg->data[1] >= 6U;
     }
 
     if ((msg->addr == 0xC9U) && (gm_hw == GM_CAM) && !gm_force_brake_c9) {
@@ -546,6 +551,12 @@ static safety_config gm_init(uint16_t param) {
                                            {0x1E1, 0, 7, .check_relay = false},
                                            {0xBD, 0, 7, .check_relay = false},
                                            {0x1F5, 0, 8, .check_relay = false}}; // pt bus
+  static const CanMsg GM_ASCM_ALT_BRAKE_TX_MSGS[] = {{0x180, 0, 4, .check_relay = true}, {0x409, 0, 7, .check_relay = false}, {0x40A, 0, 7, .check_relay = false}, {0x2CB, 0, 8, .check_relay = true}, {0x370, 0, 6, .check_relay = false}, {0x315, 0, 5, .check_relay = true},  // pt bus
+                                                     {0xA1, 1, 7, .check_relay = false}, {0x306, 1, 8, .check_relay = false}, {0x308, 1, 7, .check_relay = false}, {0x310, 1, 2, .check_relay = false},   // obs bus
+                                                     {0x200, 0, 6, .check_relay = false},
+                                                     {0x1E1, 0, 7, .check_relay = false},
+                                                     {0xBD, 0, 7, .check_relay = false},
+                                                     {0x1F5, 0, 8, .check_relay = false}}; // pt bus
 
 
   static const LongitudinalLimits GM_CAM_LONG_LIMITS = {
@@ -660,6 +671,7 @@ static safety_config gm_init(uint16_t param) {
   gm_remote_start_boots_comma = GET_FLAG(param, GM_PARAM_REMOTE_START_BOOTS_COMMA);
   gm_panda_3d1_sched = GET_FLAG(param, GM_PARAM_PANDA_3D1_SCHED) && gm_pedal_long && !gm_has_acc && !gm_bolt_2022_pedal;
   gm_panda_paddle_sched = GET_FLAG(param, GM_PARAM_PANDA_PADDLE_SCHED) && gm_pedal_long && enable_gas_interceptor;
+  gm_alt_brake = GET_FLAG(param, GM_PARAM_NO_CAMERA) && (gm_hw == GM_ASCM) && !gm_sdgm && !gm_ascm_int;
 
   gm_3d1_spoof_valid = false;
   gm_3d1_internal_tx = false;
@@ -726,6 +738,8 @@ static safety_config gm_init(uint16_t param) {
         ret = BUILD_SAFETY_CFG(gm_rx_checks, GM_CAM_TX_MSGS);
       }
     }
+  } else if (gm_alt_brake) {
+    ret = BUILD_SAFETY_CFG(gm_rx_checks, GM_ASCM_ALT_BRAKE_TX_MSGS);
   } else {
     ret = BUILD_SAFETY_CFG(gm_rx_checks, GM_ASCM_TX_MSGS);
   }
