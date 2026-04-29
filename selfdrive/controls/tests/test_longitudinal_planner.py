@@ -105,7 +105,7 @@ def make_toggles(model_version: str = "v11"):
   )
 
 
-@pytest.mark.parametrize("model_version", ["v11", "v12"])
+@pytest.mark.parametrize("model_version", ["v11", "v12", "v13"])
 def test_experimental_mlsim_uses_vehicle_min_accel_floor(model_version):
   v_ego = 18.0
   desired_accel = -1.0
@@ -126,7 +126,7 @@ def test_experimental_mlsim_uses_vehicle_min_accel_floor(model_version):
   assert planner.output_a_target < comfort_min_accel
 
 
-@pytest.mark.parametrize("model_version", ["v11", "v12"])
+@pytest.mark.parametrize("model_version", ["v11", "v12", "v13"])
 def test_acc_mode_uses_close_raw_lead_when_tracking_lead_is_debounced(model_version):
   v_ego = 5.0
 
@@ -151,7 +151,7 @@ def test_acc_mode_uses_close_raw_lead_when_tracking_lead_is_debounced(model_vers
   )
 
 
-@pytest.mark.parametrize("model_version", ["v11", "v12"])
+@pytest.mark.parametrize("model_version", ["v11", "v12", "v13"])
 def test_acc_mode_matches_no_lead_baseline_for_far_vision_only_lead_without_tracking(model_version):
   v_ego = 29.0
 
@@ -259,7 +259,7 @@ def test_vision_slow_stopped_lead_cap_ignores_far_high_speed_stop_candidate():
   assert planner.get_vision_slow_stopped_lead_cap(lead, v_ego, -1.0, 1.45) is None
 
 
-@pytest.mark.parametrize("model_version", ["v11", "v12"])
+@pytest.mark.parametrize("model_version", ["v11", "v12", "v13"])
 def test_dynamic_t_follow_increases_modestly_for_closing_lead(model_version):
   v_ego = 21.535
 
@@ -283,7 +283,7 @@ def test_dynamic_t_follow_increases_modestly_for_closing_lead(model_version):
   assert planner.effective_t_follow < sm["starpilotPlan"].tFollow + 0.45
 
 
-@pytest.mark.parametrize("model_version", ["v11", "v12"])
+@pytest.mark.parametrize("model_version", ["v11", "v12", "v13"])
 def test_dynamic_t_follow_stays_near_base_for_far_highway_lead(model_version):
   v_ego = 29.26
 
@@ -305,7 +305,7 @@ def test_dynamic_t_follow_stays_near_base_for_far_highway_lead(model_version):
   assert planner.effective_t_follow == pytest.approx(sm["starpilotPlan"].tFollow, abs=0.02)
 
 
-@pytest.mark.parametrize("model_version", ["v11", "v12"])
+@pytest.mark.parametrize("model_version", ["v11", "v12", "v13"])
 def test_dynamic_t_follow_releases_toward_base_after_lead_opens(model_version):
   v_ego = 21.535
 
@@ -333,7 +333,7 @@ def test_dynamic_t_follow_releases_toward_base_after_lead_opens(model_version):
   assert planner.effective_t_follow == pytest.approx(sm["starpilotPlan"].tFollow, abs=0.02)
 
 
-@pytest.mark.parametrize("model_version", ["v11", "v12"])
+@pytest.mark.parametrize("model_version", ["v11", "v12", "v13"])
 def test_acc_mode_vision_lead_approach_cap_smooths_before_close_brake(model_version):
   approach_v_ego = 21.535
   close_v_ego = 21.435
@@ -370,7 +370,7 @@ def test_acc_mode_vision_lead_approach_cap_smooths_before_close_brake(model_vers
   assert planner_close.output_a_target < planner_approach.output_a_target - 0.25
 
 
-@pytest.mark.parametrize("model_version", ["v11", "v12"])
+@pytest.mark.parametrize("model_version", ["v11", "v12", "v13"])
 def test_acc_mode_low_speed_vision_stop_buffer_sets_should_stop_before_tiny_gap(model_version):
   v_ego = 3.8
 
@@ -393,7 +393,7 @@ def test_acc_mode_low_speed_vision_stop_buffer_sets_should_stop_before_tiny_gap(
   assert planner.output_a_target < -1.0
 
 
-@pytest.mark.parametrize("model_version", ["v11", "v12"])
+@pytest.mark.parametrize("model_version", ["v11", "v12", "v13"])
 def test_acc_mode_damps_far_radar_mild_lead_brake_more_than_close_brake(model_version):
   far_v_ego = 29.26
   far_v_cruise = 32.22

@@ -725,7 +725,7 @@ class DrivingModelBigButton(BigButton):
       f"{key}_driving_vision_metadata.pkl",
     ]
 
-    if version == "v12":
+    if version in {"v12", "v13"}:
       files.extend([
         f"{key}_driving_off_policy_tinygrad.pkl",
         f"{key}_driving_off_policy_metadata.pkl",
