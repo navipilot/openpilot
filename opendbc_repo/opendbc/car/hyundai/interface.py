@@ -22,6 +22,29 @@ ENABLE_BUTTONS = (ButtonType.accelCruise, ButtonType.decelCruise, ButtonType.can
 ECU_DISABLE_TIMESTAMP = 0.0
 
 
+def apply_platform_longitudinal_params(ret: structs.CarParams) -> None:
+  ret.startingState = True
+  ret.startAccel = 1.0
+  ret.longitudinalActuatorDelay = 0.5
+
+  if ret.flags & HyundaiFlags.CANFD:
+    ret.vEgoStopping = 0.3
+    ret.vEgoStarting = 0.1
+    ret.stoppingDecelRate = 0.4
+  elif ret.flags & HyundaiFlags.EV:
+    ret.vEgoStopping = 0.35
+    ret.vEgoStarting = 0.1
+    ret.stoppingDecelRate = 0.45
+  elif ret.flags & HyundaiFlags.HYBRID:
+    ret.vEgoStopping = 0.4
+    ret.vEgoStarting = 0.15
+    ret.stoppingDecelRate = 0.45
+  else:
+    ret.vEgoStopping = 0.3
+    ret.vEgoStarting = 0.1
+    ret.stoppingDecelRate = 0.4
+
+
 class CarInterface(CarInterfaceBase):
   CarState = CarState
   CarController = CarController
@@ -155,17 +178,7 @@ class CarInterface(CarInterfaceBase):
     if ret.openpilotLongitudinalControl:
       ret.radarUnavailable = True
     ret.pcmCruise = not ret.openpilotLongitudinalControl
-    ret.startingState = True
-    ret.vEgoStarting = 0.1
-    ret.startAccel = 1.0
-    ret.longitudinalActuatorDelay = 0.5
-
-    if candidate == CAR.HYUNDAI_IONIQ_6:
-      ret.startingState = True
-      ret.vEgoStopping = 0.3
-      ret.vEgoStarting = 0.1
-      ret.stoppingDecelRate = 0.4
-      ret.longitudinalActuatorDelay = 0.5
+    apply_platform_longitudinal_params(ret)
 
     if ret.openpilotLongitudinalControl:
       ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.LONG.value

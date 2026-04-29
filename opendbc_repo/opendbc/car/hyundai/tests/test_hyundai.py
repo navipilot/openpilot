@@ -96,6 +96,22 @@ class TestHyundaiFingerprint:
     CP = CarInterface.get_params(CAR.KIA_SPORTAGE_HEV_2026, fingerprint, [], False, False, False, None)
     assert CP.flags & HyundaiFlags.SEND_LFA
 
+  @pytest.mark.parametrize(("candidate", "expected"), [
+    (CAR.KIA_EV6, (0.3, 0.1, 0.4)),
+    (CAR.HYUNDAI_KONA_EV, (0.35, 0.1, 0.45)),
+    (CAR.HYUNDAI_SONATA_HYBRID, (0.4, 0.15, 0.45)),
+    (CAR.GENESIS_G70, (0.3, 0.1, 0.4)),
+  ])
+  def test_platform_longitudinal_params_match_family_tune(self, candidate, expected):
+    toggles = get_test_toggles()
+    CP = CarInterface.get_params(candidate, gen_empty_fingerprint(), [], True, False, False, toggles)
+
+    assert CP.vEgoStopping == pytest.approx(expected[0])
+    assert CP.vEgoStarting == pytest.approx(expected[1])
+    assert CP.stoppingDecelRate == pytest.approx(expected[2])
+    assert CP.longitudinalActuatorDelay == pytest.approx(0.5)
+    assert CP.startingState
+
   def test_kia_forte_no_scc_fw_match(self):
     car_fw = [
       CarParams.CarFw(
@@ -264,6 +280,27 @@ class TestHyundaiFingerprint:
     assert state.actual_accel == pytest.approx(0.0)
     assert state.jerk_upper == pytest.approx(0.0)
     assert state.jerk_lower == pytest.approx(0.0)
+
+  def test_canfd_acc_control_uses_direct_accel(self):
+    CP = CarParams.new_message()
+    CP.carFingerprint = CAR.KIA_EV6
+    CP.flags = int(HyundaiFlags.CANFD)
+
+    packer = CANPacker(DBC[CP.carFingerprint][Bus.pt])
+    can_bus = CanBus(CP)
+    parser = CANParser(DBC[CP.carFingerprint][Bus.pt], [("SCC_CONTROL", 0)], can_bus.ECAN)
+
+    msg = hyundaicanfd.create_acc_control(packer, can_bus, enabled=True, accel_last=1.5, accel=-1.2, stopping=False,
+                                          gas_override=False, set_speed=42, hud_control=SimpleNamespace(leadDistanceBars=3),
+                                          main_mode_acc=0, jerk_lower=5.0, jerk_upper=1.0, direct_accel=True)
+    parser.update([(1, [msg])])
+
+    assert parser.can_valid
+    assert parser.vl["SCC_CONTROL"]["MainMode_ACC"] == 0
+    assert parser.vl["SCC_CONTROL"]["aReqRaw"] == pytest.approx(-1.2)
+    assert parser.vl["SCC_CONTROL"]["aReqValue"] == pytest.approx(-1.2)
+    assert parser.vl["SCC_CONTROL"]["JerkLowerLimit"] == pytest.approx(5.0)
+    assert parser.vl["SCC_CONTROL"]["JerkUpperLimit"] == pytest.approx(1.0)
 
   def test_sportage_angle_steering_uses_adas_cmd_with_send_lfa(self):
     fingerprint = gen_empty_fingerprint()

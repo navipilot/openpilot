@@ -383,18 +383,16 @@ class CarController(CarControllerBase):
                                                                                  CC.leftBlinker,
                                                                                  CC.rightBlinker))
       if self.frame % 2 == 0:
-        acc_kwargs = {}
+        acc_kwargs = {
+          "main_mode_acc": int(CS.out.cruiseState.available),
+          "direct_accel": True,
+          "jerk_lower": 5.0,
+          "jerk_upper": 3.0 if CC.actuators.longControlState == LongCtrlState.pid else 1.0,
+        }
         if self.CP.carFingerprint == CAR.HYUNDAI_IONIQ_6:
-          acc_kwargs = {
-            "main_mode_acc": int(CS.out.cruiseState.available),
-            "direct_accel": True,
-          }
           if use_ioniq_6_smoothed_accel:
             acc_kwargs["jerk_lower"] = self._ioniq_6_long_tuning.jerk_lower
             acc_kwargs["jerk_upper"] = self._ioniq_6_long_tuning.jerk_upper
-          else:
-            acc_kwargs["jerk_lower"] = 5.0
-            acc_kwargs["jerk_upper"] = 3.0
         can_sends.append(hyundaicanfd.create_acc_control(self.packer, self.CAN, CC.enabled, self.accel_last, accel, stopping, CC.cruiseControl.override,
                                                          set_speed_in_units, hud_control, **acc_kwargs))
         self.accel_last = accel
