@@ -217,6 +217,7 @@ class Controls:
 
   def publish(self, CC, lac_log):
     CS = self.sm['carState']
+    long_plan = self.sm['longitudinalPlan']
 
     # Orientation and angle rates can be useful for carcontroller
     # Only calibrated (car) frame is relevant for the carcontroller
