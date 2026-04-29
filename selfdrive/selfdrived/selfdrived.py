@@ -9,6 +9,7 @@ from cereal import car, custom, log
 from msgq.visionipc import VisionIpcClient, VisionStreamType
 
 
+from opendbc.car.chrysler.values import pacifica_hybrid_aol_stock_acc_mode
 from opendbc.car.gm.values import GMFlags
 from opendbc.safety import ALTERNATIVE_EXPERIENCE
 
@@ -425,7 +426,13 @@ class SelfdriveD:
 
     if not REPLAY:
       # Check for mismatch between openpilot and car's PCM
-      cruise_mismatch = CS.cruiseState.enabled and (not self.enabled or not self.CP.pcmCruise)
+      pacifica_hybrid_aol = pacifica_hybrid_aol_stock_acc_mode(
+        self.CP.carFingerprint,
+        self.CP.pcmCruise,
+        self.enabled,
+        self.sm['starpilotCarState'].alwaysOnLateralEnabled,
+      )
+      cruise_mismatch = CS.cruiseState.enabled and (not self.enabled or not self.CP.pcmCruise) and not pacifica_hybrid_aol
       self.cruise_mismatch_counter = self.cruise_mismatch_counter + 1 if cruise_mismatch else 0
       if self.cruise_mismatch_counter > int(6. / DT_CTRL):
         self.events.add(EventName.cruiseMismatch)

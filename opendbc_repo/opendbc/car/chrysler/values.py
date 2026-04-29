@@ -97,6 +97,22 @@ class CAR(Platforms):
   )
 
 
+PACIFICA_HYBRID_AOL_CARS = frozenset({
+  CAR.CHRYSLER_PACIFICA_2019_HYBRID,
+})
+
+
+def pacifica_hybrid_aol_stock_acc_mode(car_fingerprint, pcm_cruise: bool,
+                                       controls_enabled: bool, always_on_lateral_enabled: bool) -> bool:
+  # Keep this narrow until we have logs proving other Chrysler platforms need the same exemption.
+  return (
+    car_fingerprint in PACIFICA_HYBRID_AOL_CARS and
+    pcm_cruise and
+    always_on_lateral_enabled and
+    not controls_enabled
+  )
+
+
 class CarControllerParams:
   def __init__(self, CP):
     self.STEER_STEP = 2  # 50 Hz

@@ -10,6 +10,7 @@ from openpilot.common.realtime import config_realtime_process, DT_CTRL, Priority
 from openpilot.common.swaglog import cloudlog
 
 from opendbc.car.car_helpers import interfaces
+from opendbc.car.chrysler.values import pacifica_hybrid_aol_stock_acc_mode
 from opendbc.car.gm.values import CAR as GM_CAR
 from opendbc.car.vehicle_model import VehicleModel
 from openpilot.selfdrive.controls.lib.drive_helpers import clip_curvature, get_lateral_active
@@ -225,7 +226,14 @@ class Controls:
       CC.angularVelocity = self.calibrated_pose.angular_velocity.xyz.tolist()
 
     CC.cruiseControl.override = CC.enabled and not CC.longActive and self.CP.openpilotLongitudinalControl
-    CC.cruiseControl.cancel = CS.cruiseState.enabled and (not CC.enabled or not self.CP.pcmCruise)
+    pacifica_hybrid_aol = pacifica_hybrid_aol_stock_acc_mode(
+      self.CP.carFingerprint,
+      self.CP.pcmCruise,
+      CC.enabled,
+      self.sm['starpilotCarState'].alwaysOnLateralEnabled,
+    )
+    cancel_requested = CS.cruiseState.enabled and (not CC.enabled or not self.CP.pcmCruise)
+    CC.cruiseControl.cancel = cancel_requested and not pacifica_hybrid_aol
     CC.cruiseControl.resume = CC.enabled and CS.cruiseState.standstill and not self.sm['longitudinalPlan'].shouldStop
 
     hudControl = CC.hudControl
