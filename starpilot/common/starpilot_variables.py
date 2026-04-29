@@ -971,7 +971,7 @@ class StarPilotVariables:
     if isinstance(toggle.model_version, bytes):
       toggle.model_version = toggle.model_version.decode("utf-8", "ignore")
     toggle.classic_model = toggle.model_version in {"v1", "v2", "v3", "v4"}
-    toggle.tinygrad_model = toggle.model_version in {"v8", "v9", "v10", "v11", "v12"}
+    toggle.tinygrad_model = toggle.model_version in {"v8", "v9", "v10", "v11", "v12", "v13"}
     toggle.tomb_raider = toggle.model == "space-lab"
 
     toggle.model_ui = self.get_value("ModelUI")

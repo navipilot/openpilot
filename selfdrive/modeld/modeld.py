@@ -156,6 +156,8 @@ class ModelState:
       numpy_inputs['traffic_convention'] = np.zeros((1, ModelConstants.TRAFFIC_CONVENTION_LEN), dtype=np.float32)
     if 'features_buffer' in input_shapes:
       numpy_inputs['features_buffer'] = np.zeros((1, ModelConstants.INPUT_HISTORY_BUFFER_LEN,  ModelConstants.FEATURE_LEN), dtype=np.float32)
+    if 'action_t' in input_shapes:
+      numpy_inputs['action_t'] = np.zeros(input_shapes['action_t'], dtype=np.float32)
 
     # Optional inputs for non-v11 (and some v10/v9 variants)
     # Lateral control params
@@ -282,8 +284,10 @@ class ModelState:
     self.is_v11 = (self.policy_generation == "v11")
     self.is_v10 = (self.policy_generation == "v10")
     self.is_v12 = (self.policy_generation == "v12")
+    self.is_v13 = (self.policy_generation == "v13")
     self.is_v9 = (self.policy_generation == "v9")
-    self.mlsim = (self.policy_generation in ("v8", "v10", "v11", "v12"))
+    self.mlsim = (self.policy_generation in ("v8", "v10", "v11", "v12", "v13"))
+    self.policy_has_plan = 'plan' in self.policy_output_slices
 
     self.frames = {name: DrivingModelFrame(context, ModelConstants.TEMPORAL_SKIP) for name in self.vision_input_names}
     self.prev_desire = np.zeros(ModelConstants.DESIRE_LEN, dtype=np.float32)
@@ -307,7 +311,7 @@ class ModelState:
     self.off_policy_output: np.ndarray | None = None
 
     off_policy_metadata = None
-    if self.policy_generation == "v12" or OFF_POLICY_METADATA_PATH.is_file() or OFF_POLICY_PKL_PATH.is_file():
+    if self.policy_generation in ("v12", "v13") or OFF_POLICY_METADATA_PATH.is_file() or OFF_POLICY_PKL_PATH.is_file():
       resolved_off_policy_meta = ensure_artifact(OFF_POLICY_METADATA_PATH, "driving_off_policy_metadata.pkl", optional=True)
       if resolved_off_policy_meta is not None:
         with open(resolved_off_policy_meta, 'rb') as f:
@@ -316,6 +320,7 @@ class ModelState:
     if off_policy_metadata is not None:
       self.off_policy_input_shapes = off_policy_metadata['input_shapes']
       self.off_policy_output_slices = off_policy_metadata['output_slices']
+      self.off_policy_has_plan = 'plan' in self.off_policy_output_slices
       off_policy_output_size = off_policy_metadata['output_shapes']['outputs'][1]
       self.off_policy_numpy_inputs, self.off_policy_prev_desired_curv_key = self._build_policy_inputs(self.off_policy_input_shapes)
       self.off_policy_desire_key = next((k for k in self.off_policy_numpy_inputs if k.startswith('desire')), None)
@@ -326,6 +331,8 @@ class ModelState:
         with open(resolved_off_policy_pkl, "rb") as f:
           self.off_policy_run = pickle.load(f)
         self.off_policy_enabled = True
+    else:
+      self.off_policy_has_plan = False
 
     # Optional temporal buffer for previous desired curvature (allocate only if any model expects it)
     if self.prev_desired_curv_key is not None or self.off_policy_prev_desired_curv_key is not None:
@@ -374,6 +381,11 @@ class ModelState:
     if self.off_policy_enabled and 'traffic_convention' in self.off_policy_numpy_inputs:
       self.off_policy_numpy_inputs['traffic_convention'][:] = inputs['traffic_convention']
 
+    if 'action_t' in self.numpy_inputs:
+      self.numpy_inputs['action_t'][:] = inputs['action_t']
+    if self.off_policy_enabled and 'action_t' in self.off_policy_numpy_inputs:
+      self.off_policy_numpy_inputs['action_t'][:] = inputs['action_t']
+
     if 'lateral_control_params' in self.numpy_inputs:
       self.numpy_inputs['lateral_control_params'][:] = inputs['lateral_control_params']
     if self.off_policy_enabled and 'lateral_control_params' in self.off_policy_numpy_inputs:
@@ -413,14 +425,14 @@ class ModelState:
       self.full_prev_desired_curv[0,-1,:] = policy_outputs_dict['desired_curvature'][0, :]
 
       if self.prev_desired_curv_key is not None:
-        # v9/v10/v11/v12 models expect zeros for prev_desired_curv(s); others use history
-        if self.is_v9 or self.is_v10 or self.is_v11 or self.is_v12:
+        # v9/v10/v11/v12/v13 models expect zeros for prev_desired_curv(s); others use history
+        if self.is_v9 or self.is_v10 or self.is_v11 or self.is_v12 or self.is_v13:
           self.numpy_inputs[self.prev_desired_curv_key][:] = 0 * self.full_prev_desired_curv[0, self.temporal_idxs]
         else:
           self.numpy_inputs[self.prev_desired_curv_key][:] = self.full_prev_desired_curv[0, self.temporal_idxs]
 
       if self.off_policy_enabled and self.off_policy_prev_desired_curv_key is not None:
-        if self.is_v9 or self.is_v12:
+        if self.is_v9 or self.is_v12 or self.is_v13:
           self.off_policy_numpy_inputs[self.off_policy_prev_desired_curv_key][:] = 0 * self.full_prev_desired_curv[0, self.temporal_idxs]
         else:
           self.off_policy_numpy_inputs[self.off_policy_prev_desired_curv_key][:] = self.full_prev_desired_curv[0, self.temporal_idxs]
@@ -431,7 +443,8 @@ class ModelState:
       off_policy_outputs_dict = self.off_policy_parser.parse_policy_outputs(
         self.slice_outputs(self.off_policy_output, self.off_policy_output_slices)
       )
-      off_policy_outputs_dict.pop('plan', None)
+      if self.policy_has_plan:
+        off_policy_outputs_dict.pop('plan', None)
       combined_outputs_dict = {**combined_outputs_dict, **off_policy_outputs_dict, **policy_outputs_dict}
     else:
       combined_outputs_dict = {**combined_outputs_dict, **policy_outputs_dict}
@@ -587,10 +600,17 @@ def main(demo=False):
     bufs = {name: buf_extra if 'big' in name else buf_main for name in model.vision_input_names}
     transforms = {name: model_transform_extra if 'big' in name else model_transform_main for name in model.vision_input_names}
 
+    frame_delay = DT_MDL  # Average time elapsed since the current frame finished exposing.
+    action_delay = DT_MDL / 2  # Target the midpoint between current output and the next model step.
+    lat_action_t = lat_delay + frame_delay + action_delay
+    long_action_t = long_delay + frame_delay + action_delay
+
     inputs:dict[str, np.ndarray] = {
       model.desire_key: vec_desire,
       'traffic_convention': traffic_convention,
     }
+    if 'action_t' in model.numpy_inputs or (model.off_policy_enabled and 'action_t' in model.off_policy_numpy_inputs):
+      inputs['action_t'] = np.array([lat_action_t, long_action_t], dtype=np.float32)
     # Include optional inputs only if the loaded model expects them
     if 'lateral_control_params' in model.numpy_inputs:
       inputs['lateral_control_params'] = lateral_control_params
@@ -606,12 +626,10 @@ def main(demo=False):
       drivingdata_send = messaging.new_message('drivingModelData')
       posenet_send = messaging.new_message('cameraOdometry')
 
-      frame_delay = DT_MDL  # Average time elapsed since the current frame finished exposing.
-      action_delay = DT_MDL / 2  # Target the midpoint between current output and the next model step.
       action = get_action_from_model(
         model_output, prev_action,
-        lat_delay + frame_delay + action_delay,
-        long_delay + frame_delay + action_delay,
+        lat_action_t,
+        long_action_t,
         v_ego, model.mlsim, model.is_v9, starpilot_toggles,
       )
       prev_action = action
