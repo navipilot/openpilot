@@ -15,7 +15,7 @@ AVERAGE_ROAD_ROLL = 0.06  # conservative roll margin used by Hyundai CAN-FD angl
 
 class CarControllerParams:
   ACCEL_MIN = -3.5 # m/s
-  ACCEL_MAX = 2.0 # m/s
+  ACCEL_MAX = 3.5 # m/s
   ANGLE_LIMITS: AngleSteeringLimits = AngleSteeringLimits(
     180,
     ([], []),
