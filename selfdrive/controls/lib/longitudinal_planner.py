@@ -35,11 +35,11 @@ VISION_LEAD_APPROACH_MIN_CLOSING_SPEED = 2.0
 VISION_LEAD_APPROACH_TRIGGER_TIME = 4.5
 VISION_LEAD_APPROACH_FULL_TIME = 1.0
 VISION_LEAD_APPROACH_TIGHT_BUFFER = 2.0
-VISION_LEAD_APPROACH_MAX_DECEL = 0.65
+VISION_LEAD_APPROACH_MAX_DECEL = 0.80
 VISION_LEAD_APPROACH_MIN_DECEL = 0.15
 VISION_LEAD_APPROACH_MIN_MODEL_PROB = 0.85
 VISION_LEAD_APPROACH_FULL_MODEL_PROB = 0.98
-VISION_LEAD_APPROACH_DEFICIT_MAX_DECEL = 1.15
+VISION_LEAD_APPROACH_DEFICIT_MAX_DECEL = 1.30
 VISION_LEAD_APPROACH_DEFICIT_BUFFER_MIN = 3.0
 VISION_LEAD_APPROACH_DEFICIT_BUFFER_GAIN = 0.20
 VISION_SLOW_LEAD_MAX_SPEED = 5.0
@@ -68,12 +68,12 @@ VISION_LOW_SPEED_STOP_BUFFER_MAX_EGO_SPEED = 5.5
 VISION_LOW_SPEED_STOP_BUFFER_MAX_LEAD_SPEED = 1.75
 VISION_LOW_SPEED_STOP_BUFFER_MIN_MODEL_PROB = 0.9
 VISION_LOW_SPEED_STOP_BUFFER_MIN_CLOSING_SPEED = 0.35
-VISION_LOW_SPEED_STOP_BUFFER_BASE = 2.8
+VISION_LOW_SPEED_STOP_BUFFER_BASE = 3.2
 VISION_LOW_SPEED_STOP_BUFFER_EGO_GAIN = 0.80
 VISION_LOW_SPEED_STOP_BUFFER_LEAD_GAIN = 0.25
-VISION_LOW_SPEED_STOP_BUFFER_RELEASE_MARGIN = 0.75
-VISION_LOW_SPEED_STOP_BUFFER_HOLD_TIME = 0.6
-VISION_LOW_SPEED_STOP_BUFFER_MIN_BRAKE = 0.9
+VISION_LOW_SPEED_STOP_BUFFER_RELEASE_MARGIN = 0.9
+VISION_LOW_SPEED_STOP_BUFFER_HOLD_TIME = 0.8
+VISION_LOW_SPEED_STOP_BUFFER_MIN_BRAKE = 1.1
 VISION_LOW_SPEED_STOP_BUFFER_BRAKE_GAIN = 0.25
 
 # Uncertainty-based filter disable thresholds
@@ -736,24 +736,30 @@ class LongitudinalPlanner:
         self.v_desired_trajectory, self.a_desired_trajectory,
         action_t=action_t, vEgoStopping=starpilot_toggles.vEgoStopping)
 
-    output_accel_min = get_vehicle_min_accel(self.CP, v_ego) if experimental_mlsim else accel_limits_turns[0]
+    comfort_output_accel_min = get_vehicle_min_accel(self.CP, v_ego) if experimental_mlsim else accel_limits_turns[0]
+    vision_cap_accel_min = min(comfort_output_accel_min, get_vehicle_min_accel(self.CP, v_ego))
+    output_accel_min = comfort_output_accel_min
 
     close_lead_caps = []
     vision_low_speed_stop_active = False
+    vision_brake_cap_active = False
     if lead_control_active:
       for lead in (self.lead_one, self.lead_two):
         cap = self.get_close_lead_brake_cap(lead, v_ego, output_accel_min)
         if cap is not None:
           close_lead_caps.append(cap)
-        slow_stop_cap = self.get_vision_slow_stopped_lead_cap(lead, v_ego, output_accel_min, effective_t_follow)
+        slow_stop_cap = self.get_vision_slow_stopped_lead_cap(lead, v_ego, vision_cap_accel_min, effective_t_follow)
         if slow_stop_cap is not None:
           close_lead_caps.append(slow_stop_cap)
-        approach_cap = self.get_vision_lead_approach_cap(lead, v_ego, output_accel_min, effective_t_follow)
+          vision_brake_cap_active = True
+        approach_cap = self.get_vision_lead_approach_cap(lead, v_ego, vision_cap_accel_min, effective_t_follow)
         if approach_cap is not None:
           close_lead_caps.append(approach_cap)
-        low_speed_stop_cap, low_speed_stop_active = self.get_vision_low_speed_stop_buffer_cap(lead, v_ego, output_accel_min)
+          vision_brake_cap_active = True
+        low_speed_stop_cap, low_speed_stop_active = self.get_vision_low_speed_stop_buffer_cap(lead, v_ego, vision_cap_accel_min)
         if low_speed_stop_cap is not None:
           close_lead_caps.append(low_speed_stop_cap)
+          vision_brake_cap_active = True
         vision_low_speed_stop_active |= low_speed_stop_active
     if close_lead_caps:
       close_lead_brake_cap = min(close_lead_caps)
@@ -771,6 +777,9 @@ class LongitudinalPlanner:
       # same action horizon as the planner preserves normal accel farther below set speed.
       cruise_accel_cap = (v_cruise - v_ego + 0.01) / max(action_t, self.dt)
       output_a_target = min(output_a_target, cruise_accel_cap)
+
+    if vision_brake_cap_active:
+      output_accel_min = min(output_accel_min, vision_cap_accel_min)
 
     output_accel_max = no_throttle_output_max if not self.allow_throttle else accel_limits_turns[1]
     output_a_target = float(np.clip(output_a_target, output_accel_min, output_accel_max))

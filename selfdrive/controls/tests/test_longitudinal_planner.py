@@ -345,7 +345,7 @@ def test_acc_mode_vision_lead_approach_cap_smooths_before_close_brake(model_vers
   sm_approach = make_sm(
     approach_v_ego,
     desired_accel=0.2,
-    min_accel=-3.0,
+    min_accel=-0.5,
     experimental_mode=False,
     tracking_lead=True,
     lead_one=make_lead(status=True, d_rel=38.9, v_lead=18.04, a_lead=-0.026, radar=False, model_prob=0.984),
@@ -353,7 +353,7 @@ def test_acc_mode_vision_lead_approach_cap_smooths_before_close_brake(model_vers
   sm_close = make_sm(
     close_v_ego,
     desired_accel=0.2,
-    min_accel=-3.0,
+    min_accel=-0.5,
     experimental_mode=False,
     tracking_lead=True,
     lead_one=make_lead(status=True, d_rel=27.18, v_lead=15.76, a_lead=-0.824, radar=False, model_prob=0.988),
@@ -366,7 +366,7 @@ def test_acc_mode_vision_lead_approach_cap_smooths_before_close_brake(model_vers
 
   assert planner_approach.mode == "acc"
   assert planner_close.mode == "acc"
-  assert planner_approach.output_a_target < -0.5
+  assert planner_approach.output_a_target < -0.6
   assert planner_close.output_a_target < planner_approach.output_a_target - 0.25
 
 
@@ -379,7 +379,7 @@ def test_acc_mode_low_speed_vision_stop_buffer_sets_should_stop_before_tiny_gap(
   sm = make_sm(
     v_ego,
     desired_accel=0.1,
-    min_accel=-3.0,
+    min_accel=-0.5,
     experimental_mode=False,
     tracking_lead=True,
     lead_one=make_lead(status=True, d_rel=5.75, v_lead=0.58, a_lead=-0.1, radar=False, model_prob=0.99),
