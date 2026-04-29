@@ -31,6 +31,17 @@
   /* ACC */                            \
   {0x343, 0, 8, .check_relay = true},  \
 
+#define TOYOTA_COMMON_LONG_TX_MSGS_FILTER \
+  TOYOTA_COMMON_TX_MSGS \
+  /* DSU bus 0 */ \
+  {0x283, 0, 7, .check_relay = false}, {0x2E6, 0, 8, .check_relay = false}, {0x2E7, 0, 8, .check_relay = false}, {0x33E, 0, 7, .check_relay = false}, \
+  {0x344, 0, 8, .check_relay = false}, {0x365, 0, 7, .check_relay = false}, {0x366, 0, 7, .check_relay = false}, {0x4CB, 0, 8, .check_relay = false}, \
+  /* DSU bus 1 */ \
+  {0x128, 1, 6, .check_relay = false}, {0x141, 1, 4, .check_relay = false}, {0x160, 1, 8, .check_relay = false}, {0x161, 1, 7, .check_relay = false}, \
+  {0x470, 1, 4, .check_relay = false}, \
+  /* PCS_HUD */                        \
+  {0x411, 0, 8, .check_relay = false}, \
+
 #define TOYOTA_COMMON_SECOC_LONG_TX_MSGS \
   TOYOTA_COMMON_SECOC_TX_MSGS \
   {0x343, 0, 8, .check_relay = true}, \
@@ -63,6 +74,7 @@ static bool toyota_alt_brake = false;
 static bool toyota_stock_longitudinal = false;
 static bool toyota_lta = false;
 static int toyota_dbc_eps_torque_factor = 100;   // conversion factor for STEER_TORQUE_EPS in %: see dbc file
+static bool toyota_long_filter = false;
 
 static uint32_t toyota_compute_checksum(const CANPacket_t *msg) {
   int len = GET_LEN(msg);
@@ -368,6 +380,10 @@ static safety_config toyota_init(uint16_t param) {
     TOYOTA_COMMON_LONG_TX_MSGS
   };
 
+  static const CanMsg TOYOTA_LONG_TX_MSGS_FILTER[] = {
+    TOYOTA_COMMON_LONG_TX_MSGS_FILTER
+  };
+
   static const CanMsg TOYOTA_SECOC_LONG_TX_MSGS[] = {
     TOYOTA_COMMON_SECOC_LONG_TX_MSGS
   };
@@ -379,6 +395,7 @@ static safety_config toyota_init(uint16_t param) {
   const uint32_t TOYOTA_PARAM_ALT_BRAKE = 1UL << TOYOTA_PARAM_OFFSET;
   const uint32_t TOYOTA_PARAM_STOCK_LONGITUDINAL = 2UL << TOYOTA_PARAM_OFFSET;
   const uint32_t TOYOTA_PARAM_LTA = 4UL << TOYOTA_PARAM_OFFSET;
+  const uint32_t TOYOTA_PARAM_LONG_FILTER = 16UL << TOYOTA_PARAM_OFFSET;
 
 #ifdef ALLOW_DEBUG
   const uint32_t TOYOTA_PARAM_SECOC = 8UL << TOYOTA_PARAM_OFFSET;
@@ -388,6 +405,7 @@ static safety_config toyota_init(uint16_t param) {
   toyota_alt_brake = GET_FLAG(param, TOYOTA_PARAM_ALT_BRAKE);
   toyota_stock_longitudinal = GET_FLAG(param, TOYOTA_PARAM_STOCK_LONGITUDINAL);
   toyota_lta = GET_FLAG(param, TOYOTA_PARAM_LTA);
+  toyota_long_filter = GET_FLAG(param, TOYOTA_PARAM_LONG_FILTER);
   toyota_dbc_eps_torque_factor = param & TOYOTA_EPS_FACTOR;
 
   safety_config ret;
@@ -401,7 +419,11 @@ static safety_config toyota_init(uint16_t param) {
     if (toyota_stock_longitudinal) {
       SET_TX_MSGS(TOYOTA_TX_MSGS, ret);
     } else {
-      SET_TX_MSGS(TOYOTA_LONG_TX_MSGS, ret);
+      if (toyota_long_filter) {
+        SET_TX_MSGS(TOYOTA_LONG_TX_MSGS_FILTER, ret);
+      } else {
+        SET_TX_MSGS(TOYOTA_LONG_TX_MSGS, ret);
+      }
     }
   }
 

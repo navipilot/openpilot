@@ -234,7 +234,20 @@ class Controls:
     )
     cancel_requested = CS.cruiseState.enabled and (not CC.enabled or not self.CP.pcmCruise)
     CC.cruiseControl.cancel = cancel_requested and not pacifica_hybrid_aol
-    CC.cruiseControl.resume = CC.enabled and CS.cruiseState.standstill and not self.sm['longitudinalPlan'].shouldStop
+
+    legacy_resume_hack = False
+    if len(long_plan.speeds):
+      planned_resume = long_plan.speeds[-1] > 0.1
+      # Some stock-ACC SNG hacks still rely on the legacy "planner wants speed"
+      # signal rather than longitudinalPlan.shouldStop going false first.
+      legacy_resume_hack = planned_resume and (
+        (self.CP.brand == "toyota" and self.CP.openpilotLongitudinalControl and not self.CP.autoResumeSng) or
+        (self.CP.brand == "gm" and getattr(self.starpilot_toggles, "volt_sng", False))
+      )
+
+    CC.cruiseControl.resume = CC.enabled and CS.cruiseState.standstill and (
+      not self.sm['longitudinalPlan'].shouldStop or legacy_resume_hack
+    )
 
     hudControl = CC.hudControl
     hud_set_speed = float(CS.vCruiseCluster * CV.KPH_TO_MS)

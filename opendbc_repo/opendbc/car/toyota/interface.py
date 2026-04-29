@@ -54,6 +54,9 @@ class CarInterface(CarInterfaceBase):
     # openpilot to send it. 0x2AA is sent by a similar device which intercepts
     # the radar instead of DSU on NO_DSU_CARs.
     use_sdsu = bool(0x2FF in fingerprint[0] or (0x2AA in fingerprint[0] and candidate in NO_DSU_CAR))
+    if use_sdsu:
+      # sDSU / radar filter hardware needs the Toyota safety long-filter TX set.
+      ret.safetyConfigs[0].safetyParam |= ToyotaSafetyFlags.LONG_FILTER.value
 
     # In TSS2 cars, the camera does long control
     found_ecus = [fw.ecu for fw in car_fw]
