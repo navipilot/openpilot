@@ -7,10 +7,11 @@ from opendbc.can import CANPacker, CANParser
 from opendbc.car import Bus, ButtonType, gen_empty_fingerprint
 from opendbc.car.structs import CarParams
 from opendbc.car.fw_versions import build_fw_dict, match_fw_to_car
-from opendbc.car.hyundai.carcontroller import Ioniq6LongitudinalTuningState, update_ioniq_6_longitudinal_tuning
+from opendbc.car.hyundai.carcontroller import HyundaiLongitudinalTuningState, Ioniq6LongitudinalTuningState, \
+                                              update_hyundai_longitudinal_tuning, update_ioniq_6_longitudinal_tuning
 from opendbc.car.hyundai.carstate import CarState, decode_ioniq_6_blindspot_radar_state
 from opendbc.car.hyundai.interface import CarInterface
-from opendbc.car.hyundai import hyundaicanfd
+from opendbc.car.hyundai import hyundaican, hyundaicanfd
 from opendbc.car.hyundai.hyundaicanfd import CanBus
 from opendbc.car.hyundai.radar_interface import RADAR_START_ADDR
 from opendbc.car.hyundai.values import CAMERA_SCC_CAR, CANFD_CAR, CAN_GEARS, CAR, CHECKSUM, DATE_FW_ECUS, \
@@ -281,6 +282,24 @@ class TestHyundaiFingerprint:
     assert state.jerk_upper == pytest.approx(0.0)
     assert state.jerk_lower == pytest.approx(0.0)
 
+  def test_hyundai_longitudinal_tuning_helper_softens_stopping(self):
+    state = HyundaiLongitudinalTuningState(accel_last=-3.5)
+
+    state = update_hyundai_longitudinal_tuning(state, accel_cmd=-3.5, v_ego=0.9, a_ego=-1.0,
+                                               long_control_state=LongCtrlState.stopping, long_active=True,
+                                               radar_unavailable=True)
+    assert state.stopping
+    assert state.desired_accel == pytest.approx(0.0)
+    assert state.actual_accel > -3.5
+    assert state.jerk_lower == pytest.approx(5.0)
+
+    state = update_hyundai_longitudinal_tuning(state, accel_cmd=1.0, v_ego=0.8, a_ego=0.1,
+                                               long_control_state=LongCtrlState.stopping, long_active=True,
+                                               radar_unavailable=True)
+    assert state.stopping
+    assert state.desired_accel == pytest.approx(0.0)
+    assert state.actual_accel <= 0.0
+
   def test_canfd_acc_control_uses_direct_accel(self):
     CP = CarParams.new_message()
     CP.carFingerprint = CAR.KIA_EV6
@@ -301,6 +320,30 @@ class TestHyundaiFingerprint:
     assert parser.vl["SCC_CONTROL"]["aReqValue"] == pytest.approx(-1.2)
     assert parser.vl["SCC_CONTROL"]["JerkLowerLimit"] == pytest.approx(5.0)
     assert parser.vl["SCC_CONTROL"]["JerkUpperLimit"] == pytest.approx(1.0)
+
+  def test_can_acc_commands_use_tuned_values(self):
+    CP = CarParams.new_message()
+    CP.carFingerprint = CAR.GENESIS_G90
+
+    packer = CANPacker(DBC[CP.carFingerprint][Bus.pt])
+    parser = CANParser(DBC[CP.carFingerprint][Bus.pt], [("SCC11", 0), ("SCC12", 0), ("SCC14", 0)], 0)
+
+    msgs = hyundaican.create_acc_commands(packer, enabled=True, accel=-1.0, upper_jerk=2.5, idx=3,
+                                          hud_control=SimpleNamespace(leadDistanceBars=3, leadVisible=False), set_speed=42,
+                                          stopping=False, long_override=False, use_fca=False, CP=CP,
+                                          main_mode_acc=0, desired_accel=0.0, actual_accel=-0.35,
+                                          jerk_lower=4.0, comfort_band_upper=0.08, comfort_band_lower=0.02, stop_req=True)
+    parser.update([(1, msgs)])
+
+    assert parser.can_valid
+    assert parser.vl["SCC11"]["MainMode_ACC"] == 0
+    assert parser.vl["SCC11"]["ObjValid"] == 0
+    assert parser.vl["SCC12"]["StopReq"] == 1
+    assert parser.vl["SCC12"]["aReqRaw"] == pytest.approx(0.0)
+    assert parser.vl["SCC12"]["aReqValue"] == pytest.approx(-0.35)
+    assert parser.vl["SCC14"]["ComfortBandUpper"] == pytest.approx(0.08)
+    assert parser.vl["SCC14"]["ComfortBandLower"] == pytest.approx(0.02)
+    assert parser.vl["SCC14"]["JerkLowerLimit"] == pytest.approx(4.0)
 
   def test_sportage_angle_steering_uses_adas_cmd_with_send_lfa(self):
     fingerprint = gen_empty_fingerprint()
