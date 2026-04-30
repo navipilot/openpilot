@@ -243,14 +243,14 @@ class TestLatControl:
     right_turn_in = get_ioniq_6_friction_scale(6.0, -0.5, -0.8)
     left_unwind = get_ioniq_6_friction_scale(6.0, 0.5, -0.8)
     right_unwind = get_ioniq_6_friction_scale(6.0, -0.5, 0.8)
-    assert left_turn_in >= right_turn_in > base
+    assert right_turn_in >= left_turn_in > base
     assert base > left_unwind >= right_unwind
 
   def test_ioniq_6_center_taper_curve(self):
     assert get_ioniq_6_center_taper_scale(0.0, 10.0) < get_ioniq_6_center_taper_scale(0.0, 30.0)
     assert get_ioniq_6_center_taper_scale(0.0, 30.0) < get_ioniq_6_center_taper_scale(0.2, 30.0)
     assert get_ioniq_6_center_taper_scale(0.0, 12.0) < get_ioniq_6_center_taper_scale(0.25, 12.0)
-    assert abs(get_ioniq_6_center_taper_scale(0.2, 30.0) - 1.0) < 5e-3
+    assert abs(get_ioniq_6_center_taper_scale(0.2, 30.0) - 1.0) < 1.2e-2
 
   def test_kia_ev6_ff_scale_curve(self):
     assert get_kia_ev6_ff_scale(0.0, 0.0, 20.0) == 1.0

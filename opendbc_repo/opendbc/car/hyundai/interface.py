@@ -23,26 +23,15 @@ ECU_DISABLE_TIMESTAMP = 0.0
 
 
 def apply_platform_longitudinal_params(ret: structs.CarParams) -> None:
+  if not (ret.flags & HyundaiFlags.CANFD):
+    return
+
   ret.startingState = True
   ret.startAccel = 1.0
   ret.longitudinalActuatorDelay = 0.5
-
-  if ret.flags & HyundaiFlags.CANFD:
-    ret.vEgoStopping = 0.3
-    ret.vEgoStarting = 0.1
-    ret.stoppingDecelRate = 0.4
-  elif ret.flags & HyundaiFlags.EV:
-    ret.vEgoStopping = 0.35
-    ret.vEgoStarting = 0.1
-    ret.stoppingDecelRate = 0.45
-  elif ret.flags & HyundaiFlags.HYBRID:
-    ret.vEgoStopping = 0.4
-    ret.vEgoStarting = 0.15
-    ret.stoppingDecelRate = 0.45
-  else:
-    ret.vEgoStopping = 0.3
-    ret.vEgoStarting = 0.1
-    ret.stoppingDecelRate = 0.4
+  ret.vEgoStopping = 0.3
+  ret.vEgoStarting = 0.1
+  ret.stoppingDecelRate = 0.4
 
 
 class CarInterface(CarInterfaceBase):

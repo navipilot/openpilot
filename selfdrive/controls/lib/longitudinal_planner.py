@@ -30,6 +30,8 @@ MIN_ALLOW_THROTTLE_SPEED = 2.5
 RAW_LEAD_SAFETY_MIN_CLOSING_SPEED = 0.5
 RAW_LEAD_SAFETY_TTC = 7.0
 RAW_LEAD_SAFETY_DISTANCE = 40.0
+STANDSTILL_LEAD_NUDGE_ACCEL = 0.05
+STANDSTILL_LEAD_NUDGE_MIN_SPEED = 0.0
 CLOSE_LEAD_BRAKE_CAP_MAX_TTC = 25.0
 VISION_LEAD_APPROACH_MIN_CLOSING_SPEED = 2.0
 VISION_LEAD_APPROACH_TRIGGER_TIME = 4.5
@@ -767,10 +769,11 @@ class LongitudinalPlanner:
       output_a_target = min(output_a_target, close_lead_brake_cap)
 
     if lead_control_active and sm['carState'].standstill:
+      standstill_nudge_gap = max(float(getattr(starpilot_toggles, "stop_distance", STOP_DISTANCE)), STOP_DISTANCE) - 0.5
       moving_leads = [lead for lead in (self.lead_one, self.lead_two)
-                      if lead.status and lead.vLead > 0.0 and lead.dRel >= STOP_DISTANCE - 0.5]
+                      if lead.status and lead.vLead > STANDSTILL_LEAD_NUDGE_MIN_SPEED and lead.dRel >= standstill_nudge_gap]
       if moving_leads:
-        output_a_target = max(output_a_target, 0.3)
+        output_a_target = max(output_a_target, STANDSTILL_LEAD_NUDGE_ACCEL)
 
     if lead_control_active and np.isfinite(v_cruise) and any(lead.status for lead in (self.lead_one, self.lead_two)):
       # Keep follow/catchup behavior from pulling past the cruise target. Using the

@@ -23,12 +23,6 @@ MAX_ANGLE_CONSECUTIVE_FRAMES = 2
 CANFD_BLINDSPOT_STATUS_STALE_NS = 200_000_000
 HYUNDAI_CANFD_SCC_ACCEL_STEP = 5.0 / 50.0
 HYUNDAI_CANFD_SCC_DECEL_STEP = 12.5 / 50.0
-HYUNDAI_LONG_MIN_JERK = 0.5
-HYUNDAI_LONG_JERK_LIMIT = 4.0
-HYUNDAI_LONG_LOOKAHEAD_JERK_BP = [2.0, 5.0, 20.0]
-HYUNDAI_LONG_LOOKAHEAD_JERK_V = [0.3, 0.45, 0.6]
-HYUNDAI_DYNAMIC_LOWER_JERK_BP = [-2.0, -1.5, -1.0, -0.25, -0.1, -0.025, -0.01, -0.005]
-HYUNDAI_DYNAMIC_LOWER_JERK_V = [3.3, 1.5, 1.0, 0.8, 0.7, 0.65, 0.55, 0.5]
 IONIQ_6_LONG_MIN_JERK = 0.5
 IONIQ_6_LONG_JERK_LIMIT = 4.0
 IONIQ_6_LONG_LOOKAHEAD_JERK_BP = [2.0, 5.0, 20.0]
@@ -49,30 +43,9 @@ class Ioniq6LongitudinalTuningState:
   long_control_state_last: LongCtrlState = LongCtrlState.off
 
 
-@dataclass
-class HyundaiLongitudinalTuningState:
-  desired_accel: float = 0.0
-  actual_accel: float = 0.0
-  accel_last: float = 0.0
-  jerk_upper: float = 0.0
-  jerk_lower: float = 0.0
-  comfort_band_upper: float = 0.0
-  comfort_band_lower: float = 0.0
-  stopping: bool = False
-  stopping_count: int = 0
-  long_control_state_last: LongCtrlState = LongCtrlState.off
-
-
 def _jerk_limited_integrator(desired_accel: float, last_accel: float, jerk_upper: float, jerk_lower: float) -> float:
   step = (jerk_upper if desired_accel >= last_accel else jerk_lower) * DT_CTRL * 5.0
   return float(np.clip(desired_accel, last_accel - step, last_accel + step))
-
-
-def _calculate_hyundai_dynamic_lower_jerk(accel_error: float) -> float:
-  if accel_error < 0.0:
-    scaled_values = np.array(HYUNDAI_DYNAMIC_LOWER_JERK_V) * (HYUNDAI_LONG_JERK_LIMIT / HYUNDAI_DYNAMIC_LOWER_JERK_V[0])
-    return float(np.interp(accel_error, HYUNDAI_DYNAMIC_LOWER_JERK_BP, scaled_values))
-  return HYUNDAI_LONG_MIN_JERK
 
 
 def _calculate_ioniq_6_dynamic_lower_jerk(accel_error: float) -> float:
@@ -132,65 +105,6 @@ def update_ioniq_6_longitudinal_tuning(state: Ioniq6LongitudinalTuningState, acc
   return state
 
 
-def update_hyundai_longitudinal_tuning(state: HyundaiLongitudinalTuningState, accel_cmd: float, v_ego: float, a_ego: float,
-                                       long_control_state: LongCtrlState, long_active: bool, radar_unavailable: bool) -> HyundaiLongitudinalTuningState:
-  stopping = long_control_state == LongCtrlState.stopping
-
-  if not long_active:
-    state.desired_accel = 0.0
-    state.actual_accel = 0.0
-    state.accel_last = 0.0
-    state.jerk_upper = 0.0
-    state.jerk_lower = 0.0
-    state.comfort_band_upper = 0.0
-    state.comfort_band_lower = 0.0
-    state.stopping = False
-    state.stopping_count = 0
-    state.long_control_state_last = long_control_state
-    return state
-
-  if not stopping:
-    state.stopping = False
-    state.stopping_count = 0
-  elif state.long_control_state_last == LongCtrlState.off:
-    state.stopping = True
-  else:
-    if state.stopping_count > 1 / (DT_CTRL * 5):
-      state.stopping = True
-    state.stopping_count += 1
-
-  upper_speed_limit = float(np.interp(v_ego, [0.0, 5.0, 20.0], [2.0, 3.0, 2.0])) if long_control_state == LongCtrlState.pid else HYUNDAI_LONG_MIN_JERK
-  lower_speed_limit = float(np.interp(v_ego, [0.0, 5.0, 20.0], [5.0, 3.5, 3.0]))
-
-  future_t_upper = float(np.interp(v_ego, HYUNDAI_LONG_LOOKAHEAD_JERK_BP, HYUNDAI_LONG_LOOKAHEAD_JERK_V))
-  future_t_lower = float(np.interp(v_ego, HYUNDAI_LONG_LOOKAHEAD_JERK_BP, HYUNDAI_LONG_LOOKAHEAD_JERK_V))
-
-  accel_error = accel_cmd - state.accel_last
-  j_ego_upper = float(np.clip(accel_error / future_t_upper, -HYUNDAI_LONG_JERK_LIMIT, HYUNDAI_LONG_JERK_LIMIT))
-  j_ego_lower = float(np.clip(accel_error / future_t_lower, -HYUNDAI_LONG_JERK_LIMIT, HYUNDAI_LONG_JERK_LIMIT))
-  desired_jerk_upper = min(max(j_ego_upper, HYUNDAI_LONG_MIN_JERK), upper_speed_limit)
-
-  dynamic_lower_jerk = _calculate_hyundai_dynamic_lower_jerk(a_ego - state.accel_last)
-  state.jerk_upper = desired_jerk_upper
-  state.jerk_lower = 5.0 if radar_unavailable else min(dynamic_lower_jerk, lower_speed_limit)
-
-  if state.stopping:
-    state.desired_accel = 0.0
-  else:
-    state.desired_accel = float(np.clip(accel_cmd, CarControllerParams.ACCEL_MIN, CarControllerParams.ACCEL_MAX))
-
-  state.actual_accel = _jerk_limited_integrator(state.desired_accel, state.accel_last, state.jerk_upper, state.jerk_lower)
-  state.accel_last = state.actual_accel
-
-  accel_vals = [0.0, 0.3, 0.6, 0.9, 1.2, 2.0]
-  decel_vals = [-3.5, -2.5, -1.5, -1.0, -0.5, -0.05]
-  comfort_band_vals = [0.0, 0.02, 0.04, 0.06, 0.08, 0.10]
-  state.comfort_band_upper = float(np.interp(a_ego, accel_vals, comfort_band_vals))
-  state.comfort_band_lower = float(np.interp(a_ego, decel_vals, comfort_band_vals[::-1]))
-  state.long_control_state_last = long_control_state
-  return state
-
-
 def process_hud_alert(enabled, fingerprint, hud_control):
   sys_warning = (hud_control.visualAlert in (VisualAlert.steerRequired, VisualAlert.ldw))
 
@@ -235,7 +149,6 @@ class CarController(CarControllerBase):
     self.long_active_ecu = self.CP.openpilotLongitudinalControl
     self._ioniq_6_lane_change_ui_side = None
     self._ioniq_6_lane_change_ui_trigger_frames = 0
-    self._hyundai_long_tuning = HyundaiLongitudinalTuningState()
     self._ioniq_6_long_tuning = Ioniq6LongitudinalTuningState()
 
   def update(self, CC, CS, now_nanos, starpilot_toggles):
@@ -297,18 +210,6 @@ class CarController(CarControllerBase):
     # When ECU disable was skipped (car started in READY mode), don't send any
     # longitudinal messages - stock ECU is still active and these would conflict
     self.long_active_ecu = self.CP.openpilotLongitudinalControl and not self.ecu_disable_failed
-
-    use_classic_hyundai_long_tuning = not (self.CP.flags & HyundaiFlags.CANFD) and self.long_active_ecu
-    if use_classic_hyundai_long_tuning and self.frame % 5 == 0:
-      self._hyundai_long_tuning = update_hyundai_longitudinal_tuning(self._hyundai_long_tuning, accel_cmd,
-                                                                     CS.out.vEgo, CS.out.aEgo,
-                                                                     actuators.longControlState, CC.longActive,
-                                                                     self.CP.radarUnavailable)
-      accel = self._hyundai_long_tuning.actual_accel
-      stopping = self._hyundai_long_tuning.stopping
-    elif use_classic_hyundai_long_tuning:
-      accel = self._hyundai_long_tuning.actual_accel
-      stopping = self._hyundai_long_tuning.stopping
 
     use_ioniq_6_dynamic_long_tuning = self.CP.carFingerprint == CAR.HYUNDAI_IONIQ_6 and self.long_active_ecu and \
                                       actuators.longControlState == LongCtrlState.pid
@@ -398,14 +299,7 @@ class CarController(CarControllerBase):
       use_fca = self.CP.flags & HyundaiFlags.USE_FCA.value
       can_sends.extend(hyundaican.create_acc_commands(self.packer, CC.enabled, accel, jerk, int(self.frame / 2),
                                                       hud_control, set_speed_in_units, stopping,
-                                                      CC.cruiseControl.override, use_fca, self.CP,
-                                                      main_mode_acc=int(CS.out.cruiseState.available),
-                                                      desired_accel=self._hyundai_long_tuning.desired_accel,
-                                                      actual_accel=self._hyundai_long_tuning.actual_accel,
-                                                      jerk_lower=self._hyundai_long_tuning.jerk_lower,
-                                                      comfort_band_upper=self._hyundai_long_tuning.comfort_band_upper,
-                                                      comfort_band_lower=self._hyundai_long_tuning.comfort_band_lower,
-                                                      stop_req=self._hyundai_long_tuning.stopping))
+                                                      CC.cruiseControl.override, use_fca, self.CP))
 
     # 20 Hz LFA MFA message
     if self.frame % 5 == 0 and self.CP.flags & HyundaiFlags.SEND_LFA.value:

@@ -394,6 +394,30 @@ def test_acc_mode_low_speed_vision_stop_buffer_sets_should_stop_before_tiny_gap(
 
 
 @pytest.mark.parametrize("model_version", ["v11", "v12", "v13"])
+def test_standstill_moving_lead_does_not_force_resume_while_should_stop(model_version):
+  v_ego = 0.0
+
+  CP = CarInterface.get_non_essential_params(CAR.HONDA_CIVIC)
+  planner = LongitudinalPlanner(CP, init_v=v_ego)
+  sm = make_sm(
+    v_ego,
+    desired_accel=0.0,
+    min_accel=-0.5,
+    experimental_mode=False,
+    tracking_lead=True,
+    lead_one=make_lead(status=True, d_rel=7.1, v_lead=2.3, a_lead=1.8, radar=True, model_prob=1.0),
+  )
+  sm["carState"].standstill = True
+  sm["controlsState"].longControlState = LongCtrlState.stopping
+  sm["starpilotPlan"].vCruise = 10.0
+
+  planner.update(sm, make_toggles(model_version))
+
+  assert planner.output_should_stop
+  assert planner.output_a_target < 0.1
+
+
+@pytest.mark.parametrize("model_version", ["v11", "v12", "v13"])
 def test_acc_mode_damps_far_radar_mild_lead_brake_more_than_close_brake(model_version):
   far_v_ego = 29.26
   far_v_cruise = 32.22

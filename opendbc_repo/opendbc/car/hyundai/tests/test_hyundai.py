@@ -7,8 +7,7 @@ from opendbc.can import CANPacker, CANParser
 from opendbc.car import Bus, ButtonType, gen_empty_fingerprint
 from opendbc.car.structs import CarParams
 from opendbc.car.fw_versions import build_fw_dict, match_fw_to_car
-from opendbc.car.hyundai.carcontroller import HyundaiLongitudinalTuningState, Ioniq6LongitudinalTuningState, \
-                                              update_hyundai_longitudinal_tuning, update_ioniq_6_longitudinal_tuning
+from opendbc.car.hyundai.carcontroller import Ioniq6LongitudinalTuningState, update_ioniq_6_longitudinal_tuning
 from opendbc.car.hyundai.carstate import CarState, decode_ioniq_6_blindspot_radar_state
 from opendbc.car.hyundai.interface import CarInterface
 from opendbc.car.hyundai import hyundaican, hyundaicanfd
@@ -97,19 +96,13 @@ class TestHyundaiFingerprint:
     CP = CarInterface.get_params(CAR.KIA_SPORTAGE_HEV_2026, fingerprint, [], False, False, False, None)
     assert CP.flags & HyundaiFlags.SEND_LFA
 
-  @pytest.mark.parametrize(("candidate", "expected"), [
-    (CAR.KIA_EV6, (0.3, 0.1, 0.4)),
-    (CAR.HYUNDAI_KONA_EV, (0.35, 0.1, 0.45)),
-    (CAR.HYUNDAI_SONATA_HYBRID, (0.4, 0.15, 0.45)),
-    (CAR.GENESIS_G70, (0.3, 0.1, 0.4)),
-  ])
-  def test_platform_longitudinal_params_match_family_tune(self, candidate, expected):
+  def test_canfd_longitudinal_params_match_family_tune(self):
     toggles = get_test_toggles()
-    CP = CarInterface.get_params(candidate, gen_empty_fingerprint(), [], True, False, False, toggles)
+    CP = CarInterface.get_params(CAR.KIA_EV6, gen_empty_fingerprint(), [], True, False, False, toggles)
 
-    assert CP.vEgoStopping == pytest.approx(expected[0])
-    assert CP.vEgoStarting == pytest.approx(expected[1])
-    assert CP.stoppingDecelRate == pytest.approx(expected[2])
+    assert CP.vEgoStopping == pytest.approx(0.3)
+    assert CP.vEgoStarting == pytest.approx(0.1)
+    assert CP.stoppingDecelRate == pytest.approx(0.4)
     assert CP.longitudinalActuatorDelay == pytest.approx(0.5)
     assert CP.startingState
 
@@ -282,24 +275,6 @@ class TestHyundaiFingerprint:
     assert state.jerk_upper == pytest.approx(0.0)
     assert state.jerk_lower == pytest.approx(0.0)
 
-  def test_hyundai_longitudinal_tuning_helper_softens_stopping(self):
-    state = HyundaiLongitudinalTuningState(accel_last=-3.5)
-
-    state = update_hyundai_longitudinal_tuning(state, accel_cmd=-3.5, v_ego=0.9, a_ego=-1.0,
-                                               long_control_state=LongCtrlState.stopping, long_active=True,
-                                               radar_unavailable=True)
-    assert state.stopping
-    assert state.desired_accel == pytest.approx(0.0)
-    assert state.actual_accel > -3.5
-    assert state.jerk_lower == pytest.approx(5.0)
-
-    state = update_hyundai_longitudinal_tuning(state, accel_cmd=1.0, v_ego=0.8, a_ego=0.1,
-                                               long_control_state=LongCtrlState.stopping, long_active=True,
-                                               radar_unavailable=True)
-    assert state.stopping
-    assert state.desired_accel == pytest.approx(0.0)
-    assert state.actual_accel <= 0.0
-
   def test_canfd_acc_control_uses_direct_accel(self):
     CP = CarParams.new_message()
     CP.carFingerprint = CAR.KIA_EV6
@@ -321,7 +296,7 @@ class TestHyundaiFingerprint:
     assert parser.vl["SCC_CONTROL"]["JerkLowerLimit"] == pytest.approx(5.0)
     assert parser.vl["SCC_CONTROL"]["JerkUpperLimit"] == pytest.approx(1.0)
 
-  def test_can_acc_commands_use_tuned_values(self):
+  def test_can_acc_commands_use_default_values(self):
     CP = CarParams.new_message()
     CP.carFingerprint = CAR.GENESIS_G90
 
@@ -330,20 +305,17 @@ class TestHyundaiFingerprint:
 
     msgs = hyundaican.create_acc_commands(packer, enabled=True, accel=-1.0, upper_jerk=2.5, idx=3,
                                           hud_control=SimpleNamespace(leadDistanceBars=3, leadVisible=False), set_speed=42,
-                                          stopping=False, long_override=False, use_fca=False, CP=CP,
-                                          main_mode_acc=0, desired_accel=0.0, actual_accel=-0.35,
-                                          jerk_lower=4.0, comfort_band_upper=0.08, comfort_band_lower=0.02, stop_req=True)
+                                          stopping=False, long_override=False, use_fca=False, CP=CP)
     parser.update([(1, msgs)])
 
     assert parser.can_valid
-    assert parser.vl["SCC11"]["MainMode_ACC"] == 0
-    assert parser.vl["SCC11"]["ObjValid"] == 0
-    assert parser.vl["SCC12"]["StopReq"] == 1
-    assert parser.vl["SCC12"]["aReqRaw"] == pytest.approx(0.0)
-    assert parser.vl["SCC12"]["aReqValue"] == pytest.approx(-0.35)
-    assert parser.vl["SCC14"]["ComfortBandUpper"] == pytest.approx(0.08)
-    assert parser.vl["SCC14"]["ComfortBandLower"] == pytest.approx(0.02)
-    assert parser.vl["SCC14"]["JerkLowerLimit"] == pytest.approx(4.0)
+    assert parser.vl["SCC11"]["MainMode_ACC"] == 1
+    assert parser.vl["SCC12"]["StopReq"] == 0
+    assert parser.vl["SCC12"]["aReqRaw"] == pytest.approx(-1.0)
+    assert parser.vl["SCC12"]["aReqValue"] == pytest.approx(-1.0)
+    assert parser.vl["SCC14"]["ComfortBandUpper"] == pytest.approx(0.0)
+    assert parser.vl["SCC14"]["ComfortBandLower"] == pytest.approx(0.0)
+    assert parser.vl["SCC14"]["JerkLowerLimit"] == pytest.approx(5.0)
 
   def test_sportage_angle_steering_uses_adas_cmd_with_send_lfa(self):
     fingerprint = gen_empty_fingerprint()

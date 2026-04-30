@@ -36,7 +36,13 @@ void AnnotatedCameraWidget::updateState(const UIState &s, const StarPilotUIState
 
   const cereal::CarState::Reader &carState = sm["carState"].getCarState();
 
-  starpilot_nvg->experimentalButtonPosition = QPoint(experimental_btn->x(), experimental_btn->y());
+  const bool hide_steering_wheel = starpilot_toggles.value("hide_steering_wheel").toBool();
+  experimental_btn->setVisible(!hide_steering_wheel);
+
+  const QPoint experimental_button_position = hide_steering_wheel
+    ? QPoint(width() - UI_BORDER_SIZE - btn_size, UI_BORDER_SIZE)
+    : QPoint(experimental_btn->x(), experimental_btn->y());
+  starpilot_nvg->experimentalButtonPosition = experimental_button_position;
 
   bool onroad_distance_btn_enabled = starpilot_nvg->dmIconPosition != QPoint(0, 0) && !starpilot_nvg->hideBottomIcons && starpilot_toggles.value("onroad_distance_button").toBool();
   personality_btn->setVisible(onroad_distance_btn_enabled);
@@ -47,7 +53,10 @@ void AnnotatedCameraWidget::updateState(const UIState &s, const StarPilotUIState
 
   dmon.onroad_distance_btn_enabled = onroad_distance_btn_enabled;
 
-  screen_recorder->move(experimental_btn->x() - UI_BORDER_SIZE - btn_size, experimental_btn->y());
+  const QPoint screen_recorder_position = hide_steering_wheel
+    ? experimental_button_position
+    : QPoint(experimental_button_position.x() - UI_BORDER_SIZE - btn_size, experimental_button_position.y());
+  screen_recorder->move(screen_recorder_position);
   screen_recorder->setVisible(starpilot_nvg->standstillDuration == 0 && !(starpilot_nvg->signalStyle == "static" && carState.getRightBlinker()) && starpilot_toggles.value("screen_recorder").toBool());
 }
 
