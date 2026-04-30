@@ -28,6 +28,9 @@ PRIUS_INTEGRAL_MISMATCH_UNWIND = 8.0
 PRIUS_POSITIVE_FEEDFORWARD_SCALE = 0.5
 
 MAX_PITCH_COMPENSATION = 1.5  # m/s^2
+TOYOTA_COAST_BRAKE_MIN_SPEED = 15.0  # m/s
+TOYOTA_COAST_BRAKE_ENABLE_ACCEL = -0.10  # m/s^2
+TOYOTA_COAST_BRAKE_DISABLE_ACCEL = -0.06  # m/s^2
 
 # LKA limits
 # EPS faults if you apply torque while the steering rate is above 100 deg/s for too long
@@ -58,6 +61,28 @@ def get_long_tune(CP, params):
   return PIDController(0.0, (kiBP, kiV), k_f=k_f,
                        pos_limit=params.ACCEL_MAX, neg_limit=params.ACCEL_MIN,
                        rate=1 / (DT_CTRL * 3))
+
+
+def update_permit_braking(current: bool, net_acceleration_request_min: float, stopping: bool,
+                          long_active: bool, v_ego: float) -> bool:
+  if stopping or not long_active:
+    return True
+
+  # At cruising speeds, some Toyota platforms turn tiny negative accel corrections
+  # into noticeable brake taps. Keep a small coast-only band so mild follow/cruise
+  # trims stay off the brakes while still allowing real negative requests through.
+  if v_ego >= TOYOTA_COAST_BRAKE_MIN_SPEED:
+    if net_acceleration_request_min <= TOYOTA_COAST_BRAKE_ENABLE_ACCEL:
+      return True
+    if net_acceleration_request_min >= TOYOTA_COAST_BRAKE_DISABLE_ACCEL:
+      return False
+    return current
+
+  if net_acceleration_request_min < 0.2:
+    return True
+  if net_acceleration_request_min > 0.3:
+    return False
+  return current
 
 
 class CarController(CarControllerBase):
@@ -287,10 +312,11 @@ class CarController(CarControllerBase):
         # Along with rate limiting positive jerk above, this greatly improves gas response time
         # Consider the net acceleration request that the PCM should be applying (pitch included)
         net_acceleration_request_min = min(actuators.accel + accel_due_to_pitch, net_acceleration_request)
-        if net_acceleration_request_min < 0.2 or stopping or not CC.longActive:
-          self.permit_braking = True
-        elif net_acceleration_request_min > 0.3:
-          self.permit_braking = False
+        self.permit_braking = update_permit_braking(self.permit_braking,
+                                                    net_acceleration_request_min,
+                                                    stopping,
+                                                    CC.longActive,
+                                                    CS.out.vEgo)
 
         pcm_accel_cmd = float(np.clip(pcm_accel_cmd, self.params.ACCEL_MIN, self.params.ACCEL_MAX))
 
