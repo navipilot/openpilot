@@ -2189,7 +2189,7 @@
       {
         "key": "GMAutoHold",
         "label": "Volt Auto Hold",
-        "description": "Hold the car at a stop on supported non-CC-only Chevy Volt alpha-longitudinal setups until the gas pedal is pressed.",
+        "description": "Hold the car at a stop on supported non-CC-only Chevy Volts until the gas pedal is pressed.",
         "data_type": "bool",
         "ui_type": "toggle"
       },

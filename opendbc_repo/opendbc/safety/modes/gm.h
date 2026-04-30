@@ -60,6 +60,7 @@ static bool gm_panda_3d1_sched = false;
 static bool gm_panda_paddle_sched = false;
 static bool gm_bolt_2022_pedal = false;
 static bool gm_alt_brake = false;
+static bool gm_volt_auto_hold = false;
 
 static bool gm_cc_long = false;
 static bool gm_has_acc = true;
@@ -96,6 +97,7 @@ static const uint32_t GM_PADDLE_TX_OFFSET_US = 0U;
 static const uint32_t GM_PADDLE_LOCK_TOLERANCE_US = 5000U;
 static const uint32_t GM_PADDLE_STALE_US = 100000U;
 static const uint32_t GM_PADDLE_FEED_STALE_US = 100000U;
+static const int GM_VOLT_AUTO_HOLD_MAX_BRAKE = 240;
 
 void can_send(CANPacket_t *to_push, uint8_t bus_number, bool skip_tx_hook);
 void can_set_checksum(CANPacket_t *packet);
@@ -363,7 +365,15 @@ static bool gm_tx_hook(const CANPacket_t *msg) {
   if (msg->addr == 0x315U) {
     int brake = ((msg->data[0] & 0xFU) << 8) + msg->data[1];
     brake = (0x1000 - brake) & 0xFFF;
-    if (longitudinal_brake_checks(brake, *gm_long_limits)) {
+    bool stock_auto_hold_brake_allowed = gm_volt_auto_hold && !vehicle_moving && !gas_pressed_prev;
+    bool violation = false;
+    violation |= !(get_longitudinal_allowed() || stock_auto_hold_brake_allowed) && (brake != 0);
+    if (stock_auto_hold_brake_allowed && !get_longitudinal_allowed()) {
+      violation |= brake > GM_VOLT_AUTO_HOLD_MAX_BRAKE;
+    } else {
+      violation |= brake > gm_long_limits->max_brake;
+    }
+    if (violation) {
       tx = false;
     }
   }
@@ -602,12 +612,22 @@ static safety_config gm_init(uint16_t param) {
                                           {0x200, 0, 6, .check_relay = false},
                                           {0x1E1, 0, 7, .check_relay = false},
                                           {0xBD, 0, 7, .check_relay = false}, {0x1F5, 0, 8, .check_relay = false}};  // pt bus
+  static const CanMsg GM_CAM_VOLT_AUTO_HOLD_TX_MSGS[] = {{0x180, 0, 4, .check_relay = true}, {0x370, 0, 6, .check_relay = false}, {0x3D1, 0, 8, .check_relay = false}, {0x315, 0, 5, .check_relay = true},  // pt bus
+                                                         {0x1E1, 2, 7, .check_relay = false}, {0x184, 2, 8, .check_relay = true},  // camera bus
+                                                         {0x200, 0, 6, .check_relay = false},
+                                                         {0x1E1, 0, 7, .check_relay = false},
+                                                         {0xBD, 0, 7, .check_relay = false}, {0x1F5, 0, 8, .check_relay = false}};  // pt bus
 
   static const CanMsg GM_SDGM_TX_MSGS[] = {{0x180, 0, 4, .check_relay = true}, {0x370, 0, 6, .check_relay = false}, {0x3D1, 0, 8, .check_relay = false},  // pt bus
                                            {0x1E1, 2, 7, .check_relay = false}, {0x184, 2, 8, .check_relay = false},  // camera bus
                                            {0x200, 0, 6, .check_relay = false},
                                            {0x1E1, 0, 7, .check_relay = false},
                                            {0xBD, 0, 7, .check_relay = false}, {0x1F5, 0, 8, .check_relay = false}};  // pt bus
+  static const CanMsg GM_SDGM_VOLT_AUTO_HOLD_TX_MSGS[] = {{0x180, 0, 4, .check_relay = true}, {0x370, 0, 6, .check_relay = false}, {0x3D1, 0, 8, .check_relay = false},  // pt bus
+                                                           {0x1E1, 2, 7, .check_relay = false}, {0x184, 2, 8, .check_relay = false}, {0x315, 2, 5, .check_relay = false},  // camera bus
+                                                           {0x200, 0, 6, .check_relay = false},
+                                                           {0x1E1, 0, 7, .check_relay = false},
+                                                           {0xBD, 0, 7, .check_relay = false}, {0x1F5, 0, 8, .check_relay = false}};  // pt bus
 
   static const CanMsg GM_CAM_NO_CAMERA_TX_MSGS[] = {{0x180, 0, 4, .check_relay = false}, {0x370, 0, 6, .check_relay = false}, {0x3D1, 0, 8, .check_relay = false},  // pt bus
                                                     {0x409, 0, 7, .check_relay = false}, {0x40A, 0, 7, .check_relay = false},
@@ -615,6 +635,12 @@ static safety_config gm_init(uint16_t param) {
                                                     {0x200, 0, 6, .check_relay = false},
                                                     {0x1E1, 0, 7, .check_relay = false},
                                                     {0xBD, 0, 7, .check_relay = false}, {0x1F5, 0, 8, .check_relay = false}};  // pt bus
+  static const CanMsg GM_CAM_NO_CAMERA_VOLT_AUTO_HOLD_TX_MSGS[] = {{0x180, 0, 4, .check_relay = false}, {0x370, 0, 6, .check_relay = false}, {0x3D1, 0, 8, .check_relay = false}, {0x315, 0, 5, .check_relay = false},  // pt bus
+                                                                   {0x409, 0, 7, .check_relay = false}, {0x40A, 0, 7, .check_relay = false},
+                                                                   {0x1E1, 2, 7, .check_relay = false}, {0x184, 2, 8, .check_relay = false},  // camera bus
+                                                                   {0x200, 0, 6, .check_relay = false},
+                                                                   {0x1E1, 0, 7, .check_relay = false},
+                                                                   {0xBD, 0, 7, .check_relay = false}, {0x1F5, 0, 8, .check_relay = false}};  // pt bus
 
   static RxCheck gm_no_acc_rx_checks[] = {
     GM_COMMON_RX_CHECKS
@@ -671,6 +697,8 @@ static safety_config gm_init(uint16_t param) {
   gm_remote_start_boots_comma = GET_FLAG(param, GM_PARAM_REMOTE_START_BOOTS_COMMA);
   gm_panda_3d1_sched = GET_FLAG(param, GM_PARAM_PANDA_3D1_SCHED) && gm_pedal_long && !gm_has_acc && !gm_bolt_2022_pedal;
   gm_panda_paddle_sched = GET_FLAG(param, GM_PARAM_PANDA_PADDLE_SCHED) && gm_pedal_long && enable_gas_interceptor;
+  // Reuse the paddle-scheduler bit as a stock-Volt auto-hold marker on non-pedal ACC paths.
+  gm_volt_auto_hold = GET_FLAG(param, GM_PARAM_PANDA_PADDLE_SCHED) && !gm_pedal_long && !gm_cc_long && gm_has_acc;
   gm_alt_brake = GET_FLAG(param, GM_PARAM_NO_CAMERA) && (gm_hw == GM_ASCM) && !gm_sdgm && !gm_ascm_int;
 
   gm_3d1_spoof_valid = false;
@@ -714,7 +742,11 @@ static safety_config gm_init(uint16_t param) {
   const bool gm_sdgm_stock = gm_sdgm && !gm_cc_long && !gm_cam_long && !gm_no_camera;
   // SDGM behaves like a forwarding camera path for whitelist/forwarding purposes.
   if (gm_sdgm_stock) {
-    ret = BUILD_SAFETY_CFG(gm_rx_checks, GM_SDGM_TX_MSGS);
+    if (gm_volt_auto_hold) {
+      ret = BUILD_SAFETY_CFG(gm_rx_checks, GM_SDGM_VOLT_AUTO_HOLD_TX_MSGS);
+    } else {
+      ret = BUILD_SAFETY_CFG(gm_rx_checks, GM_SDGM_TX_MSGS);
+    }
   } else if ((gm_hw == GM_CAM) || gm_sdgm) {
     // FIXME: cppcheck thinks that gm_cam_long is always false. This is not true
     // if ALLOW_DEBUG is defined but cppcheck is run without ALLOW_DEBUG
@@ -732,10 +764,20 @@ static safety_config gm_init(uint16_t param) {
         ret = BUILD_SAFETY_CFG(gm_rx_checks, GM_CAM_LONG_TX_MSGS);
       }
     } else {
-      if (gm_no_camera) {
-        ret = BUILD_SAFETY_CFG(gm_rx_checks, GM_CAM_NO_CAMERA_TX_MSGS);
+      if (gm_volt_auto_hold && gm_sdgm) {
+        ret = BUILD_SAFETY_CFG(gm_rx_checks, GM_SDGM_VOLT_AUTO_HOLD_TX_MSGS);
+      } else if (gm_no_camera) {
+        if (gm_volt_auto_hold) {
+          ret = BUILD_SAFETY_CFG(gm_rx_checks, GM_CAM_NO_CAMERA_VOLT_AUTO_HOLD_TX_MSGS);
+        } else {
+          ret = BUILD_SAFETY_CFG(gm_rx_checks, GM_CAM_NO_CAMERA_TX_MSGS);
+        }
       } else {
-        ret = BUILD_SAFETY_CFG(gm_rx_checks, GM_CAM_TX_MSGS);
+        if (gm_volt_auto_hold) {
+          ret = BUILD_SAFETY_CFG(gm_rx_checks, GM_CAM_VOLT_AUTO_HOLD_TX_MSGS);
+        } else {
+          ret = BUILD_SAFETY_CFG(gm_rx_checks, GM_CAM_TX_MSGS);
+        }
       }
     }
   } else if (gm_alt_brake) {

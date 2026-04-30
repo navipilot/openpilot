@@ -533,6 +533,64 @@ class TestGmCcLongitudinalPandaSchedSafety(TestGmCcLongitudinalSafety):
       for btn in range(8):
         self.assertEqual(enabled and btn in allowed_btns, self._tx(self._button_msg(btn)))
 
+
+class TestGmVoltAutoHoldCameraSafety(TestGmCameraSafetyBase):
+  TX_MSGS = TestGmCameraSafety.TX_MSGS + [[0x315, 0]]
+  EXTRA_SAFETY_PARAM = GMSafetyFlags.FLAG_GM_PANDA_PADDLE_SCHED
+
+  def setUp(self):
+    self.packer = CANPackerSafety("gm_global_a_powertrain_generated")
+    self.packer_chassis = CANPackerSafety("gm_global_a_chassis")
+    self.safety = libsafety_py.libsafety
+    self.safety.set_safety_hooks(CarParams.SafetyModel.gm, GMSafetyFlags.HW_CAM | self.EXTRA_SAFETY_PARAM)
+    self.safety.init_tests()
+
+  def _send_brake_msg(self, brake):
+    values = {"FrictionBrakeCmd": -brake}
+    return self.packer_chassis.make_can_msg_safety("EBCMFrictionBrakeCmd", 0, values)
+
+  def test_standstill_brake_allowed_without_controls(self):
+    self._rx(self._speed_msg(0))
+    self.safety.set_controls_allowed(False)
+    self.assertTrue(self._tx(self._send_brake_msg(100)))
+
+  def test_moving_brake_blocked_without_controls(self):
+    self._rx(self._speed_msg(self.STANDSTILL_THRESHOLD + 1))
+    self.safety.set_controls_allowed(False)
+    self.assertFalse(self._tx(self._send_brake_msg(100)))
+
+  def test_gas_blocks_standstill_brake_without_controls(self):
+    self._rx(self._speed_msg(0))
+    self._rx(self._user_gas_msg(True))
+    self.safety.set_controls_allowed(False)
+    self.assertFalse(self._tx(self._send_brake_msg(100)))
+
+
+class TestGmVoltAutoHoldSdgmSafety(TestGmSafetyBase):
+  TX_MSGS = TestGmSdgmSafety.TX_MSGS + [[0x315, 2]]
+  EXTRA_SAFETY_PARAM = GMSafetyFlags.FLAG_GM_PANDA_PADDLE_SCHED
+
+  def setUp(self):
+    self.packer = CANPackerSafety("gm_global_a_powertrain_generated")
+    self.packer_chassis = CANPackerSafety("gm_global_a_chassis")
+    self.safety = libsafety_py.libsafety
+    self.safety.set_safety_hooks(CarParams.SafetyModel.gm, GMSafetyFlags.HW_SDGM | self.EXTRA_SAFETY_PARAM)
+    self.safety.init_tests()
+
+  def _send_brake_msg(self, brake):
+    values = {"FrictionBrakeCmd": -brake}
+    return self.packer_chassis.make_can_msg_safety("EBCMFrictionBrakeCmd", 2, values)
+
+  def test_standstill_brake_allowed_without_controls(self):
+    self._rx(self._speed_msg(0))
+    self.safety.set_controls_allowed(False)
+    self.assertTrue(self._tx(self._send_brake_msg(100)))
+
+  def test_moving_brake_blocked_without_controls(self):
+    self._rx(self._speed_msg(self.STANDSTILL_THRESHOLD + 1))
+    self.safety.set_controls_allowed(False)
+    self.assertFalse(self._tx(self._send_brake_msg(100)))
+
   def test_3d1_feed_frame_allowed(self):
     self.assertTrue(self._tx(self._pcm_status_msg(True)))
     self.assertTrue(self._tx(self._pcm_status_msg(False)))

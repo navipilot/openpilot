@@ -189,6 +189,10 @@ class CarInterface(CarInterfaceBase):
       disable_openpilot_long = params.get_bool("DisableOpenpilotLongitudinal")
     except UnknownKeyName:
       disable_openpilot_long = False
+    try:
+      gm_auto_hold = params.get_bool("GMAutoHold")
+    except UnknownKeyName:
+      gm_auto_hold = False
 
     ret.brand = "gm"
     ret.safetyConfigs = [get_safety_config(structs.CarParams.SafetyModel.gm)]
@@ -631,6 +635,21 @@ class CarInterface(CarInterfaceBase):
 
     if remote_start_boots_comma:
       ret.safetyConfigs[0].safetyParam |= GMSafetyFlags.FLAG_GM_REMOTE_START_BOOTS_COMMA.value
+
+    volt_stock_auto_hold_safety = (
+      gm_auto_hold and
+      not ret.openpilotLongitudinalControl and
+      candidate in {
+        CAR.CHEVROLET_VOLT,
+        CAR.CHEVROLET_VOLT_2019,
+        CAR.CHEVROLET_VOLT_ASCM,
+        CAR.CHEVROLET_VOLT_CAMERA,
+      }
+    )
+    if volt_stock_auto_hold_safety:
+      # Reuse the paddle-scheduler safety bit as a stock-Volt auto-hold marker on
+      # non-pedal paths. The scheduler logic remains inactive without pedal-long.
+      ret.safetyConfigs[0].safetyParam |= GMSafetyFlags.FLAG_GM_PANDA_PADDLE_SCHED.value
 
     use_panda_3d1_sched = (
       ret.openpilotLongitudinalControl and

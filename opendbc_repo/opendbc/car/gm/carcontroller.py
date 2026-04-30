@@ -7,7 +7,7 @@ from opendbc.car.gm import gmcan
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.gm.values import (
   ASCM_INT, CAR, CC_ONLY_CAR, CC_REGEN_PADDLE_CAR, DBC, EV_CAR, SDGM_CAR, AccState, CanBus, CarControllerParams,
-  CruiseButtons, GMFlags,
+  CruiseButtons, GMFlags, GMSafetyFlags,
 )
 from opendbc.car.interfaces import CarControllerBase
 from openpilot.common.params import Params, UnknownKeyName
@@ -117,9 +117,12 @@ def get_testing_ground_1_brake_switch_bias(v_ego: float) -> int:
 
 
 def supports_volt_auto_hold(CP, starpilot_toggles):
+  safety_cfg = getattr(CP, "safetyConfigs", ())
+  safety_param = safety_cfg[0].safetyParam if safety_cfg else 0
+  stock_hold_safety_ready = CP.openpilotLongitudinalControl or bool(safety_param & GMSafetyFlags.FLAG_GM_PANDA_PADDLE_SCHED.value)
   return (
     getattr(starpilot_toggles, "gm_auto_hold", False) and
-    CP.openpilotLongitudinalControl and
+    stock_hold_safety_ready and
     CP.carFingerprint in AUTO_HOLD_VOLT_CARS
   )
 
@@ -128,6 +131,23 @@ def estimate_auto_hold_brake(driver_brake: float, op_brake: float) -> int:
   driver_hold = np.interp(float(driver_brake), [8.0, 20.0, 40.0, 80.0], [80.0, 110.0, 150.0, 220.0])
   hold_brake = max(float(op_brake), float(driver_hold))
   return int(round(np.clip(hold_brake, AUTO_HOLD_MIN_BRAKE, AUTO_HOLD_MAX_BRAKE)))
+
+
+def get_friction_brake_bus(CP):
+  volt_gateway_alt_brake = (
+    CP.carFingerprint == CAR.CHEVROLET_VOLT and
+    CP.networkLocation == NetworkLocation.gateway and
+    bool(CP.flags & GMFlags.NO_ACCELERATOR_POS_MSG.value)
+  )
+  if volt_gateway_alt_brake:
+    return CanBus.POWERTRAIN
+
+  if CP.networkLocation == NetworkLocation.fwdCamera:
+    if CP.carFingerprint in SDGM_CAR:
+      return CanBus.CAMERA
+    return CanBus.POWERTRAIN
+
+  return CanBus.CHASSIS
 
 
 class CarController(CarControllerBase):
@@ -333,6 +353,7 @@ class CarController(CarControllerBase):
     accel = actuators.accel
     press_regen_paddle = False
     auto_hold_enabled = supports_volt_auto_hold(self.CP, starpilot_toggles)
+    stock_hold_apply_brake = self.apply_brake if self.CP.openpilotLongitudinalControl else 0
 
     hold_ready = (
       auto_hold_enabled and
@@ -349,8 +370,8 @@ class CarController(CarControllerBase):
 
     if CS.out.vEgo > 0.1 or CS.out.gasPressed or CS.out.gearShifter not in AUTO_HOLD_DRIVE_GEARS:
       self.auto_hold_brake = 0
-    elif CS.out.brakePressed or self.apply_brake > 0:
-      self.auto_hold_brake = estimate_auto_hold_brake(CS.out.brake, self.apply_brake)
+    elif CS.out.brakePressed or stock_hold_apply_brake > 0:
+      self.auto_hold_brake = estimate_auto_hold_brake(CS.out.brake, stock_hold_apply_brake)
 
     if self.frame % 25 == 0:
       try:
@@ -432,6 +453,13 @@ class CarController(CarControllerBase):
       paddle_sched_feed_active = False
 
     paddle_spoof_pressed = raw_regen_active and (CS.out.vEgo > 2.68)
+    auto_hold_active = (
+      hold_ready and
+      CS.auto_hold_armed and
+      not CC.longActive and
+      not CS.out.regenBraking and
+      CS.out.vEgo < 0.02
+    )
 
     # Steering (Active: 50Hz, inactive: 10Hz)
     steer_step = self.params.STEER_STEP if CC.latActive else self.params.INACTIVE_STEER_STEP
@@ -481,13 +509,6 @@ class CarController(CarControllerBase):
         interceptor_gas_cmd = 0
         at_full_stop = CC.longActive and CS.out.standstill
         near_stop = CC.longActive and (CS.out.vEgo < self.params.NEAR_STOP_BRAKE_PHASE)
-        auto_hold_active = (
-          hold_ready and
-          CS.auto_hold_armed and
-          not CC.longActive and
-          not CS.out.regenBraking and
-          CS.out.vEgo < 0.02
-        )
         if not CC.longActive:
           # ASCM sends max regen when not enabled
           self.apply_gas = self.params.INACTIVE_REGEN
@@ -607,19 +628,11 @@ class CarController(CarControllerBase):
         if self.CP.enableGasInterceptorDEPRECATED:
           can_sends.append(create_gas_interceptor_command(self.packer_pt, interceptor_gas_cmd, idx))
         if self.CP.carFingerprint not in CC_ONLY_CAR:
-          volt_gateway_alt_brake = (
-            self.CP.carFingerprint == CAR.CHEVROLET_VOLT and
-            self.CP.networkLocation == NetworkLocation.gateway and
-            bool(self.CP.flags & GMFlags.NO_ACCELERATOR_POS_MSG.value)
-          )
-          friction_brake_bus = CanBus.POWERTRAIN if volt_gateway_alt_brake else CanBus.CHASSIS
+          friction_brake_bus = get_friction_brake_bus(self.CP)
           # GM Camera exceptions
           # TODO: can we always check the longControlState?
           if self.CP.networkLocation == NetworkLocation.fwdCamera:
             at_full_stop = at_full_stop and stopping
-            friction_brake_bus = CanBus.POWERTRAIN
-            if self.CP.carFingerprint in SDGM_CAR:
-              friction_brake_bus = CanBus.CAMERA
 
           if self.CP.autoResumeSng:
             resume = actuators.longControlState != LongCtrlState.starting or CC.cruiseControl.resume
@@ -704,6 +717,18 @@ class CarController(CarControllerBase):
           can_sends.append(gmcan.create_buttons(self.packer_pt, cancel_bus, (CS.buttons_counter + 1) % 4, CruiseButtons.CANCEL))
 
     else:
+      if self.frame % 4 == 0 and auto_hold_active:
+        idx = (self.frame // 4) % 4
+        hold_brake = self.auto_hold_brake or estimate_auto_hold_brake(CS.out.brake, stock_hold_apply_brake)
+        hold_standstill = CS.pcm_acc_status == AccState.STANDSTILL
+        hold_near_stop = CS.out.vEgo < self.params.NEAR_STOP_BRAKE_PHASE
+        can_sends.append(gmcan.create_friction_brake_command(
+          self.packer_ch, get_friction_brake_bus(self.CP), hold_brake, idx, False, hold_near_stop, hold_standstill, self.CP))
+        CS.auto_hold_engaged = True
+        CS.auto_hold_fault_suppression_timer = 1.0
+      elif self.frame % 4 == 0:
+        CS.auto_hold_engaged = False
+
       # While car is braking, cancel button causes ECM to enter a soft disable state with a fault status.
       # A delayed cancellation allows camera to cancel and avoids a fault when user depresses brake quickly
       self.cancel_counter = self.cancel_counter + 1 if CC.cruiseControl.cancel else 0
