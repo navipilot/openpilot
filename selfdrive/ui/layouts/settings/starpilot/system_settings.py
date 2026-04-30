@@ -25,9 +25,9 @@ from openpilot.selfdrive.ui.layouts.settings.starpilot.panel import StarPilotPan
 from openpilot.selfdrive.ui.layouts.settings.starpilot.aethergrid import (
   AETHER_COMPACT_ROW_HEIGHT,
   AETHER_LIST_METRICS,
+  AetherAdjustorRow,
   AetherScrollbar,
   AetherSegmentedControl,
-  AetherSliderDialog,
   AetherListColors,
   DEFAULT_PANEL_STYLE,
   _point_hits,
@@ -89,6 +89,7 @@ class SystemSettingsManagerView(Widget):
   SECTION_GAP = AETHER_LIST_METRICS.section_gap
   SECTION_HEADER_HEIGHT = AETHER_LIST_METRICS.section_header_height
   SECTION_HEADER_GAP = AETHER_LIST_METRICS.section_header_gap
+  SLIDER_ROW_HEIGHT = AETHER_LIST_METRICS.range_row_height
   ROW_HEIGHT = AETHER_COMPACT_ROW_HEIGHT
   CONTENT_GUTTER = AETHER_LIST_METRICS.content_right_gutter
   FADE_HEIGHT = AETHER_LIST_METRICS.fade_height
@@ -106,10 +107,13 @@ class SystemSettingsManagerView(Widget):
     self._scrollbar = AetherScrollbar()
     self._content_height = 0.0
     self._scroll_offset = 0.0
+    self._ensure_visible_key: str | None = None
     self._interactive_rects: dict[str, rl.Rectangle] = {}
     self._pressed_target: str | None = None
     self._can_click = True
     self._active_tab_key = "basics"
+    self._active_adjustor_key: str | None = None
+    self._adjustor_rows: dict[str, AetherAdjustorRow] = {}
     self._display_slider_keys = ["ScreenBrightness", "ScreenBrightnessOnroad", "ScreenTimeout", "ScreenTimeoutOnroad"]
     self._power_slider_keys = ["DeviceShutdown", "LowVoltageShutdown"]
 
@@ -127,6 +131,8 @@ class SystemSettingsManagerView(Widget):
         "min": 0,
         "max": 101,
         "step": 1,
+        "live": True,
+        "presets": [0, 25, 50, 75, 101],
         "get": lambda: float(self._controller._params.get_int("ScreenBrightness")),
         "set": lambda v: self._controller._set_brightness("ScreenBrightness", v),
       },
@@ -138,6 +144,8 @@ class SystemSettingsManagerView(Widget):
         "min": 1,
         "max": 101,
         "step": 1,
+        "live": True,
+        "presets": [1, 35, 60, 80, 101],
         "get": lambda: float(max(1, self._controller._params.get_int("ScreenBrightnessOnroad"))),
         "set": lambda v: self._controller._set_brightness("ScreenBrightnessOnroad", max(1, int(v))),
       },
@@ -149,6 +157,8 @@ class SystemSettingsManagerView(Widget):
         "min": 5,
         "max": 60,
         "step": 5,
+        "live": False,
+        "presets": [5, 15, 30, 60],
         "get": lambda: float(self._controller._params.get_int("ScreenTimeout")),
         "set": lambda v: self._controller._params.put_int("ScreenTimeout", int(v)),
       },
@@ -160,6 +170,8 @@ class SystemSettingsManagerView(Widget):
         "min": 5,
         "max": 60,
         "step": 5,
+        "live": False,
+        "presets": [5, 15, 30, 60],
         "get": lambda: float(self._controller._params.get_int("ScreenTimeoutOnroad")),
         "set": lambda v: self._controller._params.put_int("ScreenTimeoutOnroad", int(v)),
       },
@@ -171,6 +183,8 @@ class SystemSettingsManagerView(Widget):
         "min": 0,
         "max": 33,
         "step": 1,
+        "live": False,
+        "presets": [0, 1, 4, 8],
         "get": lambda: float(self._controller._params.get_int("DeviceShutdown")),
         "set": lambda v: self._controller._params.put_int("DeviceShutdown", int(v)),
       },
@@ -182,10 +196,37 @@ class SystemSettingsManagerView(Widget):
         "min": 11.8,
         "max": 12.5,
         "step": 0.1,
+        "live": False,
+        "presets": [11.8, 12.0, 12.2, 12.5],
         "get": lambda: float(self._controller._params.get_float("LowVoltageShutdown")),
         "set": lambda v: self._controller._params.put_float("LowVoltageShutdown", float(v)),
       },
     }
+
+    for key, spec in self._slider_specs.items():
+      on_change = (lambda value, setter=spec["set"]: setter(value)) if spec.get("live") else (lambda _value: None)
+      on_commit = None if spec.get("live") else (lambda value, setter=spec["set"]: setter(value))
+      adjustor = self._child(
+        AetherAdjustorRow(
+          spec["title"],
+          spec["subtitle"],
+          spec["min"],
+          spec["max"],
+          spec["step"],
+          spec["get"],
+          on_change,
+          on_commit=on_commit,
+          unit=spec["unit"],
+          labels=spec["labels"],
+          presets=spec.get("presets", []),
+          is_active=lambda key=key: self._active_adjustor_key == key,
+          set_active=lambda active, key=key: self._set_active_adjustor(key, active),
+          style=self.PANEL_STYLE,
+          color=self.PANEL_STYLE.accent,
+        )
+      )
+      adjustor.set_touch_valid_callback(lambda adjustor=adjustor: self._scroll_panel.is_touch_valid() or adjustor.is_interacting)
+      self._adjustor_rows[key] = adjustor
 
     self._toggle_defs = [
       {
@@ -352,36 +393,24 @@ class SystemSettingsManagerView(Widget):
     return self._controller.backup_status_text()
 
   def _format_slider_value(self, key: str) -> str:
+    adjustor = self._adjustor_rows.get(key)
+    if adjustor is not None:
+      return adjustor.formatted_value()
     spec = self._slider_specs[key]
     current_val = spec["get"]()
     if current_val in spec["labels"]:
       return spec["labels"][current_val]
     if spec["step"] < 1:
-      suffix = spec["unit"]
-      return f"{current_val:.1f}{suffix}"
-    suffix = spec["unit"]
-    return f"{int(current_val)}{suffix}"
+      return f"{current_val:.1f}{spec['unit']}"
+    return f"{int(current_val)}{spec['unit']}"
 
-  def _open_slider_dialog(self, key: str):
-    spec = self._slider_specs[key]
-
-    def on_close(result, value):
-      if result == DialogResult.CONFIRM:
-        spec["set"](value)
-
-    gui_app.push_widget(
-      AetherSliderDialog(
-        spec["title"],
-        spec["min"],
-        spec["max"],
-        spec["step"],
-        spec["get"](),
-        on_close,
-        unit=spec["unit"],
-        labels=spec["labels"],
-        color=AetherListColors.PRIMARY,
-      )
-    )
+  def _set_active_adjustor(self, key: str, active: bool):
+    if active:
+      self._active_adjustor_key = key
+      self._ensure_visible_key = key
+    elif self._active_adjustor_key == key:
+      self._active_adjustor_key = None
+      self._ensure_visible_key = None
 
   def _get_drive_mode_index(self):
     state = self._controller._get_force_drive_state()
@@ -401,6 +430,10 @@ class SystemSettingsManagerView(Widget):
   def _clear_ephemeral_state(self):
     self._pressed_target = None
     self._can_click = True
+    self._active_adjustor_key = None
+    self._ensure_visible_key = None
+    for adjustor in self._adjustor_rows.values():
+      adjustor.reset_interaction()
 
   def show_event(self):
     super().show_event()
@@ -439,11 +472,11 @@ class SystemSettingsManagerView(Widget):
     if not target_id:
       return
     prefix, _, value = target_id.partition(":")
-    if prefix == "slider":
-      self._open_slider_dialog(value)
-      return
     if prefix == "tab":
       self._active_tab_key = value
+      self._active_adjustor_key = None
+      for adjustor in self._adjustor_rows.values():
+        adjustor.reset_interaction()
       return
     if prefix == "toggle":
       toggle_def = self._lookup_toggle(value)
@@ -525,8 +558,8 @@ class SystemSettingsManagerView(Widget):
     return self.TAB_HEIGHT + self.TAB_BOTTOM_GAP + content_height
 
   def _measure_active_tab_height(self, width: float) -> float:
-    display_h = self._section_block_height(self._section_height(len(self._display_slider_keys), self.ROW_HEIGHT))
-    power_h = self._section_block_height(self._section_height(len(self._power_slider_keys), self.ROW_HEIGHT))
+    display_h = self._section_block_height(self._slider_section_height(self._display_slider_keys, width))
+    power_h = self._section_block_height(self._slider_section_height(self._power_slider_keys, width))
     backups_h = self._section_block_height(self._section_height(2, self.ROW_HEIGHT))
     maintenance_h = self._section_block_height(self._maintenance_section_content_height())
     if self._active_tab_key == "basics":
@@ -546,6 +579,13 @@ class SystemSettingsManagerView(Widget):
 
   def _section_block_height(self, content_height: float) -> float:
     return self.SECTION_HEADER_HEIGHT + self.SECTION_HEADER_GAP + content_height + self.SECTION_GAP
+
+  def _slider_section_height(self, keys: list[str], width: float) -> float:
+    total = 0.0
+    for key in keys:
+      adjustor = self._adjustor_rows[key]
+      total += adjustor.measure_height(width)
+    return total
 
   def _maintenance_section_content_height(self) -> float:
     support_h = self._section_height(len(self._support_rows), self.ROW_HEIGHT)
@@ -618,30 +658,31 @@ class SystemSettingsManagerView(Widget):
   def _draw_slider_section(self, y: float, x: float, width: float, title: str, keys: list[str]) -> float:
     draw_section_header(rl.Rectangle(x, y, width, self.SECTION_HEADER_HEIGHT), title, style=self.PANEL_STYLE)
     y += self.SECTION_HEADER_HEIGHT + self.SECTION_HEADER_GAP
-    group_rect = rl.Rectangle(x, y, width, self._section_height(len(keys), self.ROW_HEIGHT))
+    group_rect = rl.Rectangle(x, y, width, self._slider_section_height(keys, width))
     draw_list_group_shell(group_rect)
+    current_y = group_rect.y
     for index, key in enumerate(keys):
-      self._draw_slider_row(rl.Rectangle(group_rect.x, y + index * self.ROW_HEIGHT, group_rect.width, self.ROW_HEIGHT), key, is_last=index == len(keys) - 1)
+      current_y = self._draw_slider_row(rl.Rectangle(group_rect.x, current_y, group_rect.width, 0), key, is_last=index == len(keys) - 1)
     return y + group_rect.height + self.SECTION_GAP
 
-  def _draw_slider_row(self, rect: rl.Rectangle, key: str, is_last: bool):
-    spec = self._slider_specs[key]
-    target_id = f"slider:{key}"
-    hovered, pressed = self._interactive_state(target_id, rect)
-    draw_settings_list_row(
-      rect,
-      title=spec["title"],
-      subtitle=spec["subtitle"],
-      value=self._format_slider_value(key),
-      hovered=hovered,
-      pressed=pressed,
-      is_last=is_last,
-      show_chevron=True,
-      title_size=24,
-      subtitle_size=18,
-      value_size=22,
-      style=self.PANEL_STYLE,
-    )
+  def _draw_slider_row(self, rect: rl.Rectangle, key: str, is_last: bool) -> float:
+    adjustor = self._adjustor_rows[key]
+    adjustor.set_is_last(is_last)
+    row_h = adjustor.measure_height(rect.width)
+    row_rect = rl.Rectangle(rect.x, rect.y, rect.width, row_h)
+    if self._ensure_visible_key == key:
+      padding = 12.0
+      min_offset = min(0.0, self._scroll_rect.y + padding - row_rect.y)
+      max_offset = min(0.0, self._scroll_rect.y + self._scroll_rect.height - padding - (row_rect.y + row_rect.height))
+      current_offset = self._scroll_panel.get_offset()
+      if current_offset < max_offset:
+        self._scroll_panel.set_offset(max_offset)
+      elif current_offset > min_offset:
+        self._scroll_panel.set_offset(min_offset)
+      self._ensure_visible_key = None
+    adjustor.set_parent_rect(self._scroll_rect)
+    adjustor.render(row_rect)
+    return rect.y + row_h
 
   def _draw_toggle_group_section(self, y: float, x: float, width: float, group: dict) -> float:
     toggles = self._toggle_defs_for_group(group)

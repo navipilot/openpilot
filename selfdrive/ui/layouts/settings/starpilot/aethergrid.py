@@ -216,6 +216,17 @@ class AetherListMetrics:
   toggle_width: int = 78
   toggle_height: int = 42
   toggle_right_inset: int = 34
+  adjustor_row_height: int = 94
+  adjustor_row_active_height: int = 154
+  adjustor_preset_height: int = 30
+  adjustor_preset_gap: int = 10
+  adjustor_scrubber_height: int = 52
+  adjustor_value_pill_height: int = 36
+  adjustor_value_pill_width: int = 144
+  range_row_height: int = 140
+  range_control_height: int = 56
+  range_control_bottom: int = 14
+  range_control_inset_x: int = 18
   utility_value_right: int = 270
   utility_value_width: int = 220
   utility_chevron_right: int = 62
@@ -752,6 +763,645 @@ def draw_settings_list_row(
       chevron_rect,
       style.muted_color,
     )
+
+
+def format_adjustor_value(value: float, *, step: float = 1.0, unit: str = "", labels: dict[float, str] | None = None) -> str:
+  label_map = labels or {}
+  tolerance = max(abs(step) * 0.5, 1e-4) if step != 0 else 1e-4
+  for label_value, label in label_map.items():
+    if abs(float(label_value) - float(value)) <= tolerance:
+      return label
+
+  if step > 0 and step < 1:
+    decimals = max(1, min(3, len(f"{step:.6f}".rstrip("0").split(".")[-1])))
+    return f"{value:.{decimals}f}{unit}"
+  if abs(value - round(value)) <= tolerance:
+    return f"{int(round(value))}{unit}"
+  return f"{value:.2f}".rstrip("0").rstrip(".") + unit
+
+
+def draw_range_setting_row(
+  rect: rl.Rectangle,
+  *,
+  title: str,
+  subtitle: str = "",
+  value: str = "",
+  enabled: bool = True,
+  hovered: bool = False,
+  pressed: bool = False,
+  is_last: bool = False,
+  title_size: int = 24,
+  subtitle_size: int = 18,
+  value_size: int = 24,
+  separator_inset: int = 22,
+  control_height: int = AETHER_LIST_METRICS.range_control_height,
+  control_bottom: int = AETHER_LIST_METRICS.range_control_bottom,
+  control_inset_x: int = AETHER_LIST_METRICS.range_control_inset_x,
+  title_color: rl.Color | None = None,
+  subtitle_color: rl.Color | None = None,
+  value_color: rl.Color | None = None,
+  style: PanelStyle = DEFAULT_PANEL_STYLE,
+) -> rl.Rectangle:
+  draw_rect = _snap_rect(rect)
+  resolved_title_color = title_color or (style.title_color if enabled else style.muted_color)
+  resolved_subtitle_color = subtitle_color or (style.subtitle_color if enabled else style.muted_color)
+  resolved_value_color = value_color or (style.title_color if enabled else style.muted_color)
+  value_reserved = min(240.0, draw_rect.width * 0.24) if value else 0.0
+  content_left = draw_rect.x + 24
+  content_right = draw_rect.x + draw_rect.width - 24
+  if value_reserved:
+    content_right -= value_reserved + 20
+  content_width = max(120.0, content_right - content_left)
+
+  draw_list_row_shell(
+    draw_rect,
+    hovered=hovered and enabled,
+    pressed=pressed and enabled,
+    is_last=is_last,
+    row_bg=rl.Color(255, 255, 255, 0),
+    row_border=rl.Color(255, 255, 255, 0),
+    row_separator=style.divider_color,
+    current_bg=rl.Color(255, 255, 255, 0),
+    current_border=rl.Color(255, 255, 255, 0),
+    separator_inset=separator_inset,
+  )
+
+  gui_label(
+    rl.Rectangle(content_left, draw_rect.y + 14, content_width, title_size + 6),
+    title,
+    title_size,
+    resolved_title_color,
+    FontWeight.MEDIUM,
+  )
+  if subtitle:
+    gui_label(
+      rl.Rectangle(content_left, draw_rect.y + 46, content_width, subtitle_size + 8),
+      subtitle,
+      subtitle_size,
+      resolved_subtitle_color,
+      FontWeight.NORMAL,
+    )
+  if value:
+    gui_label(
+      rl.Rectangle(draw_rect.x + draw_rect.width - value_reserved - 24, draw_rect.y + 18, value_reserved, value_size + 6),
+      value,
+      value_size,
+      resolved_value_color,
+      FontWeight.MEDIUM,
+      alignment=rl.GuiTextAlignment.TEXT_ALIGN_RIGHT,
+    )
+
+  return _snap_rect(
+    rl.Rectangle(
+      draw_rect.x + control_inset_x,
+      draw_rect.y + draw_rect.height - control_height - control_bottom,
+      draw_rect.width - control_inset_x * 2,
+      control_height,
+    )
+  )
+
+
+class AetherInlineRangeControl(Widget):
+  def __init__(
+    self,
+    min_val: float,
+    max_val: float,
+    step: float,
+    current_val: float,
+    on_change: Callable[[float], None],
+    *,
+    on_commit: Callable[[float], None] | None = None,
+    unit: str = "",
+    labels: dict[float, str] | None = None,
+    color: rl.Color = AetherListColors.PRIMARY,
+    major_tick_count: int = 5,
+  ):
+    super().__init__()
+    self.min_val = min_val
+    self.max_val = max_val
+    self.step = step
+    self.current_val = current_val
+    self._on_change = on_change
+    self._on_commit = on_commit
+    self._unit = unit
+    self._labels = labels or {}
+    self._color = color
+    self._major_tick_count = max(0, major_tick_count)
+    self._font = gui_app.font(FontWeight.SEMI_BOLD)
+
+    self._smooth_value = current_val
+    self._thumb_focus = 0.0
+    self._pending_drag = False
+    self._is_dragging = False
+    self._started_on_thumb = False
+    self._press_start = rl.Vector2(0, 0)
+    self._value_at_press = current_val
+
+    self._pressed_button: int = 0
+    self._button_press_started = 0.0
+    self._next_repeat_at = 0.0
+    self._repeat_count = 0
+    self._button_press_changed = False
+
+    self._minus_rect = rl.Rectangle(0, 0, 0, 0)
+    self._plus_rect = rl.Rectangle(0, 0, 0, 0)
+    self._track_rect = rl.Rectangle(0, 0, 0, 0)
+    self._thumb_rect = rl.Rectangle(0, 0, 0, 0)
+
+  @property
+  def is_interacting(self) -> bool:
+    return self._pending_drag or self._is_dragging or self._pressed_button != 0
+
+  def set_value(self, value: float) -> None:
+    self.current_val = self._clamp_and_snap(value)
+
+  def reset_interaction(self) -> None:
+    self._pending_drag = False
+    self._is_dragging = False
+    self._started_on_thumb = False
+    self._pressed_button = 0
+    self._repeat_count = 0
+    self._button_press_changed = False
+
+  def set_touch_valid_callback(self, touch_callback: Callable[[], bool]) -> None:
+    super().set_touch_valid_callback(touch_callback)
+
+  def _cancel_interaction(self, *, revert: bool = False) -> None:
+    if revert and self.current_val != self._value_at_press:
+      self.current_val = self._value_at_press
+      self._on_change(self.current_val)
+    self.reset_interaction()
+
+  def _clamp_and_snap(self, value: float) -> float:
+    if self.step <= 0:
+      return max(self.min_val, min(self.max_val, value))
+    snapped = round((value - self.min_val) / self.step) * self.step + self.min_val
+    return max(self.min_val, min(self.max_val, snapped))
+
+  def _step_value(self, direction: int) -> bool:
+    new_val = self._clamp_and_snap(self.current_val + direction * self.step)
+    if new_val == self.current_val:
+      return False
+    self.current_val = new_val
+    self._on_change(self.current_val)
+    self._button_press_changed = True
+    return True
+
+  def _value_fraction(self, value: float) -> float:
+    value_range = self.max_val - self.min_val
+    if value_range == 0:
+      return 0.0
+    return max(0.0, min(1.0, (value - self.min_val) / value_range))
+
+  def _update_val_from_mouse(self, mouse_pos: MousePos) -> None:
+    if self._track_rect.width <= 0:
+      return
+    rel_x = max(0.0, min(1.0, (mouse_pos.x - self._track_rect.x) / self._track_rect.width))
+    value = self.min_val + rel_x * (self.max_val - self.min_val)
+    snapped = self._clamp_and_snap(value)
+    if snapped != self.current_val:
+      self.current_val = snapped
+      self._on_change(self.current_val)
+
+  def _commit_if_needed(self) -> None:
+    if self.current_val != self._value_at_press and self._on_commit is not None:
+      self._on_commit(self.current_val)
+
+  def _update_state(self):
+    super()._update_state()
+    if self._pressed_button == 0:
+      return
+    now = time.monotonic()
+    if now < self._next_repeat_at:
+      return
+
+    if self._step_value(self._pressed_button):
+      self._repeat_count += 1
+    repeat_interval = 0.12 if self._repeat_count < 3 else 0.075
+    self._next_repeat_at = now + repeat_interval
+
+  def _handle_mouse_press(self, mouse_pos: MousePos):
+    if not self._touch_valid() or not rl.check_collision_point_rec(mouse_pos, self._rect):
+      return
+
+    self._value_at_press = self.current_val
+    self._button_press_changed = False
+    now = time.monotonic()
+    if rl.check_collision_point_rec(mouse_pos, self._minus_rect):
+      self._pressed_button = -1
+      self._button_press_started = now
+      self._next_repeat_at = now + 0.34
+      self._repeat_count = 0
+      return
+    if rl.check_collision_point_rec(mouse_pos, self._plus_rect):
+      self._pressed_button = 1
+      self._button_press_started = now
+      self._next_repeat_at = now + 0.34
+      self._repeat_count = 0
+      return
+
+    self._pending_drag = True
+    self._started_on_thumb = rl.check_collision_point_rec(mouse_pos, _inflate_rect(self._thumb_rect, 8, 8))
+    self._press_start = rl.Vector2(mouse_pos.x, mouse_pos.y)
+
+  def _handle_mouse_release(self, mouse_pos: MousePos):
+    if self._pressed_button != 0:
+      direction = self._pressed_button
+      button_rect = self._minus_rect if direction < 0 else self._plus_rect
+      if rl.check_collision_point_rec(mouse_pos, button_rect) and self._repeat_count == 0:
+        self._step_value(direction)
+      self._pressed_button = 0
+      self._repeat_count = 0
+      self._commit_if_needed()
+      return
+
+    if self._is_dragging:
+      self._is_dragging = False
+      self._commit_if_needed()
+      return
+
+    if self._pending_drag:
+      if not self._started_on_thumb and rl.check_collision_point_rec(mouse_pos, self._rect):
+        self._update_val_from_mouse(mouse_pos)
+        self._commit_if_needed()
+      self._pending_drag = False
+      self._started_on_thumb = False
+
+  def _handle_mouse_event(self, mouse_event: MouseEvent):
+    mouse_in_rect = rl.check_collision_point_rec(mouse_event.pos, self._rect)
+    if mouse_event.left_released and self.is_interacting and not mouse_in_rect:
+      if self._pressed_button != 0:
+        self._pressed_button = 0
+        self._repeat_count = 0
+        self._commit_if_needed()
+      elif self._is_dragging or self._pending_drag:
+        self._cancel_interaction(revert=True)
+      return
+
+    if not self._touch_valid():
+      self._cancel_interaction(revert=True)
+      return
+
+    if self._pressed_button != 0:
+      button_rect = self._minus_rect if self._pressed_button < 0 else self._plus_rect
+      if not rl.check_collision_point_rec(mouse_event.pos, _inflate_rect(button_rect, 4, 4)):
+        self._pressed_button = 0
+        self._repeat_count = 0
+        if self._button_press_changed:
+          self._commit_if_needed()
+      return
+
+    if self._pending_drag and not self._is_dragging:
+      dx = mouse_event.pos.x - self._press_start.x
+      dy = mouse_event.pos.y - self._press_start.y
+      if abs(dy) > 12 and abs(dy) > abs(dx):
+        self._pending_drag = False
+        self._started_on_thumb = False
+        return
+      if abs(dx) > 12 and abs(dx) >= abs(dy):
+        self._pending_drag = False
+        self._is_dragging = True
+
+    if self._is_dragging:
+      dx = mouse_event.pos.x - self._press_start.x
+      dy = mouse_event.pos.y - self._press_start.y
+      if abs(dy) > 18 and abs(dy) > abs(dx) * 1.15:
+        self._cancel_interaction(revert=True)
+        return
+      self._update_val_from_mouse(mouse_event.pos)
+
+  def _draw_button(self, rect: rl.Rectangle, label: str, *, pressed: bool = False):
+    fill = rl.Color(255, 255, 255, 8 if not pressed else 14)
+    border = rl.Color(255, 255, 255, 18 if not pressed else 28)
+    _draw_rounded_fill(rect, fill, radius_px=14)
+    _draw_rounded_stroke(rect, border, radius_px=14)
+    _draw_text_fit_common(
+      self._font,
+      label,
+      rl.Vector2(rect.x + 10, rect.y + (rect.height - 22) / 2),
+      max(1.0, rect.width - 20),
+      22,
+      align_center=True,
+      color=AetherListColors.HEADER,
+    )
+
+  def _render(self, rect: rl.Rectangle):
+    rect = _snap_rect(rect)
+    self.set_rect(rect)
+    dt = rl.get_frame_time()
+    self._smooth_value += (self.current_val - self._smooth_value) * (1 - math.exp(-dt / 0.075))
+    thumb_target = 1.0 if self._is_dragging or self._pending_drag else 0.0
+    self._thumb_focus += (thumb_target - self._thumb_focus) * (1 - math.exp(-dt / 0.070))
+
+    button_size = min(rect.height, 44)
+    button_y = rect.y + (rect.height - button_size) / 2
+    self._minus_rect = _snap_rect(rl.Rectangle(rect.x, button_y, button_size, button_size))
+    self._plus_rect = _snap_rect(rl.Rectangle(rect.x + rect.width - button_size, button_y, button_size, button_size))
+    self._draw_button(self._minus_rect, "-", pressed=self._pressed_button < 0)
+    self._draw_button(self._plus_rect, "+", pressed=self._pressed_button > 0)
+
+    track_x = self._minus_rect.x + self._minus_rect.width + 14
+    track_w = max(1.0, self._plus_rect.x - 14 - track_x)
+    lane_h = rect.height
+    track_h = 4.0
+    track_y = rect.y + (lane_h - track_h) / 2
+    self._track_rect = _snap_rect(rl.Rectangle(track_x, track_y, track_w, track_h))
+
+    rl.draw_rectangle_rounded(self._track_rect, 1.0, 12, rl.Color(255, 255, 255, 18))
+    if self._major_tick_count > 1:
+      for index in range(self._major_tick_count):
+        frac = index / max(1, self._major_tick_count - 1)
+        tick_x = self._track_rect.x + frac * self._track_rect.width
+        rl.draw_rectangle_rec(rl.Rectangle(tick_x - 1, rect.y + rect.height / 2 - 8, 2, 16), rl.Color(255, 255, 255, 24))
+
+    fill_frac = self._value_fraction(self._smooth_value)
+    fill_w = fill_frac * self._track_rect.width
+    if fill_w > 1:
+      fill_rect = _snap_rect(rl.Rectangle(self._track_rect.x, self._track_rect.y, fill_w, self._track_rect.height))
+      rl.draw_rectangle_rounded(fill_rect, 1.0, 12, _with_alpha(self._color, 220))
+
+    thumb_w = 18 + self._thumb_focus * 4
+    thumb_h = 28 + self._thumb_focus * 4
+    thumb_center_x = self._track_rect.x + fill_frac * self._track_rect.width
+    thumb_center_y = rect.y + rect.height / 2
+    self._thumb_rect = _snap_rect(rl.Rectangle(thumb_center_x - thumb_w / 2, thumb_center_y - thumb_h / 2, thumb_w, thumb_h))
+    thumb_fill = _mix_colors(rl.Color(224, 230, 238, 255), self._color, 0.12)
+    _draw_rounded_fill(self._thumb_rect, thumb_fill, radius_px=12)
+    _draw_rounded_stroke(self._thumb_rect, rl.Color(14, 17, 23, 52), radius_px=12)
+    if self._thumb_focus > 0.02:
+      _draw_rounded_stroke(_inflate_rect(self._thumb_rect, 1, 1), _with_alpha(self._color, int(70 * self._thumb_focus)), radius_px=13)
+
+    if self._is_dragging or self._pressed_button != 0:
+      bubble_text = format_adjustor_value(self.current_val, step=self.step, unit=self._unit, labels=self._labels)
+      bubble_w = max(80.0, min(132.0, 44.0 + len(bubble_text) * 10.0))
+      bubble_rect = _snap_rect(rl.Rectangle(thumb_center_x - bubble_w / 2, rect.y - 40, bubble_w, 32))
+      bubble_fill = _mix_colors(rl.Color(18, 22, 28, 255), self._color, 0.18)
+      bubble_border = _with_alpha(self._color, 70)
+      _draw_rounded_fill(bubble_rect, bubble_fill, radius_px=14)
+      _draw_rounded_stroke(bubble_rect, bubble_border, radius_px=14)
+      _draw_text_fit_common(
+        gui_app.font(FontWeight.MEDIUM),
+        bubble_text,
+        rl.Vector2(bubble_rect.x + 10, bubble_rect.y + 7),
+        max(1.0, bubble_rect.width - 20),
+        16,
+        align_center=True,
+        color=AetherListColors.HEADER,
+      )
+
+
+class AetherAdjustorRow(Widget):
+  def __init__(
+    self,
+    title: str,
+    subtitle: str,
+    min_val: float,
+    max_val: float,
+    step: float,
+    get_value: Callable[[], float],
+    on_change: Callable[[float], None],
+    *,
+    on_commit: Callable[[float], None] | None = None,
+    unit: str = "",
+    labels: dict[float, str] | None = None,
+    presets: list[float] | None = None,
+    is_active: bool | Callable[[], bool] = False,
+    set_active: Callable[[bool], None] | None = None,
+    style: PanelStyle = DEFAULT_PANEL_STYLE,
+    color: rl.Color | None = None,
+  ):
+    super().__init__()
+    self._title = title
+    self._subtitle = subtitle
+    self._get_value = get_value
+    self._is_active = is_active
+    self._set_active = set_active
+    self._style = style
+    self._color = color or style.accent
+    self._presets = presets or []
+    self._font_title = gui_app.font(FontWeight.MEDIUM)
+    self._font_subtitle = gui_app.font(FontWeight.NORMAL)
+    self._font_value = gui_app.font(FontWeight.SEMI_BOLD)
+    self._focus_progress = 0.0
+    self._pressed_zone: str | None = None
+    self._is_last = False
+    self._header_rect = rl.Rectangle(0, 0, 0, 0)
+    self._value_rect = rl.Rectangle(0, 0, 0, 0)
+    self._hint_rect = rl.Rectangle(0, 0, 0, 0)
+    self._preset_rects: list[tuple[float, rl.Rectangle]] = []
+    self._scrubber_rect = rl.Rectangle(0, 0, 0, 0)
+    self._scrubber = self._child(
+      AetherInlineRangeControl(
+        min_val,
+        max_val,
+        step,
+        get_value(),
+        on_change,
+        on_commit=on_commit,
+        unit=unit,
+        labels=labels,
+        color=self._color,
+      )
+    )
+    self._unit = unit
+    self._labels = labels or {}
+    self._step = step
+
+  @property
+  def is_interacting(self) -> bool:
+    return self._scrubber.is_interacting
+
+  def _active(self) -> bool:
+    return bool(self._is_active() if callable(self._is_active) else self._is_active)
+
+  def reset_interaction(self) -> None:
+    self._pressed_zone = None
+    self._scrubber.reset_interaction()
+
+  def set_touch_valid_callback(self, touch_callback: Callable[[], bool]) -> None:
+    super().set_touch_valid_callback(touch_callback)
+    self._scrubber.set_touch_valid_callback(touch_callback)
+
+  def set_is_last(self, is_last: bool) -> None:
+    self._is_last = is_last
+
+  def _current_value(self) -> float:
+    return self._scrubber.current_val if (self._active() or self._scrubber.is_interacting) else self._get_value()
+
+  def formatted_value(self) -> str:
+    return format_adjustor_value(self._current_value(), step=self._step, unit=self._unit, labels=self._labels)
+
+  def measure_height(self, width: float) -> float:
+    del width
+    if not self._active():
+      return float(AETHER_LIST_METRICS.adjustor_row_height)
+    preset_height = AETHER_LIST_METRICS.adjustor_preset_height + AETHER_LIST_METRICS.adjustor_preset_gap if self._presets else 0
+    return float(AETHER_LIST_METRICS.adjustor_row_active_height + preset_height)
+
+  def _set_active_state(self, active: bool) -> None:
+    if self._set_active is not None:
+      self._set_active(active)
+
+  def _handle_mouse_press(self, mouse_pos: MousePos):
+    if not self._touch_valid() or not rl.check_collision_point_rec(mouse_pos, self._rect):
+      return
+    self._pressed_zone = None
+
+    if self._active():
+      for preset_value, preset_rect in self._preset_rects:
+        if rl.check_collision_point_rec(mouse_pos, _inflate_rect(preset_rect, 4, 4)):
+          self._pressed_zone = f"preset:{preset_value}"
+          return
+      if rl.check_collision_point_rec(mouse_pos, self._scrubber_rect):
+        self._pressed_zone = "scrubber"
+        return
+
+    if rl.check_collision_point_rec(mouse_pos, self._header_rect) or rl.check_collision_point_rec(mouse_pos, self._value_rect) or rl.check_collision_point_rec(mouse_pos, self._hint_rect):
+      self._pressed_zone = "header"
+
+  def _handle_mouse_release(self, mouse_pos: MousePos):
+    pressed_zone = self._pressed_zone
+    self._pressed_zone = None
+
+    if pressed_zone == "scrubber":
+      return
+
+    if pressed_zone and pressed_zone.startswith("preset:"):
+      self._scrubber._value_at_press = self._scrubber.current_val
+      try:
+        preset_value = float(pressed_zone.split(":", 1)[1])
+      except ValueError:
+        return
+      for value, preset_rect in self._preset_rects:
+        if value == preset_value and rl.check_collision_point_rec(mouse_pos, _inflate_rect(preset_rect, 4, 4)):
+          self._scrubber.set_value(preset_value)
+          self._scrubber._on_change(self._scrubber.current_val)
+          self._scrubber._commit_if_needed()
+          return
+      return
+
+    if pressed_zone == "header":
+      active = self._active()
+      if rl.check_collision_point_rec(mouse_pos, _inflate_rect(self._header_rect, 6, 4)) or rl.check_collision_point_rec(mouse_pos, _inflate_rect(self._value_rect, 6, 4)) or rl.check_collision_point_rec(mouse_pos, _inflate_rect(self._hint_rect, 6, 4)):
+        self._set_active_state(not active)
+
+  def _handle_mouse_event(self, mouse_event: MouseEvent):
+    del mouse_event
+
+  def _render_preset_chip(self, rect: rl.Rectangle, text: str, *, current: bool, pressed: bool):
+    fill = rl.Color(255, 255, 255, 5)
+    border = rl.Color(255, 255, 255, 14)
+    text_color = self._style.subtitle_color
+    if current:
+      fill = _mix_colors(rl.Color(18, 22, 28, 255), self._color, 0.22, alpha=255)
+      border = _with_alpha(self._color, 72)
+      text_color = self._style.title_color
+    elif pressed:
+      fill = rl.Color(255, 255, 255, 10)
+      border = rl.Color(255, 255, 255, 22)
+
+    _draw_rounded_fill(rect, fill, radius_px=13)
+    _draw_rounded_stroke(rect, border, radius_px=13)
+    _draw_text_fit_common(
+      gui_app.font(FontWeight.MEDIUM),
+      text,
+      rl.Vector2(rect.x + 10, rect.y + 7),
+      max(1.0, rect.width - 20),
+      15,
+      align_center=True,
+      color=text_color,
+    )
+
+  def _render(self, rect: rl.Rectangle):
+    rect = _snap_rect(rect)
+    self.set_rect(rect)
+    active = self._active()
+    if not self._scrubber.is_interacting:
+      self._scrubber.set_value(self._get_value())
+
+    dt = rl.get_frame_time()
+    focus_target = 1.0 if active else 0.0
+    self._focus_progress += (focus_target - self._focus_progress) * (1 - math.exp(-dt / 0.09))
+
+    hovered = _point_hits(gui_app.last_mouse_event.pos, rect, self._parent_rect, pad_x=6, pad_y=0)
+    current_bg = _with_alpha(_mix_colors(rl.Color(18, 22, 28, 255), self._color, 0.16), int(18 + self._focus_progress * 14))
+    current_border = _with_alpha(self._color, int(34 + self._focus_progress * 34))
+    draw_list_row_shell(
+      rect,
+      current=active or self._focus_progress > 0.02,
+      hovered=hovered and not self.is_interacting,
+      pressed=self._pressed_zone == "header",
+      is_last=self._is_last,
+      row_bg=rl.Color(255, 255, 255, 0),
+      row_border=rl.Color(255, 255, 255, 0),
+      row_separator=self._style.divider_color,
+      current_bg=current_bg,
+      current_border=current_border,
+    )
+
+    value_pill_w = min(float(AETHER_LIST_METRICS.adjustor_value_pill_width), max(118.0, rect.width * 0.22))
+    self._header_rect = rl.Rectangle(rect.x, rect.y, rect.width, min(rect.height, 78))
+    self._value_rect = _snap_rect(rl.Rectangle(rect.x + rect.width - value_pill_w - 18, rect.y + 14, value_pill_w, AETHER_LIST_METRICS.adjustor_value_pill_height))
+    content_right = self._value_rect.x - 18
+    content_left = rect.x + 24
+    content_width = max(120.0, content_right - content_left)
+
+    gui_label(rl.Rectangle(content_left, rect.y + 14, content_width, 28), self._title, 24, self._style.title_color, FontWeight.MEDIUM)
+    gui_label(rl.Rectangle(content_left, rect.y + 44, content_width, 22), self._subtitle, 18, self._style.subtitle_color, FontWeight.NORMAL)
+
+    pill_fill = rl.Color(255, 255, 255, 5)
+    pill_border = rl.Color(255, 255, 255, 14)
+    if active:
+      pill_fill = _mix_colors(rl.Color(18, 22, 28, 255), self._color, 0.20, alpha=255)
+      pill_border = _with_alpha(self._color, 64)
+    _draw_rounded_fill(self._value_rect, pill_fill, radius_px=16)
+    _draw_rounded_stroke(self._value_rect, pill_border, radius_px=16)
+    _draw_text_fit_common(
+      self._font_value,
+      self.formatted_value(),
+      rl.Vector2(self._value_rect.x + 14, self._value_rect.y + 8),
+      max(1.0, self._value_rect.width - 28),
+      18,
+      align_center=True,
+      color=self._style.title_color,
+    )
+
+    hint_y = rect.y + 76
+    self._hint_rect = _snap_rect(rl.Rectangle(content_left, hint_y, rect.width - 48, 8))
+    hint_track = _snap_rect(rl.Rectangle(self._hint_rect.x, self._hint_rect.y + 2, self._hint_rect.width, 4))
+    rl.draw_rectangle_rounded(hint_track, 1.0, 10, rl.Color(255, 255, 255, 10))
+    fill_w = hint_track.width * self._scrubber._value_fraction(self._current_value())
+    if fill_w > 0:
+      rl.draw_rectangle_rounded(_snap_rect(rl.Rectangle(hint_track.x, hint_track.y, fill_w, hint_track.height)), 1.0, 10, _with_alpha(self._color, 180 if active else 120))
+
+    if not active:
+      return
+
+    tray_alpha = max(0, min(255, int(255 * self._focus_progress)))
+    tray_top = rect.y + 92 - (1.0 - self._focus_progress) * 6
+    current_y = tray_top
+    self._preset_rects.clear()
+
+    if self._presets:
+      chip_gap = 8.0
+      chip_h = float(AETHER_LIST_METRICS.adjustor_preset_height)
+      chip_w = max(68.0, (rect.width - 48 - chip_gap * (len(self._presets) - 1)) / max(1, len(self._presets)))
+      chip_x = content_left
+      for preset_value in self._presets:
+        chip_rect = _snap_rect(rl.Rectangle(chip_x, current_y, chip_w, chip_h))
+        self._preset_rects.append((preset_value, chip_rect))
+        self._render_preset_chip(
+          chip_rect,
+          format_adjustor_value(preset_value, step=self._step, unit=self._unit, labels=self._labels),
+          current=abs(self._current_value() - preset_value) <= max(abs(self._step) * 0.5, 1e-4),
+          pressed=self._pressed_zone == f"preset:{preset_value}",
+        )
+        chip_x += chip_w + chip_gap
+      current_y += chip_h + AETHER_LIST_METRICS.adjustor_preset_gap
+
+    self._scrubber_rect = _snap_rect(rl.Rectangle(content_left, current_y, rect.width - 48, AETHER_LIST_METRICS.adjustor_scrubber_height))
+    self._scrubber.set_parent_rect(self._parent_rect)
+    self._scrubber.render(self._scrubber_rect)
 
 
 def draw_selection_list_row(
@@ -1705,10 +2355,14 @@ class AetherSlider(Widget):
     unit: str = "",
     labels: dict[float, str] | None = None,
     color: rl.Color = rl.Color(54, 77, 239, 255),
+    on_commit: Callable[[float], None] | None = None,
+    show_value_label: bool = True,
   ):
     super().__init__()
     self.min_val, self.max_val, self.step, self.current_val = min_val, max_val, step, current_val
-    self.on_change, self.unit, self.labels, self.color = on_change, unit, labels or {}, color
+    self.on_change, self.on_commit = on_change, on_commit
+    self.unit, self.labels, self.color = unit, labels or {}, color
+    self.show_value_label = show_value_label
     self._is_dragging = False
     self._font = gui_app.font(FontWeight.BOLD)
     self._thumb_offset: float = 0.0
@@ -1716,6 +2370,70 @@ class AetherSlider(Widget):
     self._plus_offset: float = 0.0
     self._minus_pressed = False
     self._plus_pressed = False
+    self._pending_drag = False
+    self._press_start = rl.Vector2(0, 0)
+    self._started_on_thumb = False
+    self._value_at_press = current_val
+
+  @property
+  def is_interacting(self) -> bool:
+    return self._is_dragging or self._pending_drag or self._minus_pressed or self._plus_pressed
+
+  def set_value(self, value: float) -> None:
+    self.current_val = self._clamp_and_snap(value)
+
+  def reset_interaction(self) -> None:
+    self._is_dragging = False
+    self._pending_drag = False
+    self._started_on_thumb = False
+    self._thumb_offset = 0.0
+    self._minus_pressed = False
+    self._plus_pressed = False
+
+  def _cancel_interaction(self, *, revert: bool = False) -> None:
+    if revert and self.current_val != self._value_at_press:
+      self.current_val = self._value_at_press
+      self.on_change(self.current_val)
+    self.reset_interaction()
+
+  def _finalize_interaction(self, mouse_pos: MousePos, *, inside_release: bool) -> None:
+    button_w = self._button_width(self._rect)
+    changed = False
+
+    if self._minus_pressed:
+      self._minus_pressed = False
+      if inside_release and rl.check_collision_point_rec(mouse_pos, rl.Rectangle(self._rect.x, self._rect.y, button_w, self._rect.height)):
+        new_val = self._clamp_and_snap(self.current_val - self.step)
+        if new_val != self.current_val:
+          self.current_val = new_val
+          self.on_change(self.current_val)
+          changed = True
+
+    if self._plus_pressed:
+      self._plus_pressed = False
+      if inside_release and rl.check_collision_point_rec(mouse_pos, rl.Rectangle(self._rect.x + self._rect.width - button_w, self._rect.y, button_w, self._rect.height)):
+        new_val = self._clamp_and_snap(self.current_val + self.step)
+        if new_val != self.current_val:
+          self.current_val = new_val
+          self.on_change(self.current_val)
+          changed = True
+
+    if self._is_dragging:
+      changed = changed or self.current_val != self._value_at_press
+      self._is_dragging = False
+      self._thumb_offset = 0.0
+    elif self._pending_drag:
+      if inside_release and not self._started_on_thumb and rl.check_collision_point_rec(mouse_pos, self._rect):
+        before_tap = self.current_val
+        self._update_val_from_mouse(mouse_pos)
+        changed = changed or before_tap != self.current_val
+      self._pending_drag = False
+      self._thumb_offset = 0.0
+      changed = changed or self.current_val != self._value_at_press
+
+    self._started_on_thumb = False
+    if changed and self.on_commit is not None:
+      self.on_commit(self.current_val)
 
   def _clamp_and_snap(self, val: float) -> float:
     if self.step <= 0:
@@ -1786,8 +2504,9 @@ class AetherSlider(Widget):
     if self.step > 0:
       n_steps = int(round(value_range / self.step))
       if n_steps > 0:
-        for i in range(n_steps + 1):
-          tick_x = track_x + (i / n_steps) * track_w
+        tick_count = min(n_steps, 24)
+        for i in range(tick_count + 1):
+          tick_x = track_x + (i / max(1, tick_count)) * track_w
           tick_h = int(track_h * 0.6)
           tick_y = track_rect.y + (track_h - tick_h) / 2
           rl.draw_rectangle_rec(rl.Rectangle(tick_x - 1, tick_y, 2, tick_h), rl.Color(255, 255, 255, 60))
@@ -1799,16 +2518,18 @@ class AetherSlider(Widget):
     _draw_rounded_fill(t_face_rect, rl.Color(230, 235, 242, 255), radius_px=12)
     _draw_rounded_stroke(t_face_rect, rl.Color(20, 22, 28, 46), radius_px=12)
     rl.draw_rectangle_rec(rl.Rectangle(t_face_rect.x, t_face_rect.y, t_face_rect.width, 1), rl.Color(255, 255, 255, 40))
-    val_str = self.labels.get(self.current_val, f"{self.current_val:.2f}".rstrip('0').rstrip('.') + self.unit)
-    label_size = max(18, int(round(rect.height * 0.38)))
-    ts = measure_text_cached(self._font, val_str, label_size)
-    val_x = max(rect.x, min(thumb_x + (thumb_w - ts.x) / 2, rect.x + rect.width - ts.x))
-    val_pos = rl.Vector2(val_x, thumb_y - label_size - 10)
-    rl.draw_text_ex(self._font, val_str, rl.Vector2(round(val_pos.x), round(val_pos.y)), label_size, 0, rl.WHITE)
+    if self.show_value_label:
+      val_str = self.labels.get(self.current_val, f"{self.current_val:.2f}".rstrip('0').rstrip('.') + self.unit)
+      label_size = max(18, int(round(rect.height * 0.38)))
+      ts = measure_text_cached(self._font, val_str, label_size)
+      val_x = max(rect.x, min(thumb_x + (thumb_w - ts.x) / 2, rect.x + rect.width - ts.x))
+      val_pos = rl.Vector2(val_x, thumb_y - label_size - 10)
+      rl.draw_text_ex(self._font, val_str, rl.Vector2(round(val_pos.x), round(val_pos.y)), label_size, 0, rl.WHITE)
 
   def _handle_mouse_press(self, mouse_pos: MousePos):
-    if not rl.check_collision_point_rec(mouse_pos, self._rect):
+    if not self._touch_valid() or not rl.check_collision_point_rec(mouse_pos, self._rect):
       return
+    self._value_at_press = self.current_val
     button_w = self._button_width(self._rect)
     minus_rect = rl.Rectangle(self._rect.x, self._rect.y, button_w, self._rect.height)
     plus_rect = rl.Rectangle(self._rect.x + self._rect.width - button_w, self._rect.y, button_w, self._rect.height)
@@ -1823,38 +2544,48 @@ class AetherSlider(Widget):
     thumb_y = self._rect.y + (self._rect.height - thumb_h) / 2
     thumb_rect = rl.Rectangle(thumb_x - 8, thumb_y - 8, thumb_w + 16, thumb_h + 16)
     if rl.check_collision_point_rec(mouse_pos, thumb_rect):
-      self._is_dragging = True
+      self._pending_drag = True
+      self._started_on_thumb = True
+      self._press_start = rl.Vector2(mouse_pos.x, mouse_pos.y)
       self._thumb_offset = 1.0
     else:
-      track_x = self._rect.x + button_w
-      track_w = self._rect.width - 2 * button_w
-      if track_w > 0:
-        rel_x = max(0.0, min(1.0, (mouse_pos.x - track_x) / track_w))
-        val = self.min_val + rel_x * (self.max_val - self.min_val)
-        snapped = self._clamp_and_snap(val)
-        if snapped != self.current_val:
-          self.current_val = snapped
-          self.on_change(self.current_val)
+      self._pending_drag = True
+      self._started_on_thumb = False
+      self._press_start = rl.Vector2(mouse_pos.x, mouse_pos.y)
 
   def _handle_mouse_release(self, mouse_pos: MousePos):
-    button_w = self._button_width(self._rect)
-    if self._minus_pressed:
-      self._minus_pressed = False
-      if rl.check_collision_point_rec(mouse_pos, rl.Rectangle(self._rect.x, self._rect.y, button_w, self._rect.height)):
-        new_val = self._clamp_and_snap(self.current_val - self.step)
-        if new_val != self.current_val:
-          self.current_val = new_val
-          self.on_change(self.current_val)
-    if self._plus_pressed:
-      self._plus_pressed = False
-      if rl.check_collision_point_rec(mouse_pos, rl.Rectangle(self._rect.x + self._rect.width - button_w, self._rect.y, button_w, self._rect.height)):
-        new_val = self._clamp_and_snap(self.current_val + self.step)
-        if new_val != self.current_val:
-          self.current_val = new_val
-          self.on_change(self.current_val)
+    self._finalize_interaction(mouse_pos, inside_release=True)
+
+  def _handle_mouse_event(self, mouse_event: MouseEvent):
+    mouse_in_rect = rl.check_collision_point_rec(mouse_event.pos, self._rect)
+    if mouse_event.left_released and self.is_interacting and not mouse_in_rect:
+      self._finalize_interaction(mouse_event.pos, inside_release=False)
+      return
+
+    if not self._touch_valid():
+      self._cancel_interaction(revert=True)
+      return
+
+    if self._pending_drag and not self._is_dragging:
+      dx = mouse_event.pos.x - self._press_start.x
+      dy = mouse_event.pos.y - self._press_start.y
+      if abs(dy) > 12 and abs(dy) > abs(dx):
+        self._pending_drag = False
+        self._started_on_thumb = False
+        self._thumb_offset = 0.0
+        return
+      if abs(dx) > 12 and abs(dx) >= abs(dy):
+        self._pending_drag = False
+        self._is_dragging = True
+        self._thumb_offset = 1.0
+
     if self._is_dragging:
-      self._is_dragging = False
-      self._thumb_offset = 0.0
+      dx = mouse_event.pos.x - self._press_start.x
+      dy = mouse_event.pos.y - self._press_start.y
+      if abs(dy) > 18 and abs(dy) > abs(dx) * 1.15:
+        self._cancel_interaction(revert=True)
+        return
+      self._update_val_from_mouse(mouse_event.pos)
 
   def _update_val_from_mouse(self, mouse_pos: MousePos):
     button_w = self._button_width(self._rect)
@@ -2211,8 +2942,9 @@ class TileGrid(Widget):
 
   def add_tile(self, tile: Widget):
     self.tiles.append(tile)
-    if self._touch_valid_callback is not None and hasattr(tile, "set_touch_valid_callback"):
-      tile.set_touch_valid_callback(self._touch_valid_callback)
+    touch_valid_callback = getattr(self, "_touch_valid_callback", None)
+    if touch_valid_callback is not None and hasattr(tile, "set_touch_valid_callback"):
+      tile.set_touch_valid_callback(touch_valid_callback)
 
   def set_touch_valid_callback(self, touch_callback: Callable[[], bool]) -> None:
     super().set_touch_valid_callback(touch_callback)
