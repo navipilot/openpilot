@@ -1,6 +1,7 @@
 from __future__ import annotations
 import json
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -12,6 +13,7 @@ import pyray as rl
 from openpilot.system.hardware import HARDWARE
 from openpilot.system.ui.lib.application import gui_app, FontWeight, MouseEvent, MousePos
 from openpilot.system.ui.lib.multilang import tr
+from openpilot.system.ui.lib.scroll_panel2 import GuiScrollPanel2
 from openpilot.system.ui.widgets import DialogResult, Widget
 from openpilot.system.ui.widgets.confirm_dialog import ConfirmDialog, alert_dialog
 from openpilot.system.ui.widgets.keyboard import Keyboard
@@ -21,14 +23,24 @@ from openpilot.system.ui.widgets.label import gui_label
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.selfdrive.ui.layouts.settings.starpilot.panel import StarPilotPanel
 from openpilot.selfdrive.ui.layouts.settings.starpilot.aethergrid import (
+  AETHER_COMPACT_ROW_HEIGHT,
   AETHER_LIST_METRICS,
+  AetherScrollbar,
+  AetherSegmentedControl,
+  AetherSliderDialog,
   AetherListColors,
-  AetherVerticalSlider,
-  TileGrid,
-  ToggleTile,
-  RadioTileGroup,
+  DEFAULT_PANEL_STYLE,
+  _point_hits,
   build_list_panel_frame,
   draw_list_panel_shell,
+  draw_list_group_shell,
+  draw_list_scroll_fades,
+  draw_metric_strip,
+  draw_section_header,
+  draw_selection_list_row,
+  draw_settings_list_row,
+  draw_soft_card,
+  draw_tab_card,
 )
 
 LEGACY_STARPILOT_PARAM_RENAMES = {
@@ -66,48 +78,310 @@ REPORT_CATEGORIES = [
 
 
 class SystemSettingsManagerView(Widget):
-  """Single-view, zero-scroll, fully-flat system settings dashboard.
-  Left column: massive equalizer sliders and smart home style dashboard toggles.
-  Right column: categorized thick action cards."""
+  HEADER_TITLE_HEIGHT = 40
+  HEADER_SUBTITLE_HEIGHT = 24
+  HEADER_TOP_OFFSET = 4
+  HEADER_SUMMARY_GAP = 12
+  HEADER_CARD_HEIGHT = 108
+  TAB_HEIGHT = 52
+  TAB_GAP = 10
+  TAB_BOTTOM_GAP = 18
+  SECTION_GAP = AETHER_LIST_METRICS.section_gap
+  SECTION_HEADER_HEIGHT = AETHER_LIST_METRICS.section_header_height
+  SECTION_HEADER_GAP = AETHER_LIST_METRICS.section_header_gap
+  ROW_HEIGHT = AETHER_COMPACT_ROW_HEIGHT
+  CONTENT_GUTTER = AETHER_LIST_METRICS.content_right_gutter
+  FADE_HEIGHT = AETHER_LIST_METRICS.fade_height
+  COLUMN_GAP = 22
+  TWO_COLUMN_BREAKPOINT = 1180
+  ACTION_PILL_WIDTH = 108
+  DANGER_PILL_WIDTH = 96
+
+  PANEL_STYLE = DEFAULT_PANEL_STYLE
 
   def __init__(self, controller: "StarPilotSystemLayout"):
     super().__init__()
     self._controller = controller
+    self._scroll_panel = GuiScrollPanel2(horizontal=False)
+    self._scrollbar = AetherScrollbar()
+    self._content_height = 0.0
+    self._scroll_offset = 0.0
+    self._interactive_rects: dict[str, rl.Rectangle] = {}
     self._pressed_target: str | None = None
-    self._action_rects: dict[str, rl.Rectangle] = {}
+    self._can_click = True
+    self._active_tab_key = "basics"
+    self._display_slider_keys = ["ScreenBrightness", "ScreenBrightnessOnroad", "ScreenTimeout", "ScreenTimeoutOnroad"]
+    self._power_slider_keys = ["DeviceShutdown", "LowVoltageShutdown"]
 
     shutdown_labels = {0: tr("5 mins")}
     for i in range(1, 4): shutdown_labels[i] = f"{i * 15} mins"
     for i in range(4, 34): shutdown_labels[i] = f"{i - 3} " + (tr("hour") if i == 4 else tr("hours"))
     brightness_labels = {101: tr("Auto"), 0: tr("Off")}
 
-    self._vsliders: dict[str, AetherVerticalSlider] = {
-      "ScreenBrightness": AetherVerticalSlider(0, 101, 1, self._controller._params.get_int("ScreenBrightness"), lambda v: self._controller._set_brightness("ScreenBrightness", v), title="Offroad", unit="%", labels=brightness_labels, color=AetherListColors.PRIMARY),
-      "ScreenBrightnessOnroad": AetherVerticalSlider(1, 101, 1, max(1, self._controller._params.get_int("ScreenBrightnessOnroad")), lambda v: self._controller._set_brightness("ScreenBrightnessOnroad", max(1, int(v))), title="Onroad", unit="%", labels=brightness_labels, color=AetherListColors.PRIMARY),
-      "ScreenTimeout": AetherVerticalSlider(5, 60, 5, self._controller._params.get_int("ScreenTimeout"), lambda v: self._controller._params.put_int("ScreenTimeout", int(v)), title="Off Timer", unit="s", color=AetherListColors.PRIMARY),
-      "ScreenTimeoutOnroad": AetherVerticalSlider(5, 60, 5, self._controller._params.get_int("ScreenTimeoutOnroad"), lambda v: self._controller._params.put_int("ScreenTimeoutOnroad", int(v)), title="On Timer", unit="s", color=AetherListColors.PRIMARY),
-      "DeviceShutdown": AetherVerticalSlider(0, 33, 1, self._controller._params.get_int("DeviceShutdown"), lambda v: self._controller._params.put_int("DeviceShutdown", int(v)), title="Shutdown", labels=shutdown_labels, color=AetherListColors.PRIMARY),
-      "LowVoltageShutdown": AetherVerticalSlider(11.8, 12.5, 0.1, self._controller._params.get_float("LowVoltageShutdown"), lambda v: self._controller._params.put_float("LowVoltageShutdown", float(v)), title="Low Volt", unit="V", color=AetherListColors.PRIMARY),
+    self._slider_specs = {
+      "ScreenBrightness": {
+        "title": tr("Offroad Brightness"),
+        "subtitle": tr("Primary screen brightness while parked."),
+        "unit": "%",
+        "labels": brightness_labels,
+        "min": 0,
+        "max": 101,
+        "step": 1,
+        "get": lambda: float(self._controller._params.get_int("ScreenBrightness")),
+        "set": lambda v: self._controller._set_brightness("ScreenBrightness", v),
+      },
+      "ScreenBrightnessOnroad": {
+        "title": tr("Onroad Brightness"),
+        "subtitle": tr("Screen brightness while driving."),
+        "unit": "%",
+        "labels": brightness_labels,
+        "min": 1,
+        "max": 101,
+        "step": 1,
+        "get": lambda: float(max(1, self._controller._params.get_int("ScreenBrightnessOnroad"))),
+        "set": lambda v: self._controller._set_brightness("ScreenBrightnessOnroad", max(1, int(v))),
+      },
+      "ScreenTimeout": {
+        "title": tr("Offroad Screen Timeout"),
+        "subtitle": tr("How long the display stays awake while parked."),
+        "unit": "s",
+        "labels": {},
+        "min": 5,
+        "max": 60,
+        "step": 5,
+        "get": lambda: float(self._controller._params.get_int("ScreenTimeout")),
+        "set": lambda v: self._controller._params.put_int("ScreenTimeout", int(v)),
+      },
+      "ScreenTimeoutOnroad": {
+        "title": tr("Onroad Screen Timeout"),
+        "subtitle": tr("How long the display stays on while driving."),
+        "unit": "s",
+        "labels": {},
+        "min": 5,
+        "max": 60,
+        "step": 5,
+        "get": lambda: float(self._controller._params.get_int("ScreenTimeoutOnroad")),
+        "set": lambda v: self._controller._params.put_int("ScreenTimeoutOnroad", int(v)),
+      },
+      "DeviceShutdown": {
+        "title": tr("Shutdown Delay"),
+        "subtitle": tr("How long the device waits before powering down."),
+        "unit": "",
+        "labels": shutdown_labels,
+        "min": 0,
+        "max": 33,
+        "step": 1,
+        "get": lambda: float(self._controller._params.get_int("DeviceShutdown")),
+        "set": lambda v: self._controller._params.put_int("DeviceShutdown", int(v)),
+      },
+      "LowVoltageShutdown": {
+        "title": tr("Low Voltage Shutdown"),
+        "subtitle": tr("Voltage threshold that protects the car battery."),
+        "unit": "V",
+        "labels": {},
+        "min": 11.8,
+        "max": 12.5,
+        "step": 0.1,
+        "get": lambda: float(self._controller._params.get_float("LowVoltageShutdown")),
+        "set": lambda v: self._controller._params.put_float("LowVoltageShutdown", float(v)),
+      },
     }
 
-    self._display_band = ["ScreenBrightness", "ScreenBrightnessOnroad", "ScreenTimeout", "ScreenTimeoutOnroad"]
-    self._power_band = ["DeviceShutdown", "LowVoltageShutdown"]
-
-    self._toggles = [
-      ToggleTile("Standby Mode", lambda: self._controller._params.get_bool("StandbyMode"), lambda v: self._controller._params.put_bool("StandbyMode", v)),
-      ToggleTile("Raise Temp", lambda: self._controller._params.get_bool("IncreaseThermalLimits"), lambda v: self._controller._params.put_bool("IncreaseThermalLimits", v)),
-      ToggleTile("No Uploads", lambda: self._controller._params.get_bool("NoUploads"), lambda v: self._controller._params.put_bool("NoUploads", v)),
-      ToggleTile("Konik Server", lambda: self._controller._get_konik_state(), lambda v: self._controller._on_konik_toggle(v)),
-      ToggleTile("No Onroad", lambda: self._controller._params.get_bool("DisableOnroadUploads"), lambda v: self._controller._params.put_bool("DisableOnroadUploads", v), is_enabled=lambda: not self._controller._params.get_bool("NoUploads")),
-      ToggleTile("No Logging", lambda: self._controller._params.get_bool("NoLogging"), lambda v: self._controller._params.put_bool("NoLogging", v)),
-      ToggleTile("HD Record", lambda: self._controller._params.get_bool("HigherBitrate"), lambda v: self._controller._on_higher_bitrate_toggle(v), is_enabled=lambda: not self._controller._params.get_bool("DisableOnroadUploads") and not self._controller._params.get_bool("NoUploads")),
-      ToggleTile("Debug Mode", lambda: self._controller._params.get_bool("DebugMode"), lambda v: self._controller._params.put_bool("DebugMode", v)),
+    self._toggle_defs = [
+      {
+        "id": "StandbyMode",
+        "title": tr("Standby Mode"),
+        "subtitle": tr("Keep the device ready for faster wake-ups."),
+        "get": lambda: self._controller._params.get_bool("StandbyMode"),
+        "set": lambda v: self._controller._params.put_bool("StandbyMode", v),
+      },
+      {
+        "id": "IncreaseThermalLimits",
+        "title": tr("Raise Thermal Limits"),
+        "subtitle": tr("Allow the device to run warmer before backing off."),
+        "get": lambda: self._controller._params.get_bool("IncreaseThermalLimits"),
+        "set": lambda v: self._controller._params.put_bool("IncreaseThermalLimits", v),
+      },
+      {
+        "id": "UseKonikServer",
+        "title": tr("Use Konik Server"),
+        "subtitle": tr("Switch remote services to the Konik endpoint."),
+        "get": self._controller._get_konik_state,
+        "set": self._controller._on_konik_toggle,
+      },
+      {
+        "id": "DebugMode",
+        "title": tr("Debug Mode"),
+        "subtitle": tr("Expose additional debugging and developer toggles."),
+        "get": lambda: self._controller._params.get_bool("DebugMode"),
+        "set": lambda v: self._controller._params.put_bool("DebugMode", v),
+      },
+      {
+        "id": "NoUploads",
+        "title": tr("Disable Uploads"),
+        "subtitle": tr("Stop all cloud uploads from this device."),
+        "get": lambda: self._controller._params.get_bool("NoUploads"),
+        "set": lambda v: self._controller._params.put_bool("NoUploads", v),
+      },
+      {
+        "id": "DisableOnroadUploads",
+        "title": tr("Disable Onroad Uploads"),
+        "subtitle": tr("Block uploads while the car is onroad."),
+        "get": lambda: self._controller._params.get_bool("DisableOnroadUploads"),
+        "set": lambda v: self._controller._params.put_bool("DisableOnroadUploads", v),
+        "is_enabled": lambda: not self._controller._params.get_bool("NoUploads"),
+        "disabled_label": tr("Turn off Disable Uploads first"),
+      },
+      {
+        "id": "NoLogging",
+        "title": tr("Disable Logging"),
+        "subtitle": tr("Stop writing standard log data to storage."),
+        "get": lambda: self._controller._params.get_bool("NoLogging"),
+        "set": lambda v: self._controller._params.put_bool("NoLogging", v),
+      },
+      {
+        "id": "HigherBitrate",
+        "title": tr("High Bitrate Recording"),
+        "subtitle": tr("Capture higher-quality onroad footage."),
+        "get": lambda: self._controller._params.get_bool("HigherBitrate"),
+        "set": self._controller._on_higher_bitrate_toggle,
+        "is_enabled": lambda: not self._controller._params.get_bool("DisableOnroadUploads") and not self._controller._params.get_bool("NoUploads"),
+        "disabled_label": tr("Uploads must stay enabled"),
+      },
     ]
-    self._toggle_grid = TileGrid(columns=4, padding=16, uniform_width=True)
-    for t in self._toggles:
-      self._toggle_grid.add_tile(t)
 
-    self._drive_mode_radio = RadioTileGroup("", [tr("Auto"), tr("Onroad"), tr("Offroad")], self._get_drive_mode_index(), self._on_drive_mode_change)
+    self._support_rows = [
+      {
+        "id": "ReportIssue",
+        "title": tr("Report Issue"),
+        "subtitle": tr("Send feedback with your Discord handle."),
+        "action": tr("Open"),
+      },
+      {
+        "id": "FlashPanda",
+        "title": tr("Flash Panda"),
+        "subtitle": tr("Reflash Panda firmware from this panel."),
+        "action": tr("Flash"),
+      },
+    ]
+    self._danger_rows = [
+      {
+        "id": "Storage",
+        "title": tr("Clear Driving Data"),
+        "subtitle": tr("Delete recorded driving data and footage."),
+        "action": tr("Delete"),
+      },
+      {
+        "id": "ErrorLogs",
+        "title": tr("Clear Error Logs"),
+        "subtitle": tr("Remove saved crash logs and diagnostics."),
+        "action": tr("Delete"),
+      },
+      {
+        "id": "ResetDefaults",
+        "title": tr("Reset Toggles"),
+        "subtitle": tr("Restore StarPilot defaults for all toggles."),
+        "action": tr("Reset"),
+      },
+      {
+        "id": "ResetStock",
+        "title": tr("Reset To Stock"),
+        "subtitle": tr("Restore stock openpilot toggle values."),
+        "action": tr("Reset"),
+      },
+    ]
+    self._toggle_groups = [
+      {
+        "id": "device_controls",
+        "title": tr("Device Controls"),
+        "toggle_ids": ["StandbyMode", "IncreaseThermalLimits", "UseKonikServer", "DebugMode"],
+      },
+      {
+        "id": "uploads_logging",
+        "title": tr("Uploads & Logging"),
+        "toggle_ids": ["NoUploads", "DisableOnroadUploads", "NoLogging", "HigherBitrate"],
+      },
+    ]
+    self._tab_defs = [
+      {"id": "basics", "title": tr("Display & Power")},
+      {"id": "connectivity", "title": tr("Connectivity")},
+      {"id": "care", "title": tr("Backups & Care")},
+    ]
+
+    self._drive_mode_control = self._child(
+      AetherSegmentedControl(
+        [tr("Auto"), tr("Onroad"), tr("Offroad")],
+        self._get_drive_mode_index,
+        self._on_drive_mode_change,
+        statuses=[tr("Default"), tr("Force on"), tr("Force off")],
+      )
+    )
+
+    self._scroll_rect = rl.Rectangle(0, 0, 0, 0)
+
+  def _section_height(self, count: int, row_height: float) -> float:
+    return 0.0 if count <= 0 else count * row_height
+
+  def _stacked_section_height(self, sections: list[float]) -> float:
+    if not sections:
+      return 0.0
+    return max(0.0, sum(sections) - self.SECTION_GAP)
+
+  def _uses_two_columns(self, width: float) -> bool:
+    return width >= self.TWO_COLUMN_BREAKPOINT
+
+  def _column_width(self, width: float) -> float:
+    return (width - self.COLUMN_GAP) / 2 if self._uses_two_columns(width) else width
+
+  def _interactive_state(self, target_id: str, rect: rl.Rectangle, *, pad_y: float = 0) -> tuple[bool, bool]:
+    self._interactive_rects[target_id] = rect
+    hovered = _point_hits(gui_app.last_mouse_event.pos, rect, self._scroll_rect, pad_x=6, pad_y=pad_y)
+    return hovered, self._pressed_target == target_id
+
+  def _lookup_toggle(self, toggle_id: str):
+    return next((toggle for toggle in self._toggle_defs if toggle["id"] == toggle_id), None)
+
+  def _toggle_defs_for_group(self, group: dict) -> list[dict]:
+    return [toggle for toggle_id in group["toggle_ids"] if (toggle := self._lookup_toggle(toggle_id)) is not None]
+
+  def _tab_subtitle(self, tab_id: str) -> str:
+    if tab_id == "basics":
+      return tr("{} controls").format(len(self._display_slider_keys) + len(self._power_slider_keys))
+    if tab_id == "connectivity":
+      return tr("{} toggles").format(len(self._toggle_defs))
+    return self._controller.backup_status_text()
+
+  def _format_slider_value(self, key: str) -> str:
+    spec = self._slider_specs[key]
+    current_val = spec["get"]()
+    if current_val in spec["labels"]:
+      return spec["labels"][current_val]
+    if spec["step"] < 1:
+      suffix = spec["unit"]
+      return f"{current_val:.1f}{suffix}"
+    suffix = spec["unit"]
+    return f"{int(current_val)}{suffix}"
+
+  def _open_slider_dialog(self, key: str):
+    spec = self._slider_specs[key]
+
+    def on_close(result, value):
+      if result == DialogResult.CONFIRM:
+        spec["set"](value)
+
+    gui_app.push_widget(
+      AetherSliderDialog(
+        spec["title"],
+        spec["min"],
+        spec["max"],
+        spec["step"],
+        spec["get"](),
+        on_close,
+        unit=spec["unit"],
+        labels=spec["labels"],
+        color=AetherListColors.PRIMARY,
+      )
+    )
 
   def _get_drive_mode_index(self):
     state = self._controller._get_force_drive_state()
@@ -126,291 +400,390 @@ class SystemSettingsManagerView(Widget):
 
   def _clear_ephemeral_state(self):
     self._pressed_target = None
+    self._can_click = True
 
   def show_event(self):
     super().show_event()
     self._clear_ephemeral_state()
+    self._scroll_offset = 0.0
 
   def hide_event(self):
     super().hide_event()
     self._clear_ephemeral_state()
 
   def _handle_mouse_press(self, mouse_pos: MousePos):
-    self._pressed_target = None
-    for action_id, rect in self._action_rects.items():
-      if rl.check_collision_point_rec(mouse_pos, rect):
-        self._pressed_target = f"action:{action_id}"
-        break
-    
-    for t in self._toggles:
-      t._handle_mouse_press(mouse_pos)
-    self._drive_mode_radio._handle_mouse_press(mouse_pos)
-    for slider in self._vsliders.values():
-      slider._handle_mouse_press(mouse_pos)
+    self._pressed_target = self._target_at(mouse_pos)
+    self._can_click = True
 
   def _handle_mouse_event(self, mouse_event: MouseEvent):
-    for slider in self._vsliders.values():
-      slider._handle_mouse_event(mouse_event)
-    for t in self._toggles:
-      t._handle_mouse_event(mouse_event)
+    if not self._scroll_panel.is_touch_valid():
+      self._can_click = False
+      return
+    if self._pressed_target is not None and self._target_at(mouse_event.pos) != self._pressed_target:
+      self._pressed_target = None
 
   def _handle_mouse_release(self, mouse_pos: MousePos):
-    target = self._pressed_target
+    target = self._target_at(mouse_pos) if self._scroll_panel.is_touch_valid() else None
+    if self._pressed_target is not None and self._pressed_target == target and self._can_click:
+      self._activate_target(target)
     self._pressed_target = None
-    if target and target.startswith("action:"):
-      action_id = target.split(":", 1)[1]
-      rect = self._action_rects.get(action_id)
-      if rect and rl.check_collision_point_rec(mouse_pos, rect):
-        self._controller.handle_action(action_id)
+    self._can_click = True
 
-    for t in self._toggles:
-      t._handle_mouse_release(mouse_pos)
-    self._drive_mode_radio._handle_mouse_release(mouse_pos)
-    for slider in self._vsliders.values():
-      slider._handle_mouse_release(mouse_pos)
+  def _target_at(self, mouse_pos: MousePos) -> str | None:
+    for target_id, rect in self._interactive_rects.items():
+      if _point_hits(mouse_pos, rect, self._scroll_rect, pad_x=6, pad_y=0):
+        return target_id
+    return None
 
-  # --- Main render ---
+  def _activate_target(self, target_id: str | None):
+    if not target_id:
+      return
+    prefix, _, value = target_id.partition(":")
+    if prefix == "slider":
+      self._open_slider_dialog(value)
+      return
+    if prefix == "tab":
+      self._active_tab_key = value
+      return
+    if prefix == "toggle":
+      toggle_def = self._lookup_toggle(value)
+      if toggle_def is None:
+        return
+      is_enabled = toggle_def.get("is_enabled", lambda: True)
+      if is_enabled():
+        toggle_def["set"](not toggle_def["get"]())
+      return
+    if prefix == "backup":
+      self._controller.open_backup_manager(value)
+      return
+    if prefix == "action":
+      self._controller.handle_action(value)
 
   def _render(self, rect: rl.Rectangle):
     self.set_rect(rect)
-    self._action_rects.clear()
 
     frame = build_list_panel_frame(rect)
-    draw_list_panel_shell(frame)
+    draw_list_panel_shell(frame, self.PANEL_STYLE)
 
-    hdr = frame.header
-    gui_label(rl.Rectangle(hdr.x, hdr.y + 4, hdr.width * 0.55, 40), tr("System Settings"), 40, AetherListColors.HEADER, FontWeight.SEMI_BOLD)
-    gui_label(rl.Rectangle(hdr.x, hdr.y + 48, hdr.width * 0.7, 36), tr("Manage device behavior, power, and storage."), 24, AetherListColors.SUBTEXT, FontWeight.NORMAL)
+    self._drive_mode_control.set_parent_rect(frame.header)
 
-    actual_header_h = 100
-    content_y = hdr.y + actual_header_h
-    content_h = (frame.shell.y + frame.shell.height) - content_y - AETHER_LIST_METRICS.panel_padding_bottom
-    content_w = frame.scroll.width
-    section_gap = 24
+    self._draw_header(frame.header)
 
-    self._sync_slider_values()
-    if content_w < 1260:
-      left_ratio = 0.56 if content_w < 1080 else 0.52
-      col_w = (content_w - section_gap) / 2
-      left_col = rl.Rectangle(frame.scroll.x, content_y, col_w * left_ratio + col_w * 0.44, content_h)
-      right_col_x = left_col.x + left_col.width + section_gap
-      right_col = rl.Rectangle(right_col_x, content_y, frame.scroll.x + content_w - right_col_x, content_h)
-      self._draw_left_column(left_col)
-      self._draw_right_column(right_col, compact=True)
+    scroll_rect = frame.scroll
+    self._scroll_rect = scroll_rect
+    content_width = scroll_rect.width - self.CONTENT_GUTTER
+    self._content_height = self._measure_content_height(content_width)
+    self._scroll_panel.set_enabled(self.is_visible)
+    self._scroll_offset = self._scroll_panel.update(scroll_rect, max(self._content_height, scroll_rect.height))
+
+    rl.begin_scissor_mode(int(scroll_rect.x), int(scroll_rect.y), int(scroll_rect.width), int(scroll_rect.height))
+    self._draw_scroll_content(scroll_rect, content_width)
+    rl.end_scissor_mode()
+
+    if self._content_height > scroll_rect.height:
+      self._scrollbar.render(scroll_rect, self._content_height, self._scroll_offset)
+
+    draw_list_scroll_fades(scroll_rect, self._content_height, self._scroll_offset, AetherListColors.PANEL_BG, fade_height=self.FADE_HEIGHT)
+
+  def _draw_header(self, rect: rl.Rectangle):
+    title_y = rect.y + self.HEADER_TOP_OFFSET
+    subtitle_y = rect.y + 48
+    gui_label(rl.Rectangle(rect.x, title_y, rect.width * 0.60, self.HEADER_TITLE_HEIGHT), tr("System Settings"), 40, AetherListColors.HEADER, FontWeight.SEMI_BOLD)
+    gui_label(rl.Rectangle(rect.x, subtitle_y, rect.width * 0.62, self.HEADER_SUBTITLE_HEIGHT), tr("Manage display, backups, connectivity, and device maintenance from one touch-first panel."), 22, AetherListColors.SUBTEXT, FontWeight.NORMAL)
+
+    summary_y = subtitle_y + self.HEADER_SUBTITLE_HEIGHT + self.HEADER_SUMMARY_GAP
+    summary_rect = rl.Rectangle(rect.x, summary_y, rect.width, min(self.HEADER_CARD_HEIGHT, rect.y + rect.height - summary_y))
+    self._draw_summary_card(summary_rect)
+
+  def _draw_summary_card(self, rect: rl.Rectangle):
+    draw_soft_card(rect, self.PANEL_STYLE.surface_fill, self.PANEL_STYLE.surface_border)
+    inset = 18
+    left_x = rect.x + inset
+    left_w = rect.width * 0.40
+    gui_label(rl.Rectangle(left_x, rect.y + 10, left_w, 22), tr("Current Drive State"), 20, AetherListColors.MUTED, FontWeight.MEDIUM)
+    gui_label(rl.Rectangle(left_x, rect.y + 34, left_w, 28), self._controller._get_force_drive_state(), 24, AetherListColors.HEADER, FontWeight.MEDIUM)
+    draw_metric_strip(
+      rl.Rectangle(left_x, rect.y + 70, max(240.0, rect.width * 0.38), 30),
+      [
+        (tr("Storage"), self._controller.storage_summary()),
+        (tr("System Backups"), self._controller.backup_count_text()),
+        (tr("Toggle Snapshots"), self._controller.toggle_backup_count_text()),
+      ],
+      style=self.PANEL_STYLE,
+      label_top_offset=0,
+      value_top_offset=14,
+      divider_top_offset=2,
+      divider_bottom_offset=16,
+    )
+
+    control_w = max(300.0, min(420.0, rect.width * 0.34))
+    control_rect = rl.Rectangle(rect.x + rect.width - control_w - inset, rect.y + 14, control_w, rect.height - 28)
+    self._drive_mode_control.render(control_rect)
+
+  def _measure_content_height(self, width: float) -> float:
+    content_height = self._measure_active_tab_height(width)
+    return self.TAB_HEIGHT + self.TAB_BOTTOM_GAP + content_height
+
+  def _measure_active_tab_height(self, width: float) -> float:
+    display_h = self._section_block_height(self._section_height(len(self._display_slider_keys), self.ROW_HEIGHT))
+    power_h = self._section_block_height(self._section_height(len(self._power_slider_keys), self.ROW_HEIGHT))
+    backups_h = self._section_block_height(self._section_height(2, self.ROW_HEIGHT))
+    maintenance_h = self._section_block_height(self._maintenance_section_content_height())
+    if self._active_tab_key == "basics":
+      if self._uses_two_columns(width):
+        return max(display_h, power_h)
+      return self._stacked_section_height([display_h, power_h])
+
+    if self._active_tab_key == "connectivity":
+      group_heights = [self._section_block_height(self._section_height(len(self._toggle_defs_for_group(group)), self.ROW_HEIGHT)) for group in self._toggle_groups]
+      if self._uses_two_columns(width):
+        return max(group_heights)
+      return self._stacked_section_height(group_heights)
+
+    if self._uses_two_columns(width):
+      return max(backups_h, maintenance_h)
+    return self._stacked_section_height([backups_h, maintenance_h])
+
+  def _section_block_height(self, content_height: float) -> float:
+    return self.SECTION_HEADER_HEIGHT + self.SECTION_HEADER_GAP + content_height + self.SECTION_GAP
+
+  def _maintenance_section_content_height(self) -> float:
+    support_h = self._section_height(len(self._support_rows), self.ROW_HEIGHT)
+    danger_h = self._section_height(len(self._danger_rows), self.ROW_HEIGHT)
+    return support_h + 12 + 30 + danger_h
+
+  def _draw_scroll_content(self, rect: rl.Rectangle, width: float):
+    self._interactive_rects.clear()
+    y = rect.y + self._scroll_offset
+    self._draw_tabs(rl.Rectangle(rect.x, y, width, self.TAB_HEIGHT))
+    y += self.TAB_HEIGHT + self.TAB_BOTTOM_GAP
+
+    if self._active_tab_key == "basics":
+      self._draw_basics_tab(y, rect.x, width)
+    elif self._active_tab_key == "connectivity":
+      self._draw_connectivity_tab(y, rect.x, width)
     else:
-      col_w = (content_w - section_gap) / 2
-      left_col = rl.Rectangle(frame.scroll.x, content_y, col_w, content_h)
-      right_col = rl.Rectangle(frame.scroll.x + col_w + section_gap, content_y, col_w, content_h)
-      self._draw_left_column(left_col)
-      self._draw_right_column(right_col, compact=False)
+      self._draw_care_tab(y, rect.x, width)
 
-  def _sync_slider_values(self):
-    params = self._controller._params
-    for key, slider in self._vsliders.items():
-      if slider._is_dragging:
-        continue
-      pval = float(params.get_float(key)) if key == "LowVoltageShutdown" else float(params.get_int(key))
-      if slider.current_val != pval:
-        slider.current_val = pval
+  def _draw_tabs(self, rect: rl.Rectangle):
+    if not self._tab_defs:
+      return
+    available_w = max(1.0, rect.width)
+    tab_w = (available_w - self.TAB_GAP * max(0, len(self._tab_defs) - 1)) / max(1, len(self._tab_defs))
+    for index, tab in enumerate(self._tab_defs):
+      tab_rect = rl.Rectangle(rect.x + index * (tab_w + self.TAB_GAP), rect.y, tab_w, self.TAB_HEIGHT)
+      target_id = f"tab:{tab['id']}"
+      hovered, pressed = self._interactive_state(target_id, tab_rect, pad_y=4)
+      draw_tab_card(
+        tab_rect,
+        tab["title"],
+        self._tab_subtitle(tab["id"]),
+        current=self._active_tab_key == tab["id"],
+        hovered=hovered,
+        pressed=pressed,
+        title_size=19,
+        subtitle_size=14,
+        show_underline=True,
+        style=self.PANEL_STYLE,
+      )
 
-  # --- Left column: slider bands + toggles ---
+  def _draw_basics_tab(self, y: float, x: float, width: float):
+    if self._uses_two_columns(width):
+      column_w = self._column_width(width)
+      self._draw_slider_section(y, x, column_w, tr("Display"), self._display_slider_keys)
+      self._draw_slider_section(y, x + column_w + self.COLUMN_GAP, column_w, tr("Power"), self._power_slider_keys)
+      return
+    y = self._draw_slider_section(y, x, width, tr("Display"), self._display_slider_keys)
+    self._draw_slider_section(y, x, width, tr("Power"), self._power_slider_keys)
 
-  def _draw_left_column(self, rect: rl.Rectangle):
-    band_zone_h = rect.height * (0.52 if rect.width < 760 else 0.45)
-    toggle_zone_h = rect.height - band_zone_h - 16
+  def _draw_connectivity_tab(self, y: float, x: float, width: float):
+    if self._uses_two_columns(width):
+      column_w = self._column_width(width)
+      self._draw_toggle_group_section(y, x, column_w, self._toggle_groups[0])
+      self._draw_toggle_group_section(y, x + column_w + self.COLUMN_GAP, column_w, self._toggle_groups[1])
+      return
+    current_y = y
+    for group in self._toggle_groups:
+      current_y = self._draw_toggle_group_section(current_y, x, width, group)
 
-    display_h = band_zone_h * 0.58
-    power_h = band_zone_h - display_h - 16
+  def _draw_care_tab(self, y: float, x: float, width: float):
+    if self._uses_two_columns(width):
+      column_w = self._column_width(width)
+      self._draw_backups_section(y, x, column_w)
+      self._draw_maintenance_section(y, x + column_w + self.COLUMN_GAP, column_w)
+      return
+    y = self._draw_backups_section(y, x, width)
+    self._draw_maintenance_section(y, x, width)
 
-    self._draw_slider_band(rl.Rectangle(rect.x, rect.y, rect.width, display_h), tr("Display"), self._display_band)
-    self._draw_slider_band(rl.Rectangle(rect.x, rect.y + display_h + 16, rect.width, power_h), tr("Power"), self._power_band)
+  def _draw_slider_section(self, y: float, x: float, width: float, title: str, keys: list[str]) -> float:
+    draw_section_header(rl.Rectangle(x, y, width, self.SECTION_HEADER_HEIGHT), title, style=self.PANEL_STYLE)
+    y += self.SECTION_HEADER_HEIGHT + self.SECTION_HEADER_GAP
+    group_rect = rl.Rectangle(x, y, width, self._section_height(len(keys), self.ROW_HEIGHT))
+    draw_list_group_shell(group_rect)
+    for index, key in enumerate(keys):
+      self._draw_slider_row(rl.Rectangle(group_rect.x, y + index * self.ROW_HEIGHT, group_rect.width, self.ROW_HEIGHT), key, is_last=index == len(keys) - 1)
+    return y + group_rect.height + self.SECTION_GAP
 
-    toggle_y = rect.y + band_zone_h + 16
-    toggle_rect = rl.Rectangle(rect.x, toggle_y, rect.width, toggle_zone_h)
-    self._toggle_grid.render(toggle_rect)
+  def _draw_slider_row(self, rect: rl.Rectangle, key: str, is_last: bool):
+    spec = self._slider_specs[key]
+    target_id = f"slider:{key}"
+    hovered, pressed = self._interactive_state(target_id, rect)
+    draw_settings_list_row(
+      rect,
+      title=spec["title"],
+      subtitle=spec["subtitle"],
+      value=self._format_slider_value(key),
+      hovered=hovered,
+      pressed=pressed,
+      is_last=is_last,
+      show_chevron=True,
+      title_size=24,
+      subtitle_size=18,
+      value_size=22,
+      style=self.PANEL_STYLE,
+    )
 
-  def _draw_slider_band(self, rect, label, slider_keys):
-    rl.draw_rectangle_rounded(rect, 0.15, 16, rl.Color(28, 30, 36, 255))
-    rl.draw_rectangle_rounded_lines_ex(rect, 0.15, 16, 1, rl.Color(255, 255, 255, 15))
+  def _draw_toggle_group_section(self, y: float, x: float, width: float, group: dict) -> float:
+    toggles = self._toggle_defs_for_group(group)
+    trailing_text = tr("{} toggles").format(len(toggles))
+    draw_section_header(rl.Rectangle(x, y, width, self.SECTION_HEADER_HEIGHT), group["title"], trailing_text=trailing_text, style=self.PANEL_STYLE)
+    y += self.SECTION_HEADER_HEIGHT + self.SECTION_HEADER_GAP
+    toggle_rect = rl.Rectangle(x, y, width, self._section_height(len(toggles), self.ROW_HEIGHT))
+    draw_list_group_shell(toggle_rect)
+    for index, toggle_def in enumerate(toggles):
+      self._draw_toggle_row(rl.Rectangle(toggle_rect.x, toggle_rect.y + index * self.ROW_HEIGHT, toggle_rect.width, self.ROW_HEIGHT), toggle_def, is_last=index == len(toggles) - 1)
+    return y + toggle_rect.height + self.SECTION_GAP
 
-    label_h = 24
-    gui_label(rl.Rectangle(rect.x + 16, rect.y + 12, rect.width * 0.3, label_h), label, 20, AetherListColors.SUBTEXT, FontWeight.BOLD)
+  def _draw_toggle_row(self, rect: rl.Rectangle, toggle_def: dict, is_last: bool):
+    target_id = f"toggle:{toggle_def['id']}"
+    hovered, pressed = self._interactive_state(target_id, rect)
+    is_enabled = toggle_def.get("is_enabled", lambda: True)()
+    subtitle = toggle_def.get("disabled_label", "") if not is_enabled and toggle_def.get("disabled_label") else toggle_def["subtitle"]
+    draw_settings_list_row(
+      rect,
+      title=toggle_def["title"],
+      subtitle=subtitle,
+      toggle_value=toggle_def["get"](),
+      enabled=is_enabled,
+      hovered=hovered,
+      pressed=pressed,
+      is_last=is_last,
+      show_chevron=False,
+      title_size=24,
+      subtitle_size=18,
+      style=self.PANEL_STYLE,
+    )
 
-    slider_top = rect.y + label_h + 20
-    slider_h = rect.height - label_h - 32
-    slider_area_w = rect.width - 32
-    gap = 12
+  def _draw_backups_section(self, y: float, x: float, width: float) -> float:
+    draw_section_header(rl.Rectangle(x, y, width, self.SECTION_HEADER_HEIGHT), tr("Backups"), trailing_text=self._controller.backup_status_text(), style=self.PANEL_STYLE)
+    y += self.SECTION_HEADER_HEIGHT + self.SECTION_HEADER_GAP
 
-    n = len(slider_keys)
-    cols = max(1, min(n, int((slider_area_w + gap) / (120 + gap))))
-    rows = (n + cols - 1) // cols
-    col_w = (slider_area_w - (cols - 1) * gap) / cols
-    row_gap = 12
-    total_slider_h = max(0, slider_h - row_gap * max(0, rows - 1))
-    cell_h = total_slider_h / max(1, rows)
-    content_w = min(n, cols) * col_w + max(0, min(n, cols) - 1) * gap
-    start_x = rect.x + 16 + (slider_area_w - content_w) / 2
+    summary_rect = rl.Rectangle(x, y, width, self.ROW_HEIGHT * 2)
+    draw_list_group_shell(summary_rect)
+    self._draw_backup_manager_row(rl.Rectangle(summary_rect.x, summary_rect.y, summary_rect.width, self.ROW_HEIGHT), "system", is_last=False)
+    self._draw_backup_manager_row(rl.Rectangle(summary_rect.x, summary_rect.y + self.ROW_HEIGHT, summary_rect.width, self.ROW_HEIGHT), "toggle", is_last=True)
+    return y + summary_rect.height + self.SECTION_GAP
 
-    for i, key in enumerate(slider_keys):
-      row = i // cols
-      col = i % cols
-      col_x = start_x + col * (col_w + gap)
-      col_y = slider_top + row * (cell_h + row_gap)
-      self._vsliders[key].render(rl.Rectangle(col_x, col_y, col_w, cell_h))
-
-  # --- Right column: action cards ---
-
-  def _draw_right_column(self, rect: rl.Rectangle, compact: bool = False):
-    gap = 16
-    total_h = rect.height - 2 * gap
-    if compact:
-      h1 = total_h * 0.26
-      h2 = total_h * 0.42
-      h3 = total_h * 0.32
+  def _draw_backup_manager_row(self, rect: rl.Rectangle, backup_kind: str, is_last: bool):
+    target_id = f"backup:{backup_kind}"
+    hovered, pressed = self._interactive_state(target_id, rect)
+    if backup_kind == "system":
+      title = tr("System Backups")
+      subtitle = self._controller.latest_backup_summary()
+      count = self._controller.backup_count()
     else:
-      h1 = total_h * 0.30
-      h2 = total_h * 0.40
-      h3 = total_h * 0.30
+      title = tr("Toggle Snapshots")
+      subtitle = self._controller.latest_toggle_backup_summary()
+      count = self._controller.toggle_backup_count()
+    action_text = tr("Create") if count == 0 else tr("Manage")
+    draw_selection_list_row(
+      rect,
+      title=title,
+      subtitle=subtitle,
+      action_text=action_text,
+      hovered=hovered,
+      pressed=pressed,
+      is_last=is_last,
+      action_width=154,
+      action_pill=True,
+      action_pill_height=40,
+      action_pill_width=92 if count == 0 else self.ACTION_PILL_WIDTH,
+      title_size=26,
+      subtitle_size=17,
+      action_text_size=15,
+      row_separator=self.PANEL_STYLE.divider_color,
+      action_fill=rl.Color(89, 116, 151, 18),
+      action_border=rl.Color(89, 116, 151, 42),
+      action_text_color=AetherListColors.HEADER,
+    )
 
-    card1_rect = rl.Rectangle(rect.x, rect.y, rect.width, h1)
-    card2_rect = rl.Rectangle(rect.x, rect.y + h1 + gap, rect.width, h2)
-    card3_rect = rl.Rectangle(rect.x, rect.y + h1 + h2 + 2*gap, rect.width, h3)
+  def _draw_maintenance_section(self, y: float, x: float, width: float):
+    draw_section_header(rl.Rectangle(x, y, width, self.SECTION_HEADER_HEIGHT), tr("Support & Maintenance"), style=self.PANEL_STYLE)
+    y += self.SECTION_HEADER_HEIGHT + self.SECTION_HEADER_GAP
 
-    self._draw_card_background(card1_rect, tr("Drive & Actions"))
-    self._draw_card1_content(card1_rect, compact=compact)
+    support_rect = rl.Rectangle(x, y, width, self._section_height(len(self._support_rows), self.ROW_HEIGHT))
+    draw_list_group_shell(support_rect)
+    for index, row in enumerate(self._support_rows):
+      row_rect = rl.Rectangle(support_rect.x, support_rect.y + index * self.ROW_HEIGHT, support_rect.width, self.ROW_HEIGHT)
+      self._draw_action_row(row_rect, row, is_last=index == len(self._support_rows) - 1)
+    y += support_rect.height + 12
 
-    self._draw_card_background(card2_rect, tr("Backups Management"))
-    self._draw_card2_content(card2_rect, compact=compact)
+    danger_title_rect = rl.Rectangle(x, y, width, 22)
+    gui_label(danger_title_rect, tr("Danger Zone"), 20, AetherListColors.DANGER, FontWeight.MEDIUM)
+    y += 30
 
-    self._draw_card_background(card3_rect, tr("Maintenance (Caution)"))
-    self._draw_card3_content(card3_rect, compact=compact)
+    danger_rect = rl.Rectangle(x, y, width, self._section_height(len(self._danger_rows), self.ROW_HEIGHT))
+    draw_list_group_shell(danger_rect, fill=rl.Color(173, 78, 90, 10), border=rl.Color(173, 78, 90, 30))
+    for index, row in enumerate(self._danger_rows):
+      row_rect = rl.Rectangle(danger_rect.x, danger_rect.y + index * self.ROW_HEIGHT, danger_rect.width, self.ROW_HEIGHT)
+      self._draw_action_row(row_rect, row, is_last=index == len(self._danger_rows) - 1, danger=True)
 
-  def _draw_card_background(self, rect, title):
-    rl.draw_rectangle_rounded(rect, 0.15, 16, rl.Color(28, 30, 36, 255))
-    rl.draw_rectangle_rounded_lines_ex(rect, 0.15, 16, 1, rl.Color(255, 255, 255, 15))
-    gui_label(rl.Rectangle(rect.x + 16, rect.y + 12, rect.width, 24), title, 20, AetherListColors.SUBTEXT, FontWeight.BOLD)
-
-  def _draw_action_button(self, rect: rl.Rectangle, action_id: str, label: str, danger: bool = False, active: bool = False):
-    self._action_rects[action_id] = rect
-    mouse_pos = gui_app.last_mouse_event.pos
-    hovered = rl.check_collision_point_rec(mouse_pos, rect)
-    pressed = self._pressed_target == f"action:{action_id}"
-    
-    color = AetherListColors.PRIMARY if active else rl.Color(45, 48, 55, 255)
-    border_color = rl.Color(255, 255, 255, 20)
-    
-    if danger:
-        color = rl.Color(90, 35, 40, 255)
-        border_color = rl.Color(173, 78, 90, 180)
-        
-    if hovered: color = rl.Color(min(color.r + 20, 255), min(color.g + 20, 255), min(color.b + 20, 255), 255)
-    if pressed: color = rl.Color(max(color.r - 20, 0), max(color.g - 20, 0), max(color.b - 20, 0), 255)
-    
-    rl.draw_rectangle_rounded(rect, 0.25, 16, color)
-    rl.draw_rectangle_rounded_lines_ex(rect, 0.25, 16, 1, border_color)
-    text_color = rl.Color(255, 200, 200, 255) if danger else rl.WHITE
-    font_size = max(14, min(22, int(min(rect.width, rect.height) * 0.24)))
-    gui_label(rect, label, font_size, text_color, FontWeight.BOLD, alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER)
-
-  def _draw_button_row(self, rect: rl.Rectangle, buttons: list[tuple[str, str, bool]], columns: int, *, gap: int = 16, button_h: int | None = None):
-    cols = max(1, min(columns, len(buttons)))
-    rows = (len(buttons) + cols - 1) // cols
-    resolved_button_h = button_h if button_h is not None else max(34, min(64, int((rect.height - gap * max(0, rows - 1)) / max(1, rows))))
-    button_w = (rect.width - gap * max(0, cols - 1)) / cols
-    for idx, (action_id, label, danger) in enumerate(buttons):
-      row = idx // cols
-      col = idx % cols
-      bx = rect.x + col * (button_w + gap)
-      by = rect.y + row * (resolved_button_h + gap)
-      self._draw_action_button(rl.Rectangle(bx, by, button_w, resolved_button_h), action_id, label, danger=danger)
-    return rows * resolved_button_h + gap * max(0, rows - 1)
-
-  def _draw_card1_content(self, rect, compact: bool = False):
-    content_y = rect.y + 44
-    content_h = rect.height - 44 - 16
-    if compact:
-      stacked = rect.width < 760
-      units = 3 if stacked else 2
-      gap = 10
-      control_h = max(30, min(64, int((content_h - gap * (units + 1)) / units)))
-    else:
-      ACTION_BTN_H = 64
-      gap = max(12, (content_h - (ACTION_BTN_H * 2)) / 3)
-      control_h = ACTION_BTN_H
-
-    ry = content_y + gap
-    radio_rect = rl.Rectangle(rect.x + 16, ry, rect.width - 32, control_h)
-    self._drive_mode_radio.current_index = self._get_drive_mode_index()
-    self._drive_mode_radio.render(radio_rect)
-    
-    by = ry + control_h + gap
-    btn_w = (rect.width - 32 - 16) / 2
-    if compact and rect.width < 760:
-      self._draw_button_row(rl.Rectangle(rect.x + 16, by, rect.width - 32, control_h * 2 + gap), [("FlashPanda", tr("Flash Panda"), False), ("ReportIssue", tr("Report Issue"), False)], 1, gap=gap, button_h=control_h)
-    else:
-      self._draw_action_button(rl.Rectangle(rect.x + 16, by, btn_w, control_h), "FlashPanda", tr("Flash Panda"))
-      self._draw_action_button(rl.Rectangle(rect.x + 16 + btn_w + 16, by, btn_w, control_h), "ReportIssue", tr("Report Issue"))
-
-  def _draw_card2_content(self, rect, compact: bool = False):
-    content_y = rect.y + 44
-    if compact:
-      gap = 8
-      label_h = 18
-      cols = 2 if rect.width >= 560 else 1
-      rows_per_group = (3 + cols - 1) // cols
-      total_rows = rows_per_group * 2
-      available_h = rect.height - 44 - 16 - label_h * 2 - gap * 5
-      button_h = max(28, min(56, int(available_h / max(1, total_rows))))
-    else:
-      ACTION_BTN_H = 64
-      gap = max(12, (rect.height - 44 - 16 - (ACTION_BTN_H * 2)) / 3)
-      label_h = ACTION_BTN_H
-      cols = 3
-      rows_per_group = 1
-      button_h = ACTION_BTN_H
-    
-    sys_y = content_y + gap
-    label_w = 110 if rect.width >= 760 and not compact else 92
-    label_size = 22 if not compact else 18
-    gui_label(rl.Rectangle(rect.x + 16, sys_y, label_w, label_h), tr("System:"), label_size, rl.WHITE, FontWeight.SEMI_BOLD)
-    start_x = rect.x + label_w + 20
-    row_w = rect.width - (start_x - rect.x) - 16
-    system_h = self._draw_button_row(rl.Rectangle(start_x, sys_y, row_w, rows_per_group * button_h + gap * max(0, rows_per_group - 1)), [("CreateBackup", tr("Create"), False), ("RestoreBackup", tr("Restore"), False), ("DeleteBackup", tr("Delete"), True)], cols, gap=gap, button_h=button_h)
-
-    tog_y = sys_y + max(label_h, system_h) + gap
-    gui_label(rl.Rectangle(rect.x + 16, tog_y, label_w, label_h), tr("Toggles:"), label_size, rl.WHITE, FontWeight.SEMI_BOLD)
-    self._draw_button_row(rl.Rectangle(start_x, tog_y, row_w, rows_per_group * button_h + gap * max(0, rows_per_group - 1)), [("CreateToggleBackup", tr("Create"), False), ("RestoreToggleBackup", tr("Restore"), False), ("DeleteToggleBackup", tr("Delete"), True)], cols, gap=gap, button_h=button_h)
-
-  def _draw_card3_content(self, rect, compact: bool = False):
-    content_y = rect.y + 44
-    if compact:
-      gap = 10
-      columns = 2 if rect.width >= 520 else 1
-      rows_per_group = (2 + columns - 1) // columns
-      available_h = rect.height - 44 - 16 - gap * 3
-      button_h = max(30, min(56, int(available_h / max(2, rows_per_group * 2))))
-    else:
-      ACTION_BTN_H = 64
-      gap = max(12, (rect.height - 44 - 16 - (ACTION_BTN_H * 2)) / 3)
-      columns = 2
-      rows_per_group = 1
-      button_h = ACTION_BTN_H
-    
-    sys_y = content_y + gap
-    group_h = rows_per_group * button_h + gap * max(0, rows_per_group - 1)
-    system_h = self._draw_button_row(rl.Rectangle(rect.x + 16, sys_y, rect.width - 32, group_h), [("Storage", tr("Clear Data"), True), ("ErrorLogs", tr("Clear Logs"), True)], columns, gap=gap, button_h=button_h)
-    
-    tog_y = sys_y + system_h + gap
-    self._draw_button_row(rl.Rectangle(rect.x + 16, tog_y, rect.width - 32, group_h), [("ResetDefaults", tr("Reset Toggles"), True), ("ResetStock", tr("Stock OP"), True)], columns, gap=gap, button_h=button_h)
+  def _draw_action_row(self, rect: rl.Rectangle, row: dict, is_last: bool, *, danger: bool = False):
+    target_id = f"action:{row['id']}"
+    hovered, pressed = self._interactive_state(target_id, rect)
+    action_fill = rl.Color(173, 78, 90, 22) if danger else rl.Color(255, 255, 255, 8)
+    action_border = rl.Color(173, 78, 90, 48) if danger else rl.Color(255, 255, 255, 24)
+    action_text_color = AetherListColors.HEADER if not danger else rl.Color(244, 214, 219, 255)
+    draw_selection_list_row(
+      rect,
+      title=row["title"],
+      subtitle=row["subtitle"],
+      action_text=row["action"],
+      hovered=hovered,
+      pressed=pressed,
+      is_last=is_last,
+      action_width=154,
+      action_pill=True,
+      action_pill_height=40,
+      action_pill_width=self.DANGER_PILL_WIDTH if danger else self.ACTION_PILL_WIDTH,
+      title_size=26,
+      subtitle_size=17,
+      action_text_size=15,
+      row_separator=self.PANEL_STYLE.divider_color,
+      action_fill=action_fill,
+      action_border=action_border,
+      action_text_color=action_text_color,
+      title_color=AetherListColors.HEADER if not danger else rl.Color(249, 229, 233, 255),
+      subtitle_color=AetherListColors.SUBTEXT if not danger else rl.Color(203, 171, 178, 255),
+    )
 
 class StarPilotSystemLayout(StarPilotPanel):
+  _BACKUP_NAME_SANITIZE_RE = re.compile(r"[^A-Za-z0-9._-]+")
+
   def __init__(self):
     super().__init__()
     self._keyboard = Keyboard(min_text_size=0)
+    self._storage_text = "0 MB"
+    self._storage_updated_at = 0.0
+    self._storage_refresh_pending = False
+    self._storage_refresh_generation = 0
+    self._pending_storage_text: tuple[int, str] | None = None
     self._manager_view = SystemSettingsManagerView(self)
+    self._refresh_storage_cache(force=True)
 
   def show_event(self):
     super().show_event()
+    self._refresh_storage_cache(force=True)
     self._manager_view.show_event()
 
   def hide_event(self):
@@ -418,7 +791,104 @@ class StarPilotSystemLayout(StarPilotPanel):
     self._manager_view.hide_event()
 
   def _render(self, rect: rl.Rectangle):
+    if self._pending_storage_text is not None:
+      generation, storage_text = self._pending_storage_text
+      self._pending_storage_text = None
+      if generation == self._storage_refresh_generation:
+        self._storage_text = storage_text
+        self._storage_updated_at = rl.get_time()
+      self._storage_refresh_pending = False
+    self._refresh_storage_cache()
     self._manager_view.render(rect)
+
+  def _refresh_storage_cache(self, force: bool = False):
+    now = rl.get_time()
+    if self._storage_refresh_pending:
+      return
+    if not force and (now - self._storage_updated_at) < 5.0:
+      return
+
+    generation = self._storage_refresh_generation + 1
+    self._storage_refresh_generation = generation
+
+    def refresh_worker():
+      result: str | None = None
+      try:
+        result = self._get_storage()
+      finally:
+        if result is None:
+          self._storage_refresh_pending = False
+        else:
+          self._pending_storage_text = (generation, result)
+
+    self._storage_refresh_pending = True
+    self._storage_updated_at = now
+    threading.Thread(target=refresh_worker, daemon=True).start()
+
+  def storage_summary(self) -> str:
+    return self._storage_text
+
+  def backup_count_text(self) -> str:
+    count = len(self._get_backups("backups"))
+    return tr("None") if count == 0 else tr("{} saved").format(count)
+
+  def backup_count(self) -> int:
+    return len(self._get_backups("backups"))
+
+  def toggle_backup_count_text(self) -> str:
+    count = len(self._get_backups("toggle_backups"))
+    return tr("None") if count == 0 else tr("{} saved").format(count)
+
+  def toggle_backup_count(self) -> int:
+    return len(self._get_backups("toggle_backups"))
+
+  def latest_backup_summary(self) -> str:
+    backups = self._get_backups("backups")
+    if not backups:
+      return tr("No full-system backups saved yet.")
+    return backups[-1]
+
+  def latest_toggle_backup_summary(self) -> str:
+    backups = self._get_backups("toggle_backups")
+    if not backups:
+      return tr("No toggle snapshots saved yet.")
+    return backups[-1]
+
+  def backup_status_text(self) -> str:
+    system_count = len(self._get_backups("backups"))
+    toggle_count = len(self._get_backups("toggle_backups"))
+    return tr("{} full • {} toggle").format(system_count, toggle_count)
+
+  def open_backup_manager(self, backup_kind: str):
+    if backup_kind == "system":
+      options = [tr("Create Backup"), tr("Restore Backup"), tr("Delete Backup")]
+      title = tr("System Backups")
+    else:
+      options = [tr("Save Toggle Snapshot"), tr("Restore Toggle Snapshot"), tr("Delete Toggle Snapshot")]
+      title = tr("Toggle Snapshots")
+
+    def on_select(res):
+      if res != DialogResult.CONFIRM or not dialog.selection:
+        return
+      selection = dialog.selection
+      if selection == options[0]:
+        if backup_kind == "system":
+          self._on_create_backup()
+        else:
+          self._on_create_toggle_backup()
+      elif selection == options[1]:
+        if backup_kind == "system":
+          self._on_restore_backup()
+        else:
+          self._on_restore_toggle_backup()
+      elif selection == options[2]:
+        if backup_kind == "system":
+          self._on_delete_backup()
+        else:
+          self._on_delete_toggle_backup()
+
+    dialog = MultiOptionDialog(title, options, callback=on_select)
+    gui_app.push_widget(dialog)
 
   def handle_action(self, action_id: str):
     if action_id == "ScreenManagement":
@@ -541,13 +1011,23 @@ class StarPilotSystemLayout(StarPilotPanel):
     if not b_dir.exists():
       return []
     if folder == "backups":
-      return [f.name for f in b_dir.glob("*.tar.zst") if "in_progress" not in f.name]
-    return [d.name for d in b_dir.iterdir() if d.is_dir() and "in_progress" not in d.name]
+      entries = [f for f in b_dir.glob("*.tar.zst") if "in_progress" not in f.name]
+    else:
+      entries = [d for d in b_dir.iterdir() if d.is_dir() and "in_progress" not in d.name]
+    entries.sort(key=lambda item: item.stat().st_mtime if item.exists() else 0.0, reverse=True)
+    return [entry.name for entry in entries]
+
+  def _sanitize_backup_name(self, raw_name: str, prefix: str) -> str:
+    sanitized = self._BACKUP_NAME_SANITIZE_RE.sub("_", raw_name.strip())
+    sanitized = sanitized.strip("._-")
+    if not sanitized:
+      sanitized = f"{prefix}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    return sanitized
 
   def _on_create_backup(self):
     def on_name(res, name):
       if res == DialogResult.CONFIRM:
-        safe_name = name.replace(" ", "_") if name else f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        safe_name = self._sanitize_backup_name(name or "", "backup")
         backup_path = f"/data/backups/{safe_name}.tar.zst"
         if Path(backup_path).exists():
           gui_app.push_widget(alert_dialog(tr("A backup with this name already exists.")))
@@ -573,7 +1053,8 @@ class StarPilotSystemLayout(StarPilotPanel):
       if res == DialogResult.CONFIRM and dialog.selection:
         gui_app.push_widget(alert_dialog(tr("Restoring... device will reboot.")))
         def _task():
-          subprocess.run(["rm", "-rf", "/data/openpilot/*"])
+          shutil.rmtree("/data/openpilot", ignore_errors=True)
+          os.makedirs("/data/openpilot", exist_ok=True)
           subprocess.run(["tar", "--use-compress-program=zstd", "-xf", f"/data/backups/{dialog.selection}", "-C", "/"])
           os.system("reboot")
         threading.Thread(target=_task, daemon=True).start()
@@ -589,7 +1070,14 @@ class StarPilotSystemLayout(StarPilotPanel):
 
     def _on_select(res):
       if res == DialogResult.CONFIRM and dialog.selection:
-        os.remove(f"/data/backups/{dialog.selection}")
+        backup_name = dialog.selection
+
+        def _on_confirm(confirm_res):
+          if confirm_res == DialogResult.CONFIRM:
+            os.remove(f"/data/backups/{backup_name}")
+            gui_app.push_widget(alert_dialog(tr("Backup deleted.")))
+
+        gui_app.push_widget(ConfirmDialog(tr("Delete backup '{}'?").format(backup_name), tr("Delete"), callback=_on_confirm))
 
     dialog = MultiOptionDialog(tr("Delete Backup"), backups, callback=_on_select)
     gui_app.push_widget(dialog)
@@ -597,7 +1085,7 @@ class StarPilotSystemLayout(StarPilotPanel):
   def _on_create_toggle_backup(self):
     def on_name(res, name):
       if res == DialogResult.CONFIRM:
-        safe_name = name.replace(" ", "_") if name else f"toggle_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        safe_name = self._sanitize_backup_name(name or "", "toggle_backup")
         backup_path = Path(f"/data/toggle_backups/{safe_name}")
         if backup_path.exists():
           gui_app.push_widget(alert_dialog(tr("A toggle backup with this name already exists.")))
@@ -646,7 +1134,14 @@ class StarPilotSystemLayout(StarPilotPanel):
 
     def _on_select(res):
       if res == DialogResult.CONFIRM and dialog.selection:
-        shutil.rmtree(f"/data/toggle_backups/{dialog.selection}", ignore_errors=True)
+        backup_name = dialog.selection
+
+        def _on_confirm(confirm_res):
+          if confirm_res == DialogResult.CONFIRM:
+            shutil.rmtree(f"/data/toggle_backups/{backup_name}", ignore_errors=True)
+            gui_app.push_widget(alert_dialog(tr("Toggle backup deleted.")))
+
+        gui_app.push_widget(ConfirmDialog(tr("Delete toggle backup '{}'?").format(backup_name), tr("Delete"), callback=_on_confirm))
 
     dialog = MultiOptionDialog(tr("Delete Toggle Backup"), backups, callback=_on_select)
     gui_app.push_widget(dialog)

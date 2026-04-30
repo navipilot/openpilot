@@ -427,6 +427,7 @@ def draw_toggle_switch(
   rect: rl.Rectangle,
   enabled: bool,
   *,
+  is_enabled: bool = True,
   track_color: rl.Color = AetherListColors.PRIMARY,
   off_track_color: rl.Color = rl.Color(255, 255, 255, 24),
   knob_color: rl.Color = rl.WHITE,
@@ -437,6 +438,9 @@ def draw_toggle_switch(
 ):
   toggle_rect = rl.Rectangle(rect.x + rect.width - width - right_inset, rect.y + (rect.height - height) / 2, width, height)
   track = track_color if enabled else off_track_color
+  if not is_enabled:
+    track = _with_alpha(_mix_colors(off_track_color, track, 0.35), 42)
+    knob_color = _with_alpha(knob_color, 132)
   knob_x = toggle_rect.x + toggle_rect.width - knob_offset if enabled else toggle_rect.x + knob_offset
   rl.draw_rectangle_rounded(toggle_rect, 1.0, 16, track)
   rl.draw_circle(int(knob_x), int(toggle_rect.y + toggle_rect.height / 2), 16, knob_color)
@@ -465,6 +469,19 @@ def draw_action_pill(
     align_center=True,
     color=text_color,
   )
+
+
+def draw_chevron_icon(rect: rl.Rectangle, color: rl.Color, *, thickness: float = 3.0):
+  snapped = _snap_rect(rect)
+  center_x = snapped.x + snapped.width / 2
+  center_y = snapped.y + snapped.height / 2
+  size = max(6.0, min(snapped.width, snapped.height) * 0.28)
+  left_x = center_x - size * 0.6
+  right_x = center_x + size * 0.35
+  top_y = center_y - size
+  bottom_y = center_y + size
+  rl.draw_line_ex(rl.Vector2(left_x, top_y), rl.Vector2(right_x, center_y), thickness, color)
+  rl.draw_line_ex(rl.Vector2(left_x, bottom_y), rl.Vector2(right_x, center_y), thickness, color)
 
 
 def draw_tab_card(
@@ -676,6 +693,7 @@ def draw_settings_list_row(
   subtitle: str = "",
   value: str = "",
   toggle_value: bool | None = None,
+  enabled: bool = True,
   hovered: bool = False,
   pressed: bool = False,
   is_last: bool = False,
@@ -684,14 +702,20 @@ def draw_settings_list_row(
   subtitle_size: int = 20,
   value_size: int = 24,
   separator_inset: int = 22,
+  title_color: rl.Color | None = None,
+  subtitle_color: rl.Color | None = None,
   value_color: rl.Color | None = None,
   style: PanelStyle = DEFAULT_PANEL_STYLE,
 ):
   draw_rect = _snap_rect(rect)
+  resolved_title_color = title_color or (style.title_color if enabled else style.muted_color)
+  resolved_subtitle_color = subtitle_color or (style.subtitle_color if enabled else style.muted_color)
+  resolved_value_color = value_color or (style.title_color if enabled else style.muted_color)
+  chevron_rect = rl.Rectangle(draw_rect.x + draw_rect.width - AETHER_LIST_METRICS.utility_chevron_right, draw_rect.y + 18, 26, 26)
   draw_list_row_shell(
     draw_rect,
-    hovered=hovered,
-    pressed=pressed,
+    hovered=hovered and enabled,
+    pressed=pressed and enabled,
     is_last=is_last,
     row_bg=rl.Color(255, 255, 255, 0),
     row_border=rl.Color(255, 255, 255, 0),
@@ -703,32 +727,30 @@ def draw_settings_list_row(
 
   label_rect = rl.Rectangle(draw_rect.x + 24, draw_rect.y + 14, draw_rect.width * 0.55, 28)
   subtitle_rect = rl.Rectangle(draw_rect.x + 24, draw_rect.y + 46, draw_rect.width * 0.60, 24)
-  gui_label(label_rect, title, title_size, style.title_color, FontWeight.MEDIUM)
+  gui_label(label_rect, title, title_size, resolved_title_color, FontWeight.MEDIUM)
   if subtitle:
-    gui_label(subtitle_rect, subtitle, subtitle_size, style.subtitle_color, FontWeight.NORMAL)
+    gui_label(subtitle_rect, subtitle, subtitle_size, resolved_subtitle_color, FontWeight.NORMAL)
 
   if toggle_value is not None:
-    draw_toggle_switch(draw_rect, bool(toggle_value), track_color=style.accent)
+    draw_toggle_switch(draw_rect, bool(toggle_value), is_enabled=enabled, track_color=style.accent)
     return
 
   if value:
-    value_rect = rl.Rectangle(draw_rect.x + draw_rect.width - AETHER_LIST_METRICS.utility_value_right, draw_rect.y + 20, AETHER_LIST_METRICS.utility_value_width, 28)
+    value_left = draw_rect.x + draw_rect.width - AETHER_LIST_METRICS.utility_value_right
+    value_right = chevron_rect.x - 16 if show_chevron else draw_rect.x + draw_rect.width - 24
+    value_rect = rl.Rectangle(value_left, draw_rect.y + 20, max(48.0, value_right - value_left), 28)
     gui_label(
       value_rect,
       value,
       value_size,
-      value_color or style.title_color,
+      resolved_value_color,
       FontWeight.MEDIUM,
       alignment=rl.GuiTextAlignment.TEXT_ALIGN_RIGHT,
     )
   if show_chevron:
-    gui_label(
-      rl.Rectangle(draw_rect.x + draw_rect.width - AETHER_LIST_METRICS.utility_chevron_right, draw_rect.y + 18, 26, 26),
-      "›",
-      32,
+    draw_chevron_icon(
+      chevron_rect,
       style.muted_color,
-      FontWeight.MEDIUM,
-      alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
     )
 
 
@@ -2285,21 +2307,39 @@ class AetherContinuousSlider(Widget):
     self.color = color or rl.Color(54, 77, 239, 255)
     
     self._is_dragging = False
+    self._pending_drag = False
+    self._press_start_x = 0.0
     self._last_mouse_x = 0.0
     self._smooth_value = current_val
     self._font = gui_app.font(FontWeight.BOLD)
 
   def _handle_mouse_press(self, mouse_pos: MousePos):
     if rl.check_collision_point_rec(mouse_pos, self._rect):
-      self._is_dragging = True
+      self._pending_drag = True
+      self._is_dragging = False
+      self._press_start_x = mouse_pos.x
       self._last_mouse_x = mouse_pos.x
-      self._update_val_from_absolute(mouse_pos.x, self.base_step)
 
   def _handle_mouse_release(self, mouse_pos: MousePos):
+    del mouse_pos
+    self._pending_drag = False
     if self._is_dragging:
       self._is_dragging = False
 
   def _handle_mouse_event(self, mouse_event: MouseEvent):
+    if not self._touch_valid():
+      self._pending_drag = False
+      self._is_dragging = False
+      return
+
+    if self._pending_drag and not self._is_dragging:
+      if abs(mouse_event.pos.x - self._press_start_x) > 12:
+        self._pending_drag = False
+        self._is_dragging = True
+        self._last_mouse_x = mouse_event.pos.x
+      else:
+        return
+
     if self._is_dragging:
       dt = rl.get_frame_time()
       dx = mouse_event.pos.x - self._last_mouse_x
