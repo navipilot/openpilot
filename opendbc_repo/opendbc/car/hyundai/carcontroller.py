@@ -26,6 +26,12 @@ HYUNDAI_CANFD_SCC_ACCEL_STEP = 5.0 / 50.0
 HYUNDAI_CANFD_SCC_DECEL_STEP = 12.5 / 50.0
 IONIQ_6_CANFD_SCC_ACCEL_STEP = 6.0 / 50.0
 IONIQ_6_CANFD_SCC_DECEL_STEP = 15.0 / 50.0
+GENESIS_G90_STOP_HOLD_SPEED_BP = [0.0, 0.03, 0.08, 0.16, 0.3, 0.5]
+GENESIS_G90_STOP_HOLD_ACCEL_V = [-0.12, -0.12, -0.14, -0.18, -0.30, -0.55]
+GENESIS_G90_RELEASE_SPEED_BP = [0.0, 0.3, 0.6]
+GENESIS_G90_RELEASE_ACCEL_STEP_V = [0.24, 0.20, 0.14]
+GENESIS_G90_RELEASE_DECEL_STEP_V = [0.30, 0.24, 0.18]
+GENESIS_G90_RELEASE_MAX_SPEED = 0.8
 IONIQ_6_LONG_MIN_JERK = 0.5
 IONIQ_6_LONG_JERK_LIMIT = 4.8
 IONIQ_6_LONG_LOOKAHEAD_JERK_BP = [2.0, 5.0, 20.0]
@@ -48,6 +54,13 @@ class Ioniq6LongitudinalTuningState:
   launch_active: bool = False
   stopping: bool = False
   stopping_count: int = 0
+  long_control_state_last: LongCtrlState = LongCtrlState.off
+
+
+@dataclass
+class GenesisG90LongitudinalTuningState:
+  actual_accel: float = 0.0
+  release_active: bool = False
   long_control_state_last: LongCtrlState = LongCtrlState.off
 
 
@@ -126,6 +139,36 @@ def update_ioniq_6_longitudinal_tuning(state: Ioniq6LongitudinalTuningState, acc
   return state
 
 
+def update_genesis_g90_longitudinal_tuning(state: GenesisG90LongitudinalTuningState, accel_cmd: float, v_ego: float,
+                                           long_control_state: LongCtrlState, long_active: bool) -> GenesisG90LongitudinalTuningState:
+  if not long_active:
+    state.actual_accel = 0.0
+    state.release_active = False
+    state.long_control_state_last = long_control_state
+    return state
+
+  stopping = long_control_state == LongCtrlState.stopping
+  if stopping and v_ego <= GENESIS_G90_STOP_HOLD_SPEED_BP[-1]:
+    state.release_active = False
+    state.actual_accel = float(np.interp(v_ego, GENESIS_G90_STOP_HOLD_SPEED_BP, GENESIS_G90_STOP_HOLD_ACCEL_V))
+  else:
+    if state.long_control_state_last == LongCtrlState.stopping and long_control_state == LongCtrlState.pid and \
+        accel_cmd > 0.0 and v_ego < GENESIS_G90_RELEASE_MAX_SPEED:
+      state.release_active = True
+
+    if state.release_active:
+      accel_step = float(np.interp(v_ego, GENESIS_G90_RELEASE_SPEED_BP, GENESIS_G90_RELEASE_ACCEL_STEP_V))
+      decel_step = float(np.interp(v_ego, GENESIS_G90_RELEASE_SPEED_BP, GENESIS_G90_RELEASE_DECEL_STEP_V))
+      state.actual_accel = float(np.clip(accel_cmd, state.actual_accel - decel_step, state.actual_accel + accel_step))
+      if v_ego >= GENESIS_G90_RELEASE_MAX_SPEED or accel_cmd <= 0.0 or state.actual_accel >= accel_cmd - 1e-3:
+        state.release_active = False
+    else:
+      state.actual_accel = accel_cmd
+
+  state.long_control_state_last = long_control_state
+  return state
+
+
 def process_hud_alert(enabled, fingerprint, hud_control):
   sys_warning = (hud_control.visualAlert in (VisualAlert.steerRequired, VisualAlert.ldw))
 
@@ -171,6 +214,7 @@ class CarController(CarControllerBase):
     self._ioniq_6_lane_change_ui_side = None
     self._ioniq_6_lane_change_ui_trigger_frames = 0
     self._ioniq_6_long_tuning = Ioniq6LongitudinalTuningState()
+    self._genesis_g90_long_tuning = GenesisG90LongitudinalTuningState()
 
   def update(self, CC, CS, now_nanos, starpilot_toggles):
     actuators = CC.actuators
@@ -259,6 +303,12 @@ class CarController(CarControllerBase):
         self._ioniq_6_long_tuning.launch_active = False
         self._ioniq_6_long_tuning.stopping = stopping
         self._ioniq_6_long_tuning.long_control_state_last = actuators.longControlState
+
+    if self.CP.carFingerprint == CAR.GENESIS_G90 and self.long_active_ecu:
+      self._genesis_g90_long_tuning = update_genesis_g90_longitudinal_tuning(self._genesis_g90_long_tuning, accel_cmd,
+                                                                              CS.out.vEgo, actuators.longControlState,
+                                                                              self.long_active_ecu)
+      accel = self._genesis_g90_long_tuning.actual_accel
 
     # *** common hyundai stuff ***
 

@@ -7,7 +7,8 @@ from opendbc.can import CANPacker, CANParser
 from opendbc.car import Bus, ButtonType, gen_empty_fingerprint
 from opendbc.car.structs import CarParams
 from opendbc.car.fw_versions import build_fw_dict, match_fw_to_car
-from opendbc.car.hyundai.carcontroller import Ioniq6LongitudinalTuningState, update_ioniq_6_longitudinal_tuning
+from opendbc.car.hyundai.carcontroller import Ioniq6LongitudinalTuningState, GenesisG90LongitudinalTuningState, \
+                                              update_ioniq_6_longitudinal_tuning, update_genesis_g90_longitudinal_tuning
 from opendbc.car.hyundai.carstate import CarState, decode_ioniq_6_blindspot_radar_state
 from opendbc.car.hyundai.interface import CarInterface
 from opendbc.car.hyundai import hyundaican, hyundaicanfd
@@ -290,6 +291,26 @@ class TestHyundaiFingerprint:
     assert state.launch_active
     assert state.desired_accel > 0.3
     assert state.actual_accel > 0.24
+
+  def test_genesis_g90_longitudinal_tuning_softens_final_stop_hold(self):
+    state = GenesisG90LongitudinalTuningState()
+
+    state = update_genesis_g90_longitudinal_tuning(state, accel_cmd=-2.0, v_ego=0.02,
+                                                   long_control_state=LongCtrlState.stopping, long_active=True)
+    assert state.actual_accel == pytest.approx(-0.12)
+    assert not state.release_active
+
+  def test_genesis_g90_longitudinal_tuning_ramps_out_of_stop_hold(self):
+    state = GenesisG90LongitudinalTuningState(actual_accel=-0.12, long_control_state_last=LongCtrlState.stopping)
+
+    state = update_genesis_g90_longitudinal_tuning(state, accel_cmd=0.5, v_ego=0.02,
+                                                   long_control_state=LongCtrlState.pid, long_active=True)
+    assert state.release_active
+    assert state.actual_accel == pytest.approx(0.12)
+
+    state = update_genesis_g90_longitudinal_tuning(state, accel_cmd=0.5, v_ego=0.2,
+                                                   long_control_state=LongCtrlState.pid, long_active=True)
+    assert state.actual_accel > 0.12
 
   def test_canfd_acc_control_uses_direct_accel(self):
     CP = CarParams.new_message()
