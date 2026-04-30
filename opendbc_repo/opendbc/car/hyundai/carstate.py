@@ -88,6 +88,7 @@ class CarState(CarStateBase):
     self.cruise_info = {}
     self.stock_lfa_msg = {}
     self.stock_lfahda_cluster_msg = {}
+    self.stock_blinker_stalks_ts = 0
     self.blindspots_rear_corners = {}
     self.blindspots_front_corner_1 = {}
     self.blindspots_rear_corners_ts = 0
@@ -365,6 +366,8 @@ class CarState(CarStateBase):
       self.stock_lfa_msg = copy.copy(cp.vl["LFA"])
     if cp.ts_nanos["LFAHDA_CLUSTER"]["CHECKSUM"] > 0:
       self.stock_lfahda_cluster_msg = copy.copy(cp.vl["LFAHDA_CLUSTER"])
+    if cp.ts_nanos["BLINKER_STALKS"]["CHECKSUM_MAYBE"] > 0:
+      self.stock_blinker_stalks_ts = cp.ts_nanos["BLINKER_STALKS"]["CHECKSUM_MAYBE"]
 
     ret.buttonEvents = [*create_button_events(self.cruise_buttons[-1], prev_cruise_buttons, BUTTONS_DICT),
                         *create_button_events(self.main_buttons[-1], prev_main_buttons, {1: ButtonType.mainCruise}),
@@ -408,6 +411,7 @@ class CarState(CarStateBase):
     msgs += [
       ("LFA", 0),             # optional: may stop once OP takes over, but preserve stock UI fields when present
       ("LFAHDA_CLUSTER", 0),  # optional: carries cluster icon state on some variants
+      ("BLINKER_STALKS", 0),  # optional: some trims publish live stalk/light state on ECAN during turn camera events
     ]
     if CP.flags & HyundaiFlags.EV:
       msgs.append(("DRIVE_MODE_EV", 0))  # optional: not all CAN-FD EV variants publish drive mode

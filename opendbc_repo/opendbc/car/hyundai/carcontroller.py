@@ -21,6 +21,7 @@ MAX_ANGLE = 85
 MAX_ANGLE_FRAMES = 89
 MAX_ANGLE_CONSECUTIVE_FRAMES = 2
 CANFD_BLINDSPOT_STATUS_STALE_NS = 200_000_000
+CANFD_BLINKER_STALKS_STALE_NS = 200_000_000
 HYUNDAI_CANFD_SCC_ACCEL_STEP = 5.0 / 50.0
 HYUNDAI_CANFD_SCC_DECEL_STEP = 12.5 / 50.0
 IONIQ_6_LONG_MIN_JERK = 0.5
@@ -348,12 +349,16 @@ class CarController(CarControllerBase):
         lane_change_ui_side = "left"
       elif CC.rightBlinker and not CC.leftBlinker:
         lane_change_ui_side = "right"
+      stock_blinker_stalks_live = now_nanos - CS.stock_blinker_stalks_ts <= CANFD_BLINKER_STALKS_STALE_NS
 
       if lane_change_ui_side != self._ioniq_6_lane_change_ui_side:
         self._ioniq_6_lane_change_ui_side = lane_change_ui_side
         self._ioniq_6_lane_change_ui_trigger_frames = 6 if lane_change_ui_side is not None else 0
 
-      if lane_change_ui_side is not None:
+      if stock_blinker_stalks_live:
+        self._ioniq_6_lane_change_ui_trigger_frames = 0
+
+      if lane_change_ui_side is not None and not stock_blinker_stalks_live:
         trigger = self._ioniq_6_lane_change_ui_trigger_frames > 0
         can_sends.extend(hyundaicanfd.create_ioniq_6_cluster_lane_change_messages(self.CAN, self.frame,
                                                                                    lane_change_ui_side, trigger))
