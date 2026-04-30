@@ -41,7 +41,9 @@ IONIQ_6_DYNAMIC_LOWER_JERK_V = [3.3, 1.5, 1.0, 0.8, 0.7, 0.65, 0.55, 0.5]
 IONIQ_6_LAUNCH_HOLD_SPEED_BP = [0.0, 0.6, 1.25, 2.5]
 IONIQ_6_LAUNCH_HOLD_SPEED_V = [0.75, 0.6, 0.4, 0.0]
 IONIQ_6_STOP_HOLD_SPEED_BP = [0.0, 0.25, 0.6, 1.2]
-IONIQ_6_STOP_HOLD_SPEED_V = [-0.18, -0.15, -0.08, 0.0]
+IONIQ_6_STOP_HOLD_SPEED_V = [-0.12, -0.10, -0.05, 0.0]
+IONIQ_6_STOP_RELEASE_JERK_BP = [0.0, 0.15, 0.5]
+IONIQ_6_STOP_RELEASE_JERK_V = [3.6, 4.2, 4.8]
 
 
 @dataclass
@@ -80,6 +82,8 @@ def update_ioniq_6_longitudinal_tuning(state: Ioniq6LongitudinalTuningState, acc
                                        long_control_state: LongCtrlState, long_active: bool) -> Ioniq6LongitudinalTuningState:
   starting = long_control_state == LongCtrlState.starting
   stopping = long_control_state == LongCtrlState.stopping
+  restart_from_stop = state.long_control_state_last in (LongCtrlState.stopping, LongCtrlState.starting) and \
+                      long_control_state in (LongCtrlState.starting, LongCtrlState.pid) and accel_cmd > 0.0 and v_ego < 0.5
 
   if not long_active or not stopping:
     state.stopping = False
@@ -125,13 +129,15 @@ def update_ioniq_6_longitudinal_tuning(state: Ioniq6LongitudinalTuningState, acc
 
   if state.stopping:
     state.desired_accel = float(np.interp(v_ego, IONIQ_6_STOP_HOLD_SPEED_BP, IONIQ_6_STOP_HOLD_SPEED_V))
-    state.jerk_upper = min(state.jerk_upper, float(np.interp(v_ego, [0.0, 1.2], [0.25, 0.5])))
+    state.jerk_upper = min(state.jerk_upper, float(np.interp(v_ego, [0.0, 1.2], [0.45, 0.65])))
   else:
     state.desired_accel = float(np.clip(accel_cmd, CarControllerParams.ACCEL_MIN, CarControllerParams.ACCEL_MAX))
     if state.launch_active:
       state.desired_accel = max(state.desired_accel, float(np.interp(v_ego, IONIQ_6_LAUNCH_HOLD_SPEED_BP, IONIQ_6_LAUNCH_HOLD_SPEED_V)))
       state.jerk_upper = max(state.jerk_upper, float(np.interp(v_ego, [0.0, 2.5], [4.8, 3.2])))
       state.jerk_lower = max(state.jerk_lower, 1.0)
+    if restart_from_stop:
+      state.jerk_upper = min(state.jerk_upper, float(np.interp(v_ego, IONIQ_6_STOP_RELEASE_JERK_BP, IONIQ_6_STOP_RELEASE_JERK_V)))
 
   state.actual_accel = _jerk_limited_integrator(state.desired_accel, state.accel_last, state.jerk_upper, state.jerk_lower)
   state.accel_last = state.actual_accel

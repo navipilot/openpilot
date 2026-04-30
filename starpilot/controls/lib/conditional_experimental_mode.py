@@ -49,8 +49,10 @@ class ConditionalExperimentalMode:
   STOP_APPROACH_MAX_LEAD_SPEED = 4.5
   STOP_APPROACH_MIN_MODEL_PROB = 0.9
   SLOW_LEAD_CONTINUITY_MIN_MODEL_PROB = 0.85
-  SLOW_LEAD_CONTINUITY_MAX_DISTANCE_TIME = 7.0
+  SLOW_LEAD_CONTINUITY_MAX_DISTANCE_TIME = 4.0
   SLOW_LEAD_CONTINUITY_MIN_EGO = 2.5
+  SLOW_LEAD_MIN_CLOSING_SPEED = 0.75
+  SLOW_LEAD_CLEAR_FASTER_FACTOR = 0.5
 
   # ===== END TUNING PARAMETERS =====
 
@@ -166,6 +168,8 @@ class ConditionalExperimentalMode:
     lead_distance = float(getattr(lead, "dRel", float("inf")))
     lead_speed = float(getattr(lead, "vLead", float("inf")))
     lead_prob = float(getattr(lead, "modelProb", 1.0))
+    closing_speed = max(0.0, v_ego - lead_speed)
+    min_closing_speed = max(self.SLOW_LEAD_MIN_CLOSING_SPEED, 0.04 * v_ego)
 
     if not starpilot_toggles.conditional_stopped_lead and v_ego < self.SLOW_LEAD_CONTINUITY_MIN_EGO:
       self.slow_lead_filter.update(False)
@@ -179,11 +183,17 @@ class ConditionalExperimentalMode:
       lead_status and
       lead_prob >= self.SLOW_LEAD_CONTINUITY_MIN_MODEL_PROB and
       lead_distance < max(40.0, v_ego * self.SLOW_LEAD_CONTINUITY_MAX_DISTANCE_TIME) and
+      closing_speed >= min_closing_speed and
       lead_speed < max(v_ego - 0.5, 2.0)
     )
 
     lead_threshold = scale_threshold(v_ego)
     adjusted_threshold = lead_threshold * (1.0 + 0.2 * (1.0 - lead_prob))  # Higher threshold for lower confidence
+
+    if lead_status and not slower_lead and not stopped_lead and closing_speed < (min_closing_speed * self.SLOW_LEAD_CLEAR_FASTER_FACTOR):
+      self.slow_lead_filter.update(False)
+      self.slow_lead_detected = False
+      return
 
     if self.starpilot_planner.tracking_lead or raw_vision_slow_lead or stopped_lead:
       self.slow_lead_filter.update(slower_lead or raw_vision_slow_lead or stopped_lead)

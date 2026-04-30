@@ -140,7 +140,7 @@ def test_slow_lead_holds_through_tracking_flap_for_high_confidence_vision_lead()
     model_length=v_ego * 5.0,
     tracking_lead=True,
     lead_status=True,
-    lead_d_rel=v_ego * 5.0,
+    lead_d_rel=v_ego * 3.5,
     lead_v_lead=8.0 * CV.MPH_TO_MS,
     lead_model_prob=0.95,
   )
@@ -163,6 +163,46 @@ def test_slow_lead_does_not_linger_at_crawl_when_stopped_lead_disabled():
     lead_status=True,
     lead_d_rel=8.0,
     lead_v_lead=1.2,
+    lead_model_prob=0.99,
+  )
+  toggles = SimpleNamespace(conditional_slower_lead=True, conditional_stopped_lead=False)
+
+  cem.slow_lead_filter.x = 1.0
+  cem.slow_lead_detected = True
+  cem.starpilot_planner.starpilot_following.slower_lead = False
+  cem.slow_lead(toggles, v_ego)
+
+  assert not cem.slow_lead_detected
+
+
+def test_far_untracked_slow_lead_does_not_trigger_slow_lead():
+  v_ego = 50 * CV.MPH_TO_MS
+  cem = make_cem(
+    model_length=v_ego * 5.0,
+    tracking_lead=False,
+    lead_status=True,
+    lead_d_rel=v_ego * 4.8,
+    lead_v_lead=v_ego - 2.0,
+    lead_model_prob=0.97,
+  )
+  toggles = SimpleNamespace(conditional_slower_lead=True, conditional_stopped_lead=False)
+
+  cem.slow_lead_filter.x = 1.0
+  cem.slow_lead_detected = True
+  cem.starpilot_planner.starpilot_following.slower_lead = False
+  cem.slow_lead(toggles, v_ego)
+
+  assert not cem.slow_lead_detected
+
+
+def test_pace_matched_lead_clears_slow_lead_quickly():
+  v_ego = 30 * CV.MPH_TO_MS
+  cem = make_cem(
+    model_length=v_ego * 4.0,
+    tracking_lead=True,
+    lead_status=True,
+    lead_d_rel=24.0,
+    lead_v_lead=v_ego + 0.2,
     lead_model_prob=0.99,
   )
   toggles = SimpleNamespace(conditional_slower_lead=True, conditional_stopped_lead=False)
