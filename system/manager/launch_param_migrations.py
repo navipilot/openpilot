@@ -14,7 +14,7 @@ DEFAULT_STEER_KP = 0.6
 LEGACY_STEER_KP = 0.7
 QT_STEER_KP_PLACEHOLDER = 1.0
 
-LAUNCH_PARAM_MIGRATION_MARKER = ".starpilot_launch_param_migrations_v1"
+LAUNCH_PARAM_MIGRATION_MARKER = ".starpilot_launch_param_migrations_v2"
 
 
 class ParamsLike(Protocol):
@@ -52,6 +52,11 @@ def apply_launch_param_migrations(params: ParamsLike, marker_path: Path | None =
       _approx_equal(steer_kp_stock, LEGACY_STEER_KP) or
       _approx_equal(steer_kp_stock, QT_STEER_KP_PLACEHOLDER)):
     params.put_float(STEER_KP_STOCK_KEY, DEFAULT_STEER_KP)
+
+  # Initialize UsePrebuilt to True if never explicitly set, so the UI default
+  # matches the shell script's default of USE_PREBUILT=1.
+  if not Path(params.get_param_path("UsePrebuilt")).exists():
+    params.put_bool("UsePrebuilt", True)
 
   marker.touch()
 

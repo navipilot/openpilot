@@ -22,7 +22,10 @@ class Params(_Params):
 
   def get_bool(self, key, block=False, default=False):
     try:
-      return super().get_bool(key, block=block)
+      result = super().get(key, block=block, return_default=True)
+      if result is None:
+        return bool(default)
+      return bool(result)
     except UnknownKeyName:
       return bool(default)
 

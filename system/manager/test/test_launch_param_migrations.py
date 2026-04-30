@@ -53,6 +53,23 @@ def test_apply_launch_param_migrations_sets_branch_defaults_once(tmp_path):
   assert (tmp_path / "params" / LAUNCH_PARAM_MIGRATION_MARKER).is_file()
 
 
+def test_apply_launch_param_migrations_initializes_use_prebuilt(tmp_path):
+  params = FileBackedFakeParams(tmp_path / "params")
+
+  apply_launch_param_migrations(params)
+
+  assert params.get_bool("UsePrebuilt")
+
+
+def test_apply_launch_param_migrations_does_not_overwrite_use_prebuilt(tmp_path):
+  params = FileBackedFakeParams(tmp_path / "params")
+  params.put_bool("UsePrebuilt", False)
+
+  apply_launch_param_migrations(params)
+
+  assert not params.get_bool("UsePrebuilt")
+
+
 def test_apply_launch_param_migrations_does_not_reapply_after_marker(tmp_path):
   params = FileBackedFakeParams(tmp_path / "params")
   marker = tmp_path / "params" / LAUNCH_PARAM_MIGRATION_MARKER
