@@ -20,16 +20,19 @@ from openpilot.system.ui.widgets.label import gui_label, gui_text_box
 from openpilot.system.ui.widgets.option_dialog import MultiOptionDialog
 
 from openpilot.selfdrive.ui.layouts.settings.starpilot.aethergrid import (
+  AETHER_COMPACT_ROW_HEIGHT,
+  AETHER_LIST_METRICS,
   AetherButton,
-  AetherChip,
   AetherListColors,
   AetherScrollbar,
   DEFAULT_PANEL_STYLE,
   build_list_panel_frame,
   draw_action_pill,
   draw_busy_ring,
+  draw_empty_state_card,
   draw_list_panel_shell,
   draw_metric_strip,
+  draw_section_header,
   draw_tab_card,
   draw_selection_list_row,
   draw_list_scroll_fades,
@@ -62,17 +65,16 @@ NETWORK_TYPE_LABELS = {
 
 OFFLINE_MAPS_PATH = Path("/data/media/0/osm/offline")
 CANCEL_REQUEST_TIMEOUT = 3.0
-HEADER_TOP_OFFSET = 10
+HEADER_TOP_OFFSET = 4
 HEADER_TITLE_HEIGHT = 40
-HEADER_SUBTITLE_HEIGHT = 28
+HEADER_SUBTITLE_HEIGHT = 24
 HEADER_BOTTOM_GAP = 12
-BROWSER_TOOLBAR_HEIGHT = 64
-BROWSER_SECTION_HEADER_HEIGHT = 34
-BROWSER_INSET = 18
-BROWSER_TAB_GAP = 12
-BROWSER_CONTEXT_TAB_GAP = 10
+BROWSER_SECTION_HEADER_HEIGHT = AETHER_LIST_METRICS.section_header_height
+BROWSER_SECTION_HEADER_GAP = AETHER_LIST_METRICS.section_header_gap
+BROWSER_INSET = AETHER_LIST_METRICS.content_right_gutter
+BROWSER_TAB_GAP = AETHER_LIST_METRICS.section_header_gap
 BROWSER_CONTEXT_TAB_HEIGHT = 52
-BROWSER_REGION_ROW_HEIGHT = 88
+BROWSER_REGION_ROW_HEIGHT = AETHER_COMPACT_ROW_HEIGHT
 BROWSER_EMPTY_STATE_HEIGHT = 128
 STATUS_CARD_INSET = BROWSER_INSET
 STATUS_BUTTON_HEIGHT = 52
@@ -81,7 +83,13 @@ STATUS_REMOVE_HEIGHT = 40
 STATUS_METRIC_GAP = 18
 STATUS_SELECTION_CHIP_HEIGHT = 30
 MAPS_TILE_GREEN = rl.Color(16, 185, 129, 255)
-MAPS_PANEL_STYLE = replace(DEFAULT_PANEL_STYLE, accent=MAPS_TILE_GREEN)
+MAPS_PANEL_STYLE = replace(
+  DEFAULT_PANEL_STYLE,
+  accent=MAPS_TILE_GREEN,
+  current_fill=rl.Color(16, 185, 129, 16),
+  current_border=rl.Color(16, 185, 129, 42),
+  underline_color=rl.Color(16, 185, 129, 150),
+)
 
 COUNTRIES_SECTION = next(section for section in MAPS_CATALOG if section["key"] == "countries")
 STATES_SECTION = next(section for section in MAPS_CATALOG if section["key"] == "states")
@@ -389,23 +397,17 @@ class MapBrowserCard(Widget):
       )
 
   def _render_empty_state(self, rect: rl.Rectangle, title: str, body: str):
-    state_rect = rl.Rectangle(rect.x, rect.y, rect.width, rect.height)
-    draw_soft_card(state_rect, MAPS_PANEL_STYLE.surface_fill, rl.Color(255, 255, 255, 10))
-    gui_label(
-      rl.Rectangle(state_rect.x, state_rect.y + 24, state_rect.width, 32),
+    draw_empty_state_card(
+      rect,
       title,
-      26,
-      AetherListColors.HEADER,
-      FontWeight.MEDIUM,
-      alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
-    )
-    gui_label(
-      rl.Rectangle(state_rect.x + 40, state_rect.y + 60, state_rect.width - 80, 44),
       body,
-      19,
-      AetherListColors.SUBTEXT,
-      FontWeight.NORMAL,
-      alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
+      title_size=26,
+      body_size=19,
+      body_inset_x=40,
+      title_top_padding=24,
+      body_height=44,
+      border=rl.Color(255, 255, 255, 10),
+      style=MAPS_PANEL_STYLE,
     )
 
   def _render_region_rows(self, rect: rl.Rectangle, regions: list[dict]):
@@ -436,29 +438,23 @@ class MapBrowserCard(Widget):
         action_width=142,
         action_pill=True,
         action_text_size=15,
-        action_pill_height=36,
+        action_pill_height=40,
         action_pill_width=112 if selected else 84,
         title_size=26,
         subtitle_size=17,
+        row_separator=MAPS_PANEL_STYLE.divider_color,
+        current_bg=MAPS_PANEL_STYLE.current_fill,
+        current_border=MAPS_PANEL_STYLE.current_border,
         action_fill=rl.Color(94, 168, 130, 18) if selected else rl.Color(255, 255, 255, 8),
         action_border=rl.Color(94, 168, 130, 38) if selected else rl.Color(255, 255, 255, 24),
-        action_text_color=AetherListColors.SUBTEXT if selected else AetherListColors.HEADER,
+        action_text_color=AetherListColors.HEADER,
       )
 
   def _active_browse_regions(self) -> list[dict]:
     return self._controller._browse_regions_for_active_group()
 
   def _render_section_header(self, rect: rl.Rectangle, title: str, *, count_text: str | None = None):
-    del title
-    if count_text:
-      gui_label(
-        rl.Rectangle(rect.x, rect.y + (rect.height - 22) / 2, rect.width, 22),
-        count_text,
-        20,
-        AetherListColors.SUBTEXT,
-        FontWeight.NORMAL,
-        alignment=rl.GuiTextAlignment.TEXT_ALIGN_RIGHT,
-      )
+    draw_section_header(rect, title, trailing_text=count_text or "", title_size=24, trailing_size=20, style=MAPS_PANEL_STYLE)
 
   def _measure_height(self, width: float) -> float:
     if self._controller._showing_source_picker():
@@ -466,8 +462,8 @@ class MapBrowserCard(Widget):
       return BROWSER_CONTEXT_TAB_HEIGHT + 20
 
     total = 10.0
-    total += self._measure_context_tabs_height(width) + 12
-    total += BROWSER_SECTION_HEADER_HEIGHT + 2
+    total += self._measure_context_tabs_height(width) + BROWSER_SECTION_HEADER_GAP
+    total += BROWSER_SECTION_HEADER_HEIGHT + BROWSER_SECTION_HEADER_GAP
     region_count = len(self._active_browse_regions())
     total += self._row_height(region_count, BROWSER_REGION_ROW_HEIGHT) if region_count else BROWSER_EMPTY_STATE_HEIGHT
     return total + 10
@@ -491,14 +487,14 @@ class MapBrowserCard(Widget):
 
     context_tabs_h = self._measure_context_tabs_height(content_w)
     self._render_context_tabs(rl.Rectangle(content_x, y, content_w, context_tabs_h))
-    y += context_tabs_h + 12
+    y += context_tabs_h + BROWSER_SECTION_HEADER_GAP
 
     self._render_section_header(
       rl.Rectangle(content_x, y, content_w, BROWSER_SECTION_HEADER_HEIGHT),
-      "",
+      tr("Regions"),
       count_text=self._controller._active_group_count_text(),
     )
-    y += BROWSER_SECTION_HEADER_HEIGHT + 2
+    y += BROWSER_SECTION_HEADER_HEIGHT + BROWSER_SECTION_HEADER_GAP
 
     regions = self._active_browse_regions()
     region_h = self._row_height(len(regions), BROWSER_REGION_ROW_HEIGHT) if regions else BROWSER_EMPTY_STATE_HEIGHT
@@ -1130,15 +1126,16 @@ class StarPilotMapsLayout(StarPilotPanel):
 
     hdr = frame.header
     title_y = hdr.y + HEADER_TOP_OFFSET
+    subtitle_y = hdr.y + 48
     gui_label(rl.Rectangle(hdr.x, title_y, hdr.width, HEADER_TITLE_HEIGHT), tr("Map Data"), 40, AetherListColors.HEADER, FontWeight.SEMI_BOLD)
-    gui_label(rl.Rectangle(hdr.x, title_y + 40, hdr.width * 0.72, HEADER_SUBTITLE_HEIGHT), tr("Use offline maps for speed-limit control and keep only the regions you need."), 22, AetherListColors.SUBTEXT, FontWeight.NORMAL)
+    gui_label(rl.Rectangle(hdr.x, subtitle_y, hdr.width * 0.60, HEADER_SUBTITLE_HEIGHT), tr("Use offline maps for speed-limit control and keep only the regions you need."), 22, AetherListColors.SUBTEXT, FontWeight.NORMAL)
 
-    header_status_y = title_y + HEADER_TITLE_HEIGHT + HEADER_SUBTITLE_HEIGHT + 8
+    header_status_y = subtitle_y + HEADER_SUBTITLE_HEIGHT + 12
     header_status_rect = rl.Rectangle(hdr.x, header_status_y, hdr.width, hdr.y + hdr.height - header_status_y - HEADER_BOTTOM_GAP)
     self._status_card.render(header_status_rect)
 
     scroll_rect = frame.scroll
-    content_width = scroll_rect.width - 18
+    content_width = scroll_rect.width - AETHER_LIST_METRICS.content_right_gutter
     scroll_content_rect = rl.Rectangle(scroll_rect.x, scroll_rect.y, scroll_rect.width, scroll_rect.height)
     self._content_height = self._measure_content_height(content_width)
     self._scroll_panel.set_enabled(self.is_visible)

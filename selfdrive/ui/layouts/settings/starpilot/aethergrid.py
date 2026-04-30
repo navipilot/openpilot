@@ -232,6 +232,7 @@ class AetherListFrame:
 
 
 AETHER_LIST_METRICS = AetherListMetrics()
+AETHER_COMPACT_ROW_HEIGHT = AETHER_LIST_METRICS.utility_row_height
 
 
 @dataclass(frozen=True, slots=True)
@@ -582,6 +583,155 @@ def draw_metric_strip(
       )
 
 
+def draw_section_header(
+  rect: rl.Rectangle,
+  title: str = "",
+  *,
+  trailing_text: str = "",
+  title_size: int = 26,
+  trailing_size: int = 20,
+  title_color: rl.Color | None = None,
+  trailing_color: rl.Color | None = None,
+  style: PanelStyle = DEFAULT_PANEL_STYLE,
+):
+  if title:
+    trailing_reserved = min(320.0, rect.width * 0.38) if trailing_text else 0.0
+    title_rect = rl.Rectangle(rect.x, rect.y + (rect.height - title_size) / 2, max(1.0, rect.width - trailing_reserved), title_size + 4)
+    gui_label(title_rect, title, title_size, title_color or style.subtitle_color, FontWeight.MEDIUM)
+
+  if trailing_text:
+    trailing_rect = rl.Rectangle(rect.x, rect.y + (rect.height - trailing_size) / 2, rect.width, trailing_size + 4)
+    gui_label(
+      trailing_rect,
+      trailing_text,
+      trailing_size,
+      trailing_color or style.subtitle_color,
+      FontWeight.NORMAL,
+      alignment=rl.GuiTextAlignment.TEXT_ALIGN_RIGHT,
+    )
+
+
+def draw_empty_state_card(
+  rect: rl.Rectangle,
+  title: str,
+  body: str,
+  *,
+  title_size: int = 30,
+  body_size: int = 22,
+  body_inset_x: int = 48,
+  title_gap: int = 14,
+  title_top_padding: float | None = None,
+  body_height: float | None = None,
+  fill: rl.Color | None = None,
+  border: rl.Color | None = None,
+  radius: float = 0.08,
+  segments: int = 18,
+  style: PanelStyle = DEFAULT_PANEL_STYLE,
+):
+  card_rect = _snap_rect(rect)
+  resolved_fill = fill if fill is not None else style.surface_fill
+  resolved_border = border if border is not None else style.surface_border
+  draw_soft_card(card_rect, resolved_fill, resolved_border, radius=radius, segments=segments)
+
+  title_h = max(34.0, title_size + 8)
+  title_y = card_rect.y + (title_top_padding if title_top_padding is not None else max(24.0, min(42.0, card_rect.height * 0.22)))
+  inset_x = min(float(body_inset_x), max(18.0, card_rect.width * 0.22))
+  body_y = title_y + title_h + title_gap
+  resolved_body_h = body_height if body_height is not None else max(40.0, card_rect.height - (body_y - card_rect.y) - 24.0)
+
+  gui_label(
+    rl.Rectangle(card_rect.x, title_y, card_rect.width, title_h),
+    title,
+    title_size,
+    style.title_color,
+    FontWeight.MEDIUM,
+    alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
+  )
+  gui_label(
+    rl.Rectangle(card_rect.x + inset_x, body_y, max(1.0, card_rect.width - inset_x * 2), resolved_body_h),
+    body,
+    body_size,
+    style.subtitle_color,
+    FontWeight.NORMAL,
+    alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
+  )
+
+
+def draw_list_group_shell(
+  rect: rl.Rectangle,
+  *,
+  fill: rl.Color | None = None,
+  border: rl.Color | None = None,
+  radius: float = 0.055,
+  segments: int = 18,
+  style: PanelStyle = DEFAULT_PANEL_STYLE,
+):
+  draw_soft_card(rect, fill if fill is not None else style.surface_fill, border if border is not None else style.surface_border, radius=radius, segments=segments)
+
+
+def draw_settings_list_row(
+  rect: rl.Rectangle,
+  *,
+  title: str,
+  subtitle: str = "",
+  value: str = "",
+  toggle_value: bool | None = None,
+  hovered: bool = False,
+  pressed: bool = False,
+  is_last: bool = False,
+  show_chevron: bool = True,
+  title_size: int = 28,
+  subtitle_size: int = 20,
+  value_size: int = 24,
+  separator_inset: int = 22,
+  value_color: rl.Color | None = None,
+  style: PanelStyle = DEFAULT_PANEL_STYLE,
+):
+  draw_rect = _snap_rect(rect)
+  draw_list_row_shell(
+    draw_rect,
+    hovered=hovered,
+    pressed=pressed,
+    is_last=is_last,
+    row_bg=rl.Color(255, 255, 255, 0),
+    row_border=rl.Color(255, 255, 255, 0),
+    row_separator=style.divider_color,
+    current_bg=rl.Color(255, 255, 255, 0),
+    current_border=rl.Color(255, 255, 255, 0),
+    separator_inset=separator_inset,
+  )
+
+  label_rect = rl.Rectangle(draw_rect.x + 24, draw_rect.y + 14, draw_rect.width * 0.55, 28)
+  subtitle_rect = rl.Rectangle(draw_rect.x + 24, draw_rect.y + 46, draw_rect.width * 0.60, 24)
+  gui_label(label_rect, title, title_size, style.title_color, FontWeight.MEDIUM)
+  if subtitle:
+    gui_label(subtitle_rect, subtitle, subtitle_size, style.subtitle_color, FontWeight.NORMAL)
+
+  if toggle_value is not None:
+    draw_toggle_switch(draw_rect, bool(toggle_value), track_color=style.accent)
+    return
+
+  if value:
+    value_rect = rl.Rectangle(draw_rect.x + draw_rect.width - AETHER_LIST_METRICS.utility_value_right, draw_rect.y + 20, AETHER_LIST_METRICS.utility_value_width, 28)
+    gui_label(
+      value_rect,
+      value,
+      value_size,
+      value_color or style.title_color,
+      FontWeight.MEDIUM,
+      alignment=rl.GuiTextAlignment.TEXT_ALIGN_RIGHT,
+    )
+  if show_chevron:
+    gui_label(
+      rl.Rectangle(draw_rect.x + draw_rect.width - AETHER_LIST_METRICS.utility_chevron_right, draw_rect.y + 18, 26, 26),
+      "›",
+      32,
+      style.muted_color,
+      FontWeight.MEDIUM,
+      alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
+    )
+
+
 def draw_selection_list_row(
   rect: rl.Rectangle,
   *,
@@ -606,9 +756,28 @@ def draw_selection_list_row(
   action_fill: rl.Color = AetherListColors.CURRENT_BG,
   action_border: rl.Color = AetherListColors.CURRENT_BORDER,
   action_text_color: rl.Color = AetherListColors.HEADER,
+  row_bg: rl.Color = AetherListColors.ROW_BG,
+  row_border: rl.Color = AetherListColors.ROW_BORDER,
+  row_separator: rl.Color = AetherListColors.ROW_SEPARATOR,
+  row_hover: rl.Color = AetherListColors.ROW_HOVER,
+  current_bg: rl.Color = AetherListColors.CURRENT_BG,
+  current_border: rl.Color = AetherListColors.CURRENT_BORDER,
 ):
   draw_rect = _snap_rect(rect)
-  draw_list_row_shell(draw_rect, current=current, hovered=hovered, pressed=pressed, is_last=is_last, alpha=alpha)
+  draw_list_row_shell(
+    draw_rect,
+    current=current,
+    hovered=hovered,
+    pressed=pressed,
+    is_last=is_last,
+    alpha=alpha,
+    row_bg=row_bg,
+    row_border=row_border,
+    row_separator=row_separator,
+    row_hover=row_hover,
+    current_bg=current_bg,
+    current_border=current_border,
+  )
   action_rect = rl.Rectangle(draw_rect.x + draw_rect.width - action_width, draw_rect.y, action_width, draw_rect.height)
   if not action_pill:
     action_rect = draw_action_rail(draw_rect, action_width, current=current, alpha=alpha)

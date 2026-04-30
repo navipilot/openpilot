@@ -38,18 +38,21 @@ from openpilot.selfdrive.ui.layouts.settings.starpilot.aethergrid import (
   AetherListColors,
   AetherScrollbar,
   AetherSliderDialog,
+  _point_hits,
   draw_action_rail,
   draw_action_pill,
   draw_busy_ring,
   draw_download_icon,
+  draw_empty_state_card,
   draw_heart_icon,
   draw_list_panel_shell,
+  draw_list_group_shell,
   build_list_panel_frame,
   draw_list_row_shell,
   draw_list_scroll_fades,
-  draw_soft_card,
+  draw_section_header,
+  draw_settings_list_row,
   draw_status_led,
-  draw_toggle_switch,
   draw_overflow_dots,
 )
 
@@ -224,8 +227,7 @@ class DrivingModelManagerView(Widget):
 
   def _target_at(self, mouse_pos: MousePos) -> str | None:
     for sub_key, rect in self._menu_sub_rects.items():
-      visible_rect = rl.get_collision_rec(rect, self._scroll_rect)
-      if visible_rect.width > 0 and visible_rect.height > 0 and rl.check_collision_point_rec(mouse_pos, visible_rect):
+      if _point_hits(mouse_pos, rect, self._scroll_rect, pad_x=6, pad_y=6):
         return f"menu:{sub_key}"
 
     for key, rect in self._action_rects.items():
@@ -411,32 +413,25 @@ class DrivingModelManagerView(Widget):
       self._draw_utility_section(rect.x, y, width, utility_rows)
 
   def _draw_empty_state(self, rect: rl.Rectangle):
-    state_rect = rl.Rectangle(rect.x, rect.y, rect.width - 18, rect.height)
-    draw_soft_card(state_rect, rl.Color(255, 255, 255, 5), rl.Color(255, 255, 255, 14), radius=0.08, segments=18)
-    gui_label(
-      rl.Rectangle(state_rect.x, state_rect.y + 42, state_rect.width, 40),
+    draw_empty_state_card(
+      rl.Rectangle(rect.x, rect.y, rect.width - AETHER_LIST_METRICS.content_right_gutter, rect.height),
       self._controller.empty_state_title(),
-      32,
-      MODEL_HEADER_TEXT,
-      FontWeight.MEDIUM,
-      alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
-    )
-    gui_label(
-      rl.Rectangle(state_rect.x + 48, state_rect.y + 88, state_rect.width - 96, 72),
       self._controller.empty_state_body(),
-      24,
-      MODEL_SUBTEXT,
-      FontWeight.NORMAL,
-      alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
+      title_size=32,
+      body_size=24,
+      body_inset_x=48,
+      title_top_padding=42,
+      body_height=72,
+      fill=rl.Color(255, 255, 255, 5),
+      border=rl.Color(255, 255, 255, 14),
     )
 
   def _draw_model_section(self, x: float, y: float, width: float, title: str, entries: list[ModelCatalogEntry]) -> float:
-    title_rect = rl.Rectangle(x, y, width - 18, SECTION_HEADER_HEIGHT)
-    gui_label(title_rect, title, 26, MODEL_SUBTEXT, FontWeight.MEDIUM)
+    draw_section_header(rl.Rectangle(x, y, width - AETHER_LIST_METRICS.content_right_gutter, SECTION_HEADER_HEIGHT), title)
     y += SECTION_HEADER_HEIGHT + SECTION_HEADER_GAP
 
     for index, entry in enumerate(entries):
-      row_rect = rl.Rectangle(x, y + index * ROW_HEIGHT, width - 18, ROW_HEIGHT)
+      row_rect = rl.Rectangle(x, y + index * ROW_HEIGHT, width - AETHER_LIST_METRICS.content_right_gutter, ROW_HEIGHT)
       self._draw_model_row(row_rect, entry, is_last=index == len(entries) - 1)
     return y + len(entries) * ROW_HEIGHT
 
@@ -571,7 +566,7 @@ class DrivingModelManagerView(Widget):
       )
     else:
       # Expanded sub-button menu
-      btn_h = 40
+      btn_h = 44
       gap = 8
       total_h = btn_h * 2 + gap
       start_y = rect.y + (rect.height - total_h) / 2
@@ -602,46 +597,32 @@ class DrivingModelManagerView(Widget):
     AetherChip(tr("Protected"), rl.Color(255, 255, 255, 10), MODEL_MUTED, MODEL_SUBTEXT, font_size=18).render(chip_rect)
 
   def _draw_utility_section(self, x: float, y: float, width: float, rows: list[dict]):
-    title_rect = rl.Rectangle(x, y, width - 18, SECTION_HEADER_HEIGHT)
-    gui_label(title_rect, tr("Automation and Tuning"), 26, MODEL_SUBTEXT, FontWeight.MEDIUM)
+    content_w = width - AETHER_LIST_METRICS.content_right_gutter
+    draw_section_header(rl.Rectangle(x, y, content_w, SECTION_HEADER_HEIGHT), tr("Automation and Tuning"))
     y += SECTION_HEADER_HEIGHT + SECTION_HEADER_GAP
 
-    container_rect = rl.Rectangle(x, y, width - 18, len(rows) * UTILITY_ROW_HEIGHT)
-    draw_soft_card(container_rect, rl.Color(255, 255, 255, 4), rl.Color(255, 255, 255, 15), radius=0.055, segments=18)
+    container_rect = rl.Rectangle(x, y, content_w, len(rows) * UTILITY_ROW_HEIGHT)
+    draw_list_group_shell(container_rect, fill=rl.Color(255, 255, 255, 4), border=rl.Color(255, 255, 255, 15))
 
     for index, row in enumerate(rows):
-      row_rect = rl.Rectangle(x, y + index * UTILITY_ROW_HEIGHT, width - 18, UTILITY_ROW_HEIGHT)
+      row_rect = rl.Rectangle(x, y + index * UTILITY_ROW_HEIGHT, content_w, UTILITY_ROW_HEIGHT)
       self._draw_utility_row(row_rect, row, is_last=index == len(rows) - 1)
 
   def _draw_utility_row(self, rect: rl.Rectangle, row: dict, is_last: bool):
     mouse_pos = gui_app.last_mouse_event.pos
     hovered = rl.check_collision_point_rec(mouse_pos, rect)
     pressed = self._pressed_target == f"utility:{row['id']}"
-    bg = rl.Color(255, 255, 255, 8 if hovered else 0)
-    if pressed:
-      bg = rl.Color(255, 255, 255, 14)
-    if bg.a:
-      rl.draw_rectangle_rounded(rect, ROW_RADIUS, 18, bg)
-
-    if not is_last:
-      line_y = int(rect.y + rect.height - 1)
-      rl.draw_line(int(rect.x + 22), line_y, int(rect.x + rect.width - 22), line_y, MODEL_ROW_SEPARATOR)
-
     self._utility_rects[row["id"]] = rect
-    label_rect = rl.Rectangle(rect.x + 24, rect.y + 14, rect.width * 0.55, 28)
-    subtitle_rect = rl.Rectangle(rect.x + 24, rect.y + 46, rect.width * 0.60, 24)
-    gui_label(label_rect, row["title"], 28, MODEL_HEADER_TEXT, FontWeight.MEDIUM)
-    if row.get("subtitle"):
-      gui_label(subtitle_rect, row["subtitle"], 20, MODEL_SUBTEXT, FontWeight.NORMAL)
-
-    if row["type"] == "toggle":
-      draw_toggle_switch(rect, bool(row["value"]))
-    else:
-      value_rect = rl.Rectangle(rect.x + rect.width - AETHER_LIST_METRICS.utility_value_right, rect.y + 20, AETHER_LIST_METRICS.utility_value_width, 28)
-      gui_label(value_rect, row["value"], 24, MODEL_HEADER_TEXT, FontWeight.MEDIUM, alignment=rl.GuiTextAlignment.TEXT_ALIGN_RIGHT)
-      gui_label(
-        rl.Rectangle(rect.x + rect.width - AETHER_LIST_METRICS.utility_chevron_right, rect.y + 18, 26, 26), "›", 32, MODEL_MUTED, FontWeight.MEDIUM, alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER
-      )
+    draw_settings_list_row(
+      rect,
+      title=row["title"],
+      subtitle=row.get("subtitle", ""),
+      value="" if row["type"] == "toggle" else row["value"],
+      toggle_value=bool(row["value"]) if row["type"] == "toggle" else None,
+      hovered=hovered,
+      pressed=pressed,
+      is_last=is_last,
+    )
 
   def _draw_scrollbar(self, rect: rl.Rectangle):
     self._scrollbar.render(rect, self._content_height, self._scroll_offset)
