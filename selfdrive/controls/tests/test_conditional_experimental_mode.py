@@ -18,6 +18,7 @@ def make_cem(*, model_length: float, model_stopped: bool = False, tracking_lead:
     model_stopped=model_stopped,
     tracking_lead=tracking_lead,
     starpilot_vcruise=SimpleNamespace(stop_sign_confirmed=False),
+    starpilot_following=SimpleNamespace(slower_lead=False, following_lead=False),
     lead_one=SimpleNamespace(status=lead_status, dRel=lead_d_rel, vLead=lead_v_lead,
                              modelProb=lead_model_prob, radar=lead_radar),
   )
@@ -131,6 +132,47 @@ def test_stop_light_latch_holds_slow_high_confidence_vision_lead_during_model_fl
   cem.stop_sign_and_light(v_ego, make_sm(), model_time=7.0)
 
   assert cem.stop_light_detected
+
+
+def test_slow_lead_holds_through_tracking_flap_for_high_confidence_vision_lead():
+  v_ego = 35 * CV.MPH_TO_MS
+  cem = make_cem(
+    model_length=v_ego * 5.0,
+    tracking_lead=True,
+    lead_status=True,
+    lead_d_rel=v_ego * 5.0,
+    lead_v_lead=8.0 * CV.MPH_TO_MS,
+    lead_model_prob=0.95,
+  )
+  toggles = SimpleNamespace(conditional_slower_lead=True, conditional_stopped_lead=False)
+
+  cem.slow_lead_filter.x = 1.0
+  cem.slow_lead_detected = True
+
+  cem.starpilot_planner.tracking_lead = False
+  cem.starpilot_planner.starpilot_following.slower_lead = False
+  cem.slow_lead(toggles, v_ego)
+  assert cem.slow_lead_detected
+
+
+def test_slow_lead_does_not_linger_at_crawl_when_stopped_lead_disabled():
+  v_ego = 1.5
+  cem = make_cem(
+    model_length=20.0,
+    tracking_lead=True,
+    lead_status=True,
+    lead_d_rel=8.0,
+    lead_v_lead=1.2,
+    lead_model_prob=0.99,
+  )
+  toggles = SimpleNamespace(conditional_slower_lead=True, conditional_stopped_lead=False)
+
+  cem.slow_lead_filter.x = 1.0
+  cem.slow_lead_detected = True
+  cem.starpilot_planner.starpilot_following.slower_lead = False
+  cem.slow_lead(toggles, v_ego)
+
+  assert not cem.slow_lead_detected
 
 
 class DummyThemeManager:

@@ -48,6 +48,9 @@ class ConditionalExperimentalMode:
   STOP_APPROACH_LATCH_TIME = 1.0
   STOP_APPROACH_MAX_LEAD_SPEED = 4.5
   STOP_APPROACH_MIN_MODEL_PROB = 0.9
+  SLOW_LEAD_CONTINUITY_MIN_MODEL_PROB = 0.85
+  SLOW_LEAD_CONTINUITY_MAX_DISTANCE_TIME = 7.0
+  SLOW_LEAD_CONTINUITY_MIN_EGO = 2.5
 
   # ===== END TUNING PARAMETERS =====
 
@@ -158,19 +161,35 @@ class ConditionalExperimentalMode:
     self.curve_detected = bool(self.curvature_filter.x >= THRESHOLD and v_ego > CRUISING_SPEED)
 
   def slow_lead(self, starpilot_toggles, v_ego):
-    if self.starpilot_planner.tracking_lead:
-      slower_lead = starpilot_toggles.conditional_slower_lead and self.starpilot_planner.starpilot_following.slower_lead
-      stopped_lead = starpilot_toggles.conditional_stopped_lead and self.starpilot_planner.lead_one.vLead < 1
-      lead_threshold = scale_threshold(v_ego)
+    lead = self.starpilot_planner.lead_one
+    lead_status = bool(getattr(lead, "status", False))
+    lead_distance = float(getattr(lead, "dRel", float("inf")))
+    lead_speed = float(getattr(lead, "vLead", float("inf")))
+    lead_prob = float(getattr(lead, "modelProb", 1.0))
 
-      # Adjust threshold based on lead probability for vision-only accuracy
-      lead_prob = getattr(self.starpilot_planner.lead_one, 'modelProb', 1.0)
-      adjusted_threshold = lead_threshold * (1.0 + 0.2 * (1.0 - lead_prob))  # Higher threshold for lower confidence
+    if not starpilot_toggles.conditional_stopped_lead and v_ego < self.SLOW_LEAD_CONTINUITY_MIN_EGO:
+      self.slow_lead_filter.update(False)
+      self.slow_lead_detected = False
+      return
 
-      self.slow_lead_filter.update(slower_lead or stopped_lead)
+    slower_lead = starpilot_toggles.conditional_slower_lead and self.starpilot_planner.starpilot_following.slower_lead
+    stopped_lead = starpilot_toggles.conditional_stopped_lead and lead_speed < 1
+    raw_vision_slow_lead = bool(
+      starpilot_toggles.conditional_slower_lead and
+      lead_status and
+      lead_prob >= self.SLOW_LEAD_CONTINUITY_MIN_MODEL_PROB and
+      lead_distance < max(40.0, v_ego * self.SLOW_LEAD_CONTINUITY_MAX_DISTANCE_TIME) and
+      lead_speed < max(v_ego - 0.5, 2.0)
+    )
+
+    lead_threshold = scale_threshold(v_ego)
+    adjusted_threshold = lead_threshold * (1.0 + 0.2 * (1.0 - lead_prob))  # Higher threshold for lower confidence
+
+    if self.starpilot_planner.tracking_lead or raw_vision_slow_lead or stopped_lead:
+      self.slow_lead_filter.update(slower_lead or raw_vision_slow_lead or stopped_lead)
       self.slow_lead_detected = bool(self.slow_lead_filter.x >= adjusted_threshold)
     else:
-      self.slow_lead_filter.x = 0
+      self.slow_lead_filter.update(False)
       self.slow_lead_detected = False
 
   def stop_sign_and_light(self, v_ego, sm, model_time):

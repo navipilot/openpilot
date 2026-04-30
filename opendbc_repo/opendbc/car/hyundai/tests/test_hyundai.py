@@ -275,6 +275,22 @@ class TestHyundaiFingerprint:
     assert state.jerk_upper == pytest.approx(0.0)
     assert state.jerk_lower == pytest.approx(0.0)
 
+  def test_ioniq_6_longitudinal_tuning_helper_holds_launch_through_starting_handoff(self):
+    state = Ioniq6LongitudinalTuningState()
+
+    state = update_ioniq_6_longitudinal_tuning(state, accel_cmd=1.0, v_ego=0.0, a_ego=0.0,
+                                               long_control_state=LongCtrlState.starting, long_active=True)
+    assert state.launch_active
+    assert state.actual_accel == pytest.approx(0.24)
+    assert state.jerk_upper == pytest.approx(4.8)
+    assert state.jerk_lower == pytest.approx(1.0)
+
+    state = update_ioniq_6_longitudinal_tuning(state, accel_cmd=0.3, v_ego=0.25, a_ego=1.2,
+                                               long_control_state=LongCtrlState.pid, long_active=True)
+    assert state.launch_active
+    assert state.desired_accel > 0.3
+    assert state.actual_accel > 0.24
+
   def test_canfd_acc_control_uses_direct_accel(self):
     CP = CarParams.new_message()
     CP.carFingerprint = CAR.KIA_EV6
