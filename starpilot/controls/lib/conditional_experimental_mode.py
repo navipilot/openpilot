@@ -95,10 +95,11 @@ class ConditionalExperimentalMode:
 
   def update(self, v_ego, sm, starpilot_toggles):
     now = time.monotonic()
+    standstill = bool(sm["carState"].standstill)
 
     self.status_value = CEStatus["OFF"] if self.params.get_bool("SafeMode") else restore_persisted_ce_state(self.params, self.params_memory)
 
-    if not is_manual_ce_status(self.status_value) and not sm["carState"].standstill:
+    if not is_manual_ce_status(self.status_value) and not standstill:
       self.update_conditions(v_ego, sm, starpilot_toggles)
 
       triggered = self.check_conditions(v_ego, sm, starpilot_toggles)
@@ -114,11 +115,25 @@ class ConditionalExperimentalMode:
       self.experimental_mode = triggered or hold_active or transition_buffer_active
       self.prev_experimental_mode = self.experimental_mode
       self.params_memory.put_int("CEStatus", self.status_value if self.experimental_mode else CEStatus["OFF"])
+    elif not is_manual_ce_status(self.status_value):
+      self.mode_hold_until = 0.0
+      self.mode_false_since = 0.0
+
+      # Keep the stop-light path live at standstill so EXP stays pinned for a red
+      # light / stop sign, but can immediately release to CHILL when the model
+      # clears the stop (green light / open path).
+      self.stop_sign_and_light(v_ego, sm, starpilot_toggles.conditional_model_stop_time)
+      standstill_stop_hold = self.stop_light_detected or getattr(self.starpilot_planner.starpilot_vcruise, "stop_sign_confirmed", False)
+
+      self.experimental_mode = standstill_stop_hold
+      self.prev_experimental_mode = self.experimental_mode
+      self.status_value = CEStatus["STOP_LIGHT"] if self.experimental_mode else CEStatus["OFF"]
+      self.params_memory.put_int("CEStatus", self.status_value if self.experimental_mode else CEStatus["OFF"])
     else:
       self.mode_hold_until = 0.0
       self.mode_false_since = 0.0
-      self.experimental_mode = (self.status_value == CEStatus["USER_OVERRIDDEN"] or
-                                (sm["carState"].standstill and self.experimental_mode and self.starpilot_planner.model_stopped))
+      self.experimental_mode = self.status_value == CEStatus["USER_OVERRIDDEN"]
+      self.prev_experimental_mode = self.experimental_mode
       self.stop_light_detected &= not is_manual_ce_status(self.status_value)
       self.stop_light_filter.x = 0
 
