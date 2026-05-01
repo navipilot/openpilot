@@ -1,7 +1,5 @@
 from __future__ import annotations
-import math
 import subprocess
-import time
 from pathlib import Path
 
 import pyray as rl
@@ -10,26 +8,22 @@ from openpilot.common.basedir import BASEDIR
 from openpilot.starpilot.common.starpilot_variables import ACTIVE_THEME_PATH
 from openpilot.system.ui.lib.application import gui_app, FontWeight, MouseEvent, MousePos
 from openpilot.system.ui.lib.multilang import tr, tr_noop
-from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.widgets import Widget
-from openpilot.system.ui.widgets.label import gui_label
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.selfdrive.ui.lib.starpilot_state import starpilot_state
 from openpilot.selfdrive.ui.layouts.settings.starpilot.panel import StarPilotPanel
 from openpilot.selfdrive.ui.layouts.settings.starpilot.aethergrid import (
   AETHER_LIST_METRICS,
-  AetherListColors,
-  build_list_panel_frame,
-  draw_list_panel_shell,
   AetherContinuousSlider,
+  AetherListColors,
+  DEFAULT_PANEL_STYLE,
+  _point_hits,
+  draw_settings_panel_header,
   draw_toggle_pill,
+  init_list_panel,
 )
 
-MODEL_PANEL_BG = AetherListColors.PANEL_BG
-MODEL_HEADER_TEXT = AetherListColors.HEADER
-MODEL_SUBTEXT = AetherListColors.SUBTEXT
-MODEL_MUTED = AetherListColors.MUTED
-
+PANEL_STYLE = DEFAULT_PANEL_STYLE
 SECTION_GAP = AETHER_LIST_METRICS.section_gap
 
 
@@ -43,7 +37,6 @@ class SoundsManagerView(Widget):
     self._sliders: dict[str, AetherContinuousSlider] = {}
     self._slider_was_dragging: dict[str, bool] = {}
     self._toggle_rects: dict[str, rl.Rectangle] = {}
-    self._font = gui_app.font(FontWeight.BOLD)
 
     self._init_sliders()
 
@@ -109,7 +102,7 @@ class SoundsManagerView(Widget):
 
   def _target_at(self, mouse_pos: MousePos) -> str | None:
     for key, rect in self._toggle_rects.items():
-      if rl.check_collision_point_rec(mouse_pos, rect):
+      if _point_hits(mouse_pos, rect, pad_x=6, pad_y=6):
         return f"toggle:{key}"
     return None
 
@@ -125,16 +118,13 @@ class SoundsManagerView(Widget):
     self.set_rect(rect)
     self._toggle_rects.clear()
 
-    frame = build_list_panel_frame(rect)
-    draw_list_panel_shell(frame)
+    frame, _scroll_rect, _content_width = init_list_panel(rect, PANEL_STYLE)
 
-    header_rect = frame.header
-    self._draw_header(header_rect)
+    self._draw_header(frame.header)
 
-    # Reclaim the dead space! The global header allocates 210px, but our text only uses ~100px.
     metrics = AETHER_LIST_METRICS
     actual_header_height = 100
-    content_y = header_rect.y + actual_header_height
+    content_y = frame.header.y + actual_header_height
     content_h = (frame.shell.y + frame.shell.height) - content_y - metrics.panel_padding_bottom
 
     content_rect = rl.Rectangle(
@@ -159,11 +149,7 @@ class SoundsManagerView(Widget):
       self._slider_was_dragging[key] = is_dragging
 
   def _draw_header(self, rect: rl.Rectangle):
-    title_rect = rl.Rectangle(rect.x, rect.y + 4, rect.width * 0.55, 40)
-    gui_label(title_rect, tr("Sounds & Alerts"), 40, MODEL_HEADER_TEXT, FontWeight.SEMI_BOLD)
-
-    subtitle_rect = rl.Rectangle(rect.x, rect.y + 48, rect.width * 0.58, 36)
-    gui_label(subtitle_rect, tr("Manage system volumes and custom alert toggles."), 24, MODEL_SUBTEXT, FontWeight.NORMAL)
+    draw_settings_panel_header(rect, tr("Sounds & Alerts"), tr("Manage system volumes and custom alert toggles."), subtitle_size=24)
 
   def _draw_volume_section(self, rect: rl.Rectangle):
     num_volumes = len(self._controller.VOLUME_KEYS)
@@ -205,7 +191,7 @@ class SoundsManagerView(Widget):
     is_enabled = info.get("is_enabled", lambda: True)()
     
     mouse_pos = gui_app.last_mouse_event.pos
-    hovered = rl.check_collision_point_rec(mouse_pos, padded_rect)
+    hovered = _point_hits(mouse_pos, padded_rect, pad_x=6, pad_y=6)
     pressed = self._pressed_target == f"toggle:{key}"
     
     status_str = tr("ON") if current_val else tr("OFF")

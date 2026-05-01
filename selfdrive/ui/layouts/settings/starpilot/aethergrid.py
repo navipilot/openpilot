@@ -333,6 +333,58 @@ def draw_list_panel_shell(frame: AetherListFrame, style: PanelStyle | None = Non
     _draw_rounded_stroke(glow_rect, _with_alpha(glow, 14), radius_px=20)
 
 
+def init_list_panel(rect: rl.Rectangle, style: PanelStyle | None = None) -> tuple[AetherListFrame, rl.Rectangle, float]:
+  frame = build_list_panel_frame(rect)
+  draw_list_panel_shell(frame, style)
+  scroll_rect = frame.scroll
+  content_width = scroll_rect.width - AETHER_LIST_METRICS.content_right_gutter
+  return frame, scroll_rect, content_width
+
+
+def draw_interactive_rect(target_id: str, rect: rl.Rectangle, interactive_rects: dict[str, rl.Rectangle],
+                           pressed_target: str | None, scroll_rect: rl.Rectangle | None = None,
+                           pad_x: float = 6, pad_y: float = 0) -> tuple[bool, bool]:
+  interactive_rects[target_id] = rect
+  mouse_pos = gui_app.last_mouse_event.pos
+  hovered = _point_hits(mouse_pos, rect, scroll_rect, pad_x=pad_x, pad_y=pad_y)
+  pressed = pressed_target == target_id and hovered
+  return hovered, pressed
+
+
+def resolve_interactive_target(mouse_pos: MousePos, interactive_rects: dict[str, rl.Rectangle],
+                                scroll_rect: rl.Rectangle | None = None,
+                                pad_x: float = 6, pad_y: float = 0) -> str | None:
+  for target_id, rect in interactive_rects.items():
+    if _point_hits(mouse_pos, rect, scroll_rect, pad_x=pad_x, pad_y=pad_y):
+      return target_id
+  return None
+
+
+PANEL_HEADER_TITLE_Y: int = 4
+PANEL_HEADER_SUBTITLE_Y: int = 48
+PANEL_HEADER_TITLE_FONT_SIZE: int = 40
+PANEL_HEADER_SUBTITLE_FONT_SIZE: int = 22
+PANEL_HEADER_TITLE_FONT: FontWeight = FontWeight.SEMI_BOLD
+PANEL_HEADER_SUBTITLE_FONT: FontWeight = FontWeight.NORMAL
+
+
+def draw_settings_panel_header(header_rect: rl.Rectangle, title: str, subtitle: str | None = None,
+                                *,
+                                title_size: int = PANEL_HEADER_TITLE_FONT_SIZE,
+                                subtitle_size: int = PANEL_HEADER_SUBTITLE_FONT_SIZE,
+                                max_title_width: float = 0.55,
+                                max_subtitle_width: float = 0.58,
+                                title_color: rl.Color = AetherListColors.HEADER,
+                                subtitle_color: rl.Color = AetherListColors.SUBTEXT,
+                                title_weight: FontWeight = PANEL_HEADER_TITLE_FONT,
+                                subtitle_weight: FontWeight = PANEL_HEADER_SUBTITLE_FONT):
+  title_rect = rl.Rectangle(header_rect.x, header_rect.y + PANEL_HEADER_TITLE_Y, header_rect.width * max_title_width, title_size + 2)
+  gui_label(title_rect, title, title_size, title_color, title_weight)
+  if subtitle:
+    subtitle_rect = rl.Rectangle(header_rect.x, header_rect.y + PANEL_HEADER_SUBTITLE_Y, header_rect.width * max_subtitle_width, subtitle_size + 4)
+    gui_label(subtitle_rect, subtitle, subtitle_size, subtitle_color, subtitle_weight)
+
+
 def draw_soft_card(rect: rl.Rectangle, fill: rl.Color, border: rl.Color, radius: float = 0.08, segments: int = 18):
   radius_px = radius * min(rect.width, rect.height)
   _draw_rounded_fill(rect, fill, radius_px=radius_px, segments=segments)

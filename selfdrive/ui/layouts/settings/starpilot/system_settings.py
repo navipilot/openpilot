@@ -33,12 +33,14 @@ from openpilot.selfdrive.ui.layouts.settings.starpilot.aethergrid import (
   _point_hits,
   build_list_panel_frame,
   draw_list_panel_shell,
+  init_list_panel,
   draw_list_group_shell,
   draw_list_scroll_fades,
   draw_metric_strip,
   draw_section_header,
   draw_selection_list_row,
   draw_settings_list_row,
+  draw_settings_panel_header,
   draw_soft_card,
   draw_tab_card,
 )
@@ -78,9 +80,7 @@ REPORT_CATEGORIES = [
 
 
 class SystemSettingsManagerView(Widget):
-  HEADER_TITLE_HEIGHT = 40
   HEADER_SUBTITLE_HEIGHT = 24
-  HEADER_TOP_OFFSET = 4
   HEADER_SUMMARY_GAP = 12
   HEADER_CARD_HEIGHT = 108
   TAB_HEIGHT = 52
@@ -89,9 +89,7 @@ class SystemSettingsManagerView(Widget):
   SECTION_GAP = AETHER_LIST_METRICS.section_gap
   SECTION_HEADER_HEIGHT = AETHER_LIST_METRICS.section_header_height
   SECTION_HEADER_GAP = AETHER_LIST_METRICS.section_header_gap
-  SLIDER_ROW_HEIGHT = AETHER_LIST_METRICS.range_row_height
   ROW_HEIGHT = AETHER_COMPACT_ROW_HEIGHT
-  CONTENT_GUTTER = AETHER_LIST_METRICS.content_right_gutter
   FADE_HEIGHT = AETHER_LIST_METRICS.fade_height
   COLUMN_GAP = 22
   TWO_COLUMN_BREAKPOINT = 1180
@@ -495,16 +493,12 @@ class SystemSettingsManagerView(Widget):
   def _render(self, rect: rl.Rectangle):
     self.set_rect(rect)
 
-    frame = build_list_panel_frame(rect)
-    draw_list_panel_shell(frame, self.PANEL_STYLE)
+    frame, scroll_rect, content_width = init_list_panel(rect, self.PANEL_STYLE)
+    self._scroll_rect = scroll_rect
 
     self._drive_mode_control.set_parent_rect(frame.header)
 
     self._draw_header(frame.header)
-
-    scroll_rect = frame.scroll
-    self._scroll_rect = scroll_rect
-    content_width = scroll_rect.width - self.CONTENT_GUTTER
     self._content_height = self._measure_content_height(content_width)
     self._scroll_panel.set_enabled(self.is_visible)
     self._scroll_offset = self._scroll_panel.update(scroll_rect, max(self._content_height, scroll_rect.height))
@@ -519,12 +513,11 @@ class SystemSettingsManagerView(Widget):
     draw_list_scroll_fades(scroll_rect, self._content_height, self._scroll_offset, AetherListColors.PANEL_BG, fade_height=self.FADE_HEIGHT)
 
   def _draw_header(self, rect: rl.Rectangle):
-    title_y = rect.y + self.HEADER_TOP_OFFSET
-    subtitle_y = rect.y + 48
-    gui_label(rl.Rectangle(rect.x, title_y, rect.width * 0.60, self.HEADER_TITLE_HEIGHT), tr("System Settings"), 40, AetherListColors.HEADER, FontWeight.SEMI_BOLD)
-    gui_label(rl.Rectangle(rect.x, subtitle_y, rect.width * 0.62, self.HEADER_SUBTITLE_HEIGHT), tr("Manage display, backups, connectivity, and device maintenance from one touch-first panel."), 22, AetherListColors.SUBTEXT, FontWeight.NORMAL)
+    draw_settings_panel_header(rect, tr("System Settings"),
+                                tr("Manage display, backups, connectivity, and device maintenance from one touch-first panel."),
+                                max_title_width=0.60, max_subtitle_width=0.62)
 
-    summary_y = subtitle_y + self.HEADER_SUBTITLE_HEIGHT + self.HEADER_SUMMARY_GAP
+    summary_y = rect.y + 48 + self.HEADER_SUBTITLE_HEIGHT + self.HEADER_SUMMARY_GAP
     summary_rect = rl.Rectangle(rect.x, summary_y, rect.width, min(self.HEADER_CARD_HEIGHT, rect.y + rect.height - summary_y))
     self._draw_summary_card(summary_rect)
 
@@ -753,7 +746,7 @@ class SystemSettingsManagerView(Widget):
       subtitle_size=17,
       action_text_size=15,
       row_separator=self.PANEL_STYLE.divider_color,
-      action_fill=rl.Color(89, 116, 151, 18),
+      action_fill=AetherListColors.CURRENT_BG,
       action_border=rl.Color(89, 116, 151, 42),
       action_text_color=AetherListColors.HEADER,
     )

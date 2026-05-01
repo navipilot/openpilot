@@ -36,7 +36,9 @@ from openpilot.selfdrive.ui.layouts.settings.starpilot.aethergrid import (
   draw_tab_card,
   draw_selection_list_row,
   draw_list_scroll_fades,
+  draw_settings_panel_header,
   draw_soft_card,
+  init_list_panel,
   _point_hits,
 )
 from openpilot.selfdrive.ui.layouts.settings.starpilot.panel import StarPilotPanel
@@ -206,7 +208,7 @@ class MapStatusCard(Widget):
         selection_chip_rect,
         self._controller._selected_summary_text(),
         rl.Color(94, 168, 130, 22),
-        rl.Color(94, 168, 130, 44),
+        AetherListColors.SUCCESS_SOFT,
         AetherListColors.HEADER,
         font_size=15,
       )
@@ -1121,21 +1123,16 @@ class StarPilotMapsLayout(StarPilotPanel):
 
   def _render(self, rect: rl.Rectangle):
     self.set_rect(rect)
-    frame = build_list_panel_frame(rect)
-    draw_list_panel_shell(frame, MAPS_PANEL_STYLE)
+    frame, scroll_rect, content_width = init_list_panel(rect, MAPS_PANEL_STYLE)
 
     hdr = frame.header
-    title_y = hdr.y + HEADER_TOP_OFFSET
-    subtitle_y = hdr.y + 48
-    gui_label(rl.Rectangle(hdr.x, title_y, hdr.width, HEADER_TITLE_HEIGHT), tr("Map Data"), 40, AetherListColors.HEADER, FontWeight.SEMI_BOLD)
-    gui_label(rl.Rectangle(hdr.x, subtitle_y, hdr.width * 0.60, HEADER_SUBTITLE_HEIGHT), tr("Use offline maps for speed-limit control and keep only the regions you need."), 22, AetherListColors.SUBTEXT, FontWeight.NORMAL)
+    draw_settings_panel_header(hdr, tr("Map Data"), tr("Use offline maps for speed-limit control and keep only the regions you need."),
+                                max_title_width=1.0, max_subtitle_width=0.60)
 
-    header_status_y = subtitle_y + HEADER_SUBTITLE_HEIGHT + 12
+    header_status_y = hdr.y + 48 + HEADER_SUBTITLE_HEIGHT + 12
     header_status_rect = rl.Rectangle(hdr.x, header_status_y, hdr.width, hdr.y + hdr.height - header_status_y - HEADER_BOTTOM_GAP)
     self._status_card.render(header_status_rect)
 
-    scroll_rect = frame.scroll
-    content_width = scroll_rect.width - AETHER_LIST_METRICS.content_right_gutter
     scroll_content_rect = rl.Rectangle(scroll_rect.x, scroll_rect.y, scroll_rect.width, scroll_rect.height)
     self._content_height = self._measure_content_height(content_width)
     self._scroll_panel.set_enabled(self.is_visible)
