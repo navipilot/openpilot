@@ -1650,6 +1650,28 @@
       "cdescr": "开启转向灯后在设定时间后变道"
     },
     {
+      "group": "시작",
+      "name": "LateralControlEnabled",
+      "title": "横向控制开关",
+      "descr": "开启/关闭横向控制功能",
+      "egroup": "START",
+      "min": 0,
+      "max": 1,
+      "default": 1,
+      "unit": 1
+    },
+    {
+      "group": "시작",
+      "name": "LateralControlMinSpeed",
+      "title": "横向控制最低速度(km/h)",
+      "descr": "达到此速度后才启用横向控制",
+      "egroup": "START",
+      "min": 0,
+      "max": 120,
+      "default": 55,
+      "unit": 1
+    },
+    {
       "group": "조향일반",
       "name": "LaneChangeBsd",
       "title": "차선변경 BSD",
