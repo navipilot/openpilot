@@ -1,7 +1,7 @@
 import math
 
 from cereal import log
-from opendbc.car.honda.values import CAR as HONDA
+from opendbc.car.honda.values import CAR as HONDA, HondaFlags
 from openpilot.starpilot.common.testing_grounds import testing_ground
 from openpilot.selfdrive.controls.lib.latcontrol import LatControl
 from openpilot.common.pid import PIDController
@@ -42,7 +42,7 @@ class LatControlPID(LatControl):
                              pos_limit=self.steer_max, neg_limit=-self.steer_max)
     self.ff_factor = CP.lateralTuning.pid.kf
     self.get_steer_feedforward = CI.get_steer_feedforward_function()
-    self.is_civic_bosch_modified = CP.carFingerprint == HONDA.HONDA_CIVIC_BOSCH and CP.dashcamOnly
+    self.is_civic_bosch_modified = CP.carFingerprint == HONDA.HONDA_CIVIC_BOSCH and bool(CP.flags & HondaFlags.EPS_MODIFIED)
     self.prev_angle_steers_des_no_offset = 0.0
 
   def update(self, active, CS, VM, params, steer_limited_by_safety, desired_curvature, curvature_limited, lat_delay, calibrated_pose, model_data, starpilot_toggles):

@@ -95,6 +95,9 @@ class CarInterface(CarInterfaceBase):
       if fw.ecu == "eps" and b"," in fw.fwVersion:
         eps_modified = True
 
+    if eps_modified:
+      ret.flags |= HondaFlags.EPS_MODIFIED.value
+
     if candidate == CAR.HONDA_CIVIC:
       if eps_modified:
         # stock request input values:     0x0000, 0x00DE, 0x014D, 0x01EF, 0x0290, 0x0377, 0x0454, 0x0610, 0x06EE

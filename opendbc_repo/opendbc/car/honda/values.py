@@ -79,6 +79,7 @@ class HondaFlags(IntFlag):
   ALLOW_MANUAL_TRANS = 1024
   HYBRID = 2048
   BOSCH_TJA_CONTROL = 4096
+  EPS_MODIFIED = 8192
 
 
 # Car button codes

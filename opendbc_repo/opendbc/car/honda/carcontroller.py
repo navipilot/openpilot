@@ -4,7 +4,7 @@ from opendbc.can import CANPacker
 from opendbc.car import Bus, DT_CTRL, rate_limit, make_tester_present_msg, structs
 from opendbc.car.honda import hondacan
 from opendbc.car.honda.values import CAR, CruiseButtons, HONDA_BOSCH, HONDA_BOSCH_CANFD, HONDA_BOSCH_RADARLESS, \
-                                     HONDA_BOSCH_TJA_CONTROL, HONDA_NIDEC_ALT_PCM_ACCEL, CarControllerParams
+                                     HONDA_BOSCH_TJA_CONTROL, HONDA_NIDEC_ALT_PCM_ACCEL, CarControllerParams, HondaFlags
 from opendbc.car.interfaces import CarControllerBase
 from openpilot.starpilot.common.testing_grounds import testing_ground
 
@@ -18,7 +18,7 @@ def civic_bosch_modified_lateral_testing_ground_active() -> bool:
 
 
 def get_civic_bosch_modified_steer_can_max(base_steer_can_max: int, CP) -> int:
-  if CP.carFingerprint == CAR.HONDA_CIVIC_BOSCH and CP.dashcamOnly and civic_bosch_modified_lateral_testing_ground_active():
+  if CP.carFingerprint == CAR.HONDA_CIVIC_BOSCH and bool(CP.flags & HondaFlags.EPS_MODIFIED) and civic_bosch_modified_lateral_testing_ground_active():
     return CIVIC_BOSCH_MODIFIED_STEER_CAN_MAX
   return base_steer_can_max
 
@@ -170,7 +170,10 @@ class CarController(CarControllerBase):
     self.steering_pressed_robust_prev = False
 
   def _modified_civic_active(self) -> bool:
-    return self.CP.carFingerprint == CAR.HONDA_CIVIC_BOSCH and self.CP.dashcamOnly and civic_bosch_modified_lateral_testing_ground_active()
+    return self.CP.carFingerprint == CAR.HONDA_CIVIC_BOSCH and bool(self.CP.flags & HondaFlags.EPS_MODIFIED) and civic_bosch_modified_lateral_testing_ground_active()
+
+  def _modified_civic_standard_active(self) -> bool:
+    return self.CP.carFingerprint == CAR.HONDA_CIVIC_BOSCH and bool(self.CP.flags & HondaFlags.EPS_MODIFIED)
 
   def _filtered_steering_pressed(self, CS, torque_cmd: float) -> bool:
     self.steering_pressed_filter_s, steering_pressed = get_civic_bosch_modified_steering_pressed(
@@ -198,7 +201,7 @@ class CarController(CarControllerBase):
 
     torque_cmd = float(actuators.torque)
     filtered_steering_pressed = bool(CS.out.steeringPressed)
-    if self._modified_civic_active():
+    if self._modified_civic_standard_active():
       if CC.latActive:
         filtered_steering_pressed = self._filtered_steering_pressed(CS, torque_cmd)
         if filtered_steering_pressed:
