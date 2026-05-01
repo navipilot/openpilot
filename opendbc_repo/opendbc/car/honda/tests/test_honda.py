@@ -40,9 +40,11 @@ class TestHondaFingerprint:
     assert get_civic_bosch_modified_steer_can_max(4096, CP) == 4096
 
   def test_modified_civic_torque_lpf_tau_reacts_to_sign_change(self):
-    assert get_civic_bosch_modified_torque_lpf_tau(0.7, -0.1, 25.0) == 0.09
-    assert get_civic_bosch_modified_torque_lpf_tau(0.02, 0.01, 12.0) == 0.15
-    assert get_civic_bosch_modified_torque_lpf_tau(0.30, 0.0, 12.0) == 0.11
+    assert get_civic_bosch_modified_torque_lpf_tau(0.7, -0.1, 25.0) == 0.10
+    assert get_civic_bosch_modified_torque_lpf_tau(0.02, -0.01, 8.0) == 0.22
+    assert get_civic_bosch_modified_torque_lpf_tau(0.02, 0.01, 12.0) == 0.22
+    assert get_civic_bosch_modified_torque_lpf_tau(0.30, 0.0, 12.0) == 0.16
+    assert get_civic_bosch_modified_torque_lpf_tau(0.30, 0.0, 20.0) == 0.13
 
   def test_modified_civic_steering_pressed_filter_rejects_short_same_direction_spikes(self):
     filter_s, pressed = get_civic_bosch_modified_steering_pressed(True, 1500.0, 0.8, 0.01, False)
@@ -58,7 +60,7 @@ class TestHondaFingerprint:
     assert pressed
 
   def test_modified_civic_steering_pressed_filter_allows_opposing_driver_torque_quickly(self):
-    filter_s, pressed = get_civic_bosch_modified_steering_pressed(True, -1500.0, 0.8, 0.07, False)
+    filter_s, pressed = get_civic_bosch_modified_steering_pressed(True, -1500.0, 0.8, 0.10, False)
     assert pressed
 
   def test_official_modified_eps_firmwares_restored(self):
