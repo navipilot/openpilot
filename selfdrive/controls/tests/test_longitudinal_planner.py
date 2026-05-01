@@ -423,6 +423,40 @@ def test_acc_mode_pretracking_vision_slow_lead_blocks_positive_catchup(model_ver
 
 
 @pytest.mark.parametrize("model_version", ["v11", "v12", "v13"])
+def test_acc_mode_tracked_pace_matched_lead_caps_positive_catchup(model_version):
+  v_ego = 28.7
+
+  CP = CarInterface.get_non_essential_params(CAR.HONDA_CIVIC)
+  planner_no_lead = LongitudinalPlanner(CP, init_v=v_ego)
+  planner_with_lead = LongitudinalPlanner(CP, init_v=v_ego)
+  sm_no_lead = make_sm(
+    v_ego,
+    desired_accel=0.5,
+    min_accel=-1.0,
+    experimental_mode=False,
+    tracking_lead=False,
+  )
+  sm_with_lead = make_sm(
+    v_ego,
+    desired_accel=0.5,
+    min_accel=-1.0,
+    experimental_mode=False,
+    tracking_lead=True,
+    lead_one=make_lead(status=True, d_rel=22.0, v_lead=29.4, a_lead=0.0, radar=False, model_prob=0.995),
+  )
+  sm_no_lead["starpilotPlan"].vCruise = v_ego + 4.0
+  sm_with_lead["starpilotPlan"].vCruise = v_ego + 4.0
+
+  for _ in range(8):
+    planner_no_lead.update(sm_no_lead, make_toggles(model_version))
+    planner_with_lead.update(sm_with_lead, make_toggles(model_version))
+
+  assert planner_with_lead.mode == "acc"
+  assert planner_with_lead.output_a_target <= planner_no_lead.output_a_target - 0.15
+  assert planner_with_lead.output_a_target < 0.08
+
+
+@pytest.mark.parametrize("model_version", ["v11", "v12", "v13"])
 def test_acc_mode_low_speed_vision_stop_buffer_sets_should_stop_before_tiny_gap(model_version):
   v_ego = 3.8
 

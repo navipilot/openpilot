@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 
+from opendbc.car.chrysler.values import CAR as CHRYSLER_CAR
+
 from openpilot.starpilot.controls import starpilot_card as spc
 
 
@@ -29,6 +31,48 @@ class FakeSM(dict):
     self.updated = updated or {}
 
 
+def make_sm():
+  return FakeSM({
+    "carControl": SimpleNamespace(longActive=False),
+    "selfdriveState": SimpleNamespace(active=False, alertType=[], experimentalMode=False),
+    "starpilotSelfdriveState": SimpleNamespace(alertType=[]),
+    "starpilotPlan": SimpleNamespace(lateralCheck=True),
+    "liveCalibration": SimpleNamespace(calPerc=100),
+  }, updated={"starpilotPlan": False})
+
+
+def make_toggles(**overrides):
+  defaults = {
+    "always_on_lateral_lkas": False,
+    "always_on_lateral_main": False,
+    "always_on_lateral_pause_speed": 0.0,
+    "bookmark_via_lkas": False,
+    "conditional_experimental_mode": False,
+    "experimental_mode_via_lkas": False,
+    "force_coast_via_lkas": False,
+    "lkas_allowed_for_aol": False,
+    "pause_lateral_via_lkas": False,
+    "pause_longitudinal_via_lkas": False,
+    "speed_limit_controller": False,
+    "switchback_mode_via_lkas": False,
+    "traffic_mode_via_lkas": False,
+  }
+  defaults.update(overrides)
+  return SimpleNamespace(**defaults)
+
+
+def make_car_state(available=False, enabled=False, button_events=None):
+  return SimpleNamespace(
+    buttonEvents=button_events or [],
+    cruiseState=SimpleNamespace(available=available, enabled=enabled),
+    gearShifter=spc.GearShifter.drive,
+    brakePressed=False,
+    gasPressed=False,
+    standstill=False,
+    vEgo=15.0,
+  )
+
+
 def test_honda_lkas_button_can_toggle_always_on_lateral(monkeypatch, tmp_path):
   monkeypatch.setattr(spc, "Params", FakeParams)
   monkeypatch.setattr(spc, "is_FrogsGoMoo", lambda: False)
@@ -36,39 +80,61 @@ def test_honda_lkas_button_can_toggle_always_on_lateral(monkeypatch, tmp_path):
 
   card = spc.StarPilotCard(SimpleNamespace(brand="honda"), SimpleNamespace(alternativeExperience=0))
 
-  car_state = SimpleNamespace(
-    buttonEvents=[SimpleNamespace(type=spc.ButtonType.lkas, pressed=True)],
-    cruiseState=SimpleNamespace(available=False),
-    gearShifter=spc.GearShifter.drive,
-    brakePressed=False,
-    gasPressed=False,
-    standstill=False,
-    vEgo=15.0,
-  )
+  car_state = make_car_state(button_events=[SimpleNamespace(type=spc.ButtonType.lkas, pressed=True)])
   starpilot_car_state = SimpleNamespace(distancePressed=False)
-  sm = FakeSM({
-    "carControl": SimpleNamespace(longActive=False),
-    "selfdriveState": SimpleNamespace(active=False, alertType=[], experimentalMode=False),
-    "starpilotSelfdriveState": SimpleNamespace(alertType=[]),
-    "starpilotPlan": SimpleNamespace(lateralCheck=True),
-    "liveCalibration": SimpleNamespace(calPerc=100),
-  }, updated={"starpilotPlan": False})
-  toggles = SimpleNamespace(
-    always_on_lateral_lkas=True,
-    always_on_lateral_main=False,
-    always_on_lateral_pause_speed=0.0,
-    bookmark_via_lkas=False,
-    conditional_experimental_mode=False,
-    experimental_mode_via_lkas=False,
-    force_coast_via_lkas=False,
-    lkas_allowed_for_aol=True,
-    pause_lateral_via_lkas=False,
-    pause_longitudinal_via_lkas=False,
-    speed_limit_controller=False,
-    switchback_mode_via_lkas=False,
-    traffic_mode_via_lkas=False,
-  )
+  sm = make_sm()
+  toggles = make_toggles(always_on_lateral_lkas=True, lkas_allowed_for_aol=True)
 
   ret = card.update(car_state, starpilot_car_state, sm, toggles)
 
   assert ret.alwaysOnLateralAllowed is True
+
+
+def test_main_aol_still_follows_cruise_main_for_other_platforms(monkeypatch, tmp_path):
+  monkeypatch.setattr(spc, "Params", FakeParams)
+  monkeypatch.setattr(spc, "is_FrogsGoMoo", lambda: False)
+  monkeypatch.setattr(spc, "ERROR_LOGS_PATH", tmp_path)
+
+  card = spc.StarPilotCard(SimpleNamespace(brand="toyota", carFingerprint="TOYOTA_TEST", pcmCruise=True),
+                           SimpleNamespace(alternativeExperience=spc.ALTERNATIVE_EXPERIENCE.ALWAYS_ON_LATERAL))
+
+  ret = card.update(make_car_state(available=True), SimpleNamespace(distancePressed=False), make_sm(),
+                    make_toggles(always_on_lateral_main=True))
+
+  assert ret.alwaysOnLateralAllowed is True
+  assert ret.alwaysOnLateralEnabled is True
+
+
+def test_pacifica_hybrid_main_aol_waits_for_set_press(monkeypatch, tmp_path):
+  monkeypatch.setattr(spc, "Params", FakeParams)
+  monkeypatch.setattr(spc, "is_FrogsGoMoo", lambda: False)
+  monkeypatch.setattr(spc, "ERROR_LOGS_PATH", tmp_path)
+
+  card = spc.StarPilotCard(
+    SimpleNamespace(brand="chrysler", carFingerprint=CHRYSLER_CAR.CHRYSLER_PACIFICA_2019_HYBRID, pcmCruise=True),
+    SimpleNamespace(alternativeExperience=spc.ALTERNATIVE_EXPERIENCE.ALWAYS_ON_LATERAL),
+  )
+
+  sm = make_sm()
+  toggles = make_toggles(always_on_lateral_main=True)
+  starpilot_car_state = SimpleNamespace(distancePressed=False)
+  car_state = make_car_state(available=True, enabled=False)
+
+  ret = card.update(car_state, starpilot_car_state, sm, toggles)
+  assert ret.alwaysOnLateralAllowed is False
+  assert ret.alwaysOnLateralEnabled is False
+
+  car_state.cruiseState.enabled = True
+  ret = card.update(car_state, starpilot_car_state, sm, toggles)
+  assert ret.alwaysOnLateralAllowed is True
+  assert ret.alwaysOnLateralEnabled is True
+
+  car_state.cruiseState.enabled = False
+  ret = card.update(car_state, starpilot_car_state, sm, toggles)
+  assert ret.alwaysOnLateralAllowed is True
+  assert ret.alwaysOnLateralEnabled is True
+
+  car_state.cruiseState.available = False
+  ret = card.update(car_state, starpilot_car_state, sm, toggles)
+  assert ret.alwaysOnLateralAllowed is False
+  assert ret.alwaysOnLateralEnabled is False

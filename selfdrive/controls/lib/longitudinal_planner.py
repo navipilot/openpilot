@@ -89,6 +89,10 @@ VISION_LOW_SPEED_STOP_BUFFER_RELEASE_MARGIN = 0.9
 VISION_LOW_SPEED_STOP_BUFFER_HOLD_TIME = 0.8
 VISION_LOW_SPEED_STOP_BUFFER_MIN_BRAKE = 1.1
 VISION_LOW_SPEED_STOP_BUFFER_BRAKE_GAIN = 0.25
+LEAD_CATCHUP_ACCEL_MIN_EGO = 8.0
+LEAD_CATCHUP_ACCEL_MIN_LEAD_DELTA = -0.5
+LEAD_CATCHUP_ACCEL_MAX_GAP_BUFFER_MIN = 4.0
+LEAD_CATCHUP_ACCEL_MAX_GAP_BUFFER_GAIN = 0.15
 
 # Uncertainty-based filter disable thresholds
 UNCERT_SLOPE_TRIG = 0.12  # per second
@@ -513,6 +517,28 @@ class LongitudinalPlanner:
     min_stop_brake = VISION_LOW_SPEED_STOP_BUFFER_MIN_BRAKE + VISION_LOW_SPEED_STOP_BUFFER_BRAKE_GAIN * float(v_ego)
     return max(accel_min, -min_stop_brake), True
 
+  def get_lead_catchup_accel_cap(self, lead, v_ego, t_follow):
+    if lead is None or not lead.status or v_ego < LEAD_CATCHUP_ACCEL_MIN_EGO:
+      return None
+
+    lead_delta = float(lead.vLead) - float(v_ego)
+    if lead_delta < LEAD_CATCHUP_ACCEL_MIN_LEAD_DELTA:
+      return None
+
+    desired_gap = float(desired_follow_distance(v_ego, lead.vLead, t_follow))
+    gap_buffer = max(LEAD_CATCHUP_ACCEL_MAX_GAP_BUFFER_MIN, LEAD_CATCHUP_ACCEL_MAX_GAP_BUFFER_GAIN * float(v_ego))
+    gap_error = float(lead.dRel) - desired_gap
+    if gap_error > gap_buffer:
+      return None
+
+    # If the lead is already pace-matched or pulling away, keep any catch-up
+    # accel very small while we're near the follow target so we don't surge into
+    # the lead and immediately ask for brake again.
+    edge_cap = float(np.interp(lead_delta, [-0.5, 0.0, 1.0], [0.16, 0.08, 0.02]))
+    near_cap = min(edge_cap, 0.03)
+    gap_factor = float(np.clip(max(gap_error, 0.0) / max(gap_buffer, 0.1), 0.0, 1.0))
+    return float(np.interp(gap_factor, [0.0, 1.0], [near_cap, edge_cap]))
+
   @staticmethod
   def raw_close_lead_needs_control(lead, v_ego):
     if lead is None or not lead.status:
@@ -844,6 +870,12 @@ class LongitudinalPlanner:
                       if lead.status and lead.vLead > STANDSTILL_LEAD_NUDGE_MIN_SPEED and lead.dRel >= standstill_nudge_gap]
       if moving_leads:
         output_a_target = max(output_a_target, STANDSTILL_LEAD_NUDGE_ACCEL)
+
+    if lead_one_active:
+      lead_catchup_accel_cap = self.get_lead_catchup_accel_cap(self.lead_one, v_ego, effective_t_follow)
+      if lead_catchup_accel_cap is not None:
+        self.a_desired = min(self.a_desired, lead_catchup_accel_cap)
+        output_a_target = min(output_a_target, lead_catchup_accel_cap)
 
     if lead_control_active and np.isfinite(v_cruise) and any(lead.status for lead in (self.lead_one, self.lead_two)):
       # Keep follow/catchup behavior from pulling past the cruise target. Using the

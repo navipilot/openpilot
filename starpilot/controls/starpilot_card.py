@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from opendbc.car.chrysler.values import pacifica_hybrid_aol_requires_set_press
 from opendbc.safety import ALTERNATIVE_EXPERIENCE
 from openpilot.common.params import Params
 from openpilot.selfdrive.car.cruise import CRUISE_LONG_PRESS, ButtonType
@@ -22,6 +23,7 @@ class StarPilotCard:
     self.accel_pressed = False
     self.always_on_lateral_allowed = False
     self.prev_active = False
+    self.prev_cruise_enabled = False
     self.decel_pressed = False
     self.distancePressed_previously = False
     self.force_coast = False
@@ -90,7 +92,15 @@ class StarPilotCard:
           elif starpilot_toggles.speed_limit_controller:
             self.params_memory.put_bool("SLCAdoptSpeedLimit", True)
     elif starpilot_toggles.always_on_lateral_main:
-      self.always_on_lateral_allowed = carState.cruiseState.available
+      if pacifica_hybrid_aol_requires_set_press(self.CP.carFingerprint, self.CP.pcmCruise):
+        # Chrysler Pacifica Hybrid stock ACC can fall back to plain cruise if AOL
+        # starts steering before the driver presses SET.
+        if not carState.cruiseState.available:
+          self.always_on_lateral_allowed = False
+        elif carState.cruiseState.enabled and not self.prev_cruise_enabled:
+          self.always_on_lateral_allowed = True
+      else:
+        self.always_on_lateral_allowed = carState.cruiseState.available
 
     # On rising edge of engagement (SET press enabling lat+long), auto-enable AOL
     # so that lateral persists when braking disengages longitudinal
@@ -98,6 +108,7 @@ class StarPilotCard:
       self.always_on_lateral_allowed = True
 
     self.prev_active = sm["selfdriveState"].active
+    self.prev_cruise_enabled = carState.cruiseState.enabled
 
     self.always_on_lateral_enabled = self.always_on_lateral_allowed and self.always_on_lateral_set
     self.always_on_lateral_enabled &= carState.gearShifter not in NON_DRIVING_GEARS

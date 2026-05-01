@@ -102,12 +102,15 @@ PACIFICA_HYBRID_AOL_CARS = frozenset({
 })
 
 
+def pacifica_hybrid_aol_requires_set_press(car_fingerprint, pcm_cruise: bool) -> bool:
+  return car_fingerprint in PACIFICA_HYBRID_AOL_CARS and pcm_cruise
+
+
 def pacifica_hybrid_aol_stock_acc_mode(car_fingerprint, pcm_cruise: bool,
                                        controls_enabled: bool, always_on_lateral_enabled: bool) -> bool:
   # Keep this narrow until we have logs proving other Chrysler platforms need the same exemption.
   return (
-    car_fingerprint in PACIFICA_HYBRID_AOL_CARS and
-    pcm_cruise and
+    pacifica_hybrid_aol_requires_set_press(car_fingerprint, pcm_cruise) and
     always_on_lateral_enabled and
     not controls_enabled
   )
