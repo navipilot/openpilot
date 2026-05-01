@@ -44,6 +44,18 @@ VISION_LEAD_APPROACH_FULL_MODEL_PROB = 0.98
 VISION_LEAD_APPROACH_DEFICIT_MAX_DECEL = 1.30
 VISION_LEAD_APPROACH_DEFICIT_BUFFER_MIN = 3.0
 VISION_LEAD_APPROACH_DEFICIT_BUFFER_GAIN = 0.20
+VISION_UNTRACKED_SLOW_LEAD_MIN_MODEL_PROB = 0.9
+VISION_UNTRACKED_SLOW_LEAD_FULL_MODEL_PROB = 0.97
+VISION_UNTRACKED_SLOW_LEAD_MIN_CLOSING_SPEED = 3.0
+VISION_UNTRACKED_SLOW_LEAD_MIN_CLOSING_RATIO = 0.16
+VISION_UNTRACKED_SLOW_LEAD_FULL_CLOSING_RATIO = 0.24
+VISION_UNTRACKED_SLOW_LEAD_TRIGGER_TTC = 16.0
+VISION_UNTRACKED_SLOW_LEAD_FULL_TTC = 8.0
+VISION_UNTRACKED_SLOW_LEAD_MAX_DISTANCE_TIME = 4.25
+VISION_UNTRACKED_SLOW_LEAD_MIN_DISTANCE = 80.0
+VISION_UNTRACKED_SLOW_LEAD_MAX_DISTANCE = 120.0
+VISION_UNTRACKED_SLOW_LEAD_MAX_DECEL = 0.7
+VISION_UNTRACKED_SLOW_LEAD_MIN_DECEL = 0.1
 VISION_SLOW_LEAD_MAX_SPEED = 5.0
 VISION_SLOW_LEAD_MIN_CLOSING_SPEED = 1.5
 VISION_SLOW_LEAD_TRIGGER_TTC = 4.5
@@ -338,6 +350,51 @@ class LongitudinalPlanner:
     deficit_decel *= 0.5 + 0.5 * closing_factor
     approach_decel = max(approach_decel, deficit_decel)
     if approach_decel < VISION_LEAD_APPROACH_MIN_DECEL:
+      return None
+
+    return max(accel_min, -approach_decel)
+
+  def get_vision_untracked_slow_lead_cap(self, lead, v_ego, accel_min):
+    if lead is None or not lead.status or bool(getattr(lead, "radar", False)):
+      return None
+
+    lead_prob = float(getattr(lead, "modelProb", 0.0))
+    if lead_prob < VISION_UNTRACKED_SLOW_LEAD_MIN_MODEL_PROB:
+      return None
+
+    lead_brake = max(0.0, -float(lead.aLeadK))
+    reaction_t = max(self.CP.longitudinalActuatorDelay, self.dt)
+    closing_speed = max(0.0, v_ego - lead.vLead)
+    projected_closing_speed = closing_speed + lead_brake * reaction_t
+    if projected_closing_speed < VISION_UNTRACKED_SLOW_LEAD_MIN_CLOSING_SPEED:
+      return None
+
+    closing_ratio = projected_closing_speed / max(float(v_ego), 0.1)
+    if closing_ratio < VISION_UNTRACKED_SLOW_LEAD_MIN_CLOSING_RATIO:
+      return None
+
+    max_distance = float(np.clip(VISION_UNTRACKED_SLOW_LEAD_MAX_DISTANCE_TIME * v_ego,
+                                 VISION_UNTRACKED_SLOW_LEAD_MIN_DISTANCE,
+                                 VISION_UNTRACKED_SLOW_LEAD_MAX_DISTANCE))
+    if float(lead.dRel) > max_distance:
+      return None
+
+    projected_ttc = float(lead.dRel) / max(projected_closing_speed, 0.1)
+    if projected_ttc > VISION_UNTRACKED_SLOW_LEAD_TRIGGER_TTC:
+      return None
+
+    time_factor = float(np.clip((VISION_UNTRACKED_SLOW_LEAD_TRIGGER_TTC - projected_ttc) /
+                                (VISION_UNTRACKED_SLOW_LEAD_TRIGGER_TTC - VISION_UNTRACKED_SLOW_LEAD_FULL_TTC),
+                                0.0, 1.0))
+    prob_factor = float(np.clip((lead_prob - VISION_UNTRACKED_SLOW_LEAD_MIN_MODEL_PROB) /
+                                (VISION_UNTRACKED_SLOW_LEAD_FULL_MODEL_PROB - VISION_UNTRACKED_SLOW_LEAD_MIN_MODEL_PROB),
+                                0.0, 1.0))
+    closing_factor = float(np.clip((closing_ratio - VISION_UNTRACKED_SLOW_LEAD_MIN_CLOSING_RATIO) /
+                                   (VISION_UNTRACKED_SLOW_LEAD_FULL_CLOSING_RATIO - VISION_UNTRACKED_SLOW_LEAD_MIN_CLOSING_RATIO),
+                                   0.0, 1.0))
+    approach_decel = VISION_UNTRACKED_SLOW_LEAD_MAX_DECEL * np.clip(
+      0.5 * time_factor + 0.3 * prob_factor + 0.2 * closing_factor, 0.0, 1.0)
+    if approach_decel < VISION_UNTRACKED_SLOW_LEAD_MIN_DECEL:
       return None
 
     return max(accel_min, -approach_decel)
@@ -741,6 +798,19 @@ class LongitudinalPlanner:
     comfort_output_accel_min = get_vehicle_min_accel(self.CP, v_ego) if experimental_mlsim else accel_limits_turns[0]
     vision_cap_accel_min = min(comfort_output_accel_min, get_vehicle_min_accel(self.CP, v_ego))
     output_accel_min = comfort_output_accel_min
+
+    if not tracking_lead:
+      pretracking_vision_caps = []
+      for lead in (self.lead_one, self.lead_two):
+        if lead.status and not bool(getattr(lead, "radar", False)):
+          pretracking_cap = self.get_vision_untracked_slow_lead_cap(lead, v_ego, vision_cap_accel_min)
+          if pretracking_cap is not None:
+            pretracking_vision_caps.append(pretracking_cap)
+
+      if pretracking_vision_caps:
+        pretracking_vision_cap = min(pretracking_vision_caps)
+        self.a_desired = min(self.a_desired, pretracking_vision_cap)
+        output_a_target = min(output_a_target, pretracking_vision_cap)
 
     close_lead_caps = []
     vision_low_speed_stop_active = False

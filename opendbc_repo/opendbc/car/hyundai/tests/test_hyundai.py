@@ -313,6 +313,17 @@ class TestHyundaiFingerprint:
     assert state.actual_accel == pytest.approx(-0.12)
     assert not state.release_active
 
+  def test_genesis_g90_longitudinal_tuning_gradually_unwinds_into_stop_hold(self):
+    state = GenesisG90LongitudinalTuningState(actual_accel=-2.0)
+
+    state = update_genesis_g90_longitudinal_tuning(state, accel_cmd=-2.0, v_ego=0.5,
+                                                   long_control_state=LongCtrlState.stopping, long_active=True)
+    assert state.actual_accel == pytest.approx(-1.95)
+
+    state = update_genesis_g90_longitudinal_tuning(state, accel_cmd=-2.0, v_ego=0.3,
+                                                   long_control_state=LongCtrlState.stopping, long_active=True)
+    assert state.actual_accel == pytest.approx(-1.88)
+
   def test_genesis_g90_longitudinal_tuning_ramps_out_of_stop_hold(self):
     state = GenesisG90LongitudinalTuningState(actual_accel=-0.12, long_control_state_last=LongCtrlState.stopping)
 
@@ -563,10 +574,15 @@ class TestHyundaiFingerprint:
     ioniq6.flags = int(HyundaiFlags.CANFD | HyundaiFlags.CANFD_LKA_STEERING | HyundaiFlags.CANFD_LKA_STEERING_ALT)
 
     sportage_params = CarControllerParams(sportage)
+    sportage_low_speed_params = CarControllerParams(sportage, vEgoRaw=5.0)
+    sportage_high_speed_params = CarControllerParams(sportage, vEgoRaw=20.0)
     comparison_params = CarControllerParams(comparison_angle)
     ioniq6_params = CarControllerParams(ioniq6)
 
     assert sportage_params.ANGLE_LIMITS.MAX_LATERAL_JERK < comparison_params.ANGLE_LIMITS.MAX_LATERAL_JERK
+    assert sportage_high_speed_params.ANGLE_LIMITS.MAX_LATERAL_JERK == sportage_params.ANGLE_LIMITS.MAX_LATERAL_JERK
+    assert sportage_low_speed_params.ANGLE_LIMITS.MAX_LATERAL_JERK > sportage_high_speed_params.ANGLE_LIMITS.MAX_LATERAL_JERK
+    assert sportage_low_speed_params.ANGLE_LIMITS.MAX_LATERAL_JERK < comparison_params.ANGLE_LIMITS.MAX_LATERAL_JERK
     assert comparison_params.ANGLE_LIMITS.MAX_LATERAL_JERK == ioniq6_params.ANGLE_LIMITS.MAX_LATERAL_JERK
 
   def test_ioniq_5_canfd_aux_messages_are_optional(self):

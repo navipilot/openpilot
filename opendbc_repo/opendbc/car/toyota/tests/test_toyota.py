@@ -222,18 +222,25 @@ class TestToyotaCarController:
     assert controller.standstill_req is False
 
   def test_permit_braking_high_speed_coasts_for_tiny_decel(self):
-    assert update_permit_braking(True, -0.05, False, True, 25.0) is False
-    assert update_permit_braking(False, -0.05, False, True, 25.0) is False
+    assert update_permit_braking(True, -0.05, False, True, 25.0, True) is False
+    assert update_permit_braking(False, -0.05, False, True, 25.0, True) is False
 
-  def test_permit_braking_high_speed_brakes_for_meaningful_decel(self):
-    assert update_permit_braking(False, -0.15, False, True, 25.0) is True
+  def test_permit_braking_high_speed_brakes_for_meaningful_decel_with_lead(self):
+    assert update_permit_braking(False, -0.15, False, True, 25.0, True) is True
+
+  def test_permit_braking_high_speed_no_lead_coasts_for_mild_decel(self):
+    assert update_permit_braking(True, -0.25, False, True, 25.0, False) is False
+    assert update_permit_braking(False, -0.25, False, True, 25.0, False) is False
+
+  def test_permit_braking_high_speed_no_lead_brakes_for_stronger_decel(self):
+    assert update_permit_braking(False, -0.35, False, True, 25.0, False) is True
 
   def test_permit_braking_low_speed_keeps_legacy_behavior(self):
-    assert update_permit_braking(False, -0.05, False, True, 10.0) is True
+    assert update_permit_braking(False, -0.05, False, True, 10.0, False) is True
 
   def test_permit_braking_forces_on_when_stopping_or_inactive(self):
-    assert update_permit_braking(False, 0.10, True, True, 25.0) is True
-    assert update_permit_braking(False, 0.10, False, False, 25.0) is True
+    assert update_permit_braking(False, 0.10, True, True, 25.0, False) is True
+    assert update_permit_braking(False, 0.10, False, False, 25.0, False) is True
 
   def test_sng_hack_clears_existing_standstill_latch(self):
     controller = self._make_controller(standstill_req=True, last_standstill=True)

@@ -53,12 +53,15 @@ class CarControllerParams:
     if CP.flags & HyundaiFlags.CANFD_ANGLE_STEERING:
       self.STEER_THRESHOLD = 175
 
-      # The Sportage angle port is rough at low speed on the higher global jerk limit.
-      # Keep the branch-wide higher limit for other cars, but restore the older calmer
-      # jerk ceiling on this port only.
+      # The Sportage angle port gets rough if it keeps the branch-wide higher jerk
+      # limit everywhere, but the fully calmed 3.0 m/s^3 cap lags too much in tight
+      # low-speed turns. Give it extra low-speed authority, then fade back to the
+      # calmer ceiling by normal road speeds.
       if CP.carFingerprint == CAR.KIA_SPORTAGE_HEV_2026:
+        sportage_low_speed_weight = min(max((15.0 - vEgoRaw) / 7.0, 0.0), 1.0)
+        sportage_lateral_jerk = 3.0 + (1.2 * sportage_low_speed_weight)
         self.ANGLE_LIMITS = replace(self.ANGLE_LIMITS,
-                                    MAX_LATERAL_JERK=3.0 + (ACCELERATION_DUE_TO_GRAVITY * AVERAGE_ROAD_ROLL))
+                                    MAX_LATERAL_JERK=sportage_lateral_jerk + (ACCELERATION_DUE_TO_GRAVITY * AVERAGE_ROAD_ROLL))
 
     # To determine the limit for your car, find the maximum value that the stock LKAS will request.
     # If the max stock LKAS request is <384, add your car to this list.

@@ -6,9 +6,21 @@ from opendbc.car.honda import hondacan
 from opendbc.car.honda.values import CAR, CruiseButtons, HONDA_BOSCH, HONDA_BOSCH_CANFD, HONDA_BOSCH_RADARLESS, \
                                      HONDA_BOSCH_TJA_CONTROL, HONDA_NIDEC_ALT_PCM_ACCEL, CarControllerParams
 from opendbc.car.interfaces import CarControllerBase
+from openpilot.starpilot.common.testing_grounds import testing_ground
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
+CIVIC_BOSCH_MODIFIED_STEER_CAN_MAX = 4864
+
+
+def civic_bosch_modified_lateral_testing_ground_active() -> bool:
+  return testing_ground.use("8", "B")
+
+
+def get_civic_bosch_modified_steer_can_max(base_steer_can_max: int, CP) -> int:
+  if CP.carFingerprint == CAR.HONDA_CIVIC_BOSCH and CP.dashcamOnly and civic_bosch_modified_lateral_testing_ground_active():
+    return CIVIC_BOSCH_MODIFIED_STEER_CAN_MAX
+  return base_steer_can_max
 
 
 def compute_gb_honda_bosch(accel, speed):
@@ -140,8 +152,12 @@ class CarController(CarControllerBase):
     # **** process the car messages ****
 
     # steer torque is converted back to CAN reference (positive when steering right)
-    apply_torque = int(np.interp(-limited_torque * self.params.STEER_MAX,
-                                 self.params.STEER_LOOKUP_BP, self.params.STEER_LOOKUP_V))
+    steer_can_max = get_civic_bosch_modified_steer_can_max(self.params.STEER_MAX, self.CP)
+    if steer_can_max != self.params.STEER_MAX:
+      apply_torque = int(np.clip(-limited_torque * steer_can_max, -steer_can_max, steer_can_max))
+    else:
+      apply_torque = int(np.interp(-limited_torque * self.params.STEER_MAX,
+                                   self.params.STEER_LOOKUP_BP, self.params.STEER_LOOKUP_V))
 
     # Send CAN commands
     can_sends = []

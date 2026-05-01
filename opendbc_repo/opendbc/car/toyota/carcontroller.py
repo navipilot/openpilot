@@ -31,6 +31,7 @@ MAX_PITCH_COMPENSATION = 1.5  # m/s^2
 TOYOTA_COAST_BRAKE_MIN_SPEED = 15.0  # m/s
 TOYOTA_COAST_BRAKE_ENABLE_ACCEL = -0.10  # m/s^2
 TOYOTA_COAST_BRAKE_DISABLE_ACCEL = -0.06  # m/s^2
+TOYOTA_NO_LEAD_COAST_BRAKE_ACCEL = -0.30  # m/s^2
 
 # LKA limits
 # EPS faults if you apply torque while the steering rate is above 100 deg/s for too long
@@ -64,9 +65,12 @@ def get_long_tune(CP, params):
 
 
 def update_permit_braking(current: bool, net_acceleration_request_min: float, stopping: bool,
-                          long_active: bool, v_ego: float) -> bool:
+                          long_active: bool, v_ego: float, lead_visible: bool) -> bool:
   if stopping or not long_active:
     return True
+
+  if not lead_visible and v_ego >= TOYOTA_COAST_BRAKE_MIN_SPEED:
+    return net_acceleration_request_min <= TOYOTA_NO_LEAD_COAST_BRAKE_ACCEL
 
   # At cruising speeds, some Toyota platforms turn tiny negative accel corrections
   # into noticeable brake taps. Keep a small coast-only band so mild follow/cruise
@@ -316,7 +320,8 @@ class CarController(CarControllerBase):
                                                     net_acceleration_request_min,
                                                     stopping,
                                                     CC.longActive,
-                                                    CS.out.vEgo)
+                                                    CS.out.vEgo,
+                                                    lead)
 
         pcm_accel_cmd = float(np.clip(pcm_accel_cmd, self.params.ACCEL_MIN, self.params.ACCEL_MAX))
 

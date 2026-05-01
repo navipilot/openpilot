@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 from cereal import car, custom, log
 import openpilot.selfdrive.controls.lib.latcontrol_torque as latcontrol_torque
+import openpilot.selfdrive.controls.lib.latcontrol_pid as latcontrol_pid
 from opendbc.car.car_helpers import interfaces
 from opendbc.car.honda.values import CAR as HONDA
 from opendbc.car.toyota.values import CAR as TOYOTA
@@ -12,7 +13,7 @@ from opendbc.car.hyundai.values import CAR as HYUNDAI
 from opendbc.car.vehicle_model import VehicleModel
 from openpilot.common.realtime import DT_CTRL
 from openpilot.selfdrive.controls.lib.latcontrol_angle import LatControlAngle
-from openpilot.selfdrive.controls.lib.latcontrol_pid import LatControlPID
+from openpilot.selfdrive.controls.lib.latcontrol_pid import LatControlPID, get_civic_bosch_modified_pid_output_scale
 from openpilot.selfdrive.controls.lib.latcontrol_torque import (
   LatControlTorque,
   get_bolt_2017_center_taper_scale,
@@ -63,6 +64,30 @@ class TestLatControl:
     CS.vEgo = 22
     CS.steeringPressed = False
     CS.steeringAngleDeg = 1.0
+
+    params = log.LiveParametersData.new_message()
+    params.steerRatio = CP.steerRatio
+    params.stiffnessFactor = 1.0
+    params.roll = 0.0
+    params.angleOffsetDeg = 0.0
+
+    starpilot_toggles = SimpleNamespace()
+    return controller, VM, CS, params, starpilot_toggles
+
+  @staticmethod
+  def _build_pid_controller(car_name):
+    CarInterface = interfaces[car_name]
+    CP = CarInterface.get_non_essential_params(car_name)
+    CP.dashcamOnly = True
+    CI = CarInterface(CP, custom.StarPilotCarParams.new_message())
+    controller = LatControlPID(CP.as_reader(), CI, DT_CTRL)
+    VM = VehicleModel(CP)
+
+    CS = car.CarState.new_message()
+    CS.vEgo = 12
+    CS.steeringPressed = False
+    CS.steeringAngleDeg = -6.0
+    CS.steeringRateDeg = 0.0
 
     params = log.LiveParametersData.new_message()
     params.steerRatio = CP.steerRatio
@@ -353,6 +378,25 @@ class TestLatControl:
     _, _, lac_log = controller.update(True, CS, VM, params, False, 0.0025, False, 0.2, None, None, starpilot_toggles)
 
     assert lac_log.active
+
+  def test_civic_bosch_modified_pid_scale_curve(self):
+    assert get_civic_bosch_modified_pid_output_scale(0.0, 0.0, 12.0) == 1.0
+    assert get_civic_bosch_modified_pid_output_scale(20.0, 0.5, 12.0) > get_civic_bosch_modified_pid_output_scale(20.0, 0.0, 12.0)
+    assert get_civic_bosch_modified_pid_output_scale(-20.0, -0.5, 12.0) > get_civic_bosch_modified_pid_output_scale(-20.0, 0.0, 12.0)
+    assert get_civic_bosch_modified_pid_output_scale(-20.0, 0.5, 12.0) > get_civic_bosch_modified_pid_output_scale(20.0, 0.5, 12.0)
+    assert get_civic_bosch_modified_pid_output_scale(-20.0, 0.5, 4.0) < get_civic_bosch_modified_pid_output_scale(-20.0, 0.5, 12.0)
+
+  def test_civic_bosch_modified_pid_testing_ground_update_path(self, monkeypatch):
+    controller, VM, CS, params, starpilot_toggles = self._build_pid_controller(HONDA.HONDA_CIVIC_BOSCH)
+    monkeypatch.setattr(latcontrol_pid, "civic_bosch_modified_lateral_testing_ground_active", lambda: True)
+
+    base_output, _, lac_log = controller.update(True, CS, VM, params, False, 0.004, False, 0.2, None, None, starpilot_toggles)
+    assert lac_log.active
+
+    # Use a second update to create a turn-in phase with a larger desired angle delta.
+    tuned_output, _, _ = controller.update(True, CS, VM, params, False, 0.006, False, 0.2, None, None, starpilot_toggles)
+
+    assert abs(tuned_output) >= abs(base_output)
 
   @parameterized.expand([(HONDA.HONDA_CIVIC, LatControlPID), (TOYOTA.TOYOTA_RAV4, LatControlTorque),
                          (NISSAN.NISSAN_LEAF, LatControlAngle), (GM.CHEVROLET_BOLT_ACC_2022_2023, LatControlTorque)])

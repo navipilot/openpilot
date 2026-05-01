@@ -237,6 +237,23 @@ def test_vision_lead_approach_cap_ignores_opening_lead_with_large_gap():
   assert planner.get_vision_lead_approach_cap(lead, v_ego, -1.0, 1.45) is None
 
 
+def test_vision_untracked_slow_lead_cap_triggers_only_for_meaningful_closing_case():
+  route_v_ego = 23.23
+  far_v_ego = 29.0
+
+  CP = CarInterface.get_non_essential_params(CAR.HONDA_CIVIC)
+  planner = LongitudinalPlanner(CP, init_v=route_v_ego)
+  route_like_lead = make_lead(status=True, d_rel=66.7, v_lead=18.49, a_lead=0.0, radar=False, model_prob=0.92)
+  far_mild_lead = make_lead(status=True, d_rel=82.0, v_lead=25.0, a_lead=0.0, radar=False, model_prob=0.9)
+
+  route_cap = planner.get_vision_untracked_slow_lead_cap(route_like_lead, route_v_ego, -1.0)
+  far_cap = planner.get_vision_untracked_slow_lead_cap(far_mild_lead, far_v_ego, -1.0)
+
+  assert route_cap is not None
+  assert route_cap < -0.1
+  assert far_cap is None
+
+
 def test_vision_slow_stopped_lead_cap_brakes_earlier_for_confident_stop():
   v_ego = 13.207
   CP = CarInterface.get_non_essential_params(CAR.HONDA_CIVIC)
@@ -368,6 +385,41 @@ def test_acc_mode_vision_lead_approach_cap_smooths_before_close_brake(model_vers
   assert planner_close.mode == "acc"
   assert planner_approach.output_a_target < -0.6
   assert planner_close.output_a_target < planner_approach.output_a_target - 0.25
+
+
+@pytest.mark.parametrize("model_version", ["v11", "v12", "v13"])
+def test_acc_mode_pretracking_vision_slow_lead_blocks_positive_catchup(model_version):
+  v_ego = 23.23
+
+  CP = CarInterface.get_non_essential_params(CAR.HONDA_CIVIC)
+  planner_no_lead = LongitudinalPlanner(CP, init_v=v_ego)
+  planner_with_lead = LongitudinalPlanner(CP, init_v=v_ego)
+  sm_no_lead = make_sm(
+    v_ego,
+    desired_accel=0.2,
+    min_accel=-0.5,
+    experimental_mode=False,
+    tracking_lead=False,
+  )
+  sm_with_lead = make_sm(
+    v_ego,
+    desired_accel=0.2,
+    min_accel=-0.5,
+    experimental_mode=False,
+    tracking_lead=False,
+    lead_one=make_lead(status=True, d_rel=66.7, v_lead=18.49, a_lead=0.0, radar=False, model_prob=0.92),
+  )
+  sm_no_lead["starpilotPlan"].vCruise = v_ego + 6.0
+  sm_with_lead["starpilotPlan"].vCruise = v_ego + 6.0
+
+  for _ in range(6):
+    planner_no_lead.update(sm_no_lead, make_toggles(model_version))
+    planner_with_lead.update(sm_with_lead, make_toggles(model_version))
+
+  assert planner_with_lead.mode == "acc"
+  assert not planner_with_lead.raw_close_lead_needs_control(sm_with_lead["radarState"].leadOne, v_ego)
+  assert planner_with_lead.output_a_target <= planner_no_lead.output_a_target - 0.04
+  assert planner_with_lead.output_a_target < -0.2
 
 
 @pytest.mark.parametrize("model_version", ["v11", "v12", "v13"])
