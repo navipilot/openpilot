@@ -78,7 +78,8 @@ void DeveloperSidebar::updateState(const UIState &s, const StarPilotUIState &fs)
   const cereal::LiveDelayData::Reader &liveDelay = fpsm["liveDelay"].getLiveDelay();
   const cereal::LiveParametersData::Reader &liveParameters = fpsm["liveParameters"].getLiveParameters();
   const cereal::LiveTorqueParametersData::Reader &liveTorqueParameters = fpsm["liveTorqueParameters"].getLiveTorqueParameters();
-  const bool usingLiveTorqueTune = liveTorqueParameters.getUseParams() || starpilot_scene.starpilot_toggles.value("force_auto_tune").toBool();
+  const bool forceAutoTuneOff = starpilot_scene.starpilot_toggles.value("force_auto_tune_off").toBool();
+  const bool usingLiveTorqueTune = !forceAutoTuneOff && (liveTorqueParameters.getUseParams() || starpilot_scene.starpilot_toggles.value("force_auto_tune").toBool());
 
   const bool is_metric = s.scene.is_metric;
   const bool use_si = starpilot_scene.starpilot_toggles.value("use_si_metrics").toBool();
@@ -125,12 +126,12 @@ void DeveloperSidebar::updateState(const UIState &s, const StarPilotUIState &fs)
 
   float displayedFriction = usingLiveTorqueTune ? liveTorqueParameters.getFrictionCoefficientFiltered() : params.getFloat("SteerFrictionStock");
   if (displayedFriction == 0.0f) {
-    displayedFriction = liveTorqueParameters.getFrictionCoefficientFiltered();
+    displayedFriction = forceAutoTuneOff ? params.getFloat("SteerFriction") : liveTorqueParameters.getFrictionCoefficientFiltered();
   }
 
   float displayedLatAccel = usingLiveTorqueTune ? liveTorqueParameters.getLatAccelFactorFiltered() : params.getFloat("SteerLatAccelStock");
   if (displayedLatAccel == 0.0f) {
-    displayedLatAccel = liveTorqueParameters.getLatAccelFactorFiltered();
+    displayedLatAccel = forceAutoTuneOff ? params.getFloat("SteerLatAccel") : liveTorqueParameters.getLatAccelFactorFiltered();
   }
 
   accelerationStatus = ItemStatus(QPair<QString, QString>(tr("ACCEL"), QString::number(acceleration, 'f', 2) + accelerationUnit), metricColor);
