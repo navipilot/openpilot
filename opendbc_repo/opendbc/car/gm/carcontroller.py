@@ -133,6 +133,17 @@ def estimate_auto_hold_brake(driver_brake: float, op_brake: float) -> int:
   return int(round(np.clip(hold_brake, AUTO_HOLD_MIN_BRAKE, AUTO_HOLD_MAX_BRAKE)))
 
 
+def should_activate_auto_hold(hold_ready: bool, auto_hold_armed: bool, auto_hold_engaged: bool,
+                              brake_pressed: bool, long_active: bool, regen_braking: bool, v_ego: float) -> bool:
+  return (
+    hold_ready and
+    (auto_hold_armed or auto_hold_engaged or brake_pressed) and
+    not long_active and
+    not regen_braking and
+    v_ego < 0.02
+  )
+
+
 def get_friction_brake_bus(CP):
   volt_gateway_alt_brake = (
     CP.carFingerprint == CAR.CHEVROLET_VOLT and
@@ -453,12 +464,14 @@ class CarController(CarControllerBase):
       paddle_sched_feed_active = False
 
     paddle_spoof_pressed = raw_regen_active and (CS.out.vEgo > 2.68)
-    auto_hold_active = (
-      hold_ready and
-      CS.auto_hold_armed and
-      not CC.longActive and
-      not CS.out.regenBraking and
-      CS.out.vEgo < 0.02
+    auto_hold_active = should_activate_auto_hold(
+      hold_ready,
+      CS.auto_hold_armed,
+      CS.auto_hold_engaged,
+      CS.out.brakePressed,
+      CC.longActive,
+      CS.out.regenBraking,
+      CS.out.vEgo,
     )
 
     # Steering (Active: 50Hz, inactive: 10Hz)
