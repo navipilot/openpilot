@@ -17,7 +17,6 @@ from openpilot.selfdrive.ui.layouts.settings.starpilot.system_settings import St
 from openpilot.selfdrive.ui.layouts.settings.starpilot.visuals import StarPilotVisualsLayout
 from openpilot.selfdrive.ui.layouts.settings.starpilot.themes import StarPilotThemesLayout
 from openpilot.selfdrive.ui.layouts.settings.starpilot.vehicle import StarPilotVehicleSettingsLayout
-from openpilot.selfdrive.ui.layouts.settings.starpilot.wheel import StarPilotWheelLayout
 
 from openpilot.selfdrive.ui.layouts.settings.starpilot.aethergrid import TileGrid, HubTile, RadioTileGroup, SPACING
 
@@ -58,7 +57,7 @@ class StarPilotLayout(Widget):
     {
       "title": "Vehicle Settings",
       "icon": "icon_vehicle.png",
-      "buttons": [("VEHICLE SETTINGS", "VEHICLE", 0), ("WHEEL CONTROLS", "WHEEL", 0)],
+      "buttons": [("VEHICLE SETTINGS", "VEHICLE", 0)],
       "color": "#64748B",
     },
   ]
@@ -86,7 +85,6 @@ class StarPilotLayout(Widget):
       StarPilotPanelType.VISUALS: StarPilotPanelInfo(tr_noop("Appearance"), StarPilotVisualsLayout()),
       StarPilotPanelType.THEMES: StarPilotPanelInfo(tr_noop("Themes"), StarPilotThemesLayout()),
       StarPilotPanelType.VEHICLE: StarPilotPanelInfo(tr_noop("Vehicle Settings"), StarPilotVehicleSettingsLayout()),
-      StarPilotPanelType.WHEEL: StarPilotPanelInfo(tr_noop("Wheel Controls"), StarPilotWheelLayout()),
     }
 
     self._setup_sub_panels(
@@ -188,7 +186,6 @@ class StarPilotLayout(Widget):
       "VISUALS": StarPilotPanelType.VISUALS,
       "THEMES": StarPilotPanelType.THEMES,
       "VEHICLE": StarPilotPanelType.VEHICLE,
-      "WHEEL": StarPilotPanelType.WHEEL,
     }
 
     if self._current_category_idx is None:
