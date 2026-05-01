@@ -336,4 +336,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
 
     {"HardwareC3xLite", {PERSISTENT, INT, "0"}},
     {"ShareData", {PERSISTENT, INT, "0"}},
+
+    {"LateralControlEnabled", {PERSISTENT, INT, "1"}},        // 横向控制总开关，默认开启
+    {"LateralControlMinSpeed", {PERSISTENT, INT, "55"}},      // 横向控制最低速度，默认55 km/h
 };
