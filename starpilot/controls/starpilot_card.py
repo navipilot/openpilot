@@ -80,7 +80,7 @@ class StarPilotCard:
   def update(self, carState, starpilotCarState, sm, starpilot_toggles):
     self.switchback_mode_enabled = self.params_memory.get_bool("SwitchbackModeEnabled")
 
-    if self.CP.brand == "hyundai":
+    if self.CP.brand == "hyundai" or starpilot_toggles.lkas_allowed_for_aol:
       for be in carState.buttonEvents:
         if be.type == ButtonType.lkas and be.pressed and starpilot_toggles.always_on_lateral_lkas:
           self.always_on_lateral_allowed = not self.always_on_lateral_allowed

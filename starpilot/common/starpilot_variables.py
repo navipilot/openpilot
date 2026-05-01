@@ -501,7 +501,10 @@ class StarPilotVariables:
     latAccelFactor = CP.lateralTuning.torque.latAccelFactor
     if not math.isfinite(latAccelFactor):
       latAccelFactor = 0.0
-    toggle.lkas_allowed_for_aol = toggle.car_make == "hyundai" and bool(CP.flags & HyundaiFlags.CANFD or CP.flags & HyundaiFlags.HAS_LDA_BUTTON)
+    toggle.lkas_allowed_for_aol = (
+      (toggle.car_make == "hyundai" and bool(CP.flags & HyundaiFlags.CANFD or CP.flags & HyundaiFlags.HAS_LDA_BUTTON)) or
+      toggle.car_make == "honda"
+    )
     longitudinalActuatorDelay = CP.longitudinalActuatorDelay
     toggle.openpilot_longitudinal = CP.openpilotLongitudinalControl and not toggle.disable_openpilot_long
     pcm_cruise = CP.pcmCruise

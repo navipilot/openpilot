@@ -32,10 +32,12 @@ def long_control_state_trans(CP, active, long_control_state, v_ego,
   # Ignore cruise standstill if car has a gas interceptor
   cruise_standstill = cruise_standstill and not CP.enableGasInterceptorDEPRECATED
   stopping_condition = should_stop
-  starting_condition = (not should_stop and
-                        not cruise_standstill and
-                        not brake_pressed)
-  stopping_release_condition = starting_condition and allow_stopping_release
+  release_condition = not should_stop and not brake_pressed
+  starting_condition = release_condition and not cruise_standstill
+  # Some stock ACC platforms keep standstill latched until they see positive drive torque.
+  # Once the planner has sustained a release request, allow LongControl to leave stopping
+  # even if the standstill bit has not dropped yet.
+  stopping_release_condition = release_condition and allow_stopping_release
   started_condition = v_ego > starpilot_toggles.vEgoStarting
 
   if not active:
@@ -166,7 +168,7 @@ class LongControl:
       self.stop_release_counter = 0
       return True
 
-    if should_stop or CS.brakePressed or CS.cruiseState.standstill:
+    if should_stop or CS.brakePressed:
       self.stop_release_counter = 0
       return False
 

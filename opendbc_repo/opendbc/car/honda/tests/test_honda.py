@@ -1,7 +1,12 @@
 import re
 
 from opendbc.car.structs import CarParams
-from opendbc.car.honda.carcontroller import CIVIC_BOSCH_MODIFIED_STEER_CAN_MAX, get_civic_bosch_modified_steer_can_max
+from opendbc.car.honda.carcontroller import (
+  CIVIC_BOSCH_MODIFIED_STEER_CAN_MAX,
+  get_civic_bosch_modified_steer_can_max,
+  get_civic_bosch_modified_steering_pressed,
+  get_civic_bosch_modified_torque_lpf_tau,
+)
 from opendbc.car.honda.fingerprints import FW_VERSIONS
 from opendbc.car.honda.values import CAR, HONDA_BOSCH, HONDA_BOSCH_TJA_CONTROL, HondaFlags
 
@@ -30,3 +35,21 @@ class TestHondaFingerprint:
 
     CP.dashcamOnly = False
     assert get_civic_bosch_modified_steer_can_max(4096, CP) == 4096
+
+  def test_modified_civic_torque_lpf_tau_reacts_to_sign_change(self):
+    assert get_civic_bosch_modified_torque_lpf_tau(0.7, -0.1, 25.0) == 0.09
+    assert get_civic_bosch_modified_torque_lpf_tau(0.02, 0.01, 12.0) == 0.15
+    assert get_civic_bosch_modified_torque_lpf_tau(0.30, 0.0, 12.0) == 0.11
+
+  def test_modified_civic_steering_pressed_filter_rejects_short_same_direction_spikes(self):
+    filter_s, pressed = get_civic_bosch_modified_steering_pressed(True, 1500.0, 0.8, 0.01, False)
+    assert not pressed
+    assert filter_s > 0.01
+
+    filter_s = 0.31
+    filter_s, pressed = get_civic_bosch_modified_steering_pressed(True, 1500.0, 0.8, filter_s, False)
+    assert pressed
+
+  def test_modified_civic_steering_pressed_filter_allows_opposing_driver_torque_quickly(self):
+    filter_s, pressed = get_civic_bosch_modified_steering_pressed(True, -1500.0, 0.8, 0.11, False)
+    assert pressed

@@ -23,6 +23,50 @@ def get_civic_bosch_modified_steer_can_max(base_steer_can_max: int, CP) -> int:
   return base_steer_can_max
 
 
+def get_civic_bosch_modified_torque_lpf_tau(torque_cmd: float, prev_torque_cmd: float, v_ego: float) -> float:
+  torque_delta = abs(float(torque_cmd) - float(prev_torque_cmd))
+  sign_change = (float(torque_cmd) * float(prev_torque_cmd)) < 0.0
+  highway = v_ego > (50.0 * 0.44704)
+
+  if highway:
+    if sign_change and torque_delta > 0.15:
+      return 0.09
+    return 0.11
+
+  if torque_delta > 0.50:
+    return 0.10
+  elif torque_delta > 0.20:
+    return 0.11
+  elif torque_delta > 0.05:
+    return 0.12
+  else:
+    return 0.15
+
+
+def get_civic_bosch_modified_steering_pressed(raw_pressed: bool, steering_torque: float, torque_cmd: float,
+                                              filter_s: float, was_pressed: bool) -> tuple[float, bool]:
+  torque_product = steering_torque * torque_cmd
+  torque_cmd_abs = abs(torque_cmd)
+
+  if raw_pressed:
+    if was_pressed:
+      trigger_s = 0.05
+    elif torque_cmd_abs < 0.10:
+      trigger_s = 0.12
+    elif torque_product < 0.0:
+      trigger_s = 0.12
+    else:
+      trigger_s = 0.32
+
+    filter_s = min(1.0, filter_s + DT_CTRL)
+    steering_pressed = filter_s >= trigger_s
+  else:
+    filter_s = max(0.0, filter_s - 4.0 * DT_CTRL)
+    steering_pressed = filter_s > 0.08 and was_pressed
+
+  return filter_s, steering_pressed
+
+
 def compute_gb_honda_bosch(accel, speed):
   # TODO returns 0s, is unused
   return 0.0, 0.0
@@ -120,6 +164,24 @@ class CarController(CarControllerBase):
     self.gas = 0.0
     self.brake = 0.0
     self.last_torque = 0.0
+    self.torque_lpf = 0.0
+    self.prev_torque_cmd = 0.0
+    self.steering_pressed_filter_s = 0.0
+    self.steering_pressed_robust_prev = False
+
+  def _modified_civic_active(self) -> bool:
+    return self.CP.carFingerprint == CAR.HONDA_CIVIC_BOSCH and self.CP.dashcamOnly and civic_bosch_modified_lateral_testing_ground_active()
+
+  def _filtered_steering_pressed(self, CS, torque_cmd: float) -> bool:
+    self.steering_pressed_filter_s, steering_pressed = get_civic_bosch_modified_steering_pressed(
+      bool(CS.out.steeringPressed),
+      float(getattr(CS.out, "steeringTorque", 0.0)),
+      float(torque_cmd),
+      self.steering_pressed_filter_s,
+      self.steering_pressed_robust_prev,
+    )
+    self.steering_pressed_robust_prev = steering_pressed
+    return steering_pressed
 
   def update(self, CC, CS, now_nanos, starpilot_toggles):
     actuators = CC.actuators
@@ -134,8 +196,29 @@ class CarController(CarControllerBase):
       accel = 0.0
       gas, brake = 0.0, 0.0
 
+    torque_cmd = float(actuators.torque)
+    filtered_steering_pressed = bool(CS.out.steeringPressed)
+    if self._modified_civic_active():
+      if CC.latActive:
+        filtered_steering_pressed = self._filtered_steering_pressed(CS, torque_cmd)
+        if filtered_steering_pressed:
+          self.torque_lpf = 0.0
+          self.prev_torque_cmd = 0.0
+          torque_cmd = 0.0
+        else:
+          tau = get_civic_bosch_modified_torque_lpf_tau(torque_cmd, self.prev_torque_cmd, CS.out.vEgo)
+          alpha = DT_CTRL / (tau + DT_CTRL)
+          self.torque_lpf = alpha * torque_cmd + ((1.0 - alpha) * self.torque_lpf)
+          self.prev_torque_cmd = torque_cmd
+          torque_cmd = self.torque_lpf
+      else:
+        self.torque_lpf = 0.0
+        self.prev_torque_cmd = 0.0
+        self.steering_pressed_filter_s = 0.0
+        self.steering_pressed_robust_prev = False
+
     # *** rate limit steer ***
-    limited_torque = rate_limit(actuators.torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
+    limited_torque = rate_limit(torque_cmd, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
                                 self.params.STEER_DELTA_UP * DT_CTRL)
     self.last_torque = limited_torque
 
@@ -241,7 +324,7 @@ class CarController(CarControllerBase):
                                                  hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud))
 
       steering_available = CS.out.cruiseState.available and CS.out.vEgo > self.CP.minSteerSpeed
-      reduced_steering = CS.out.steeringPressed
+      reduced_steering = filtered_steering_pressed
       can_sends.extend(hondacan.create_lkas_hud(self.packer, self.CAN.lkas, self.CP, hud_control, CC.latActive,
                                                 steering_available, reduced_steering, alert_steer_required, CS.lkas_hud))
 
