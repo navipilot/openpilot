@@ -1,6 +1,7 @@
 import math
 
 from cereal import log
+from opendbc.car.honda.carcontroller import get_civic_bosch_modified_steering_pressed
 from opendbc.car.honda.values import CAR as HONDA, HondaFlags
 from openpilot.starpilot.common.testing_grounds import testing_ground
 from openpilot.selfdrive.controls.lib.latcontrol import LatControl
@@ -44,6 +45,9 @@ class LatControlPID(LatControl):
     self.get_steer_feedforward = CI.get_steer_feedforward_function()
     self.is_civic_bosch_modified = CP.carFingerprint == HONDA.HONDA_CIVIC_BOSCH and bool(CP.flags & HondaFlags.EPS_MODIFIED)
     self.prev_angle_steers_des_no_offset = 0.0
+    self.modified_civic_steering_pressed_filter_s = 0.0
+    self.modified_civic_steering_pressed_prev = False
+    self.prev_output_torque = 0.0
 
   def update(self, active, CS, VM, params, steer_limited_by_safety, desired_curvature, curvature_limited, lat_delay, calibrated_pose, model_data, starpilot_toggles):
     pid_log = log.ControlsState.LateralPIDState.new_message()
@@ -60,11 +64,25 @@ class LatControlPID(LatControl):
       output_torque = 0.0
       pid_log.active = False
       self.prev_angle_steers_des_no_offset = angle_steers_des_no_offset
+      self.modified_civic_steering_pressed_filter_s = 0.0
+      self.modified_civic_steering_pressed_prev = False
+      self.prev_output_torque = 0.0
 
     else:
       # offset does not contribute to resistive torque
       ff = self.ff_factor * self.get_steer_feedforward(angle_steers_des_no_offset, CS.vEgo)
-      freeze_integrator = steer_limited_by_safety or CS.steeringPressed or CS.vEgo < 5
+      steering_pressed = CS.steeringPressed
+      if self.is_civic_bosch_modified:
+        self.modified_civic_steering_pressed_filter_s, steering_pressed = get_civic_bosch_modified_steering_pressed(
+          bool(CS.steeringPressed),
+          float(getattr(CS, "steeringTorque", 0.0)),
+          float(self.prev_output_torque),
+          self.modified_civic_steering_pressed_filter_s,
+          self.modified_civic_steering_pressed_prev,
+        )
+        self.modified_civic_steering_pressed_prev = steering_pressed
+
+      freeze_integrator = steer_limited_by_safety or steering_pressed or CS.vEgo < 5
 
       output_torque = self.pid.update(error,
                                 feedforward=ff,
@@ -83,5 +101,6 @@ class LatControlPID(LatControl):
       pid_log.output = float(output_torque)
       pid_log.saturated = bool(self._check_saturation(self.steer_max - abs(output_torque) < 1e-3, CS, steer_limited_by_safety, curvature_limited))
       self.prev_angle_steers_des_no_offset = angle_steers_des_no_offset
+      self.prev_output_torque = float(output_torque)
 
     return output_torque, angle_steers_des, pid_log

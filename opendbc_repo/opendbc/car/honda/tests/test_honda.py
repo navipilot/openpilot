@@ -49,7 +49,11 @@ class TestHondaFingerprint:
     assert not pressed
     assert filter_s > 0.01
 
-    filter_s = 0.31
+    filter_s = 0.58
+    filter_s, pressed = get_civic_bosch_modified_steering_pressed(True, 1500.0, 0.8, filter_s, False)
+    assert not pressed
+
+    filter_s = 0.59
     filter_s, pressed = get_civic_bosch_modified_steering_pressed(True, 1500.0, 0.8, filter_s, False)
     assert pressed
 
