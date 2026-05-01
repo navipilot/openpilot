@@ -24,8 +24,9 @@ CANFD_BLINDSPOT_STATUS_STALE_NS = 200_000_000
 CANFD_BLINKER_STALKS_STALE_NS = 200_000_000
 HYUNDAI_CANFD_SCC_ACCEL_STEP = 5.0 / 50.0
 HYUNDAI_CANFD_SCC_DECEL_STEP = 12.5 / 50.0
-IONIQ_6_CANFD_SCC_ACCEL_STEP = 6.0 / 50.0
-IONIQ_6_CANFD_SCC_DECEL_STEP = 15.0 / 50.0
+IONIQ_6_RESPONSE_MULTIPLIER = 1.2
+IONIQ_6_CANFD_SCC_ACCEL_STEP = (6.0 / 50.0) * IONIQ_6_RESPONSE_MULTIPLIER
+IONIQ_6_CANFD_SCC_DECEL_STEP = (15.0 / 50.0) * IONIQ_6_RESPONSE_MULTIPLIER
 GENESIS_G90_STOP_HOLD_SPEED_BP = [0.0, 0.03, 0.08, 0.16, 0.3, 0.5]
 GENESIS_G90_STOP_HOLD_ACCEL_V = [-0.12, -0.12, -0.14, -0.18, -0.36, -0.72]
 GENESIS_G90_STOP_HOLD_RELAX_SPEED_BP = [0.0, 0.08, 0.16, 0.3, 0.5]
@@ -34,10 +35,12 @@ GENESIS_G90_RELEASE_SPEED_BP = [0.0, 0.3, 0.6]
 GENESIS_G90_RELEASE_ACCEL_STEP_V = [0.24, 0.20, 0.14]
 GENESIS_G90_RELEASE_DECEL_STEP_V = [0.30, 0.24, 0.18]
 GENESIS_G90_RELEASE_MAX_SPEED = 0.8
-IONIQ_6_LONG_MIN_JERK = 0.5
-IONIQ_6_LONG_JERK_LIMIT = 4.8
+IONIQ_6_LONG_MIN_JERK = 0.5 * IONIQ_6_RESPONSE_MULTIPLIER
+IONIQ_6_LONG_JERK_LIMIT = 4.8 * IONIQ_6_RESPONSE_MULTIPLIER
 IONIQ_6_LONG_LOOKAHEAD_JERK_BP = [2.0, 5.0, 20.0]
-IONIQ_6_LONG_LOOKAHEAD_JERK_V = [0.3, 0.45, 0.6]
+IONIQ_6_LONG_LOOKAHEAD_JERK_V = [0.3 / IONIQ_6_RESPONSE_MULTIPLIER,
+                                 0.45 / IONIQ_6_RESPONSE_MULTIPLIER,
+                                 0.6 / IONIQ_6_RESPONSE_MULTIPLIER]
 IONIQ_6_DYNAMIC_LOWER_JERK_BP = [-2.0, -1.5, -1.0, -0.25, -0.1, -0.025, -0.01, -0.005]
 IONIQ_6_DYNAMIC_LOWER_JERK_V = [3.3, 1.5, 1.0, 0.8, 0.7, 0.65, 0.55, 0.5]
 IONIQ_6_LAUNCH_HOLD_SPEED_BP = [0.0, 0.6, 1.25, 2.5]
@@ -45,7 +48,9 @@ IONIQ_6_LAUNCH_HOLD_SPEED_V = [0.75, 0.6, 0.4, 0.0]
 IONIQ_6_STOP_HOLD_SPEED_BP = [0.0, 0.25, 0.6, 1.2]
 IONIQ_6_STOP_HOLD_SPEED_V = [-0.12, -0.10, -0.05, 0.0]
 IONIQ_6_STOP_RELEASE_JERK_BP = [0.0, 0.15, 0.5]
-IONIQ_6_STOP_RELEASE_JERK_V = [3.6, 4.2, 4.8]
+IONIQ_6_STOP_RELEASE_JERK_V = [3.6 * IONIQ_6_RESPONSE_MULTIPLIER,
+                               4.2 * IONIQ_6_RESPONSE_MULTIPLIER,
+                               4.8 * IONIQ_6_RESPONSE_MULTIPLIER]
 
 
 @dataclass
@@ -113,8 +118,8 @@ def update_ioniq_6_longitudinal_tuning(state: Ioniq6LongitudinalTuningState, acc
       (state.long_control_state_last == LongCtrlState.starting and long_control_state == LongCtrlState.pid and v_ego < IONIQ_6_LAUNCH_HOLD_SPEED_BP[-1]):
     state.launch_active = True
 
-  upper_speed_limit = float(np.interp(v_ego, [0.0, 5.0, 20.0], [2.0, 3.0, 2.0])) if long_control_state == LongCtrlState.pid else IONIQ_6_LONG_MIN_JERK
-  lower_speed_limit = float(np.interp(v_ego, [0.0, 5.0, 20.0], [5.0, 3.5, 3.0]))
+  upper_speed_limit = float(np.interp(v_ego, [0.0, 5.0, 20.0], [2.0, 3.0, 2.0])) * IONIQ_6_RESPONSE_MULTIPLIER if long_control_state == LongCtrlState.pid else IONIQ_6_LONG_MIN_JERK
+  lower_speed_limit = float(np.interp(v_ego, [0.0, 5.0, 20.0], [5.0, 3.5, 3.0])) * IONIQ_6_RESPONSE_MULTIPLIER
 
   future_t_upper = float(np.interp(v_ego, IONIQ_6_LONG_LOOKAHEAD_JERK_BP, IONIQ_6_LONG_LOOKAHEAD_JERK_V))
   future_t_lower = float(np.interp(v_ego, IONIQ_6_LONG_LOOKAHEAD_JERK_BP, IONIQ_6_LONG_LOOKAHEAD_JERK_V))
@@ -131,12 +136,12 @@ def update_ioniq_6_longitudinal_tuning(state: Ioniq6LongitudinalTuningState, acc
 
   if state.stopping:
     state.desired_accel = float(np.interp(v_ego, IONIQ_6_STOP_HOLD_SPEED_BP, IONIQ_6_STOP_HOLD_SPEED_V))
-    state.jerk_upper = min(state.jerk_upper, float(np.interp(v_ego, [0.0, 1.2], [0.45, 0.65])))
+    state.jerk_upper = min(state.jerk_upper, float(np.interp(v_ego, [0.0, 1.2], [0.45, 0.65])) * IONIQ_6_RESPONSE_MULTIPLIER)
   else:
     state.desired_accel = float(np.clip(accel_cmd, CarControllerParams.ACCEL_MIN, CarControllerParams.ACCEL_MAX))
     if state.launch_active:
       state.desired_accel = max(state.desired_accel, float(np.interp(v_ego, IONIQ_6_LAUNCH_HOLD_SPEED_BP, IONIQ_6_LAUNCH_HOLD_SPEED_V)))
-      state.jerk_upper = max(state.jerk_upper, float(np.interp(v_ego, [0.0, 2.5], [4.8, 3.2])))
+      state.jerk_upper = max(state.jerk_upper, float(np.interp(v_ego, [0.0, 2.5], [4.8, 3.2])) * IONIQ_6_RESPONSE_MULTIPLIER)
       state.jerk_lower = max(state.jerk_lower, 1.0)
     if restart_from_stop:
       state.jerk_upper = min(state.jerk_upper, float(np.interp(v_ego, IONIQ_6_STOP_RELEASE_JERK_BP, IONIQ_6_STOP_RELEASE_JERK_V)))

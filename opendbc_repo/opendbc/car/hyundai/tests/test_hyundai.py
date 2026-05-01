@@ -249,9 +249,9 @@ class TestHyundaiFingerprint:
     state = update_ioniq_6_longitudinal_tuning(state, accel_cmd=1.5, v_ego=10.0, a_ego=0.0,
                                                long_control_state=LongCtrlState.pid, long_active=True)
     assert state.desired_accel == pytest.approx(1.5)
-    assert state.jerk_upper == pytest.approx(2.6666666667)
-    assert state.jerk_lower == pytest.approx(0.5)
-    assert state.actual_accel == pytest.approx(0.1333333333)
+    assert state.jerk_upper == pytest.approx(3.2)
+    assert state.jerk_lower == pytest.approx(0.6)
+    assert state.actual_accel == pytest.approx(0.16)
 
     state = update_ioniq_6_longitudinal_tuning(state, accel_cmd=1.0, v_ego=10.0, a_ego=0.0,
                                                long_control_state=LongCtrlState.stopping, long_active=True)
@@ -282,15 +282,15 @@ class TestHyundaiFingerprint:
     state = update_ioniq_6_longitudinal_tuning(state, accel_cmd=1.0, v_ego=0.0, a_ego=0.0,
                                                long_control_state=LongCtrlState.starting, long_active=True)
     assert state.launch_active
-    assert state.actual_accel == pytest.approx(0.24)
-    assert state.jerk_upper == pytest.approx(4.8)
+    assert state.actual_accel == pytest.approx(0.288)
+    assert state.jerk_upper == pytest.approx(5.76)
     assert state.jerk_lower == pytest.approx(1.0)
 
     state = update_ioniq_6_longitudinal_tuning(state, accel_cmd=0.3, v_ego=0.25, a_ego=1.2,
                                                long_control_state=LongCtrlState.pid, long_active=True)
     assert state.launch_active
     assert state.desired_accel > 0.3
-    assert state.actual_accel > 0.24
+    assert state.actual_accel > 0.288
 
   def test_ioniq_6_longitudinal_tuning_helper_softens_stop_release_handoff(self):
     state = Ioniq6LongitudinalTuningState(actual_accel=-0.12, accel_last=-0.12,
@@ -299,11 +299,11 @@ class TestHyundaiFingerprint:
 
     state = update_ioniq_6_longitudinal_tuning(state, accel_cmd=1.0, v_ego=0.0, a_ego=0.0,
                                                long_control_state=LongCtrlState.starting, long_active=True)
-    assert state.actual_accel == pytest.approx(0.06)
+    assert state.actual_accel == pytest.approx(0.096)
 
     state = update_ioniq_6_longitudinal_tuning(state, accel_cmd=1.0, v_ego=0.0, a_ego=0.0,
                                                long_control_state=LongCtrlState.starting, long_active=True)
-    assert state.actual_accel == pytest.approx(0.24)
+    assert state.actual_accel == pytest.approx(0.312)
 
   def test_genesis_g90_longitudinal_tuning_softens_final_stop_hold(self):
     state = GenesisG90LongitudinalTuningState()
