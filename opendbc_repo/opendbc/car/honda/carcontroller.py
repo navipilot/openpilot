@@ -49,20 +49,21 @@ def get_civic_bosch_modified_steering_pressed(raw_pressed: bool, steering_torque
   torque_cmd_abs = abs(torque_cmd)
 
   if raw_pressed:
-    if was_pressed:
-      trigger_s = 0.08
+    if torque_product < 0.0:
+      trigger_s = 0.08 if was_pressed else 0.10
+      rise_rate = 1.0
     elif torque_cmd_abs < 0.10:
-      trigger_s = 0.18
-    elif torque_product < 0.0:
-      trigger_s = 0.10
+      trigger_s = 0.20 if was_pressed else 0.24
+      rise_rate = 0.75
     else:
-      trigger_s = 0.60
+      trigger_s = 0.70 if was_pressed else 0.80
+      rise_rate = 0.50
 
-    filter_s = min(1.0, filter_s + DT_CTRL)
+    filter_s = min(1.0, filter_s + (rise_rate * DT_CTRL))
     steering_pressed = filter_s >= trigger_s
   else:
-    filter_s = max(0.0, filter_s - 6.0 * DT_CTRL)
-    steering_pressed = filter_s > 0.06 and was_pressed
+    filter_s = max(0.0, filter_s - 8.0 * DT_CTRL)
+    steering_pressed = filter_s > 0.04 and was_pressed
 
   return filter_s, steering_pressed
 
