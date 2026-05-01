@@ -31,12 +31,19 @@ def get_civic_bosch_modified_torque_lpf_tau(torque_cmd: float, prev_torque_cmd: 
   low_speed = v_ego < (30.0 * 0.44704)
 
   if highway:
+    if torque_cmd_abs < 0.12:
+      return 0.18 if sign_change else 0.16
     if sign_change and torque_delta > 0.15:
       return 0.10
     return 0.12
 
   if sign_change and torque_cmd_abs < 0.25:
-    return 0.22 if low_speed else 0.18
+    return 0.28 if low_speed else 0.22
+
+  # Extra damping for the tiny near-center commands where both modified EPS
+  # firmwares still show hunting and escalating sway.
+  if torque_cmd_abs < 0.12:
+    return 0.28 if low_speed else 0.20
 
   if low_speed:
     if torque_delta > 0.50:

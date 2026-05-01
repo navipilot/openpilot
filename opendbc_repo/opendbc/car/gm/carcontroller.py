@@ -116,12 +116,12 @@ def get_testing_ground_1_brake_switch_bias(v_ego: float) -> int:
   return int(round(np.interp(v_ego, [0.0, 6.0, 15.0, 30.0], [40.0, 85.0, 130.0, 170.0])))
 
 
-def supports_volt_auto_hold(CP, starpilot_toggles):
+def supports_volt_auto_hold(CP, auto_hold_enabled: bool):
   safety_cfg = getattr(CP, "safetyConfigs", ())
   safety_param = safety_cfg[0].safetyParam if safety_cfg else 0
   stock_hold_safety_ready = CP.openpilotLongitudinalControl or bool(safety_param & GMSafetyFlags.FLAG_GM_PANDA_PADDLE_SCHED.value)
   return (
-    getattr(starpilot_toggles, "gm_auto_hold", False) and
+    auto_hold_enabled and
     stock_hold_safety_ready and
     CP.carFingerprint in AUTO_HOLD_VOLT_CARS
   )
@@ -134,13 +134,15 @@ def estimate_auto_hold_brake(driver_brake: float, op_brake: float) -> int:
 
 
 def should_activate_auto_hold(hold_ready: bool, auto_hold_armed: bool, auto_hold_engaged: bool,
-                              brake_pressed: bool, long_active: bool, regen_braking: bool, v_ego: float) -> bool:
+                              brake_pressed: bool, standstill: bool, long_active: bool,
+                              regen_braking: bool, v_ego: float) -> bool:
+  stopped = standstill or v_ego < 0.02
   return (
     hold_ready and
     (auto_hold_armed or auto_hold_engaged or brake_pressed) and
+    stopped and
     not long_active and
-    not regen_braking and
-    v_ego < 0.02
+    not regen_braking
   )
 
 
@@ -214,6 +216,10 @@ class CarController(CarControllerBase):
     self.malibu_button_phase = 0
     self.malibu_last_button_ts_nanos = 0
     self.auto_hold_brake = 0
+    try:
+      self.gm_auto_hold_enabled = self.params_.get_bool("GMAutoHold")
+    except UnknownKeyName:
+      self.gm_auto_hold_enabled = False
 
   def calc_pedal_command(self, accel: float, long_active: bool, v_ego: float):
     if not long_active:
@@ -363,7 +369,7 @@ class CarController(CarControllerBase):
     self.aego = CS.out.aEgo
     accel = actuators.accel
     press_regen_paddle = False
-    auto_hold_enabled = supports_volt_auto_hold(self.CP, starpilot_toggles)
+    auto_hold_enabled = supports_volt_auto_hold(self.CP, self.gm_auto_hold_enabled)
     stock_hold_apply_brake = self.apply_brake if self.CP.openpilotLongitudinalControl else 0
 
     hold_ready = (
@@ -376,7 +382,7 @@ class CarController(CarControllerBase):
       CS.auto_hold_armed = False
     elif CS.regen_release_timer > 0.0:
       CS.auto_hold_armed = False
-    elif not CS.auto_hold_armed and (CS.out.vEgo > 0.03 or (CS.out.vEgo < 0.02 and CS.out.brakePressed)):
+    elif not CS.auto_hold_armed and (CS.out.vEgo > 0.03 or ((CS.out.standstill or CS.out.vEgo < 0.02) and CS.out.brakePressed)):
       CS.auto_hold_armed = True
 
     if CS.out.vEgo > 0.1 or CS.out.gasPressed or CS.out.gearShifter not in AUTO_HOLD_DRIVE_GEARS:
@@ -385,6 +391,10 @@ class CarController(CarControllerBase):
       self.auto_hold_brake = estimate_auto_hold_brake(CS.out.brake, stock_hold_apply_brake)
 
     if self.frame % 25 == 0:
+      try:
+        self.gm_auto_hold_enabled = self.params_.get_bool("GMAutoHold")
+      except UnknownKeyName:
+        self.gm_auto_hold_enabled = False
       try:
         mode = self.params_.get("LongitudinalManeuverPaddleMode")
       except UnknownKeyName:
@@ -469,6 +479,7 @@ class CarController(CarControllerBase):
       CS.auto_hold_armed,
       CS.auto_hold_engaged,
       CS.out.brakePressed,
+      CS.out.standstill,
       CC.longActive,
       CS.out.regenBraking,
       CS.out.vEgo,

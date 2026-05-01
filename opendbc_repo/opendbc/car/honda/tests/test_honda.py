@@ -41,8 +41,10 @@ class TestHondaFingerprint:
 
   def test_modified_civic_torque_lpf_tau_reacts_to_sign_change(self):
     assert get_civic_bosch_modified_torque_lpf_tau(0.7, -0.1, 25.0) == 0.10
-    assert get_civic_bosch_modified_torque_lpf_tau(0.02, -0.01, 8.0) == 0.22
-    assert get_civic_bosch_modified_torque_lpf_tau(0.02, 0.01, 12.0) == 0.22
+    assert get_civic_bosch_modified_torque_lpf_tau(0.02, -0.01, 8.0) == 0.28
+    assert get_civic_bosch_modified_torque_lpf_tau(0.02, 0.01, 12.0) == 0.28
+    assert get_civic_bosch_modified_torque_lpf_tau(0.02, 0.01, 20.0) == 0.20
+    assert get_civic_bosch_modified_torque_lpf_tau(0.02, 0.01, 25.0) == 0.16
     assert get_civic_bosch_modified_torque_lpf_tau(0.30, 0.0, 12.0) == 0.16
     assert get_civic_bosch_modified_torque_lpf_tau(0.30, 0.0, 20.0) == 0.13
 
