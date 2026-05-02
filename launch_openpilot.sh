@@ -4,5 +4,5 @@
 #  export ATHENA_HOST="wss://athena.carrotpilot.app"
 #fi
 
-exec ./copy.sh
+#exec ./copy.sh
 exec ./launch_chffrplus.sh
