@@ -302,10 +302,13 @@ class Car:
     if not self.initialized_prev:
       # Initialize CarInterface, once controls are ready
       # TODO: this can make us miss at least a few cycles when doing an ECU knockout
+      was_openpilot_long = self.CP.openpilotLongitudinalControl
       self.CI.init(self.CP, *self.can_callbacks)
       # If ECU disable was skipped/failed, strip LONG safety flag from BOTH CarParams
       # and StarPilotCarParams (pandad ORs both safetyParams together)
-      if self.CP.openpilotLongitudinalControl and self.params.get_bool("EcuDisableFailed"):
+      # Use the pre-init longitudinal state here, since Hyundai init() may already
+      # flip CP.openpilotLongitudinalControl to False as part of the fallback.
+      if was_openpilot_long and self.params.get_bool("EcuDisableFailed"):
         # ECU disable failed/rejected - switch to lateral-only mode with stock ACC
         LONG_FLAG = 4  # HyundaiSafetyFlags.LONG
         for cfg in self.CP.safetyConfigs:
