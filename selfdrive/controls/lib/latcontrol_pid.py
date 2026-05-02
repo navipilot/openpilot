@@ -15,15 +15,15 @@ def civic_bosch_modified_lateral_testing_ground_active() -> bool:
 def get_civic_bosch_modified_pid_output_scale(desired_angle_deg: float, desired_angle_delta_deg: float, v_ego: float) -> float:
   abs_angle = abs(desired_angle_deg)
   speed_weight = min(max((v_ego - 4.0) / 10.0, 0.0), 1.0)
-  center_weight = min(max((4.0 - abs_angle) / 4.0, 0.0), 1.0)
-  angle_weight = min(max((abs_angle - 8.0) / 24.0, 0.0), 1.0)
+  center_weight = min(max((6.0 - abs_angle) / 6.0, 0.0), 1.0)
+  angle_weight = min(max((abs_angle - 6.0) / 22.0, 0.0), 1.0)
   phase = desired_angle_deg * desired_angle_delta_deg
 
   is_left = desired_angle_deg > 0.0
-  center_taper = 0.06
-  base_scale = 0.08 if is_left else 0.10
-  turn_in_scale = 0.08 if is_left else 0.10
-  unwind_scale = 0.10 if is_left else 0.14
+  center_taper = 0.08
+  base_scale = 0.10 if is_left else 0.12
+  turn_in_scale = 0.10 if is_left else 0.14
+  unwind_scale = 0.14 if is_left else 0.20
 
   scale = 1.0 - (speed_weight * center_weight * center_taper)
   scale += speed_weight * angle_weight * base_scale
@@ -32,7 +32,7 @@ def get_civic_bosch_modified_pid_output_scale(desired_angle_deg: float, desired_
   elif phase < -0.2:
     scale -= speed_weight * angle_weight * unwind_scale
 
-  return max(scale, 0.84)
+  return max(scale, 0.78)
 
 
 class LatControlPID(LatControl):
