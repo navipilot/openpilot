@@ -32,6 +32,8 @@ def is_steering_msg(mode, param, addr):
     ret = addr == 0x169
   elif mode == CarParams.SafetyModel.rivian:
     ret = addr == 0x120
+  elif mode == CarParams.SafetyModel.changan:
+    ret = addr == 0x1BA
   return ret
 
 def get_steer_value(mode, param, to_send):
@@ -69,6 +71,10 @@ def get_steer_value(mode, param, to_send):
     angle = -angle + (1310 * 100)
   elif mode == CarParams.SafetyModel.rivian:
     torque = ((to_send.data[2] << 3) | (to_send.data[3] >> 5)) - 1024
+  elif mode == CarParams.SafetyModel.changan:
+    raw = ((to_send.data[2] & 0x7FU) << 7) | (to_send.data[3] >> 1)
+    raw = to_signed(raw, 14)
+    angle = int(raw * 10)
   return torque, angle
 
 def package_can_msg(msg):

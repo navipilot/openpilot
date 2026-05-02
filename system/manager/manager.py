@@ -190,7 +190,7 @@ def manager_thread() -> None:
           pid = p.proc.pid
           rss_kb = read_rss_kb(pid)
           mem_lines.append(f"{p.name}[{pid}]={rss_kb/1024:.1f}MB")
-      print("PROC_MEM " + " | ".join(mem_lines))    
+      print("PROC_MEM " + " | ".join(mem_lines))
 
     running = ' '.join("{}{}\u001b[0m".format("\u001b[32m" if p.proc.is_alive() else "\u001b[31m", p.name)
                        for p in managed_processes.values() if p.proc)
@@ -226,6 +226,7 @@ def main() -> None:
   os.system(f"python ../../opendbc/car/ford/values.py > {Params().get_param_path()}/SupportedCars_ford")
   os.system(f"python ../../opendbc/car/tesla/values.py > {Params().get_param_path()}/SupportedCars_tesla")
   os.system(f"python ../../opendbc/car/volkswagen/values.py > {Params().get_param_path()}/SupportedCars_volkswagen")
+  os.system(f"python ../../opendbc/car/changan/values.py > {Params().get_param_path()}/SupportedCars_changan")
 
   if os.getenv("PREPAREONLY") is not None:
     return

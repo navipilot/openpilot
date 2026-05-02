@@ -1,0 +1,1307 @@
+VERSION ""
+
+
+NS_ :
+	NS_DESC_
+	CM_
+	BA_DEF_
+	BA_
+	VAL_
+	CAT_DEF_
+	CAT_
+	FILTER
+	BA_DEF_DEF_
+	EV_DATA_
+	ENVVAR_DATA_
+	SGTYPE_
+	SGTYPE_VAL_
+	BA_DEF_SGTYPE_
+	BA_SGTYPE_
+	SIG_TYPE_REF_
+	VAL_TABLE_
+	SIG_GROUP_
+	SIG_VALTYPE_
+	SIGTYPE_VALTYPE_
+	BO_TX_BU_
+	BA_DEF_REL_
+	BA_REL_
+	BA_DEF_DEF_REL_
+	BU_SG_REL_
+	BU_EV_REL_
+	BU_BO_REL_
+	SG_MUL_VAL_
+
+BS_:
+
+BU_: GW THU IP BDC TBOX RMU HUD IMS IBCMR HU AMP AVM VSAP LSBA VSPA VAVS OTA PCP
+
+
+BO_ 80 GW_50: 4 GW
+ SG_ SRS_WarningLampStatus : 9|2@0+ (1,0) [0|3] "" THU,IP,TBOX
+ SG_ SRS_LeftRearBuckleSwitchSts : 11|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ SRS_PassengerBuckleSwitchStatus : 13|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ SRS_DriverBuckleSwitchStatus : 15|2@0+ (1,0) [0|3] "" THU,IP,TBOX
+ SG_ SRS_RightRearBuckleSwitchSts : 19|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ SRS_FrontPsgOccupancy : 20|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ SRS_MiddleRearBuckleSwitchSts : 22|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+
+BO_ 266 GW_10A: 8 GW
+ SG_ EPB_TextDisplay : 10|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ EPB_FailureLamp : 12|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ EPB_FunctionLamp : 14|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ EPB_SwitchPosition : 17|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ EPB_SwitchPositionValid : 31|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ EPB_RollingCounter_10A : 51|4@0+ (1,0) [0|15] "" THU,IP
+ SG_ EPB_CRCCheck_10A : 63|8@0+ (1,0) [0|255] "" THU,IP
+
+BO_ 268 GW_10C: 64 GW
+ SG_ TM1_Resolvercalibrstatus : 327|3@0+ (1,0) [0|7] "" IP,THU
+
+BO_ 271 GW_10F: 8 GW
+ SG_ HandOnSteer_1 : 4|1@0+ (1,0) [0|1] "" AMP,THU
+ SG_ HandOnSteer_2 : 25|1@0+ (1,0) [0|1] "" AMP,THU
+ SG_ HandOnSteer : 39|2@0+ (1,0) [0|3] "" AMP,THU
+ SG_ RollingCounter_10F : 51|4@0+ (1,0) [0|15] "" AMP,THU
+ SG_ CRCCheck_10F : 63|8@0+ (1,0) [0|255] "" AMP,THU
+
+BO_ 368 GW_170: 8 GW
+ SG_ EPS_ActualMotorTorq : 7|12@0+ (0.01,-20.48) [-20.48|20.46] "Nm" IP,THU
+ SG_ EPS_MaxSafetyTorsionBarTorq : 8|11@0+ (0.02,-20.48) [-20.48|20.44] "" IP,THU
+ SG_ EPS_MinSafetyTorsionBarTorq : 29|11@0+ (0.02,-20.48) [-20.48|20.44] "" IP,THU
+ SG_ EPS_ActualTorsionBarTorq : 34|11@0+ (0.02,-20.48) [-20.48|20.44] "" IP,THU
+ SG_ EPS_fault_state : 55|4@0+ (1,0) [0|15] "" TBOX,IP,THU,AVM,AMP,VSPA,VAVS
+
+BO_ 378 GW_17A: 64 GW
+ SG_ ESP_ESPActiveStatus : 0|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ ESP_ESPFunctionStatus : 1|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ ESP_EBDFailStatus : 2|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ ESP_ABSFailStatus : 3|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ ESP_TCSFailStatus : 4|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ IBCU_BrakeFluid_Warning : 27|2@0+ (1,0) [0|3] "" IP,THU
+ SG_ ESP_VehicleSpeed : 36|13@0+ (0.05625,0) [0|360] "km/h" TBOX,THU,IP,AMP
+ SG_ ESP_VehicleSpeedValid : 37|1@0+ (1,0) [0|1] "" TBOX,THU,IP,AMP
+ SG_ ESP_RollerbenchType : 80|3@0+ (1,0) [0|7] "" THU,IP
+
+BO_ 380 GW_17C: 32 GW
+ SG_ EMS_EngSpd : 70|16@0+ (0.25,0) [0|16383.5] "Rpm" IP,THU
+ SG_ EMS_EngSpdErr : 71|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ EMS_EngSts : 119|2@0+ (1,0) [0|3] "" IP,THU
+
+BO_ 381 GW_17D: 64 GW
+ SG_ PCU_RealAccPedl : 71|8@0+ (0.392,0) [0|99.96] "%" IP,THU
+ SG_ PCU_StartStopActiveVld : 234|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ PCU_AccPedlVld : 288|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ PCU_BrkPedlSts : 291|2@0+ (1,0) [0|3] "" RMU,THU,IP
+ SG_ PCU_AccPedl : 303|8@0+ (0.392,0) [0|99.96] "pct" RMU,IP,THU
+ SG_ PCU_PwrTrainSts : 311|2@0+ (1,0) [0|3] "" RMU,IP,THU
+
+BO_ 382 GW_17E: 8 GW
+ SG_ EPS_MeasuredTorsionBarTorque : 7|12@0+ (0.01,-20.48) [-20.48|20.46] "Nm" IP,THU
+ SG_ EPS_ADS_Abortfeedback : 11|4@0+ (1,0) [0|15] "" RMU,THU,IP
+ SG_ EPS_Pinionang : 21|14@0+ (0.1,-720) [-720|720] "" RMU,THU,IP
+ SG_ EPS_Pinionang_Valid : 22|1@0+ (1,0) [0|1] "" RMU,THU,IP
+ SG_ EPS_Handwheel_Relang : 39|15@0+ (0.1,-1080) [-1080|1080] "" RMU,THU,IP
+ SG_ EPS_MeasuredTorsionBarTorqValid : 40|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ EPS_RollingCounter_17E : 51|4@0+ (1,0) [0|15] "" IP,THU
+ SG_ EPS_LatCtrlAvailabilityStatus : 53|2@0+ (1,0) [0|3] "" IP,THU
+ SG_ EPS_LatCtrlActive : 54|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ EPS_Handwheel_Relang_Valid : 55|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ EPS_CRCCheck_17E : 63|8@0+ (1,0) [0|255] "" IP,THU
+
+BO_ 384 GW_180: 8 GW
+ SG_ SAS_SteeringAngle : 7|16@0- (0.1,0) [-780|780] "degree" TBOX,THU,IP
+ SG_ SAS_SteeringAngleSpeed : 23|8@0- (4,0) [0|1016] "deg/s" TBOX,THU,IP
+ SG_ SAS_SteeringAngleValid : 31|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+
+BO_ 391 GW_187: 8 GW
+ SG_ ESP_VehicleSpeed : 36|13@0+ (0.05625,0) [0|360] "" TBOX,IP,THU,AVM,AMP,VSPA,VAVS
+ SG_ ESP_VehicleSpeedValid : 37|1@0+ (1,0) [0|1] "" TBOX,IP,THU,AVM,LSBA,AMP
+
+BO_ 400 GW_190: 32 GW
+ SG_ BMS_HeatSftySts : 34|1@0+ (1,0) [0|1] "" IP,RMU,THU
+
+BO_ 404 NEW_MSG_194: 8 XXX
+
+BO_ 406 GW_196: 8 GW
+ SG_ EMS_RealAccPedal : 7|8@0+ (0.392,0) [0|99.568] "%" GW,TBOX,THU,IP
+ SG_ EMS_EngineSpeedError : 12|1@0+ (1,0) [0|1] "" GW,TBOX,THU,IP
+ SG_ EMS_EngineSpeed : 23|16@0+ (0.25,0) [0|16383.5] "Rpm" GW,TBOX,IP,HU,THU,IMS,HUD
+ SG_ EMS_EngineThrottlePosition : 39|8@0+ (0.392,0) [0|99.568] "%" GW,TBOX,THU,IP
+ SG_ EMS_AccPedal : 47|8@0+ (0.392,0) [0|99.568] "%" GW,TBOX,THU,IP,HU,AVM,HUD
+ SG_ EMS_BrakePedalStatus : 55|2@0+ (1,0) [0|3] "" GW,TBOX,IP,HU,THU,AVM,HUD
+
+BO_ 422 GW_1A6: 8 GW
+ SG_ EMS_BrakePedalStatus : 35|2@0+ (1,0) [0|3] "" GW,TBOX,IP,HU,THU,AVM,HUD
+ SG_ EMS_AccPedal : 47|8@0+ (0.392,0) [0|99.568] "%" GW,TBOX,THU,IP,HU,AVM,HUD
+
+BO_ 431 GW_1AF: 8 GW
+ SG_ TCU_ActualDrivingGear : 11|4@0+ (1,0) [0|15] "" TBOX,IP,THU,AVM,AMP,VSPA,VAVS
+ SG_ TCU_ShiftPostionValid : 12|1@0+ (1,0) [0|1] "" TBOX,IP,THU,AVM,LSBA,AMP
+ SG_ TCU_ActualDrivingGearValid : 13|1@0+ (1,0) [0|1] "" TBOX,IP,THU,AVM,AMP,VSPA,VAVS
+ SG_ TCU_GearShiftPosition : 23|4@0+ (1,0) [0|15] "" TBOX,IP,THU,AVM,AMP,LSBA
+
+BO_ 442 GW_1BA: 32 GW
+ SG_ ACC_MotorTorqueMaxLimitRequest : 7|11@0+ (0.02,-20.48) [-20.48|20.44] "" TBOX,IP,THU,AVM,AMP,VSPA,VAVS
+ SG_ ACC_MotorTorqueMinLimitRequest : 12|11@0+ (0.02,-20.48) [-20.48|20.44] "" TBOX,IP,THU,AVM,LSBA,AMP
+ SG_ EPS_AngleCmd : 17|14@0+ (0.1,-720) [-720|720] "" TBOX,IP,THU,AVM,LSBA,AMP
+ SG_ EPS_LatCtrlActive : 35|1@0+ (1,0) [0|1] "" TBOX,IP,THU,AVM,LSBA,AMP
+ SG_ ACC_RollingCounter_1BA : 51|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ ACC_CRCCheck_1BA : 63|8@0+ (1,0) [0|255] "" TBOX,THU,IP
+
+BO_ 454 GW_1C6: 8 GW
+ SG_ EMS_RealAccPedal : 7|8@0+ (0.392,0) [0|99.568] "%" GW,TBOX,THU,IP
+
+BO_ 523 GW_20B: 64 GW
+ SG_ ESP_BrakeLightOnRequest : 197|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ ESP_AutoHoldStandby : 198|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ ESP_HHC_Active : 244|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ ESP_AutoHoldAvailable : 246|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ ESP_AutoHoldActive : 247|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ ESP_HDC_STATUS : 274|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ ESP_PrefillforAPA_Available : 280|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ ESP_PrefillforAPA_active : 281|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ IBCU_BrakeDiscHighTempWarning : 283|2@0+ (1,0) [0|3] "" IP,THU
+ SG_ IBCU_precheckStatus : 309|2@0+ (1,0) [0|3] "" IP,THU
+
+BO_ 580 GW_244: 32 GW
+ SG_ ACC_ACCTargetAcceleration : 7|8@0+ (0.05,-5) [-5|7.75] "" TBOX,THU,IP
+ SG_ ACC_LDWStatus : 9|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ ACC_LDWVibrationWarningReq : 11|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ ACC_LKAStatus : 13|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ NEW_SIGNAL_1 : 14|2@1+ (1,0) [0|3] "" XXX
+ SG_ NEW_SIGNAL_3 : 16|5@1+ (1,0) [0|31] "" XXX
+ SG_ unknown : 21|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ NEW_SIGNAL_2 : 22|2@1+ (1,0) [0|3] "" XXX
+ SG_ NEW_SIGNAL_4 : 24|1@0+ (1,0) [0|1] "" XXX
+ SG_ ACC_TextInfoForDriver : 30|6@0+ (1,0) [0|63] "" TBOX,THU,IP
+ SG_ ACC_DecToStop : 31|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ NEW_SIGNAL_5 : 32|8@1+ (1,0) [0|255] "" XXX
+ SG_ ACC_EngineStartStopRequest : 41|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ ACC_TIAN_1 : 42|2@1+ (1,0) [0|3] "" XXX
+ SG_ ACC_CDDActive : 44|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ NEW_SIGNAL_6 : 45|3@1+ (1,0) [0|7] "" XXX
+ SG_ ACC_RollingCounter_24E : 51|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ ACC_ACCMode : 54|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ ACC_Driveoff_Request : 55|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ ACC_CRCCheck_24E : 63|8@0+ (1,0) [0|255] "" TBOX,THU,IP
+ SG_ ACC_AEBTargetDeceleration : 71|16@0+ (0.0005,-16) [-16|16] "" TBOX,THU,IP
+ SG_ NEW_SIGNAL_7 : 80|7@1+ (1,0) [0|127] "" XXX
+ SG_ ACC_AEBActive : 87|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ ACC_AccTrqReq : 88|14@0+ (5,-5000) [-5000|5000] "" TBOX,THU,IP
+ SG_ ACC_TIAN_2 : 89|2@1+ (1,0) [0|3] "" XXX
+ SG_ ACC_FCWPreWarning : 91|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ ACC_FCWLatentWarning : 92|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ NEW_SIGNAL_8 : 94|2@0+ (1,0) [0|3] "" XXX
+ SG_ ACC_AWBActive : 95|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ ACC_AEBCtrlType : 104|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ NEW_SIGNAL_9 : 105|1@0+ (1,0) [0|1] "" XXX
+ SG_ ACC_AccTrqReqActive : 106|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ ACC_RollingCounter_25E : 115|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ ACC_FuelCutOffPrevention : 116|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ ACC_CRCCheck_25E : 127|8@0+ (1,0) [0|255] "" TBOX,THU,IP
+ SG_ NEW_SIGNAL_10 : 135|8@0+ (1,0) [0|255] "" XXX
+ SG_ NEW_SIGNAL_12 : 136|1@0+ (1,0) [0|1] "" XXX
+ SG_ ACC_LatTakeoverReq : 138|2@0+ (1,0) [0|3] "" THU,IP
+ SG_ ACC_LngTakeOverReq : 140|2@0+ (1,0) [0|3] "" THU,IP
+ SG_ NEW_SIGNAL_11 : 143|3@0+ (1,0) [0|7] "" XXX
+ SG_ NEW_SIGNAL_13 : 151|8@0+ (1,0) [0|255] "" XXX
+ SG_ NEW_SIGNAL_14 : 153|2@0+ (1,0) [0|3] "" XXX
+ SG_ ADS_EOMTOReq : 155|2@0+ (1,0) [0|3] "" THU,IP
+ SG_ ACC_HandsOnReq : 158|3@0+ (1,0) [0|7] "" THU,IP
+ SG_ NEW_SIGNAL_15 : 159|1@0+ (1,0) [0|1] "" XXX
+ SG_ NEW_SIGNAL_16 : 167|8@0+ (1,0) [0|255] "" XXX
+ SG_ NEW_SIGNAL_17 : 175|8@0+ (1,0) [0|255] "" XXX
+ SG_ NEW_SIGNAL_18 : 183|8@0+ (1,0) [0|255] "" XXX
+ SG_ NEW_SIGNAL_19 : 191|8@0+ (1,0) [0|255] "" XXX
+ SG_ NEW_SIGNAL_20 : 199|8@0+ (1,0) [0|255] "" XXX
+ SG_ NEW_SIGNAL_21 : 207|8@0+ (1,0) [0|255] "" XXX
+ SG_ NEW_SIGNAL_22 : 215|8@0+ (1,0) [0|255] "" XXX
+ SG_ NEW_SIGNAL_23 : 223|8@0+ (1,0) [0|255] "" XXX
+ SG_ NEW_SIGNAL_24 : 231|8@0+ (1,0) [0|255] "" XXX
+ SG_ NEW_SIGNAL_25 : 239|8@0+ (1,0) [0|255] "" XXX
+ SG_ NEW_SIGNAL_26 : 247|8@0+ (1,0) [0|255] "" XXX
+ SG_ NEW_SIGNAL_27 : 255|8@0+ (1,0) [0|255] "" XXX
+
+BO_ 583 GW_247: 32 GW
+ SG_ APA_ButtonPress : 26|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ APA_ParkNotice : 39|6@0+ (1,0) [0|63] "" TBOX,THU,IP
+ SG_ APA_RollingCounter_264 : 51|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ APA_CRCCheck_264 : 63|8@0+ (1,0) [0|255] "" TBOX,THU,IP
+ SG_ APA_Activation_Status : 89|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ APA_DynamicSlotWarning : 105|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ APA_SlotNotice : 109|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+
+BO_ 585 GW_249: 8 GW
+
+BO_ 591 GW_24F: 8 GW
+ SG_ EPS_ElectPowerConsumption : 7|8@0+ (0.5,0) [0|127] "" TBOX,THU,IP
+ SG_ EPS_TorqSensorStatus : 8|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ EPS_APA_EpasFAILED : 9|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ EPS_ModeSwitchSt : 10|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ EPS_APA_Abortfeedback : 14|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ EPS_SteeringTorque : 23|8@0+ (0.1794,-22.78) [-22.78|22.78] "" TBOX,THU,IP
+ SG_ EPS_IACC_abortreason : 28|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ EPS_APA_ControlFeedback : 29|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ EPS_LDW_ShakeLevStatus : 31|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ EPS_ADASActiveMode : 33|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ EPS_ADS_ControlFeedback : 36|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ EPS_EPSFailed : 42|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ EPS_SystemSt : 46|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ EPS_RollingCounter_24F : 51|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ EPS_ConcussAvailabilityStatus : 53|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ EPS_TorqueAssistMode : 55|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ EPS_CRCCheck_24F : 63|8@0+ (1,0) [0|255] "" TBOX,THU,IP
+
+BO_ 610 GW_262: 8 GW
+ SG_ PEPS_APA_LockFeedback : 2|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ PEPS_APA_Engine0ffFeedback : 4|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ PEPS_StartIndicatorSignal : 7|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ PEPS_APA_CloseWinFeedback : 11|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ PEPS_UnallowStart_ESCL_Error : 15|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ PEPS_IMMOFailedAlarmsignal : 18|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ PEPS_UnallowStartSignal_Not_PN : 19|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ PEPS_UnallowStart_ESCL_LOCK : 21|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ PEPS_PowerDistributionStatus : 23|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ PEPS_PowerDistributionFaultBit : 47|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ PEPS_KeyStandbyPositionIndicator : 54|1@0+ (1,0) [0|1] "" THU,TBOX,IP
+ SG_ PEPS_PEPSFailStatus : 55|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+
+BO_ 632 GW_278: 8 GW
+ SG_ ESP_LatAccel : 23|8@0+ (0.1,-12.7) [-12.7|12.7] "m/s2" TBOX,THU,IP
+ SG_ ESP_LongAccel : 31|10@0+ (0.03125,-16) [-16|15.90625] "m/s2" TBOX,THU,IP
+ SG_ ESP_RollingCounter_278 : 51|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ ESP_CRCCheck_278 : 63|8@0+ (1,0) [0|255] "" TBOX,THU,IP
+
+BO_ 650 IP_28A: 8 IP
+ SG_ IP_UPSwitch : 1|2@0+ (1,0) [0|3] "" GW,HU,THU
+ SG_ IP_DownSwitch : 3|2@0+ (1,0) [0|3] "" GW,HU,THU
+ SG_ IP_LeftSwitch : 5|2@0+ (1,0) [0|3] "" GW,HU,THU
+ SG_ IP_RightSwitch : 7|2@0+ (1,0) [0|3] "" GW,HU,THU
+ SG_ IP_CustSwitch : 10|2@0+ (1,0) [0|3] "" GW,HU,THU
+ SG_ IP_SpeechSwitch : 12|2@0+ (1,0) [0|3] "" GW,HU,THU
+ SG_ IP_HandBrakeSwitch : 13|1@0+ (1,0) [0|1] "" GW,BDC,TBOX,THU
+ SG_ IP_OKSwitch : 15|2@0+ (1,0) [0|3] "" GW,HU,THU
+ SG_ IP_DisplayMode_2 : 19|4@0+ (1,0) [0|15] "" THU,GW
+ SG_ IP_DisplaySpeed : 31|13@0+ (0.05625,0) [0|360] "" THU,HUD,GW
+ SG_ IP_HUDheighedown : 42|2@0+ (1,0) [0|3] "" GW,HUD,THU
+ SG_ IP_HUDheigheup : 44|2@0+ (1,0) [0|3] "" GW,HUD,THU
+ SG_ IP_WarnAudioTpye : 47|3@0+ (1,0) [0|7] "" THU,AMP,GW
+
+BO_ 651 GW_28B: 8 GW
+ SG_ BCM_TurnLightSwitchSts : 3|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ BCM_HighBeamStatus : 5|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ BCM_LowBeamStatus : 7|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ BCM_LockTrigger : 12|5@0+ (1,0) [0|31] "" TBOX,THU,IP
+ SG_ BCM_HoodStatus : 18|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ BCM_TurnIndicatorRight : 20|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ BCM_TurnIndicatorLeft : 22|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ BCM_DriverDoorStatus : 23|1@0+ (1,0) [0|1] "" TBOX,THU,IP,HUD
+ SG_ BCM_PowerStatusFeedback : 35|2@0+ (1,0) [0|3] "" TBOX,THU,IP,AMP
+ SG_ BCM_emergencylightstatus : 37|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ PEPS_RemoteStartReq : 39|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ BCM_UnlockTrigger : 44|5@0+ (1,0) [0|31] "" TBOX,THU,IP
+ SG_ BCM_KeyAlarmStatus : 53|2@0+ (1,0) [0|3] "" TBOX,HU,THU,IP,AVM
+
+BO_ 652 GW_28C: 8 GW
+ SG_ GW_MFS_Crusie_switch_signal : 1|2@0+ (1,0) [0|3] "" AMP,THU
+ SG_ GW_MFS_Cancle_switch_signal : 3|2@0+ (1,0) [0|3] "" AMP,THU
+ SG_ GW_MFS_RESPlus_switch_signal : 5|2@0+ (1,0) [0|3] "" AMP,THU
+ SG_ GW_MFS_SETReduce_switch_signal : 7|2@0+ (1,0) [0|3] "" AMP,THU
+ SG_ GW_MFS_DIST_switch_signal : 9|2@0+ (1,0) [0|3] "" AMP,THU
+ SG_ GW_MFS_LIM_switch_signal : 11|2@0+ (1,0) [0|3] "" AMP,THU
+ SG_ GW_MFS_IACCenable_switch_signal : 13|2@0+ (1,0) [0|3] "" AMP,THU
+ SG_ GW_MFS_EPS_switch : 15|2@0+ (1,0) [0|3] "" AMP,THU
+ SG_ GW_MFS_DISTPlus_switch_signal : 17|2@0+ (1,0) [0|3] "" AMP,THU
+ SG_ GW_MFS_handsoffDetectResult : 20|3@0+ (1,0) [0|7] "" AMP,THU
+ SG_ GW_MFS_HODSystemStatus : 23|3@0+ (1,0) [0|7] "" AMP,THU
+ SG_ GW_MFS_handsoffAbilityDetect : 26|3@0+ (1,0) [0|7] "" AMP,THU
+ SG_ GW_MFS_HODAppStatus : 27|1@0+ (1,0) [0|1] "" AMP,THU
+ SG_ GW_MFS_HODLinStatus : 28|1@0+ (1,0) [0|1] "" AMP,THU
+ SG_ GW_MFS_HODCalibratedStatus : 29|1@0+ (1,0) [0|1] "" AMP,THU
+ SG_ GW_MFS_DISTReduce_switch_signal : 31|2@0+ (1,0) [0|3] "" AMP,THU
+ SG_ GW_MFS_APA_switch : 35|2@0+ (1,0) [0|3] "" AMP,THU
+ SG_ GW_MFS_ERSPlus_switch : 44|2@0+ (1,0) [0|3] "" AMP,THU
+ SG_ GW_MFS_ERSReduce_switch : 46|2@0+ (1,0) [0|3] "" AMP,THU
+ SG_ GW_MFS_HODSenserStatus : 47|1@0+ (1,0) [0|1] "" AMP,THU
+ SG_ GW_MFS_RollingCounter_28C : 51|4@0+ (1,0) [0|15] "" AMP,THU
+ SG_ GW_MFS_CRCCheck_28C : 63|8@0+ (1,0) [0|255] "" AMP,THU
+
+BO_ 654 IP_28E: 8 IP
+ SG_ IP_VoiceReq : 7|8@0+ (1,0) [0|63] "" AMP,THU
+ SG_ IP_VoicePlayTimesReq : 12|5@0+ (1,0) [0|31] "" AMP,THU
+ SG_ IP_LFReq : 15|2@0+ (1,0) [0|3] "" AMP,THU
+ SG_ IP_MsgWarningReq : 23|8@0+ (1,0) [0|255] "" AMP,THU
+ SG_ IP_TurnWarningReq : 26|3@0+ (1,0) [0|7] "" AMP,THU
+ SG_ IP_AlarmReqRollingCounter : 29|3@0+ (1,0) [0|7] "" AMP,THU
+ SG_ IP_RFReq : 31|2@0+ (1,0) [0|3] "" AMP,THU
+ SG_ IP_LRReq : 33|2@0+ (1,0) [0|3] "" AMP,THU
+ SG_ IP_TypeOfCutSoundShort : 36|3@0+ (1,0) [0|7] "" AMP,THU
+ SG_ IP_SeatBeltWarningReq : 39|3@0+ (1,0) [0|7] "" AMP,THU
+ SG_ IP_VoicePlayCycleReq : 40|5@0+ (1,0) [0|31] "" AMP,THU
+ SG_ IP_RRReq : 42|2@0+ (1,0) [0|3] "" AMP,THU
+ SG_ IP_VoicePlayIntervalReq : 47|5@0+ (1,0) [0|31] "" AMP,THU
+
+BO_ 664 GW_298: 8 GW
+ SG_ PEPS_KeyNumber : 15|3@0+ (1,0) [0|6] "" TBOX,THU,IP
+ SG_ PEPS_LockSignal : 17|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ PEPS_UnlockSignal : 21|2@0+ (1,0) [0|3] "" TBOX,THU,IP,IMS
+ SG_ BCM_LeftRearDoorStatus : 40|1@0+ (1,0) [0|1] "" TBOX,THU,IP,HUD
+
+BO_ 676 GW_2A4: 64 GW
+ SG_ LCDAR_Left_RCTAAlert : 1|2@0+ (1,0) [0|3] "" THU,IP
+ SG_ LCDAR_BSD_LCASoundWar : 3|1@0+ (1,0) [0|1] "" THU,IP
+ SG_ LCDAR_Left_BSD_LCAAlert : 5|2@0+ (1,0) [0|3] "" IP,THU
+ SG_ LCDAR_BSD_LCAEnableStatus : 7|2@0+ (1,0) [0|3] "" THU,IP
+ SG_ LCDAR_BSD_LCAAlert : 9|2@0+ (1,0) [0|3] "" IP,THU
+ SG_ LCDAR_SystemStatus : 12|3@0+ (1,0) [0|7] "" IP,THU
+ SG_ LCDAR_RCTAEnableStatus : 15|1@0+ (1,0) [0|1] "" THU,IP
+ SG_ LCDAR_RCTBStatus : 17|2@0+ (1,0) [0|3] "" IP,THU
+ SG_ LCDAR_RCTAAlert : 21|2@0+ (1,0) [0|3] "" THU,IP
+ SG_ LCDAR_BSD_LCAStatus : 23|2@0+ (1,0) [0|3] "" IP,THU
+ SG_ test : 27|2@0+ (1,0) [0|3] "" IP,THU
+ SG_ LCDAR_RCTAStatus : 31|2@0+ (1,0) [0|3] "" IP,THU
+ SG_ LCDAR_RollingCounter_2AF : 51|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ LCDAR_CRCCheck_2AF : 63|8@0+ (1,0) [0|255] "" TBOX,THU,IP
+
+BO_ 685 GW_2AD: 64 GW
+ SG_ LCDAL_SystemStatus : 6|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ LCDAL_RCWAlert : 16|2@0+ (1,0) [0|3] "" TBOX,THU,IP,AMP
+ SG_ LCDAL_RCWEnableStatus : 18|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ LCDAL_Right_RCWAlert : 21|2@0+ (1,0) [0|3] "" IP,THU
+ SG_ LCDAL_SEAEnableStatus : 24|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ LCDAL_Right_SEAAlert : 28|2@0+ (1,0) [0|3] "" THU,IP
+ SG_ LCDAL_RCWStatus : 30|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ LCDAL_SEAStatus : 36|2@0+ (1,0) [0|3] "" IP,THU
+ SG_ LCDAL_SEAAlert : 38|2@0+ (1,0) [0|3] "" THU,IP
+ SG_ LCDAL_AudioWarningEnableStatus : 42|1@0+ (1,0) [0|1] "" THU,IP
+ SG_ LCDAL_RollingCounter_2AE : 51|4@0+ (1,0) [0|15] "" THU,IP
+ SG_ LCDAL_CRCCheck_2AE : 63|8@0+ (1,0) [0|255] "" THU,IP
+ SG_ LCDAL_RLTargetLngRange : 68|9@0+ (0.5,-70) [-70|180] "m" IP,THU
+ SG_ LCDAL_RLTargetDetection : 71|3@0+ (1,0) [0|7] "" IP,THU
+ SG_ LCDAL_RLTargetLatRange : 74|10@0+ (0.1,-50) [-50|50] "m" IP,THU
+ SG_ LCDAL_RLTargetType : 95|4@0+ (1,0) [0|15] "" IP,THU
+ SG_ LCDAL_RRTargetLngRange : 101|9@0+ (0.5,-70) [-70|180] "m" IP,THU
+ SG_ LCDAL_RRTargetType : 107|4@0+ (1,0) [0|15] "" IP,THU
+ SG_ LCDAL_RollingCounter_2EF : 115|4@0+ (1,0) [0|15] "" IP,THU
+ SG_ LCDAL_CRCCheck_2EF : 127|8@0+ (1,0) [0|255] "" IP,THU
+ SG_ LCDAL_BackTargetLngRange : 132|9@0+ (0.5,-70) [-70|180] "m" IP,THU
+ SG_ LCDAL_BackTargetDetection : 135|3@0+ (1,0) [0|7] "" IP,THU
+ SG_ LCDAL_BackTargetLatRange : 138|10@0+ (0.1,-50) [-50|50] "m" IP,THU
+ SG_ LCDAL_BackTargetType : 155|4@0+ (1,0) [0|15] "" IP,THU
+ SG_ LCDAL_RRTargetLatRange : 167|10@0+ (0.1,-50) [-50|50] "m" IP,THU
+ SG_ LCDAL_RLTargetDirection : 169|3@0+ (1,0) [0|7] "" IP,THU
+ SG_ LCDAL_RRTargetDetection : 172|3@0+ (1,0) [0|7] "" IP,THU
+ SG_ LCDAL_RollingCounter_2F7 : 179|4@0+ (1,0) [0|15] "" IP,THU
+ SG_ LCDAL_CRCCheck_2F7 : 191|8@0+ (1,0) [0|255] "" IP,THU
+ SG_ LCDAL_BackTargetDirection : 194|3@0+ (1,0) [0|7] "" IP,THU
+ SG_ LCDAL_RRTargetDirection : 198|3@0+ (1,0) [0|7] "" IP,THU
+ SG_ LCDAL_BackTargetID : 217|7@0+ (1,0) [0|63] "" IP,THU
+ SG_ LCDAL_RRTargetID : 225|7@0+ (1,0) [0|63] "" IP,THU
+ SG_ LCDAL_LRTargetID : 234|7@0+ (1,0) [0|63] "" IP,THU
+ SG_ LCDAL_RollingCounter_300 : 243|4@0+ (1,0) [0|15] "" IP,THU
+ SG_ LCDAL_CRCCheck_300 : 255|8@0+ (1,0) [0|255] "" IP,THU
+
+BO_ 710 GW_2C6: 64 GW
+ SG_ APA_ParkNotice_5 : 70|7@0+ (1,0) [0|127] "" TBOX,THU,IP
+ SG_ APA_FunctionOnOffSts : 75|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ APA_LAEBNotice : 82|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ APA_RADSNotice : 108|6@0+ (1,0) [0|63] "" THU,IP
+ SG_ APA_left_slot_2_available_sts : 181|2@0+ (1,0) [0|3] "" THU,IP
+ SG_ APA_left_slot_1_available_sts : 183|2@0+ (1,0) [0|3] "" THU,IP
+ SG_ APA_right_slot_2_available_sts : 189|2@0+ (1,0) [0|3] "" THU,IP
+ SG_ APA_right_slot_1_available_sts : 191|2@0+ (1,0) [0|3] "" THU,IP
+
+BO_ 721 BDC_2D1: 8 BDC
+ SG_ BCM_ReversePosition : 29|1@0+ (1,0) [0|1] "" IBCMR,GW,TBOX,THU,IP
+ SG_ BCM_RightRearDoorStatus : 38|1@0+ (1,0) [0|1] "" GW,IBCMR,THU,HUD,IP,AVM
+ SG_ BCM_TrunkDoorStatus : 39|1@0+ (1,0) [0|1] "" IBCMR,GW,TBOX,HU,THU,IP,HUD
+ SG_ BCM_PassengerDoorStatus : 45|1@0+ (1,0) [0|1] "" IBCMR,GW,TBOX,HU,THU,IP,AVM,HUD
+
+BO_ 734 IP_2DE: 8 IP
+ SG_ IP_QDashACCFail : 1|2@0+ (1,0) [0|3] "" GW,BDC,TBOX,THU
+ SG_ IP_DISFail : 2|1@0+ (1,0) [0|1] "" GW,BDC,TBOX,THU
+ SG_ IP_PassengerLCDALEDSts : 3|1@0+ (1,0) [0|1] "" GW,BDC,TBOX,THU
+ SG_ IP_DriverLCDALEDSts : 4|1@0+ (1,0) [0|1] "" GW,BDC,TBOX,THU
+ SG_ IP_FuelCnmAfterIgnOn : 15|16@0+ (0.01,0) [0|655.34] "L" GW,TBOX,THU
+ SG_ IP_FuelSaveAfterIgnOn : 37|16@0+ (0.01,0) [0|655.34] "L" GW,TBOX,THU
+ SG_ IP_RollingCounter_2DE : 51|4@0+ (1,0) [0|15] "" GW,THU,BDC
+ SG_ IP_WholeTermClrFlg : 52|1@0+ (1,0) [0|1] "" THU,GW
+ SG_ IP_CRCCheck_2DE : 63|8@0+ (1,0) [0|255] "" GW,THU,BDC
+
+BO_ 736 BDC_2E0: 8 BDC
+ SG_ RRS_LRMDistance : 3|4@0+ (1,0) [0|15] "" IBCMR,GW,TBOX,THU,IP
+ SG_ RRS_RRMDistance : 7|4@0+ (1,0) [0|15] "" IBCMR,GW,TBOX,THU,IP
+ SG_ RRS_LRCDistance : 11|4@0+ (1,0) [0|15] "" IBCMR,GW,TBOX,THU,IP
+ SG_ RRS_RRCDistance : 15|4@0+ (1,0) [0|15] "" IBCMR,GW,TBOX,THU,IP
+ SG_ RRS_LFCDistance : 19|4@0+ (1,0) [0|15] "" IBCMR,GW,TBOX,THU,IP
+ SG_ RRS_RFCDistance : 23|4@0+ (1,0) [0|15] "" IBCMR,GW,TBOX,THU,IP
+ SG_ RRS_RFMDistance : 27|4@0+ (1,0) [0|15] "" IBCMR,GW,TBOX,THU,IP
+ SG_ RRS_LFMDistance : 31|4@0+ (1,0) [0|15] "" IBCMR,GW,TBOX,THU,IP
+ SG_ RRS_RFCRealDistance : 39|8@0+ (1,0) [0|255] "cm" IBCMR,GW,TBOX,THU,IP
+ SG_ RRS_WarningFrequency : 41|2@0+ (1,0) [0|3] "" IBCMR,GW,TBOX,THU,IP,AMP
+ SG_ RRS_FrontRadarActiveStatus : 43|2@0+ (1,0) [0|3] "" IBCMR,GW,TBOX,THU,IP
+ SG_ RRS_WarningType : 47|4@0+ (1,0) [0|15] "" IBCMR,GW,TBOX,THU,IP,AMP
+ SG_ RRS_ctrlModulErrFlag : 48|1@0+ (1,0) [0|1] "" IBCMR,GW,TBOX,THU,IP
+ SG_ RRS_BattVoltErrFlag : 49|1@0+ (1,0) [0|1] "" IBCMR,GW,TBOX,THU,IP
+ SG_ RRS_RRMidSnsErrFlag : 50|1@0+ (1,0) [0|1] "" IBCMR,GW,TBOX,THU,IP
+ SG_ RRS_LRMidSnsErrFlag : 51|1@0+ (1,0) [0|1] "" IBCMR,GW,TBOX,THU,IP
+ SG_ RRS_RRCSnsErrFlag : 52|1@0+ (1,0) [0|1] "" IBCMR,GW,TBOX,THU,IP
+ SG_ RRS_LRCSnsErrFlag : 53|1@0+ (1,0) [0|1] "" IBCMR,GW,TBOX,THU,IP
+ SG_ RRS_RFCSnsErrFlag : 54|1@0+ (1,0) [0|1] "" IBCMR,GW,TBOX,THU,IP
+ SG_ RRS_LFCSnsErrFlag : 55|1@0+ (1,0) [0|1] "" IBCMR,GW,TBOX,THU,IP
+ SG_ RRS_SpkErrFlag : 56|1@0+ (1,0) [0|1] "" IBCMR,GW,TBOX,THU,IP
+ SG_ RRS_RFMSnsErrFlag : 57|1@0+ (1,0) [0|1] "" IBCMR,GW,TBOX,THU,IP
+ SG_ RRS_LFMSnsErrFlag : 58|1@0+ (1,0) [0|1] "" IBCMR,GW,TBOX,THU,IP
+ SG_ RRS_SystemFailureFlag : 59|1@0+ (1,0) [0|1] "" IBCMR,GW,TBOX,THU,IP
+ SG_ RRS_SwitchIndicatorError : 60|1@0+ (1,0) [0|1] "" IBCMR,GW,TBOX,THU,IP
+
+BO_ 737 BDC_2E1: 8 BDC
+ SG_ LRM_Sector_Dist : 7|8@0+ (1,0) [0|255] "cm" GW,TBOX,THU,IP
+ SG_ RRM_Sector_Dist : 15|8@0+ (1,0) [0|255] "cm" GW,TBOX,THU,IP
+ SG_ RRC_Sector_Dist : 16|7@0+ (1,0) [0|127] "cm" GW,TBOX,THU,IP
+ SG_ LRC_Sector_Dist : 23|7@0+ (1,0) [0|127] "cm" GW,TBOX,THU,IP
+ SG_ LFC_Sector_Dist : 25|7@0+ (1,0) [0|127] "cm" GW,TBOX,THU,IP
+ SG_ RFC_Sector_Dist : 34|7@0+ (1,0) [0|127] "cm" GW,TBOX,THU,IP
+ SG_ LFM_Sector_Dist : 43|8@0+ (1,0) [0|255] "cm" GW,TBOX,THU,IP
+ SG_ RFM_Sector_Dist : 51|8@0+ (1,0) [0|255] "cm" GW,TBOX,THU,IP
+ SG_ RRS_LoudspeakersPosition : 59|4@0+ (1,0) [0|15] "" GW,TBOX,THU,IP,AMP
+
+BO_ 742 GW_2E6: 8 GW
+ SG_ EMS_CooltTErr : 15|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ EMS_EngTCoolt : 23|8@0+ (0.75,-48) [-48|142.5] "DegreeC" IP,THU
+
+BO_ 772 GW_304: 8 GW
+ SG_ LAS_FrontCameraFailureStatus : 1|2@0+ (1,0) [0|3] "" BDC,IP,THU
+ SG_ LAS_FrontCameraCalibrationStatus : 3|2@0+ (1,0) [0|3] "" BDC,IP,THU
+ SG_ ACC_LDWStatus : 9|2@0+ (1,0) [0|3] "" BDC,IP,THU
+ SG_ ACC_HostLaneLeftStatus : 19|4@0+ (1,0) [0|15] "" BDC,IP,THU
+ SG_ ACC_HostLaneRightStatus : 23|4@0+ (1,0) [0|15] "" BDC,IP,THU
+ SG_ ACC_LLaneMarkerType : 30|3@0+ (1,0) [0|7] "" BDC,IP,THU
+ SG_ APA_RollingCounter_304 : 51|4@0+ (1,0) [0|15] "" BDC,IP,THU
+ SG_ APA_CRCCheck_304 : 63|8@0+ (1,0) [0|255] "" BDC,IP,THU
+
+BO_ 775 GW_307: 64 GW
+ SG_ ACC_SetSpeed : 6|8@0+ (1,0) [0|254] "Km/h" TBOX,THU,IP
+ SG_ ACC_ObjValid : 13|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ ACC_TimeGapSet : 18|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ ACC_DistanceLevel : 22|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ ACC_AEBEnable : 26|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ ACC_FCWSettingStatus : 30|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ ACC_RollingCounter_35E : 51|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ ACC_CRCCheck_35E : 63|8@0+ (1,0) [0|255] "" TBOX,THU,IP
+ SG_ ACC_ACCTargetRelSpd : 92|9@0+ (1,-250) [-250|250] "km/h" TBOX,THU,IP
+ SG_ ACC_FRadarCalibrationStatus : 94|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ ACC_RollingCounter_322 : 115|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ ACC_CRCCheck_322 : 127|8@0+ (1,0) [0|255] "" TBOX,THU,IP
+ SG_ ACC_RollingCounter_344 : 179|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ ACC_CRCCheck_344 : 191|8@0+ (1,0) [0|255] "" TBOX,THU,IP
+ SG_ ACC_VehicleStartRemindSts : 220|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ ACC_IACCProhibitionTime : 226|7@0+ (1,0) [0|127] "s" THU,IP
+ SG_ ACC_CSLSetReq : 227|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ ACC_RollingCounter_35F : 243|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ ACC_CSLAEnableStatus : 245|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ ACC_CRCCheck_35F : 255|8@0+ (1,0) [0|255] "" TBOX,THU,IP
+ SG_ ACC_Target6ID : 260|6@0+ (1,0) [0|64] "" THU,IP,HUD
+ SG_ ACC_Target6Detection : 263|3@0+ (1,0) [0|7] "" THU,IP,HUD
+ SG_ ACC_Target6Direction : 266|3@0+ (1,0) [0|7] "" THU,IP,HUD
+ SG_ ACC_Target6Type : 270|4@0+ (1,0) [0|15] "" THU,IP,HUD
+ SG_ ACC_Target6LngRange : 279|12@0+ (0.1,-100) [-100|300] "m" THU,IP,HUD
+ SG_ ACC_Target6LatRange : 283|10@0+ (0.1,-50) [-50|50] "m" THU,IP,HUD
+ SG_ ACC_Target6HeadingAngle : 289|10@0+ (0.01,-3.14) [-3.14|3.14] "rad" THU,IP,HUD
+ SG_ ACC_Target6ZoneID : 311|5@0+ (1,0) [0|31] "" THU,IP,HUD
+ SG_ ACC_Target7ID : 324|6@0+ (1,0) [0|64] "" THU,IP,HUD
+ SG_ ACC_Target7Detection : 327|3@0+ (1,0) [0|7] "" THU,IP,HUD
+ SG_ ACC_Target7Direction : 330|3@0+ (1,0) [0|7] "" THU,IP,HUD
+ SG_ ACC_Target7Type : 334|4@0+ (1,0) [0|15] "" THU,IP,HUD
+ SG_ ACC_Target7LngRange : 343|12@0+ (0.1,-100) [-100|300] "m" THU,IP,HUD
+ SG_ ACC_Target7LatRange : 347|10@0+ (0.1,-50) [-50|50] "m" THU,IP,HUD
+ SG_ ACC_Target7HeadingAngle : 353|10@0+ (0.01,-3.14) [-3.14|3.14] "rad" THU,IP,HUD
+ SG_ ACC_Target7ZoneID : 375|5@0+ (1,0) [0|31] "" THU,IP,HUD
+ SG_ ACC_LLLaneDis : 391|8@0+ (0.05,0) [0|12] "m" IP
+ SG_ ACC_RRLaneDis : 399|8@0+ (0.05,-12) [-12|0] "m" IP
+ SG_ ACC_LLaneDistanceFus : 407|7@0+ (0.05,-1) [-1|5] "m" IP
+ SG_ ACC_RLaneDistanceFus : 415|7@0+ (0.05,-5) [-5|1] "m" IP
+
+BO_ 786 GW_312: 64 GW
+ SG_ ACC_AEBTargetType : 43|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ ACC_AEBTargetDetection : 44|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ ACC_AEBTargetDirection : 47|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ ACC_RollingCounter_3E4 : 51|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ ACC_CRCCheck_3E4 : 63|8@0+ (1,0) [0|255] "" TBOX,THU,IP
+ SG_ ADS_EOMWarnning : 71|3@0+ (1,0) [0|7] "" THU,IP
+
+BO_ 790 NEW_MSG_316: 64 XXX
+
+BO_ 793 GW_319: 32 GW
+ SG_ OBC_ObcChrgInpAcU : 71|9@0+ (1,0) [0|500] "V" THU,IP
+ SG_ OBC_ObcChrgInpAcI : 78|10@0+ (0.1,0) [0|100] "A" THU,IP
+ SG_ DCAC_DcacPwrCnseAct : 153|10@0+ (10,0) [0|6000] "W" THU,TBOX,IP
+ SG_ DCAC_DcacOutpPwrAvlMax : 175|10@0+ (10,0) [0|6000] "W" THU,IP
+
+BO_ 794 GW_31A: 64 GW
+ SG_ ACC_AEBTargetLngRange : 7|9@0+ (0.5,-70) [-70|180] "m" TBOX,THU,IP
+ SG_ ACC_AEBTargetRelSpeed : 14|9@0+ (1,-250) [-250|250] "km/h" TBOX,THU,IP
+ SG_ ACC_AEBTargetLatRange : 21|10@0+ (0.1,-50) [-50|50] "m" TBOX,THU,IP
+ SG_ ACC_ELKAlert : 25|2@0+ (1,0) [0|3] "" THU,IP,TBOX
+ SG_ ACC_AEBTargetmode : 33|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ ACC_AEBTextInfo : 37|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ ACC_AEBStatus : 39|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ ACC_Voiceinfo : 47|5@0+ (1,0) [0|31] "" TBOX,THU,IP,AMP
+ SG_ ACC_RollingCounter_36D : 51|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ ACC_FRadarFailureStatus : 53|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ ACC_CRCCheck_36D : 63|8@0+ (1,0) [0|255] "" TBOX,THU,IP
+ SG_ NEW_SIGNAL_1 : 67|4@0+ (1,0) [0|15] "" XXX
+ SG_ ACC_RLaneMarkerType : 70|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ NEW_SIGNAL_2 : 72|6@1+ (1,0) [0|63] "" XXX
+ SG_ ACC_IACCHWAEnable : 78|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ ACC_HostLaneLeftStatus : 83|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ ACC_HostLaneRightStatus : 87|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ ACC_RoadCurvature : 91|7@0+ (0.0005,-0.03) [-0.03|0.03] "1/m" TBOX,IP,THU
+ SG_ ACC_LLaneMarkerType : 94|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ ACC_RoadCurvatureNear : 100|7@0+ (0.0005,-0.03) [-0.03|0.03] "1/m" TBOX,THU,IP
+ SG_ ACC_RoadCurvatureFar : 109|7@0+ (0.0005,-0.03) [-0.03|0.03] "1/m" TBOX,THU,IP
+ SG_ ACC_RollingCounter_30A : 115|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ ACC_LaneChangeStatus : 117|2@0+ (1,0) [0|3] "" THU,IP
+ SG_ ACC_CRCCheck_30A : 127|8@0+ (1,0) [0|255] "" TBOX,THU,IP
+ SG_ ACC_IACCHWAMode : 135|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ ACC_DriverHandsOffStatus : 137|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ ACC_IACCHWATextInfoForDriver : 143|5@0+ (1,0) [0|31] "" TBOX,THU,IP
+ SG_ ACC_TargetBasedLateralControl : 150|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ NEW_SIGNAL_3 : 160|6@1+ (1,0) [0|63] "" XXX
+ SG_ ACC_LLLaneDetection : 167|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ ACC_RRLaneDetection : 174|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ ACC_RollingCounter_30D : 179|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ ACC_HighBeamControl : 182|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ ACC_CRCCheck_30D : 191|8@0+ (1,0) [0|255] "" TBOX,THU,IP
+ SG_ ACC_ELKInterventionMode : 210|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ ACC_ELKMode : 213|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ ACC_LatPathDY : 221|10@0- (0.01,0) [-5|5] "m" TBOX,THU,IP
+ SG_ ACC_ELKEnableStatus : 222|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ ACC_LatPathHeadingAngle : 227|11@0- (0.1,0) [-90|90] "degree" TBOX,THU,IP
+ SG_ ACC_RollingCounter_367 : 243|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ ACC_CRCCheck_367 : 255|8@0+ (1,0) [0|255] "" TBOX,THU,IP
+
+BO_ 798 GW_31E: 64 GW
+ SG_ RRS_LRMDistance : 3|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ RRS_RRMDistance : 7|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ RRS_LRCDistance : 11|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ RRS_RRCDistance : 15|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ RRS_LFCDistance : 19|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ RRS_RFCDistance : 23|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ RRS_RFMDistance : 27|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ RRS_LFMDistance : 31|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ RRS_RRSDistance : 37|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ RRS_WarningFrequency : 41|2@0+ (1,0) [0|3] "" TBOX,THU,IP,AMP
+ SG_ RRS_WarningType : 47|4@0+ (1,0) [0|15] "" TBOX,THU,IP,AMP
+ SG_ RRS_SystemFailureFlag : 48|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ RRS_ButtonPress : 49|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ RRS_RFSDistance : 52|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ RRS_LRSDistance : 55|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ RRS_LFSDistance : 58|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ LFF_Sector_Dist : 80|7@0+ (1,0) [0|127] "cm" TBOX,THU,IP
+ SG_ RFF_Sector_Dist : 89|7@0+ (1,0) [0|127] "cm" TBOX,THU,IP
+ SG_ LRF_Sector_Dist : 98|7@0+ (1,0) [0|127] "cm" TBOX,THU,IP
+ SG_ RRF_Sector_Dist : 107|7@0+ (1,0) [0|127] "cm" TBOX,THU,IP
+ SG_ LRM_Sector_Dist : 135|8@0+ (1,0) [0|255] "cm" TBOX,THU,IP
+ SG_ RRM_Sector_Dist : 143|8@0+ (1,0) [0|255] "cm" TBOX,THU,IP
+ SG_ RRC_Sector_Dist : 144|7@0+ (1,0) [0|127] "cm" TBOX,THU,IP
+ SG_ LRC_Sector_Dist : 151|7@0+ (1,0) [0|127] "cm" TBOX,THU,IP
+ SG_ LRS_Sector_Dist : 153|7@0+ (1,0) [0|127] "cm" TBOX,THU,IP
+ SG_ RRS_Sector_Dist : 162|7@0+ (1,0) [0|127] "cm" TBOX,THU,IP
+ SG_ APA_RollingCounter_2A6 : 179|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ APA_CRCCheck_2A6 : 191|8@0+ (1,0) [0|255] "" TBOX,THU,IP
+ SG_ RFM_Sector_Dist : 192|7@0+ (1,0) [0|127] "cm" TBOX,THU,IP
+ SG_ LFM_Sector_Dist : 199|7@0+ (1,0) [0|127] "cm" TBOX,THU,IP
+ SG_ LFC_Sector_Dist : 201|7@0+ (1,0) [0|127] "cm" TBOX,THU,IP
+ SG_ RFC_Sector_Dist : 210|7@0+ (1,0) [0|127] "cm" TBOX,THU,IP
+ SG_ LFS_Sector_Dist : 219|7@0+ (1,0) [0|127] "cm" TBOX,THU,IP
+ SG_ RFS_Sector_Dist : 228|7@0+ (1,0) [0|127] "cm" TBOX,THU,IP
+ SG_ APA_RollingCounter_2A7 : 243|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ APA_CRCCheck_2A7 : 255|8@0+ (1,0) [0|255] "" TBOX,THU,IP
+ SG_ APA_SystemFailureFlag : 284|5@0+ (1,0) [0|31] "" TBOX,THU,IP
+ SG_ APA_LR_Rebuild_Target_Dist : 322|5@0+ (10,0) [0|310] "cm" TBOX,THU,IP
+ SG_ APA_LF_Rebuild_Target_Dist : 327|5@0+ (10,0) [0|310] "cm" TBOX,THU,IP
+ SG_ APA_RR_Rebuild_Target_Dist : 328|5@0+ (10,0) [0|310] "cm" TBOX,THU,IP
+ SG_ APA_RF_Rebuild_Target_Dist : 333|5@0+ (10,0) [0|310] "cm" TBOX,THU,IP
+ SG_ APA_VoiceTipType : 494|3@0+ (1,0) [0|7] "" THU,IP
+
+BO_ 800 GW_320: 8 GW
+ SG_ GW_OTAmode_Chks : 7|8@0+ (1,0) [0|255] "" THU,IP,OTA
+ SG_ GW_ADSSecOCVerifyFailureFlag : 16|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ GW_OTAmode_Cntr : 20|4@0+ (1,0) [0|15] "" THU,IP,OTA
+ SG_ GW_ResetReq : 31|7@0+ (1,0) [0|127] "" THU,IP,AMP
+ SG_ GW_OTAmode : 55|4@0+ (1,0) [0|15] "" THU,IP,OTA
+
+BO_ 817 GW_331: 8 GW
+ SG_ TCU_EPBFaultIPReq : 1|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ TCU_DriverRemindIPReq : 3|2@0+ (1,0) [0|3] "" IP,THU
+ SG_ TCU_TransTempWarning : 5|2@0+ (1,0) [0|3] "" IP,THU
+ SG_ TCU_FailureLamp : 6|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ TCU_GearForDisplay : 39|4@0+ (1,0) [0|15] "" TBOX,IP,THU,HUD
+ SG_ TCU_ARCFaultIPReq : 40|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ TCU_ESLFaultIPReq : 41|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ TCU_ParkSelectIPReq : 42|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ TCU_ParkRelMPosnIPReq : 43|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ TCU_ParkRelAPosnIPReq : 45|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ TCU_PowerplantStatusIPReq : 55|1@0+ (1,0) [0|1] "" IP,THU
+
+BO_ 823 GW_337: 32 GW
+ SG_ ESP_RearLeftWheelStatus : 65|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ ESP_FrontRightWheelStatus : 68|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ ESP_FrontLeftWheelStatus : 71|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ ESP_RearRghtWheelStatus : 78|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ ESP_TPMSresetstatus : 85|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ ESP_TPMS_WarningStatus : 86|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ ESP_TPMS_MalfunctionStatus : 87|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+
+BO_ 824 GW_338: 8 GW
+ SG_ TCU_ReqTranTempWarning : 5|2@0+ (1,0) [0|3] "" GW,TBOX,THU,IP
+ SG_ TCU_FailureLamp : 6|1@0+ (1,0) [0|1] "" GW,TBOX,THU,IP
+ SG_ TCU_EngStatusIPReq : 11|2@0+ (1,0) [0|3] "" GW,IP
+ SG_ TCU_BuzzerReq : 34|3@0+ (1,0) [0|7] "" GW,TBOX,THU,IP
+ SG_ TCU_GearForDisplay : 39|4@0+ (1,0) [0|15] "" GW,TBOX,IP,HU,THU
+ SG_ TCU_ARCFaultIPReq : 40|1@0+ (1,0) [0|1] "" GW,TBOX,THU,IP
+ SG_ TCU_ESLFaultIPReq : 41|1@0+ (1,0) [0|1] "" GW,TBOX,THU,IP
+ SG_ TCU_ParkSelectIPReq : 42|1@0+ (1,0) [0|1] "" GW,TBOX,THU,IP
+ SG_ TCU_ParkRelMPosnIPReq : 43|1@0+ (1,0) [0|1] "" GW,TBOX,THU,IP
+ SG_ TCU_ParkRelAPosnIPReq : 45|2@0+ (1,0) [0|3] "" GW,TBOX,THU,IP
+ SG_ TCU_EngStartIPReq : 47|2@0+ (1,0) [0|3] "" GW,TBOX,THU,IP
+
+BO_ 826 GW_33A: 8 GW
+ SG_ EMS_FuelTankLetOutSts : 62|3@0+ (1,0) [0|7] "" IP,THU
+
+BO_ 827 GW_33B: 64 GW
+ SG_ PCU_ChrgStsLamp_IP : 128|1@0+ (1,0) [0|1] "" IP,RMU,THU
+ SG_ PCU_Batt12VFltIndcnLi : 130|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ PCU_SysFltIndcnLi : 132|2@0+ (1,0) [0|3] "" IP,THU
+ SG_ PCU_PwrLimnTmp : 133|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ PCU_ChrgCblConntd : 134|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ PCU_RdyIndcnLi : 135|1@0+ (1,0) [0|1] "" IP,VSAP,THU
+ SG_ PCU_SOCDsp : 143|7@0+ (1,0) [0|127] "%" IP,RMU,THU
+ SG_ PCU_DrvMod : 149|3@0+ (1,0) [0|7] "" IP,RMU,THU
+ SG_ PCU_DisChrgeLamp : 156|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ PCU_eDTE : 173|9@0+ (1,0) [0|510] "km" IP,THU
+ SG_ PCU_SysEgyFlow : 177|6@0+ (1,0) [0|63] "" IP,THU
+ SG_ PCU_eDTEDesignformula_FB : 199|2@0+ (1,0) [0|3] "" THU,IP
+ SG_ PCU_SOColorReq : 233|2@0+ (1,0) [0|1] "" IP,THU
+ SG_ PCU_FuelLeftoverVD : 234|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ PCU_VehChrgDchaStsinfDis : 238|4@0+ (1,0) [0|15] "" THU,IP
+ SG_ PCU_DrvFuCnsRenew : 242|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ PCU_FuelLeftover : 254|7@0+ (1,0) [0|127] "L" IP,THU
+ SG_ PCU_EcnsTotAftIgnOn : 258|11@0+ (0.1,-50) [-50|154.6] "kWh" IP,THU
+ SG_ PCU_TipInfo_ChrgCfmPGear : 259|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ PCU_TipInfo_PullChrgrBefStrt : 260|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ PCU_TipInfo_InhbEV : 263|3@0+ (1,0) [0|7] "" IP,THU
+ SG_ PCU_TipInfo_HldHevIacc : 272|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ PCU_TipInfo_LowSocTryStrtEng : 273|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ PCU_TipInfo_MotAdptnReq : 274|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ PCU_TipInfo_12VChrgClsd : 276|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ PCU_TipInfo_LowSocStrtEng : 277|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ PCU_TipInfo_LowSocReqChrg : 278|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ PCU_TipInfo_ClsChrgCover : 279|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ PCU_FltInfo_MotorFlt : 280|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ PCU_FltInfo_ELockRelsFlt : 281|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ PCU_FltInfo_ChrgAbnorm : 282|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ PCU_TipInfo_BattTLow : 283|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ PCU_TipInfo_ChrgPwrLow : 284|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ PCU_TipInfo_ELockUnclsdChrgn : 285|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ PCU_TipInfo_BattChrgHeatg : 286|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ PCU_TipInfo_SocLowChrgn : 287|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ PCU_ECnsAvgShortTerm : 290|9@0+ (0.1,-20) [-20|31] "kWh/100km" IP,THU
+ SG_ PCU_FltInfo_TMSFlt : 291|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ PCU_FltInfo_HVPuPdFaild : 293|2@0+ (1,0) [0|2] "" IP,THU
+ SG_ PCU_FltInfo_SysHiLvlFlt : 294|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ PCU_FltInfo_SysLoLvlFlt : 295|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ PCU_FltInfo_DrvAbltyInsuff : 312|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ PCU_FltInfo_OnlyEV : 313|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ PCU_FltInfo_DCACFlt : 314|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ PCU_DisChrgSts : 336|1@0+ (1,0) [0|1] "" THU,IP
+ SG_ PCU_eDTEStd : 359|9@0+ (1,0) [0|510] "km" THU,IP
+ SG_ PCU_ECnsAvgWholeTerm : 364|9@0+ (0.1,0) [0|51] "kWh/100km" THU,IP
+ SG_ PCU_ElectricLockMode : 366|2@0+ (1,0) [0|3] "" THU,IP
+ SG_ PCU_DteDisp : 389|11@0+ (1,0) [0|2046] "KM" IP,THU
+ SG_ PCU_FuelLevelDiag : 391|2@0+ (1,0) [0|2] "" IP,THU
+ SG_ PCU_FuelAvgAftIgnON : 394|8@0+ (0.1,0) [0|25.4] "L/100Km" IP,THU
+ SG_ PCU_EnergyAvgAftIgnON : 402|9@0+ (0.1,-10) [-10|41] "L/100Km" IP,THU
+ SG_ PCU_REEVDrvMod : 436|3@0+ (1,0) [0|7] "" IP,THU
+ SG_ PCU_TipInfo_DchaStrtEngIndcn : 439|2@0+ (1,0) [0|3] "" IP,THU
+ SG_ PCU_FuelAvgLongTerm : 455|8@0+ (0.1,0) [0|25.4] "L/100Km" IP,THU
+ SG_ PCU_EnergyAvgLongTerm : 463|9@0+ (0.1,-10) [-10|41] "L/100Km" IP,THU
+ SG_ PCU_ECnsAvgSubtotal : 470|9@0+ (0.1,-20) [-20|31] "KWH/100KM" IP,THU
+ SG_ PCU_FuelAvgSubtotal : 477|8@0+ (0.1,0) [0|25.4] "L/100Km" IP,THU
+ SG_ PCU_EnergyAvgSubtotal : 485|9@0+ (0.1,-10) [-10|41] "L/100Km" IP,THU
+
+BO_ 832 GW_340: 8 GW
+ SG_ AC_FrBlowType : 2|3@0+ (1,0) [0|7] "" IBCMR,BDC,TBOX,THU,IP
+
+BO_ 838 GW_346: 64 GW
+ SG_ EMS_FuCnse : 3|12@0+ (0.001,0) [0|4.095] "" IP,RMU,THU
+ SG_ EMS_OilPressureSts : 4|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ EMS_MILIndcd : 6|2@0+ (1,0) [0|3] "" IP,THU
+ SG_ EMS_EngProtectionRemind : 21|2@0+ (1,0) [0|3] "" IP,THU
+ SG_ EMS_LowPreOilPumpProRemind : 22|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ EMS_FuelCapLeakDisplay : 55|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ EMS_EngLoad : 71|8@0+ (0.392,0) [0|99.568] "%" TBOX,THU,IP
+ SG_ EMS_GPF_State : 83|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ EMS_MILIndcdLightInfo : 263|4@0+ (1,0) [0|15] "" IP,THU
+
+BO_ 839 GW_347: 8 GW
+ SG_ TPMS_LRPressureWarning : 2|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ TPMS_RFPressureWarning : 5|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ BCM_TirePresureSignalStatus : 6|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ TPMS_SignalStatus : 7|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ TPMS_LFTyrePressure : 15|8@0+ (1.373,0) [0|350] "KPa" TBOX,THU,IP
+ SG_ TPMS_RFTyrePressure : 23|8@0+ (1.373,0) [0|350] "KPa" TBOX,THU,IP
+ SG_ TPMS_RRTyrePressure : 31|8@0+ (1.373,0) [0|350] "KPa" TBOX,THU,IP
+ SG_ TPMS_LRTyrePressure : 39|8@0+ (1.373,0) [0|350] "KPa" TBOX,THU,IP
+ SG_ TPMS_SystemFailureWarning : 41|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ TPMS_LFPressureWarning : 44|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ TPMS_RRPressureWarning : 47|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+
+BO_ 844 GW_34C: 64 GW
+ SG_ BMS_PredChrgTi : 215|10@0+ (1,0) [0|1000] "Min" THU,IP
+ SG_ BMS_BcuBattSocUnderLamp : 336|1@0+ (1,0) [0|1] "" IP,THU
+
+BO_ 849 GW_351: 8 GW
+ SG_ PEPS_FISStartRequest : 48|2@0+ (1,0) [0|3] "" THU,IP
+
+BO_ 850 GW_352: 8 GW
+ SG_ DSM_MemoryAlarm : 12|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ DSM_MemorySetSwitch : 35|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+
+BO_ 869 THU_365: 32 THU
+ SG_ IMS_DrowsinessWarning : 128|3@0+ (1,0) [0|3] "" IMS,IP,GW,BDC
+ SG_ IMS_DistractionWarning : 151|2@0+ (1,0) [0|3] "" IMS,IP,GW,BDC
+
+BO_ 870 GW_366: 8 GW
+ SG_ AC_EnvironmentalTempVD : 8|1@0+ (1,0) [0|1] "" IBCMR,BDC,TBOX,THU,IP
+ SG_ AC_EnvironmentalTemp : 23|8@0+ (0.5,-40) [-40|87] "degreeC" IBCMR,BDC,TBOX,THU,IP
+ SG_ AC_FrReqWindLevel : 31|4@0+ (1,0) [0|15] "" IBCMR,BDC,TBOX,THU,IP
+
+BO_ 881 GW_371: 8 GW
+ SG_ PCU_SOCSaveSts : 1|2@0+ (1,0) [0|3] "" THU,IP
+ SG_ PCU_DriveModeMemoryStatus : 3|2@0+ (1,0) [0|3] "" THU,IP
+ SG_ PCU_SpecialModeSetFB : 25|3@0+ (1,0) [0|7] "" THU,IP
+ SG_ PCU_DrvMod2 : 31|3@0+ (1,0) [0|7] "" THU,IP
+ SG_ PCU_chargSpeedFB : 32|2@0+ (1,0) [0|3] "" THU,IP
+ SG_ PCU_ParkingModeReminder : 34|2@0+ (1,0) [0|3] "" THU,IP
+ SG_ PCU_EnterParkingModeReminder : 36|2@0+ (1,0) [0|3] "" THU,IP
+ SG_ PCU_EmergencyModeReminder : 38|2@0+ (1,0) [0|3] "" THU,IP
+ SG_ PCU_Drivescore : 46|8@0+ (1,0) [0|100] "" THU,IP
+
+BO_ 885 THU_375: 64 THU
+ SG_ HU_FaceIDEnableStatus : 26|2@0+ (1,0) [0|3] "" GW,BDC,IP
+ SG_ HU_CarWashModelRequest : 41|2@0+ (1,0) [0|3] "" HU,IP,GW
+ SG_ HU_IPSoundStyleSetting : 66|3@0+ (1,0) [0|7] "" IP,GW
+ SG_ HU_ScreenPowerOn : 72|1@0+ (1,0) [0|1] "" IP,GW,BDC,PCP,TBOX
+ SG_ HU_IPDimmingSetting : 79|4@0+ (1,0) [0|15] "" IP,GW
+ SG_ HU_ThemeChange : 92|3@0+ (1,0) [0|7] "" GW,BDC,IP,TBOX
+ SG_ HU_FaceIDDetectErrorSts : 98|3@0+ (1,0) [0|7] "" GW,BDC,IP
+ SG_ HU_FaceIDEntrySts : 104|1@0+ (1,0) [0|1] "" GW,BDC,IP
+ SG_ HU_DistractionWarning : 111|2@0+ (1,0) [0|3] "" IP,GW,BDC
+ SG_ HU_IPDimmerLevel : 115|7@0+ (1,0) [0|100] "" IP,GW,BDC
+ SG_ HU_IPDimmingModeSet : 117|2@0+ (1,0) [0|3] "" IP,GW
+ SG_ HU_FaceIDStartEngineSwitch : 119|2@0+ (1,0) [0|3] "" GW,BDC,IP
+ SG_ HU_FaceIDDetectSts : 121|2@0+ (1,0) [0|3] "" GW,BDC,IP
+ SG_ HU_FaceIDDetectFailReason : 124|3@0+ (1,0) [0|7] "" GW,BDC,IP
+
+BO_ 898 GW_382: 64 GW
+ SG_ ACC_RollingCounter_35D : 51|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ ACC_CRCCheck_35D : 63|8@0+ (1,0) [0|255] "" TBOX,THU,IP
+ SG_ ACC_RollingCounter_35C : 115|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ ACC_CRCCheck_35C : 127|8@0+ (1,0) [0|255] "" TBOX,THU,IP
+ SG_ ACC_LaneQuality : 134|6@0+ (0.015625,0) [0|0.984375] "" TBOX,THU,IP
+ SG_ ACC_LaneEquationC1 : 137|12@0+ (0.0004882813,-1) [-1|0.9990234375] "rad" TBOX,THU,IP
+ SG_ ACC_LaneEquationC2 : 157|12@0+ (1.52588e-05,-0.0312347412) [-0.0312347412|0.0312347412] "" TBOX,THU,IP
+ SG_ ACC_LaneEquationC3 : 161|12@0+ (4.768e-07,-0.0009760857) [-0.0009760857|0.0009760857] "" TBOX,THU,IP
+ SG_ ACC_RollingCounter_3E6 : 179|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ ACC_LaneEquationStatus : 181|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ ACC_CRCCheck_3E6 : 191|8@0+ (1,0) [0|255] "" TBOX,THU,IP
+ SG_ ACC_Target1ID : 196|6@0+ (1,0) [0|64] "" THU,IP,HUD
+ SG_ ACC_Target1Detection : 199|3@0+ (1,0) [0|7] "" THU,IP,HUD
+ SG_ ACC_Target1Direction : 202|3@0+ (1,0) [0|7] "" THU,IP,HUD
+ SG_ ACC_Target1Type : 206|4@0+ (1,0) [0|15] "" THU,IP,HUD
+ SG_ ACC_Target1LngRange : 215|12@0+ (0.1,-100) [-100|300] "m" THU,IP,HUD
+ SG_ ACC_Target1LatRange : 219|10@0+ (0.1,-50) [-50|50] "m" THU,IP,HUD
+ SG_ ACC_Target1HeadingAngle : 225|10@0+ (0.01,-3.14) [-3.14|3.14] "rad" THU,IP,HUD
+ SG_ ACC_Target2Detection : 240|3@0+ (1,0) [0|7] "" THU,IP,HUD
+ SG_ ACC_Target1ZoneID : 247|5@0+ (1,0) [0|31] "" THU,IP,HUD
+ SG_ ACC_Target2ID : 253|6@0+ (1,0) [0|64] "" THU,IP,HUD
+ SG_ ACC_Target2LngRange : 259|12@0+ (0.1,-100) [-100|300] "m" THU,IP,HUD
+ SG_ ACC_Target2Type : 263|4@0+ (1,0) [0|15] "" THU,IP,HUD
+ SG_ ACC_Target2LatRange : 279|10@0+ (0.1,-50) [-50|50] "m" THU,IP,HUD
+ SG_ ACC_Target2HeadingAngle : 282|10@0+ (0.01,-3.14) [-3.14|3.14] "rad" THU,IP,HUD
+ SG_ ACC_Target2Direction : 285|3@0+ (1,0) [0|7] "" THU,IP,HUD
+ SG_ ACC_Target2ZoneID : 288|5@0+ (1,0) [0|31] "" THU,IP,HUD
+ SG_ ACC_Target3ID : 296|6@0+ (1,0) [0|64] "" THU,IP,HUD
+ SG_ ACC_Target3Detection : 299|3@0+ (1,0) [0|7] "" THU,IP,HUD
+ SG_ ACC_Target3Type : 306|4@0+ (1,0) [0|15] "" THU,IP,HUD
+ SG_ ACC_Target3LngRange : 318|12@0+ (0.1,-100) [-100|300] "m" THU,IP,HUD
+ SG_ ACC_Target3LatRange : 322|10@0+ (0.1,-50) [-50|50] "m" THU,IP,HUD
+ SG_ ACC_Target3Direction : 328|3@0+ (1,0) [0|7] "" THU,IP,HUD
+ SG_ ACC_Target3HeadingAngle : 341|10@0+ (0.01,-3.14) [-3.14|3.14] "rad" THU,IP,HUD
+ SG_ ACC_Target3ZoneID : 347|5@0+ (1,0) [0|31] "" THU,IP,HUD
+ SG_ ACC_Target4ID : 355|6@0+ (1,0) [0|64] "" THU,IP,HUD
+ SG_ ACC_Target4Detection : 358|3@0+ (1,0) [0|7] "" THU,IP,HUD
+ SG_ ACC_Target4LngRange : 361|12@0+ (0.1,-100) [-100|300] "m" THU,IP,HUD
+ SG_ ACC_Targe4Type : 365|4@0+ (1,0) [0|15] "" THU,IP,HUD
+ SG_ ACC_Target4LatRange : 381|10@0+ (0.1,-50) [-50|50] "m" THU,IP,HUD
+ SG_ ACC_Target4HeadingAngle : 384|10@0+ (0.01,-3.14) [-3.14|3.14] "rad" THU,IP,HUD
+ SG_ ACC_Target4Direction : 387|3@0+ (1,0) [0|7] "" THU,IP,HUD
+ SG_ ACC_Target5Detection : 401|3@0+ (1,0) [0|7] "" THU,IP,HUD
+ SG_ ACC_Target4ZoneID : 406|5@0+ (1,0) [0|31] "" THU,IP,HUD
+ SG_ ACC_Target5Type : 408|4@0+ (1,0) [0|15] "" THU,IP,HUD
+ SG_ ACC_Target5ID : 414|6@0+ (1,0) [0|64] "" THU,IP,HUD
+ SG_ ACC_Target5LngRange : 420|12@0+ (0.1,-100) [-100|300] "m" THU,IP,HUD
+ SG_ ACC_Target5LatRange : 424|10@0+ (0.1,-50) [-50|50] "m" THU,IP,HUD
+ SG_ ACC_Target5HeadingAngle : 443|10@0+ (0.01,-3.14) [-3.14|3.14] "rad" THU,IP,HUD
+ SG_ ACC_Target5Direction : 446|3@0+ (1,0) [0|7] "" THU,IP,HUD
+ SG_ ACC_Target5ZoneID : 449|5@0+ (1,0) [0|31] "" THU,IP,HUD
+
+BO_ 903 GW_387: 8 GW
+ SG_ BCM_BLEKeyIndicator : 1|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ BCM_DriveModeStatus : 5|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ BCM_DriveModeFeedback : 7|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ BCM_DriveModeSet : 13|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ BCM_Statuslowbeam : 40|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ BCM_Statusrainsensor : 41|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ BCM_BuzzerWarningMode : 47|5@0+ (1,0) [0|31] "" TBOX,THU,IP
+ SG_ BCM_SaveEnergySetStatus : 53|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+
+BO_ 906 GW_38A: 8 GW
+ SG_ GW_MFS_Left_switch : 1|2@0+ (1,0) [0|3] "" BDC,IP,TBOX,THU
+ SG_ GW_MFS_Right_switch : 3|2@0+ (1,0) [0|3] "" BDC,IP,TBOX,THU
+ SG_ GW_MFS_UP_switch : 5|2@0+ (1,0) [0|3] "" BDC,IP,TBOX,THU
+ SG_ GW_MFS_Down_switch : 7|2@0+ (1,0) [0|3] "" BDC,IP,TBOX,THU
+ SG_ GW_MFS_OK_switch : 9|2@0+ (1,0) [0|3] "" BDC,IP,TBOX,THU
+ SG_ GW_MFS_Hungup_switch_signal : 29|2@0+ (1,0) [0|3] "" BDC,IP,THU,TBOX
+ SG_ GW_MFS_Answer_switch_signal : 31|2@0+ (1,0) [0|3] "" BDC,IP,THU,TBOX
+ SG_ GW_MFS_DiagInfoSW_38A : 42|3@0+ (1,0) [0|7] "" BDC,IP,THU,TBOX
+
+BO_ 912 GW_390: 8 GW
+ SG_ BCM_LowPowerWarning : 2|3@0+ (1,0) [0|7] "" TBOX,THU,IP,IMS,AMP
+ SG_ BCM_PMSLevel : 5|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ BCM_BSNLevel : 23|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+
+BO_ 918 GW_396: 8 GW
+ SG_ BCM_SunroofStatus : 0|1@0+ (1,0) [0|1] "" TBOX,THU,IP,HUD
+ SG_ BCM_Sunroof_POS_VIT : 7|7@0+ (1,0) [0|127] "" TBOX,THU,IP
+ SG_ BCM_Sunroof_POS_Direction : 8|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ BCM_Sunshade_POS_VIT_FL : 15|7@0+ (1,0) [0|127] "%" TBOX,THU,IP
+ SG_ BCM_Sunroof_Movement : 18|3@0+ (1,0) [0|7] "%" TBOX,THU,IP
+ SG_ BCM_Sunshade_Movement : 21|3@0+ (1,0) [0|7] "%" TBOX,THU,IP
+ SG_ BCM_SunroofRainSetStatus : 23|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ BCM_RemoteWindowUpSetStaus : 45|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+
+BO_ 922 GW_39A: 64 GW
+ SG_ LAS_OverspeedSoundWarning : 2|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ LAS_OverspeedVisualWarning : 5|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ LAS_TSRSpeedLimitType : 7|2@0+ (1,0) [0|3] "" THU,HUD,IP
+ SG_ LAS_HMALightDistribution : 8|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ LAS_OverspeedWarningOffset : 14|5@0+ (1,-10) [-10|10] "km/h" TBOX,THU,IP
+ SG_ LAS_OverspeedWarningEnableStatus : 15|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ LAS_FrontCameraFailureStatus : 17|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ LAS_FrontCameraCalibrationStatus : 20|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ LAS_TSRStatus : 26|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ LAS_OverspeedSoundWarningEnSt : 27|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ LAS_TSRHostSpdLimit : 39|8@0+ (1,0) [0|255] "" TBOX,THU,IP
+ SG_ LAS_TSRHostSpdLimitUnits : 41|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ LAS_HMAStatus : 44|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ LAS_TSRLeftLaneStatus : 47|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ LAS_RollingCounter_332 : 51|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ LAS_TSRRightLaneStatus : 55|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ LAS_CRCCheck_332 : 63|8@0+ (1,0) [0|255] "" TBOX,THU,IP
+ SG_ LAS_TSRProhibitionSign : 66|5@0+ (1,0) [0|31] "" TBOX,THU,IP
+ SG_ LAS_TSRMandatorySign : 70|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ LAS_TSRWarningSign : 83|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ LAS_TLACountDownTime_HostLane : 94|7@0+ (1,0) [0|127] "" TBOX,THU,IP
+ SG_ LAS_TLADistance_HostLane : 103|8@0+ (1,0) [0|255] "" TBOX,THU,IP
+ SG_ LAS_TLAStopLine_HostLane : 111|8@0+ (1,0) [0|255] "" TBOX,THU,IP
+ SG_ LAS_RollingCounter_3D4 : 115|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ LAS_CRCCheck_3D4 : 127|8@0+ (1,0) [0|255] "" TBOX,THU,IP
+ SG_ LAS_TSRLeftLaneSpdLimit : 135|8@0+ (1,0) [0|255] "" TBOX,THU,IP
+ SG_ LAS_TSRRightLaneSpdLimit : 143|8@0+ (1,0) [0|255] "" TBOX,THU,IP
+ SG_ LAS_RoadSignType_LLane : 146|5@0+ (1,0) [0|15] "" IP,THU
+ SG_ LAS_RoadSignType_HLane : 151|5@0+ (1,0) [0|15] "" IP,THU
+ SG_ LAS_RoadSignType_RLane : 157|5@0+ (1,0) [0|15] "" IP,THU
+ SG_ LAS_RollingCounter_3C0 : 179|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ LAS_CRCCheck_3C0 : 191|8@0+ (1,0) [0|255] "" TBOX,THU,IP
+ SG_ LAS_TLAStatus : 193|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ LAS_TLAEnable : 194|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ LAS_TLAWarninglevel : 197|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ LAS_TLAObjectStatus_HostLane : 199|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ LAS_TLAObjectDetection_HostLane : 200|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ LAS_TLAObjectColour_HostLane : 204|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ LAS_TLAObjectType_HostLane : 212|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ LAS_TLAArrowDirection_HostLane : 215|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ LAS_TLAArrowDirection_LeftLane : 216|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ LAS_TLAObjectType_LeftLane : 219|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ LAS_TLAObjectColour_LeftLane : 221|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ LAS_TLAObjectDetection_LeftLane : 223|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ LAS_TLAObjectColour_RightLane : 225|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ LAS_TLAObjectDetection_RightLane : 227|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ LAS_TLAArrowDirection_RightLane : 236|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ LAS_TLAObjectType_RightLane : 239|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ LAS_RollingCounter_37D : 243|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ LAS_TLAObjectStatus_LeftLane : 245|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ LAS_TLAObjectStatus_RightLane : 247|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ LAS_CRCCheck_37D : 255|8@0+ (1,0) [0|255] "" TBOX,THU,IP
+ SG_ LAS_CrosswalkLngRange_HLane : 263|8@0+ (1,0) [0|255] "" IP,THU
+ SG_ LAS_RoadSignCenterLngRange_HLane : 271|9@0+ (0.1,0) [0|51.1] "m" IP,THU
+ SG_ LAS_RoadSignCenterLatRange_HLane : 278|9@0+ (0.05,-8) [-8|17.55] "m" IP,THU
+ SG_ LAS_RoadSignCenterLngRange_LLane : 285|9@0+ (0.1,0) [0|51.1] "m" IP,THU
+ SG_ LAS_RoadSignCenterLatRange_LLane : 292|9@0+ (0.05,-8) [-8|17.55] "m" IP,THU
+ SG_ LAS_RoadSignCenterLngRange_RLane : 299|9@0+ (0.1,0) [0|51.1] "m" IP,THU
+ SG_ LAS_RoadSignCenterLatRange_RLane : 306|9@0+ (0.05,-8) [-8|17.55] "m" IP,THU
+
+BO_ 923 GW_39B: 8 GW
+ SG_ AC_DriverReqTemp : 25|5@0+ (0.5,17.5) [18|32] "��" IBCMR,BDC,TBOX,THU,IP
+
+BO_ 943 THU_3AF: 64 THU
+ SG_ HU_NavCurrentRoadType : 218|3@0+ (1,0) [0|7] "" GW,BDC,TBOX,IP
+ SG_ HU_IPHudHeightSw : 222|2@0+ (1,0) [0|3] "" IP,GW,HU
+
+BO_ 947 GW_3B3: 8 GW
+ SG_ BCM_RearFoglampStatus : 11|2@0+ (1,0) [0|3] "" IBCMR,BDC,TBOX,THU,IP
+ SG_ BCM_RearPositionLampError : 24|1@0+ (1,0) [0|1] "" IBCMR,BDC,TBOX,THU,IP
+ SG_ BCM_LeftRearFoglampError : 29|1@0+ (1,0) [0|1] "" IBCMR,BDC,TBOX,THU,IP
+ SG_ BCM_RightRearFoglampError : 30|1@0+ (1,0) [0|1] "" IBCMR,BDC,TBOX,THU,IP
+ SG_ BCM_BrakeLampError : 31|1@0+ (1,0) [0|1] "" IBCMR,BDC,TBOX,THU,IP
+ SG_ BCM_CHMLampError : 32|1@0+ (1,0) [0|1] "" IBCMR,BDC,TBOX,THU,IP
+ SG_ BCM_ReverseLampError : 33|1@0+ (1,0) [0|1] "" IBCMR,BDC,TBOX,THU,IP
+ SG_ BCM_FuelTankRefuelTextInfo : 54|3@0+ (1,0) [0|7] "" IP,THU
+
+BO_ 951 GW_3B7: 8 GW
+ SG_ AVM_BodyColourSetStatus : 3|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ AVM_AVMDVRReplayModeStatus : 7|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ AVM_3DHorAngleStatus : 15|9@0+ (1,0) [0|360] "��" TBOX,THU,IP
+ SG_ AVM_FrontCameraSts : 17|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ AVM_WheelHubSetSetStatus : 20|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ AVM_LicenseNumberSetStatus : 22|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ AVM_FullSpeedPanoramicOnOff : 25|2@0+ (1,0) [0|3] "" THU,IP
+ SG_ AVM_RightCameraSts : 27|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ AVM_LeftCameraSts : 29|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ AVM_RearCameraSts : 31|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ AVM_DoorOpenWarningOnOff : 39|2@0+ (1,0) [0|3] "" THU,IP
+
+BO_ 957 THU_3BD: 64 THU
+ SG_ HU_DayNightTheme : 35|3@0+ (1,0) [0|7] "" IP,GW
+ SG_ HU_SubtotalClrSw : 40|1@0+ (1,0) [0|1] "" IP,GW
+ SG_ HU_EngDistSw : 44|2@0+ (1,0) [0|3] "" IP,GW
+ SG_ HU_URSoundWarEnable : 46|2@0+ (1,0) [0|3] "" IP,GW
+ SG_ HU_NaviIconNumber_2 : 135|4@0+ (1,0) [0|15] "" IP,GW,BDC,TBOX
+ SG_ HU_Seeoffanimation : 143|1@0+ (1,0) [0|1] "" IP,GW,BDC,TBOX,HUD
+ SG_ HU_NaviDistance : 144|17@0+ (1,0) [0|131070] "m" IP,GW,BDC,TBOX
+ SG_ HU_NaviIconNumber : 175|8@0+ (1,0) [0|255] "" IP,GW,BDC,TBOX
+ SG_ HU_Compass : 179|9@0+ (1,0) [0|360] "Degree" GW,BDC,IP
+ SG_ HU_VC_VR : 183|2@0+ (1,0) [0|3] "" IP,GW,BDC,TBOX
+ SG_ HU_ThemeByDrivemode : 198|2@0+ (1,0) [0|3] "" HU,IP,GW
+ SG_ HU_DisplayModeSet_2 : 212|4@0+ (1,0) [0|15] "" HU,IP,GW
+ SG_ HU_LanguageSync : 218|3@0+ (1,0) [0|7] "" IP,GW,BDC,TBOX,AVM
+ SG_ HU_RaceModeRecord : 225|2@0+ (1,0) [0|3] "" HU,IP,GW
+ SG_ HU_DrvMod2 : 411|3@0+ (1,0) [0|7] "" GW,IP
+ SG_ TBOX_ChrgStrtMin : 448|6@0+ (1,0) [0|63] "Minute" IP,GW
+ SG_ TBOX_ChrgStrtHour : 453|5@0+ (1,0) [0|31] "Hour" IP,GW
+ SG_ TBOX_ChrgStrtDay : 455|2@0+ (1,0) [0|3] "" IP,GW
+
+BO_ 981 IP_3D5: 32 IP
+ SG_ IP_MessageAlertSoundSetStatus : 2|3@0+ (1,0) [0|7] "" GW,HU,THU,TBOX
+ SG_ IP_DimmingSetStatus : 6|4@0+ (1,0) [0|15] "" GW,HU,THU
+ SG_ IP_MaintainReset : 7|1@0+ (1,0) [0|1] "" GW,HU,THU,TBOX
+ SG_ IP_RearSeatbeltWarningEnableFB : 9|2@0+ (1,0) [0|3] "" HU,THU,GW,TBOX
+ SG_ IP_WarningVolumeSettingFB : 12|3@0+ (1,0) [0|7] "" HU,THU,GW,TBOX
+ SG_ IP_AlarmSoundSetStatus : 15|3@0+ (1,0) [0|7] "" GW,HU,THU,TBOX
+ SG_ IP_Adaptivedimminglevel : 23|8@0+ (1,0) [0|255] "" GW,HU,THU
+ SG_ IP_DimmingModeSetStatus : 25|2@0+ (1,0) [0|7] "" GW,HU,THU
+ SG_ IP_SoundStyleSetStatus : 28|3@0+ (1,0) [0|7] "" GW,HU,THU
+ SG_ IP_AlarmSoundStatus : 31|3@0+ (1,0) [0|7] "" GW,HU,THU
+ SG_ IP_WarningMessage : 32|6@0+ (1,0) [0|63] "" HU,THU,GW
+ SG_ IP_ECnsAvgReset : 33|1@0+ (1,0) [0|1] "" GW,TBOX,THU
+ SG_ IP_WelcomeSoundSetStatus : 36|3@0+ (1,0) [0|7] "" GW,HU,THU,TBOX
+ SG_ IP_EngineCoolanTemperatureHigh : 37|1@0+ (1,0) [0|1] "" GW,BDC,TBOX,THU
+ SG_ IP_EngineOilPressureLowSts : 38|1@0+ (1,0) [0|1] "" GW,BDC,TBOX,THU
+ SG_ IP_FuelLow : 39|1@0+ (1,0) [0|1] "" GW,BDC,TBOX,THU,HUD
+ SG_ IP_Subsystemnumber : 42|8@0+ (1,0) [0|255] "" HU,THU,GW
+ SG_ IP_URSoundSwitchFeedback : 48|1@0+ (1,0) [0|1] "" THU,GW
+ SG_ IP_ThemeByDrivemodeStatus : 50|2@0+ (1,0) [0|3] "" THU,GW
+ SG_ IP_CarWashModelFeedback : 57|2@0+ (1,0) [0|3] "" THU,GW
+ SG_ IP_AverageSpeed : 71|8@0+ (1,0) [0|255] "" GW,HUD
+ SG_ IP_TravelTime_min : 79|8@0+ (1,0) [0|255] "" GW,HUD
+ SG_ IP_TravelTime_hour : 87|8@0+ (1,0) [0|255] "" GW,HUD
+ SG_ IP_W1W2DisplaySt : 88|7@0+ (1,0) [0|127] "" GW,HUD
+ SG_ IP_RotaSpeedSt : 95|7@0+ (0.1,0) [0|8] "1000r/min" GW,HUD
+ SG_ IP_DayNightAutoSt : 104|2@0+ (1,0) [0|3] "" THU,GW
+ SG_ IP_DayNightTheme : 107|3@0+ (1,0) [0|7] "" THU,GW
+ SG_ IP_HUHudHeightSwSt : 109|2@0+ (1,0) [0|3] "" GW,THU
+ SG_ IP_ResetSts : 118|3@0+ (1,0) [0|7] "" GW
+ SG_ IP_SubtotalAverageSpeed : 135|9@0+ (1,0) [0|360] "km/h" THU,GW
+ SG_ IP_AfterIgnOnAverageSpeed : 142|9@0+ (1,0) [0|360] "km/h" THU,GW
+ SG_ IP_EngDistDispSts : 149|2@0+ (1,0) [0|3] "" THU,GW
+
+BO_ 985 GW_3D9: 64 GW
+ SG_ ACC_ObsTarget1LngRange : 7|11@0+ (0.1,-20) [-20|120] "m" THU,IP
+ SG_ ACC_ObsTarget1LatRange : 12|10@0+ (0.1,-50) [-50|50] "m" THU,IP
+ SG_ ACC_ObsTarget1Type : 18|3@0+ (1,0) [0|7] "" THU,IP
+ SG_ ACC_ObsTarget2LngRange : 26|11@0+ (0.1,-20) [-20|120] "m" THU,IP
+ SG_ ACC_ObsTarget1ID : 31|5@0+ (1,0) [0|31] "" THU,IP
+ SG_ ACC_ObsTarget2LatRange : 47|10@0+ (0.1,-50) [-50|50] "m" THU,IP
+ SG_ ACC_ObsTarget2ID : 50|5@0+ (1,0) [0|31] "" THU,IP
+ SG_ ACC_ObsTarget2Type : 53|3@0+ (1,0) [0|7] "" THU,IP
+ SG_ ACC_ObsTarget3LngRange : 71|11@0+ (0.1,-20) [-20|120] "m" THU,IP
+ SG_ ACC_ObsTarget3LatRange : 76|10@0+ (0.1,-50) [-50|50] "m" THU,IP
+ SG_ ACC_ObsTarget3Type : 82|3@0+ (1,0) [0|7] "" THU,IP
+ SG_ ACC_ObsTarget4LngRange : 90|11@0+ (0.1,-20) [-20|120] "m" THU,IP
+ SG_ ACC_ObsTarget3ID : 95|5@0+ (1,0) [0|31] "" THU,IP
+ SG_ ACC_ObsTarget4LatRange : 111|10@0+ (0.1,-50) [-50|50] "m" THU,IP
+ SG_ ACC_ObsTarget4ID : 114|5@0+ (1,0) [0|31] "" THU,IP
+ SG_ ACC_ObsTarget4Type : 117|3@0+ (1,0) [0|7] "" THU,IP
+ SG_ ACC_ObsTarget5LngRange : 135|11@0+ (0.1,-20) [-20|120] "m" THU,IP
+ SG_ ACC_ObsTarget5LatRange : 140|10@0+ (0.1,-50) [-50|50] "m" THU,IP
+ SG_ ACC_ObsTarget5Type : 146|3@0+ (1,0) [0|7] "" THU,IP
+ SG_ ACC_ObsTarget6LngRange : 154|11@0+ (0.1,-20) [-20|120] "m" THU,IP
+ SG_ ACC_ObsTarget5ID : 159|5@0+ (1,0) [0|31] "" THU,IP
+ SG_ ACC_ObsTarget6LatRange : 175|10@0+ (0.1,-50) [-50|50] "m" THU,IP
+ SG_ ACC_ObsTarget6ID : 178|5@0+ (1,0) [0|31] "" THU,IP
+ SG_ ACC_ObsTarget6Type : 181|3@0+ (1,0) [0|7] "" THU,IP
+ SG_ ACC_ObsTarget7LngRange : 199|11@0+ (0.1,-20) [-20|120] "m" THU,IP
+ SG_ ACC_ObsTarget7LatRange : 204|10@0+ (0.1,-50) [-50|50] "m" THU,IP
+ SG_ ACC_ObsTarget7Type : 210|3@0+ (1,0) [0|7] "" THU,IP
+ SG_ ACC_ObsTarget8LngRange : 218|11@0+ (0.1,-20) [-20|120] "m" THU,IP
+ SG_ ACC_ObsTarget7ID : 223|5@0+ (1,0) [0|31] "" THU,IP
+ SG_ ACC_ObsTarget8LatRange : 239|10@0+ (0.1,-50) [-50|50] "m" THU,IP
+ SG_ ACC_ObsTarget8ID : 242|5@0+ (1,0) [0|31] "" THU,IP
+ SG_ ACC_ObsTarget8Type : 245|3@0+ (1,0) [0|7] "" THU,IP
+ SG_ ACC_ObsTarget9LngRange : 263|11@0+ (0.1,-20) [-20|120] "m" THU,IP
+ SG_ ACC_ObsTarget9LatRange : 268|10@0+ (0.1,-50) [-50|50] "m" THU,IP
+ SG_ ACC_ObsTarget9Type : 274|3@0+ (1,0) [0|7] "" THU,IP
+ SG_ ACC_ObsTarget10LngRange : 282|11@0+ (0.1,-20) [-20|120] "m" THU,IP
+ SG_ ACC_ObsTarget9ID : 287|5@0+ (1,0) [0|31] "" THU,IP
+ SG_ ACC_ObsTarget10LatRange : 303|10@0+ (0.1,-50) [-50|50] "m" THU,IP
+ SG_ ACC_ObsTarget10ID : 306|5@0+ (1,0) [0|31] "" THU,IP
+ SG_ ACC_ObsTarget10Type : 309|3@0+ (1,0) [0|7] "" THU,IP
+
+BO_ 986 GW_3DA: 8 GW
+ SG_ DSM_FaceIDDriverSeatStatus : 53|2@0+ (1,0) [0|3] "" IP,THU
+
+BO_ 987 GW_3DB: 64 GW
+ SG_ ACC_ObsTarget11LngRange : 7|11@0+ (0.1,-20) [-20|120] "m" THU,IP
+ SG_ ACC_ObsTarget11LatRange : 12|10@0+ (0.1,-50) [-50|50] "m" THU,IP
+ SG_ ACC_ObsTarget11Type : 18|3@0+ (1,0) [0|7] "" THU,IP
+ SG_ ACC_ObsTarget12LngRange : 26|11@0+ (0.1,-20) [-20|120] "m" THU,IP
+ SG_ ACC_ObsTarget11ID : 31|5@0+ (1,0) [0|31] "" THU,IP
+ SG_ ACC_ObsTarget12LatRange : 47|10@0+ (0.1,-50) [-50|50] "m" THU,IP
+ SG_ ACC_ObsTarget12ID : 50|5@0+ (1,0) [0|31] "" THU,IP
+ SG_ ACC_ObsTarget12Type : 53|3@0+ (1,0) [0|7] "" THU,IP
+ SG_ ACC_ObsTarget13LngRange : 71|11@0+ (0.1,-20) [-20|120] "m" THU,IP
+ SG_ ACC_ObsTarget13LatRange : 76|10@0+ (0.1,-50) [-50|50] "m" THU,IP
+ SG_ ACC_ObsTarget13Type : 82|3@0+ (1,0) [0|7] "" THU,IP
+ SG_ ACC_ObsTarget14LngRange : 90|11@0+ (0.1,-20) [-20|120] "m" THU,IP
+ SG_ ACC_ObsTarget13ID : 95|5@0+ (1,0) [0|31] "" THU,IP
+ SG_ ACC_ObsTarget14LatRange : 111|10@0+ (0.1,-50) [-50|50] "m" THU,IP
+ SG_ ACC_ObsTarget14ID : 114|5@0+ (1,0) [0|31] "" THU,IP
+ SG_ ACC_ObsTarget14Type : 117|3@0+ (1,0) [0|7] "" THU,IP
+ SG_ ACC_ObsTarget15LngRange : 135|11@0+ (0.1,-20) [-20|120] "m" THU,IP
+ SG_ ACC_ObsTarget15LatRange : 140|10@0+ (0.1,-50) [-50|50] "m" THU,IP
+ SG_ ACC_ObsTarget15Type : 146|3@0+ (1,0) [0|7] "" THU,IP
+ SG_ ACC_ObsTarget16LngRange : 154|11@0+ (0.1,-20) [-20|120] "m" THU,IP
+ SG_ ACC_ObsTarget15ID : 159|5@0+ (1,0) [0|31] "" THU,IP
+ SG_ ACC_ObsTarget16LatRange : 175|10@0+ (0.1,-50) [-50|50] "m" THU,IP
+ SG_ ACC_ObsTarget16ID : 178|5@0+ (1,0) [0|31] "" THU,IP
+ SG_ ACC_ObsTarget16Type : 181|3@0+ (1,0) [0|7] "" THU,IP
+ SG_ ACC_ObsTarget17LngRange : 199|11@0+ (0.1,-20) [-20|120] "m" THU,IP
+ SG_ ACC_ObsTarget17LatRange : 204|10@0+ (0.1,-50) [-50|50] "m" THU,IP
+ SG_ ACC_ObsTarget17Type : 210|3@0+ (1,0) [0|7] "" THU,IP
+ SG_ ACC_ObsTarget18LngRange : 218|11@0+ (0.1,-20) [-20|120] "m" THU,IP
+ SG_ ACC_ObsTarget17ID : 223|5@0+ (1,0) [0|31] "" THU,IP
+ SG_ ACC_ObsTarget18LatRange : 239|10@0+ (0.1,-50) [-50|50] "m" THU,IP
+ SG_ ACC_ObsTarget18ID : 242|5@0+ (1,0) [0|31] "" THU,IP
+ SG_ ACC_ObsTarget18Type : 245|3@0+ (1,0) [0|7] "" THU,IP
+ SG_ ACC_ObsTarget19LngRange : 263|11@0+ (0.1,-20) [-20|120] "m" THU,IP
+ SG_ ACC_ObsTarget19LatRange : 268|10@0+ (0.1,-50) [-50|50] "m" THU,IP
+ SG_ ACC_ObsTarget19Type : 274|3@0+ (1,0) [0|7] "" THU,IP
+ SG_ ACC_ObsTarget20LngRange : 282|11@0+ (0.1,-20) [-20|120] "m" THU,IP
+ SG_ ACC_ObsTarget19ID : 287|5@0+ (1,0) [0|31] "" THU,IP
+ SG_ ACC_ObsTarget20LatRange : 303|10@0+ (0.1,-50) [-50|50] "m" THU,IP
+ SG_ ACC_ObsTarget20ID : 306|5@0+ (1,0) [0|31] "" THU,IP
+ SG_ ACC_ObsTarget20Type : 309|3@0+ (1,0) [0|7] "" THU,IP
+
+BO_ 992 THU_3E0: 8 THU
+ SG_ AVM_MODAlert_Sound : 19|2@0+ (1,0) [0|3] "" AVM,GW,BDC,IP,TBOX
+
+BO_ 1006 GW_3EE: 8 GW
+ SG_ GW_DigKeyTimWarn : 10|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+
+BO_ 1007 GW_3EF: 8 GW
+ SG_ LCM_Dimmerlevel : 15|5@0+ (1,0) [0|31] "" TBOX,THU,IP
+ SG_ BCM_UV_LightStatus : 48|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ BCM_LaneChangeTurnLightSetStatus : 51|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ BCM_RmoteUVLightFeedback : 62|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+
+BO_ 1020 GW_3FC: 64 GW
+ SG_ PCU_IPDrvEgyValInd : 30|9@0+ (1,-100) [-100|300] "" IP,THU
+ SG_ PCU_TipInfo_12VChrgSysFlt : 31|1@0+ (1,0) [0|1] "" IP,THU
+ SG_ PCU_IPDrvEgyInd : 95|9@0+ (1,-100) [-100|100] "" IP,THU
+ SG_ PCU_ECnsAvgLongTerm : 102|9@0+ (0.1,-20) [-20|31] "kWh/100km" IP,THU
+ SG_ PCU_TarCruiseSpd : 135|13@0+ (0.05625,0) [0|360] "km/h" THU,IP
+ SG_ PCU_ECnsAvgAftIgnON : 150|9@0+ (0.1,-20) [-20|31] "kwh/100km" IP,THU
+ SG_ PCU_CruiseIndicate : 151|1@0+ (1,0) [0|1] "" IP
+ SG_ PCU_ECnsAvgAftRechrg : 157|9@0+ (0.1,-20) [-20|31] "kwh/100km" IP,THU
+ SG_ PCU_Evlamp : 160|2@0+ (1,0) [0|3] "" IP,THU
+ SG_ PCU_ECnsAvgAftRefuel : 171|9@0+ (0.1,-20) [-20|31] "kwh/100km" IP,THU
+ SG_ PCU_CruiseActiveIndicate : 173|1@0+ (1,0) [0|1] "" THU,IP
+ SG_ PCU_CruiseUnavailDisplay : 174|1@0+ (1,0) [0|1] "" THU,IP
+ SG_ PCU_CoastLevel : 191|2@0+ (1,0) [0|3] "" IP,THU
+ SG_ PCU_ForceEVStatus : 239|2@0+ (1,0) [0|3] "" THU,IP
+ SG_ PCU_ExtChrgPwr : 281|11@0+ (0.1,-10) [-10|194.6] "Kw" IP,THU
+ SG_ PCU_TotalDrivescore : 299|8@0+ (1,0) [0|100] "" THU,IP
+ SG_ PCU_PredDisChrgTi : 325|11@0+ (1,0) [0|1441] "Min" IP,THU
+ SG_ PCU_SmareSceneSwitchStatus : 344|1@0+ (1,0) [0|1] "" THU,IP
+ SG_ PCU_Quickscore : 359|8@0+ (1,0) [0|100] "" THU,IP
+ SG_ PCU_Breakscore : 427|8@0+ (1,0) [0|100] "" THU,IP
+ SG_ PCU_FltInfo_PartsFlt : 449|31@0+ (1,0) [0|31] "" IP,THU
+ SG_ PCU_FuelLevelPercent : 482|7@0+ (1,0) [0|100] "" IP,THU
+
+BO_ 1021 GW_3FD: 8 GW
+ SG_ BCM_EPSTorqueMode : 10|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+
+BO_ 1022 GW_3FE: 8 GW
+ SG_ BuzzerStaus : 47|3@0+ (1,0) [0|3] "" TBOX,THU,IP
+
+BO_ 1023 GW_3FF: 8 GW
+ SG_ BCM_FollowMeTurnon : 15|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ BCM_PositionLampStatus : 17|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ BCM_FrontFoglampStatus : 21|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ BCM_FrontPositionLampError : 23|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ BCM_LeftLowBeamError : 25|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ BCM_RightLowBeamError : 26|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ BCM_LeftFrontFoglampError : 27|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ BCM_RightFrontFoglampError : 28|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ BCM_LeftDayLampError : 34|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ BCM_RightDayLampError : 35|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ BCM_FollowMeHomeLightSetStatus : 42|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+ SG_ BCM_TurnIndicatorLeftError : 45|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ BCM_TurnIndicatorRightError : 46|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+
+BO_ 1025 IP_401: 8 IP
+ SG_ NM_message2 : 0|1@0+ (1,0) [1|1] "" GW,BDC
+
+BO_ 1290 IP_50A: 8 IP
+ SG_ IP_FuelLeftover_AD : 0|9@0+ (1,0) [0|300] "ŷķ" GW,BDC,TBOX,THU
+ SG_ IP_FuelLeftover : 7|7@0+ (1,0) [0|127] "L" GW,BDC,THU,TBOX
+ SG_ IP_DisAfterIgnOn : 21|14@0+ (0.1,0) [0|999.9] "Km" GW,BDC,TBOX,THU,HUD
+ SG_ IP_SubtotalClrFlg : 22|1@0+ (1,0) [0|1] "" GW,THU
+ SG_ IP_FuelLeftoverVD : 23|1@0+ (1,0) [0|1] "" GW,BDC,TBOX,THU
+ SG_ IP_DTE : 39|11@0+ (1,0) [0|2046] "KM" GW,BDC,TBOX,THU,HUD
+ SG_ HU_ATSSwtConfm : 41|2@0+ (1,0) [0|2] "" THU,GW
+ SG_ IP_FuelLevelPercent : 55|7@0+ (1,0) [0|100] "" GW,BDC,TBOX,THU
+
+BO_ 1302 THU_516: 32 THU
+ SG_ HU_LocalTimeValid : 71|1@0+ (1,0) [0|1] "" AVM,GW,BDC,TBOX,HUD,IP
+ SG_ HU_LocalTimeMonth : 75|4@0+ (1,0) [1|12] "month" AVM,GW,BDC,TBOX,IP
+ SG_ HU_LocalTimeDate : 84|5@0+ (1,0) [1|31] "day" AVM,GW,BDC,TBOX,IP
+ SG_ HU_LocalTimeHour : 92|5@0+ (1,0) [0|23] "hour" AVM,GW,BDC,TBOX,HUD,IP
+ SG_ HU_LocalTimeMinute : 101|6@0+ (1,0) [0|59] "minute" AVM,GW,BDC,TBOX,HUD,IP
+ SG_ HU_LocalTimeSecond : 109|6@0+ (1,0) [0|59] "second" AVM,GW,BDC,TBOX,IP
+ SG_ HU_LocalTimeSystem : 111|2@0+ (1,0) [0|3] "" AVM,GW,BDC,TBOX,IP
+ SG_ HU_LocalTimeYear : 119|8@0+ (1,2013) [2013|2268] "year" AVM,GW,BDC,TBOX,IP
+ SG_ HU_LeaveMaintainDay : 131|12@0+ (1,0) [0|3100] "��" IP,GW,BDC,TBOX
+ SG_ HU_MaintainRemindReq : 133|2@0+ (1,0) [0|3] "" IP,GW,BDC,TBOX
+ SG_ HU_LeaveMaintainMileage : 147|20@0+ (1,0) [0|100000] "km" IP,TBOX,GW,BDC
+
+BO_ 1303 IP_517: 8 IP
+ SG_ IP_SubtotalOdometer : 7|24@0+ (0.1,0) [0|999999.9] "km" THU,GW
+ SG_ IP_TotalEngRunMile : 31|24@0+ (0.1,0) [0|999999] "Km" GW,THU,TBOX
+
+BO_ 1304 GW_518: 8 GW
+ SG_ BCM_CarMode : 11|2@0+ (1,0) [0|3] "" TBOX,THU,IP,AMP
+
+BO_ 1310 GW_51E: 8 GW
+ SG_ TPMS_LRTemperatureWarning : 3|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ TPMS_RRTemperatureWarning : 4|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ TPMS_RFTemperatureWarning : 5|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ TPMS_LFTemperatureWarning : 6|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ TPMS_LRLeakageWarning : 17|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ TPMS_RRLeakageWarning : 19|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ TPMS_RFLeakageWarning : 21|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ TPMS_LFLeakageWarning : 23|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ TPMS_AerateFlag : 24|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ TPMS_Commendatorypressure : 28|4@0+ (1,0) [0|15] "" TBOX,THU,IP
+ SG_ TPMS_Suggestion : 31|3@0+ (1,0) [0|7] "" TBOX,THU,IP
+
+BO_ 1326 IP_52E: 8 IP
+ SG_ IP_SunroofControlReq : 7|8@0+ (1,0) [0|255] "" GW,BDC,TBOX,THU
+ SG_ IP_IndirectTPMSReset : 10|1@0+ (1,0) [0|1] "" GW,BDC,TBOX,THU
+
+BO_ 1328 IP_530: 8 IP
+ SG_ IP_EngineOffTime : 7|16@0+ (1,0) [0|65535] "s" GW,BDC,TBOX,THU
+ SG_ IP_TotalOdometer : 23|24@0+ (0.1,0) [0|999999] "Km" GW,BDC,TBOX,THU,AMP
+ SG_ IP_FuelLevel : 45|4@0+ (1,0) [0|15] "" THU,GW,BDC,TBOX
+ SG_ IP_AvgFuelConsumption : 55|8@0+ (0.1,0) [0|25.4] "L/100Km" GW,TBOX,THU,RMU
+ SG_ IP_AfeAfterIgnOn : 63|8@0+ (0.1,0) [0|25.4] "L/100Km" GW,TBOX,THU
+
+BO_ 1336 GW_538: 8 GW
+ SG_ TM2_Resolvercalibrstatus : 7|3@0+ (1,0) [0|7] "" IP,THU
+
+BO_ 1342 GW_53E: 8 GW
+ SG_ GM_Resolvercalibrstatus : 7|3@0+ (1,0) [0|7] "" IP,THU
+
+BO_ 1355 IP_54B: 8 IP
+ SG_ IP_SubtotalTime_hour : 1|17@0+ (1,0) [0|99999] "hour" THU,GW
+ SG_ IP_SubtotalTime_min : 7|6@0+ (1,0) [0|59] "min" THU,GW
+ SG_ IP_AfterIgnOnTime_min : 16|6@0+ (1,0) [0|59] "min" THU,GW
+ SG_ IP_AfterIgnOnTime_hour : 26|10@0+ (1,0) [0|999] "hour" THU,GW
+
+BO_ 1363 THU_553: 8 THU
+ SG_ HU_IPWarningVolumeSetting : 2|3@0+ (1,0) [0|7] "" HU,IP,GW,TBOX
+ SG_ HU_ACCPush : 3|1@0+ (1,0) [0|1] "" HU,IP,GW,TBOX
+ SG_ HU_MessageAlertSoundSet : 10|3@0+ (1,0) [0|7] "" HU,GW,IP,TBOX
+ SG_ HU_WelcomeSoundSet : 13|3@0+ (1,0) [0|7] "" HU,GW,IP,TBOX
+ SG_ HU_RearSeatbeltWarningEnable : 15|2@0+ (1,0) [0|3] "" HU,IP,GW,TBOX
+ SG_ HU_AlarmSoundSet : 26|3@0+ (1,0) [0|7] "" HU,GW,IP,TBOX
+
+BO_ 1394 GW_572: 8 GW
+ SG_ PTS_SpoilerFailStatus : 8|1@0+ (1,0) [0|1] "" IP,THU
+
+BO_ 1440 GW_5A0: 64 GW
+ SG_ CHM_output_volt : 223|16@0+ (0.1,0) [0|750] "V" RMU,THU,IP
+ SG_ CHM_output_curr : 239|16@0+ (0.1,-400) [-400|0] "A" RMU,THU,IP
+
+BO_ 1478 IP_5C6: 8 IP
+ SG_ IP_WakeUp_BYTE4BIT0 : 32|1@0+ (1,0) [0|1] "" GW,THU
+ SG_ IP_WakeUp_BYTE4BIT1 : 33|1@0+ (1,0) [0|1] "" GW,THU
+ SG_ IP_WakeUp_BYTE4BIT2 : 34|1@0+ (1,0) [0|1] "" GW,THU
+ SG_ IP_NotSleep_BYTE7BIT0 : 56|1@0+ (1,0) [0|1] "" GW,THU
+ SG_ IP_NotSleep_BYTE7BIT1 : 57|1@0+ (1,0) [0|1] "" GW,THU
+
+BO_ 1535 GW_5FF: 8 GW
+ SG_ BCM_AutoSpeedLockSetStatus : 1|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ BCM_AutoIGNOFFUnlockSetStatus : 3|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ BCM_RKEUnlockDoorTypeSetStatus : 5|2@0+ (1,0) [0|3] "" TBOX,THU,IP
+ SG_ BCM_KeyInSignal : 19|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ PEPS_KeyBatteryStatus : 24|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ PEPS_KeyUndetectedAlarmSignal : 25|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ PEPS_KeyInCarAlarmSignal : 26|1@0+ (1,0) [0|1] "" TBOX,THU,IP
+ SG_ BCM_PowerOffDisplayReq : 52|1@0+ (1,0) [0|1] "" IP,THU
+
+BO_ 1594 GW_63A: 64 GW
+ SG_ BMS_ChrgModeDisp : 313|2@0+ (1,0) [0|3] "" RMU,THU,IP
+
+BO_ 1691 IP_69B: 8 IP
+ SG_ IP_DTC1_HighByte : 7|8@0+ (1,0) [0|255] "" TBOX,THU
+ SG_ IP_DTC1_MiddByte : 15|8@0+ (1,0) [0|255] "" TBOX,THU
+ SG_ IP_DTC1_LowByte : 23|8@0+ (1,0) [0|255] "" TBOX,THU
+ SG_ IP_DTC1_Status : 31|8@0+ (1,0) [0|255] "" TBOX,THU
+ SG_ IP_DTC2_HighByte : 39|8@0+ (1,0) [0|255] "" TBOX,THU
+ SG_ IP_DTC2_MiddByte : 47|8@0+ (1,0) [0|255] "" TBOX,THU
+ SG_ IP_DTC2_LowByte : 55|8@0+ (1,0) [0|255] "" TBOX,THU
+ SG_ IP_DTC2_Status : 63|8@0+ (1,0) [0|255] "" TBOX,THU
+
+BO_ 1801 IP_709: 8 IP
+ SG_ Diagnose_message407 : 0|1@0+ (1,0) [1|1] "" GW,THU
+
+BO_ 3221225472 VECTOR__INDEPENDENT_SIG_MSG: 0 Vector__XXX
+ SG_ Diagnose_message406 : 0|1@0+ (1,0) [1|1] "" Vector__XXX
+ SG_ Diagnose_message409 : 0|1@0+ (1,0) [1|1] "" Vector__XXX
+
+VAL_ 817 TCU_GearForDisplay 11 "S" 10 "D" 9 "N" 8 "R" 7 "P";
+VAL_ 824 TCU_GearForDisplay 11 "S" 10 "D" 9 "N" 8 "R" 7 "P";
