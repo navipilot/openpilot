@@ -13,4 +13,7 @@ for dst in ./panda/board/obj ./panda/board/jungle/obj; do
   fi
 done
 
+export FINGERPRINT="CHANGAN_Z6_IDD"
+export SKIP_FW_QUERY="1"
+
 exec ./launch_chffrplus.sh
