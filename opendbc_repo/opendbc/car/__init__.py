@@ -122,7 +122,7 @@ class CanBusBase:
       assert fingerprint is not None
       num = max([k for k, v in fingerprint.items() if len(v)], default=0) // 4 + 1
     else:
-      num = len(CP.safetyConfigs)
+      num = max(1, len(CP.safetyConfigs))
     self.offset = 4 * (num - 1)
 
 

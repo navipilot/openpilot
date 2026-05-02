@@ -168,6 +168,26 @@ class TestHyundaiSafetyNonScc(TestHyundaiSafety):
     self.assertTrue(self.safety.safety_config_valid())
 
 
+class TestHyundaiCanCanfdBlendedSafety(TestHyundaiSafety):
+  TX_MSGS = [[0x340, 0], [0x4F1, 0], [0x485, 0], [0x364, 0]]
+  RELAY_MALFUNCTION_ADDRS = {0: (0x340, 0x485, 0x364)}
+  FWD_BLACKLISTED_ADDRS = {2: [0x340, 0x485, 0x364]}
+  MAX_RATE_UP = 2
+  MAX_RATE_DOWN = 3
+  MAX_TORQUE_LOOKUP = [0], [404]
+
+  def setUp(self):
+    self.packer = CANPackerSafety("hyundai_palisade_2023_generated")
+    self.safety = libsafety_py.libsafety
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hyundai, HyundaiSafetyFlags.CAN_CANFD_BLENDED)
+    self.safety.init_tests()
+
+  def _pcm_status_msg(self, enable):
+    values = {"ACCMode": enable, "COUNTER": self.cnt_cruise % 16}
+    self.__class__.cnt_cruise += 1
+    return self.packer.make_can_msg_panda("SCC12", 0, values)
+
+
 class TestHyundaiSafetyFCEV(TestHyundaiSafety):
   def setUp(self):
     self.packer = CANPackerSafety("hyundai_kia_generic")
@@ -257,6 +277,32 @@ class TestHyundaiLongitudinalSafety(HyundaiLongitudinalBase, TestHyundaiSafety):
     self.assertTrue(self._tx(self._accel_msg(0)))
     self.assertFalse(self._tx(self._accel_msg(0, aeb_req=True)))
     self.assertFalse(self._tx(self._accel_msg(0, aeb_decel=1.0)))
+
+
+class TestHyundaiCanCanfdBlendedLongitudinalSafety(HyundaiLongitudinalBase, TestHyundaiCanCanfdBlendedSafety):
+  TX_MSGS = [[0x340, 0], [0x4F1, 0], [0x485, 0], [0x364, 0], [0x420, 0], [0x421, 0], [0x389, 0], [0x38D, 0], [0x4A2, 0], [0x363, 0], [0x398, 0], [0x7D0, 0]]
+  FWD_BLACKLISTED_ADDRS = {2: [0x340, 0x485, 0x364, 0x420, 0x421, 0x389]}
+  RELAY_MALFUNCTION_ADDRS = {0: (0x340, 0x485, 0x364, 0x420, 0x421, 0x389)}
+  MAX_ACCEL = 3.5
+
+  DISABLED_ECU_UDS_MSG = (0x7D0, 0)
+  DISABLED_ECU_ACTUATION_MSG = (0x420, 0)
+
+  def setUp(self):
+    self.packer = CANPackerSafety("hyundai_palisade_2023_generated")
+    self.safety = libsafety_py.libsafety
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hyundai, HyundaiSafetyFlags.CAN_CANFD_BLENDED | HyundaiSafetyFlags.LONG)
+    self.safety.init_tests()
+
+  def _accel_msg(self, accel, aeb_req=False, aeb_decel=0):
+    values = {
+      "aReqRaw": accel,
+      "aReqValue": accel,
+    }
+    return self.packer.make_can_msg_panda("SCC11", 0, values)
+
+  def test_no_aeb_fca11(self):
+    pass
 
 
 class TestHyundaiLongitudinalSafetyCameraSCC(HyundaiLongitudinalBase, TestHyundaiSafety):

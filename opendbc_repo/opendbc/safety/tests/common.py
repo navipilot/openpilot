@@ -980,7 +980,11 @@ class SafetyTest(SafetyTestBase):
               continue
             if attr.startswith('TestHyundaiCanfd') and current_test.startswith('TestHyundaiCanfd'):
               continue
-            if {attr, current_test}.issubset({'TestHyundaiLongitudinalSafety', 'TestHyundaiLongitudinalSafetyCameraSCC', 'TestHyundaiSafetyFCEVLong'}):
+            if attr.startswith('TestHyundaiCanCanfdBlended') and current_test.startswith('TestHyundaiCanCanfdBlended'):
+              continue
+            if {attr, current_test}.issubset({'TestHyundaiLongitudinalSafety', 'TestHyundaiLongitudinalSafetyCameraSCC',
+                                              'TestHyundaiSafetyFCEVLong', 'TestHyundaiLongitudinalAolLkasOnEngageSafety',
+                                              'TestHyundaiCanCanfdBlendedLongitudinalSafety'}):
               continue
             volkswagen_shared = ('TestVolkswagenMqb', 'TestVolkswagenMlb')
             if attr.startswith(volkswagen_shared) and current_test.startswith(volkswagen_shared):
@@ -1007,7 +1011,13 @@ class SafetyTest(SafetyTestBase):
               # exceptions for common msgs across different hondas
               tx = list(filter(lambda m: m[0] not in [0x1FA, 0x30C, 0x33D, 0x33DB], tx))
 
-            if attr.startswith('TestHyundaiLongitudinal'):
+            if attr.startswith('TestHyundai') and current_test.startswith('TestHyundai'):
+              # common Hyundai lateral/button messages are intentionally shared across multiple safety variants
+              tx = list(filter(lambda m: m[0] not in [0x340, 0x4F1, 0x485], tx))
+
+            if attr.startswith('TestHyundaiLongitudinal') or attr in ('TestHyundaiSafetyFCEVLong',
+                                                                      'TestHyundaiLongitudinalAolLkasOnEngageSafety',
+                                                                      'TestHyundaiCanCanfdBlendedLongitudinalSafety'):
               # exceptions for common msgs across different Hyundai CAN platforms
               tx = list(filter(lambda m: m[0] not in [0x420, 0x50A, 0x389, 0x4A2], tx))
             all_tx.append([[m[0], m[1], attr] for m in tx])

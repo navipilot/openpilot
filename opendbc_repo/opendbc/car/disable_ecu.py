@@ -5,6 +5,8 @@ from opendbc.car.isotp_parallel_query import IsoTpParallelQuery
 
 EXT_DIAG_REQUEST = b'\x10\x03'
 EXT_DIAG_RESPONSE = b'\x50\x03'
+RESET_REQUEST = b'\x11\x01'
+RESET_RESPONSE = b''
 
 # File-based logging for debugging
 ECU_LOG_FILE = "/data/ecu_disable.log"
@@ -21,13 +23,22 @@ def ecu_log(msg):
     pass
 
 
-def disable_ecu(can_recv, can_send, bus=0, addr=0x7d0, sub_addr=None, com_cont_req=b'\x28\x83\x01', timeout=0.1, retry=10):
+def disable_ecu(can_recv, can_send, bus=0, addr=0x7d0, sub_addr=None, com_cont_req=b'\x28\x83\x01', timeout=0.1, retry=10, reset=False):
   """Silence an ECU by disabling sending and receiving messages using UDS 0x28.
   The ECU will stay silent as long as openpilot keeps sending Tester Present.
 
   This is used to disable the radar in some cars. Openpilot will emulate the radar.
   WARNING: THIS DISABLES AEB!"""
   ecu_log(f"=== ECU DISABLE START === addr={hex(addr)}, bus={bus}")
+
+  if reset:
+    try:
+      ecu_log("sending ECU reset before communication control...")
+      reset_query = IsoTpParallelQuery(can_send, can_recv, bus, [(addr, sub_addr)], [RESET_REQUEST], [RESET_RESPONSE])
+      reset_query.get_data(timeout=timeout)
+      time.sleep(0.2)
+    except Exception as e:
+      ecu_log(f"reset exception: {e}")
 
   # Try multiple times with different approaches
   for i in range(retry):
@@ -50,6 +61,7 @@ def disable_ecu(can_recv, can_send, bus=0, addr=0x7d0, sub_addr=None, com_cont_r
         # Log what we got back
         cc_success = False
         cc_rejected = False
+        cc_nrc = None
         for (rx_addr, _), data in cc_response.items():
           ecu_log(f"CC response: {data.hex() if data else 'empty'}")
           # Check for positive response (0x68 = 0x28 + 0x40)
@@ -59,6 +71,7 @@ def disable_ecu(can_recv, can_send, bus=0, addr=0x7d0, sub_addr=None, com_cont_r
           # Check for negative response
           elif len(data) >= 3 and data[0] == 0x7F:
             nrc = data[2]
+            cc_nrc = nrc
             nrc_meanings = {
               0x12: "subFunctionNotSupported",
               0x13: "incorrectMessageLengthOrInvalidFormat",
@@ -73,6 +86,10 @@ def disable_ecu(can_recv, can_send, bus=0, addr=0x7d0, sub_addr=None, com_cont_r
         if cc_success:
           return True
         elif cc_rejected:
+          if reset and cc_nrc == 0x22 and i < retry - 1:
+            ecu_log("CC rejected with NRC 0x22 after reset; retrying...")
+            time.sleep(0.2)
+            continue
           # ECU explicitly rejected - don't retry, it won't work
           ecu_log("=== ECU DISABLE REJECTED ===")
           return False

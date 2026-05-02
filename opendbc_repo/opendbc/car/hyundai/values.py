@@ -81,6 +81,13 @@ class CarControllerParams:
       self.STEER_DELTA_UP = 2
       self.STEER_DELTA_DOWN = 3
 
+    elif CP.flags & HyundaiFlags.CAN_CANFD_BLENDED:
+      self.STEER_MAX = 404
+      self.STEER_DRIVER_ALLOWANCE = 50
+      self.STEER_THRESHOLD = 150
+      self.STEER_DELTA_UP = 2
+      self.STEER_DELTA_DOWN = 3
+
     # Default for most HKG
     else:
       self.STEER_MAX = 384
@@ -99,6 +106,7 @@ class HyundaiSafetyFlags(IntFlag):
   ALT_LIMITS_2 = 512
   CANFD_ANGLE_STEERING = 1024
   NON_SCC = 4096
+  CAN_CANFD_BLENDED = 8192
 
 
 class HyundaiStarPilotSafetyFlags(IntFlag):
@@ -174,6 +182,9 @@ class HyundaiFlags(IntFlag):
   # Hyundai CAN-FD angle-based steering path used on newer ADAS platforms.
   CANFD_ANGLE_STEERING = 2 ** 28
 
+  # Palisade/Telluride 2023+ uses CAN routing with CAN-FD-style checksums.
+  CAN_CANFD_BLENDED = 2 ** 29
+
 
 @dataclass
 class HyundaiCarDocs(CarDocs):
@@ -190,6 +201,9 @@ class HyundaiPlatformConfig(PlatformConfig):
 
     if self.flags & HyundaiFlags.MIN_STEER_32_MPH:
       self.specs = self.specs.override(minSteerSpeed=32 * CV.MPH_TO_MS)
+
+    if self.flags & HyundaiFlags.CAN_CANFD_BLENDED:
+      self.dbc_dict = {Bus.pt: "hyundai_palisade_2023_generated"}
 
 
 @dataclass
@@ -370,6 +384,16 @@ class CAR(Platforms):
     ],
     CarSpecs(mass=1999, wheelbase=2.9, steerRatio=15.6 * 1.15, tireStiffnessFactor=0.63),
     flags=HyundaiFlags.MANDO_RADAR | HyundaiFlags.CHECKSUM_CRC8,
+  )
+  HYUNDAI_PALISADE_2023 = HyundaiPlatformConfig(
+    [
+      HyundaiCarDocs("Hyundai Palisade (without HDA II) 2023-25", "Highway Driving Assist",
+                     car_parts=CarParts.common([CarHarness.hyundai_a])),
+      HyundaiCarDocs("Kia Telluride (without HDA II) 2023-25", "Highway Driving Assist",
+                     car_parts=CarParts.common([CarHarness.hyundai_l])),
+    ],
+    HYUNDAI_PALISADE.specs,
+    flags=HyundaiFlags.CHECKSUM_CRC8 | HyundaiFlags.CAN_CANFD_BLENDED | HyundaiFlags.RADAR_SCC,
   )
   HYUNDAI_VELOSTER = HyundaiPlatformConfig(
     [HyundaiCarDocs("Hyundai Veloster 2019-20", min_enable_speed=5. * CV.MPH_TO_MS, car_parts=CarParts.common([CarHarness.hyundai_e]))],

@@ -34,6 +34,13 @@ def apply_platform_longitudinal_params(ret: structs.CarParams) -> None:
   ret.stoppingDecelRate = 0.4
 
 
+def apply_ecu_disable_failure_fallback(CP: structs.CarParams, params) -> None:
+  params.put_bool("EcuDisableFailed", True)
+  CP.safetyConfigs[-1].safetyParam &= ~HyundaiSafetyFlags.LONG.value
+  CP.openpilotLongitudinalControl = False
+  CP.pcmCruise = True
+
+
 class CarInterface(CarInterfaceBase):
   CarState = CarState
   CarController = CarController
@@ -107,14 +114,14 @@ class CarInterface(CarInterfaceBase):
     else:
       # Shared configuration for non CAN-FD cars
       ret.alphaLongitudinalAvailable = candidate not in UNSUPPORTED_LONGITUDINAL_CAR
-      ret.enableBsm = 0x58b in fingerprint[0]
+      ret.enableBsm = 0x58b in fingerprint[CAN.ECAN]
 
       # Send LFA message on cars with HDA
-      if 0x485 in fingerprint[2]:
+      if 0x485 in fingerprint[CAN.CAM]:
         ret.flags |= HyundaiFlags.SEND_LFA.value
 
       # These cars use the FCA11 message for the AEB and FCW signals, all others use SCC12
-      if 0x38d in fingerprint[0] or 0x38d in fingerprint[2]:
+      if 0x38d in fingerprint[CAN.ECAN] or 0x38d in fingerprint[CAN.CAM]:
         ret.flags |= HyundaiFlags.USE_FCA.value
 
       if ret.flags & HyundaiFlags.LEGACY:
@@ -127,8 +134,10 @@ class CarInterface(CarInterfaceBase):
         ret.safetyConfigs[0].safetyParam |= HyundaiSafetyFlags.CAMERA_SCC.value
 
       # These cars have the LFA button on the steering wheel
-      if 0x391 in fingerprint[0]:
+      if 0x391 in fingerprint[0] or ret.flags & HyundaiFlags.CAN_CANFD_BLENDED:
         ret.flags |= HyundaiFlags.HAS_LDA_BUTTON.value
+      if ret.flags & HyundaiFlags.CAN_CANFD_BLENDED:
+        ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.CAN_CANFD_BLENDED.value
 
       if candidate == CAR.KIA_FORTE:
         has_scc_fw = any(fw.ecu == Ecu.fwdRadar for fw in car_fw)
@@ -209,7 +218,7 @@ class CarInterface(CarInterfaceBase):
     ecu_log(f"=== init() called: opLong={CP.openpilotLongitudinalControl}, flags=0x{CP.flags:x}, safetyParam={CP.safetyConfigs[-1].safetyParam} ===")
 
     if CP.openpilotLongitudinalControl and not (CP.flags & (HyundaiFlags.CANFD_CAMERA_SCC | HyundaiFlags.CAMERA_SCC)):
-      addr, bus = 0x7d0, CanBus(CP).ECAN if CP.flags & HyundaiFlags.CANFD else 0
+      addr, bus = 0x7d0, CanBus(CP).ECAN if CP.flags & (HyundaiFlags.CANFD | HyundaiFlags.CAN_CANFD_BLENDED) else 0
       if CP.flags & HyundaiFlags.CANFD_LKA_STEERING.value:
         addr, bus = 0x730, CanBus(CP).ECAN
 
@@ -217,7 +226,8 @@ class CarInterface(CarInterfaceBase):
       # If it fails (READY mode returns NRC 0x22, or timeout), strip LONG safety flag
       # so panda forwards stock SCC messages normally (lateral-only mode).
       ecu_log(f"=== ECU DISABLE attempt: addr=0x{addr:x}, bus={bus} ===")
-      ecu_disabled = disable_ecu(can_recv, can_send, bus=bus, addr=addr, com_cont_req=communication_control)
+      ecu_disabled = disable_ecu(can_recv, can_send, bus=bus, addr=addr, com_cont_req=communication_control,
+                                 reset=bool(CP.flags & HyundaiFlags.CAN_CANFD_BLENDED))
 
       if CP.carFingerprint == CAR.HYUNDAI_IONIQ_6:
         # Ioniq 6: track success/failure to auto-switch between openpilot long and stock ACC
@@ -227,15 +237,15 @@ class CarInterface(CarInterfaceBase):
           params.put_bool("ExperimentalMode", True)
           ecu_log("=== ECU DISABLE SUCCESS - Longitudinal + Experimental ENABLED ===")
         else:
-          params.put_bool("EcuDisableFailed", True)
-          CP.safetyConfigs[-1].safetyParam &= ~HyundaiSafetyFlags.LONG.value
+          apply_ecu_disable_failure_fallback(CP, params)
           ecu_log(f"=== ECU DISABLE FAILED - safetyParam stripped to {CP.safetyConfigs[-1].safetyParam}, lateral-only mode ===")
       else:
-        # Other cars: just log, don't change safety params or params store
         if ecu_disabled:
+          params.put_bool("EcuDisableFailed", False)
           ecu_log("=== ECU DISABLE SUCCESS ===")
         else:
-          ecu_log("=== ECU DISABLE FAILED ===")
+          apply_ecu_disable_failure_fallback(CP, params)
+          ecu_log(f"=== ECU DISABLE FAILED - safetyParam stripped to {CP.safetyConfigs[-1].safetyParam}, lateral-only mode ===")
 
     # for blinkers
     if CP.flags & HyundaiFlags.ENABLE_BLINKERS:

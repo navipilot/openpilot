@@ -42,6 +42,9 @@ bool hyundai_fcev_gas_signal = false;
 extern bool hyundai_alt_limits_2;
 bool hyundai_alt_limits_2 = false;
 
+extern bool hyundai_can_canfd_blended;
+bool hyundai_can_canfd_blended = false;
+
 extern bool hyundai_has_lda_button;
 bool hyundai_has_lda_button = false;
 
@@ -65,6 +68,7 @@ void hyundai_common_init(uint16_t param) {
   const int HYUNDAI_PARAM_HAS_LDA_BUTTON = 1024;
   const uint16_t HYUNDAI_PARAM_AOL_LKAS_ON_ENGAGE = 2048;
   const uint16_t HYUNDAI_PARAM_NON_SCC = 4096;
+  const uint16_t HYUNDAI_PARAM_CAN_CANFD_BLENDED = 8192;
 
   hyundai_ev_gas_signal = GET_FLAG(param, HYUNDAI_PARAM_EV_GAS);
   hyundai_hybrid_gas_signal = !hyundai_ev_gas_signal && GET_FLAG(param, HYUNDAI_PARAM_HYBRID_GAS);
@@ -73,6 +77,7 @@ void hyundai_common_init(uint16_t param) {
   hyundai_alt_limits = GET_FLAG(param, HYUNDAI_PARAM_ALT_LIMITS);
   hyundai_fcev_gas_signal = GET_FLAG(param, HYUNDAI_PARAM_FCEV_GAS);
   hyundai_alt_limits_2 = GET_FLAG(param, HYUNDAI_PARAM_ALT_LIMITS_2);
+  hyundai_can_canfd_blended = GET_FLAG(param, HYUNDAI_PARAM_CAN_CANFD_BLENDED);
 
   hyundai_has_lda_button = GET_FLAG(param, HYUNDAI_PARAM_HAS_LDA_BUTTON);
   hyundai_aol_lkas_on_engage = GET_FLAG(param, HYUNDAI_PARAM_AOL_LKAS_ON_ENGAGE);
@@ -142,7 +147,6 @@ void hyundai_common_cruise_buttons_check(const int cruise_button, const bool mai
   main_button_prev = main_button;
 }
 
-#ifdef CANFD
 uint32_t hyundai_common_canfd_compute_checksum(const CANPacket_t *msg) {
   int len = GET_LEN(msg);
   uint32_t address = msg->addr;
@@ -167,7 +171,6 @@ uint32_t hyundai_common_canfd_compute_checksum(const CANPacket_t *msg) {
 
   return crc;
 }
-#endif
 
 void hyundai_lkas_button_check(const bool lkas_button) {
   if (lkas_button && !lkas_button_prev) {

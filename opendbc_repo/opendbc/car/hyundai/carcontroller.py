@@ -333,7 +333,7 @@ class CarController(CarControllerBase):
     # tester present - w/ no response (keeps relevant ECU disabled)
     if self.frame % 100 == 0 and not (self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC) and self.long_active_ecu:
       # for longitudinal control, either radar or ADAS driving ECU
-      addr, bus = 0x7d0, self.CAN.ECAN if self.CP.flags & HyundaiFlags.CANFD else 0
+      addr, bus = 0x7d0, self.CAN.ECAN if self.CP.flags & (HyundaiFlags.CANFD | HyundaiFlags.CAN_CANFD_BLENDED) else 0
       if self.CP.flags & HyundaiFlags.CANFD_LKA_STEERING.value:
         addr, bus = 0x730, self.CAN.ECAN
       can_sends.append(make_tester_present_msg(addr, bus, suppress_response=True))
@@ -365,15 +365,22 @@ class CarController(CarControllerBase):
 
   def create_can_msgs(self, apply_steer_req, apply_torque, torque_fault, set_speed_in_units, accel, stopping, hud_control, actuators, CS, CC):
     can_sends = []
+    can_canfd_blended = bool(self.CP.flags & HyundaiFlags.CAN_CANFD_BLENDED)
 
     # HUD messages
     sys_warning, sys_state, left_lane_warning, right_lane_warning = process_hud_alert(CC.enabled, self.car_fingerprint,
                                                                                       hud_control)
 
-    can_sends.append(hyundaican.create_lkas11(self.packer, self.frame, self.CP, apply_torque, apply_steer_req,
-                                              torque_fault, CS.lkas11, sys_warning, sys_state, CC.enabled,
-                                              hud_control.leftLaneVisible, hud_control.rightLaneVisible,
-                                              left_lane_warning, right_lane_warning))
+    if can_canfd_blended:
+      can_sends.extend(hyundaican.create_lkas11_can_canfd_blended(self.packer, self.frame, self.CP, apply_torque, apply_steer_req,
+                                                                  torque_fault, CS.lkas11, sys_warning, sys_state, CC.enabled,
+                                                                  hud_control.leftLaneVisible, hud_control.rightLaneVisible,
+                                                                  left_lane_warning, right_lane_warning, CS.msg_364))
+    else:
+      can_sends.append(hyundaican.create_lkas11(self.packer, self.frame, self.CP, apply_torque, apply_steer_req,
+                                                torque_fault, CS.lkas11, sys_warning, sys_state, CC.enabled,
+                                                hud_control.leftLaneVisible, hud_control.rightLaneVisible,
+                                                left_lane_warning, right_lane_warning))
 
     # Button messages
     if not self.long_active_ecu:
@@ -387,24 +394,33 @@ class CarController(CarControllerBase):
           if (self.frame - self.last_button_frame) * DT_CTRL >= 0.15:
             self.last_button_frame = self.frame
 
+    if self.long_active_ecu and can_canfd_blended:
+      can_sends.extend(hyundaican.create_radar_aux_messages(self.packer, self.CAN, self.frame))
+
     if self.frame % 2 == 0 and self.long_active_ecu:
       # TODO: unclear if this is needed
       jerk = 3.0 if actuators.longControlState == LongCtrlState.pid else 1.0
       use_fca = self.CP.flags & HyundaiFlags.USE_FCA.value
-      can_sends.extend(hyundaican.create_acc_commands(self.packer, CC.enabled, accel, jerk, int(self.frame / 2),
-                                                      hud_control, set_speed_in_units, stopping,
-                                                      CC.cruiseControl.override, use_fca, self.CP))
+      if can_canfd_blended:
+        can_sends.extend(hyundaican.create_acc_commands_can_canfd_blended(self.packer, CC.enabled, accel, jerk,
+                                                                          int(self.frame / 2), hud_control,
+                                                                          set_speed_in_units, stopping,
+                                                                          CC.cruiseControl.override, use_fca, self.CP))
+      else:
+        can_sends.extend(hyundaican.create_acc_commands(self.packer, CC.enabled, accel, jerk, int(self.frame / 2),
+                                                        hud_control, set_speed_in_units, stopping,
+                                                        CC.cruiseControl.override, use_fca, self.CP))
 
     # 20 Hz LFA MFA message
     if self.frame % 5 == 0 and self.CP.flags & HyundaiFlags.SEND_LFA.value:
-      can_sends.append(hyundaican.create_lfahda_mfc(self.packer, CC.enabled))
+      can_sends.append(hyundaican.create_lfahda_mfc(self.packer, CC.enabled, self.frame, self.CP))
 
     # 5 Hz ACC options
-    if self.frame % 20 == 0 and self.long_active_ecu:
+    if self.frame % 20 == 0 and self.long_active_ecu and not can_canfd_blended:
       can_sends.extend(hyundaican.create_acc_opt(self.packer, self.CP))
 
     # 2 Hz front radar options
-    if self.frame % 50 == 0 and self.long_active_ecu:
+    if self.frame % 50 == 0 and self.long_active_ecu and not can_canfd_blended:
       can_sends.append(hyundaican.create_frt_radar_opt(self.packer))
 
     return can_sends

@@ -5,7 +5,7 @@ import pytest
 
 from opendbc.can import CANPacker, CANParser
 from opendbc.car import Bus, ButtonType, gen_empty_fingerprint
-from opendbc.car.structs import CarParams
+from opendbc.car.structs import CarControl, CarParams
 from opendbc.car.fw_versions import build_fw_dict, match_fw_to_car
 from opendbc.car.hyundai.carcontroller import Ioniq6LongitudinalTuningState, GenesisG90LongitudinalTuningState, \
                                               update_ioniq_6_longitudinal_tuning, update_genesis_g90_longitudinal_tuning
@@ -19,7 +19,7 @@ from opendbc.car.hyundai.values import CAMERA_SCC_CAR, CANFD_CAR, CAN_GEARS, CAR
                                          UNSUPPORTED_LONGITUDINAL_CAR, PLATFORM_CODE_ECUS, HYUNDAI_VERSION_REQUEST_LONG, \
                                          CarControllerParams, DBC, HyundaiFlags, get_platform_codes, HyundaiSafetyFlags
 
-LongCtrlState = CarParams.Actuators.LongControlState
+LongCtrlState = CarControl.Actuators.LongControlState
 from opendbc.car.hyundai.fingerprints import FW_VERSIONS
 
 Ecu = CarParams.Ecu
@@ -96,6 +96,29 @@ class TestHyundaiFingerprint:
     fingerprint[cam_can][0xCB] = 24
     CP = CarInterface.get_params(CAR.KIA_SPORTAGE_HEV_2026, fingerprint, [], False, False, False, None)
     assert CP.flags & HyundaiFlags.SEND_LFA
+
+    palisade_2023 = CarInterface.get_params(CAR.HYUNDAI_PALISADE_2023, gen_empty_fingerprint(), [], True, False, False, None)
+    assert palisade_2023.flags & HyundaiFlags.CAN_CANFD_BLENDED
+    assert DBC[palisade_2023.carFingerprint][Bus.pt] == "hyundai_palisade_2023_generated"
+    assert palisade_2023.safetyConfigs[-1].safetyParam & HyundaiSafetyFlags.CAN_CANFD_BLENDED
+
+  def test_palisade_2023_disable_failure_falls_back_to_stock_acc(self, monkeypatch):
+    toggles = get_test_toggles()
+    CP = CarInterface.get_params(CAR.HYUNDAI_PALISADE_2023, gen_empty_fingerprint(), [], True, False, False, toggles)
+
+    called = {}
+
+    def fake_disable_ecu(*args, **kwargs):
+      called.update(kwargs)
+      return False
+
+    monkeypatch.setattr("opendbc.car.hyundai.interface.disable_ecu", fake_disable_ecu)
+    CarInterface.init(CP, None, None)
+
+    assert called["reset"] is True
+    assert not CP.openpilotLongitudinalControl
+    assert CP.pcmCruise
+    assert not (CP.safetyConfigs[-1].safetyParam & HyundaiSafetyFlags.LONG)
 
   def test_canfd_longitudinal_params_match_family_tune(self):
     toggles = get_test_toggles()
@@ -372,11 +395,80 @@ class TestHyundaiFingerprint:
     assert parser.can_valid
     assert parser.vl["SCC11"]["MainMode_ACC"] == 1
     assert parser.vl["SCC12"]["StopReq"] == 0
+    assert parser.vl["SCC12"]["CF_VSM_ConfMode"] == 1
+    assert parser.vl["SCC12"]["AEB_Status"] == 2
     assert parser.vl["SCC12"]["aReqRaw"] == pytest.approx(-1.0)
     assert parser.vl["SCC12"]["aReqValue"] == pytest.approx(-1.0)
     assert parser.vl["SCC14"]["ComfortBandUpper"] == pytest.approx(0.0)
     assert parser.vl["SCC14"]["ComfortBandLower"] == pytest.approx(0.0)
     assert parser.vl["SCC14"]["JerkLowerLimit"] == pytest.approx(5.0)
+
+  def test_can_acc_commands_use_enabled_fca_status(self):
+    CP = CarParams.new_message()
+    CP.carFingerprint = CAR.GENESIS_G90
+
+    packer = CANPacker(DBC[CP.carFingerprint][Bus.pt])
+    parser = CANParser(DBC[CP.carFingerprint][Bus.pt], [("FCA11", 0)], 0)
+
+    msgs = hyundaican.create_acc_commands(packer, enabled=True, accel=-1.0, upper_jerk=2.5, idx=3,
+                                          hud_control=SimpleNamespace(leadDistanceBars=3, leadVisible=False), set_speed=42,
+                                          stopping=False, long_override=False, use_fca=True, CP=CP)
+    parser.update([(1, msgs)])
+
+    assert parser.can_valid
+    assert parser.vl["FCA11"]["FCA_Status"] == 2
+
+  def test_can_canfd_blended_acc_commands_use_palisade_2023_layout(self):
+    CP = CarParams.new_message()
+    CP.carFingerprint = CAR.HYUNDAI_PALISADE_2023
+    CP.flags = int(HyundaiFlags.CAN_CANFD_BLENDED)
+
+    packer = CANPacker(DBC[CP.carFingerprint][Bus.pt])
+    parser = CANParser(DBC[CP.carFingerprint][Bus.pt], [
+      ("SCC11", 0),
+      ("SCC12", 0),
+      ("SCC14", 0),
+      ("RADAR_0x363", 0),
+      ("RADAR_0x398", 0),
+    ], 0)
+
+    msgs = hyundaican.create_acc_commands_can_canfd_blended(
+      packer,
+      enabled=True,
+      accel=-1.0,
+      upper_jerk=2.5,
+      idx=3,
+      hud_control=SimpleNamespace(leadDistanceBars=3),
+      set_speed=42,
+      stopping=False,
+      long_override=False,
+      use_fca=False,
+      CP=CP,
+    )
+    msgs.extend(hyundaican.create_radar_aux_messages(packer, CanBus(CP), 10))
+    parser.update([(1, msgs)])
+
+    assert parser.can_valid
+    assert parser.vl["SCC11"]["aReqRaw"] == pytest.approx(-1.0)
+    assert parser.vl["SCC11"]["aReqValue"] == pytest.approx(-1.0)
+    assert parser.vl["SCC12"]["ACCMode"] == 1
+    assert parser.vl["SCC12"]["MainMode_ACC"] == 1
+    assert parser.vl["SCC14"]["ObjStatus"] == 1
+    assert parser.vl["RADAR_0x363"]["FCA_ESA"] == 1
+
+  def test_can_acc_optional_messages_use_enabled_fca_usm(self):
+    CP = CarParams.new_message()
+    CP.carFingerprint = CAR.GENESIS_G90
+
+    packer = CANPacker(DBC[CP.carFingerprint][Bus.pt])
+    parser = CANParser(DBC[CP.carFingerprint][Bus.pt], [("FCA12", 0)], 0)
+
+    msgs = hyundaican.create_acc_opt(packer, CP)
+    parser.update([(1, msgs)])
+
+    assert parser.can_valid
+    assert parser.vl["FCA12"]["FCA_DrvSetState"] == 2
+    assert parser.vl["FCA12"]["FCA_USM"] == 2
 
   def test_sportage_angle_steering_uses_adas_cmd_with_send_lfa(self):
     fingerprint = gen_empty_fingerprint()
@@ -654,7 +746,7 @@ class TestHyundaiFingerprint:
 
           # Third and fourth character are usually EV/hybrid identifiers
           codes = {code.split(b"-")[0][:2] for code, _ in get_platform_codes(fws)}
-          if car_model == CAR.HYUNDAI_PALISADE:
+          if car_model in (CAR.HYUNDAI_PALISADE, CAR.HYUNDAI_PALISADE_2023):
             assert codes == {b"LX", b"ON"}, f"Car has unexpected platform codes: {car_model} {codes}"
           elif car_model == CAR.HYUNDAI_KONA_EV and ecu[0] == Ecu.fwdCamera:
             assert codes == {b"OE", b"OS"}, f"Car has unexpected platform codes: {car_model} {codes}"

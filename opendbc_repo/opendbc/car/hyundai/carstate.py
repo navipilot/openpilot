@@ -86,6 +86,7 @@ class CarState(CarStateBase):
     self.buttons_counter = 0
 
     self.cruise_info = {}
+    self.msg_364 = {}
     self.stock_lfa_msg = {}
     self.stock_lfahda_cluster_msg = {}
     self.stock_blinker_stalks_ts = 0
@@ -177,11 +178,15 @@ class CarState(CarStateBase):
       if cruise_has_set_speed:
         ret.cruiseState.speed = cruise_set_speed * speed_conv
     else:
-      ret.cruiseState.available = cp_cruise.vl["SCC11"]["MainMode_ACC"] == 1
+      scc_msg = "SCC12" if self.CP.flags & HyundaiFlags.CAN_CANFD_BLENDED else "SCC11"
+      ret.cruiseState.available = cp_cruise.vl[scc_msg]["MainMode_ACC"] == 1
       ret.cruiseState.enabled = cp_cruise.vl["SCC12"]["ACCMode"] != 0
-      ret.cruiseState.standstill = cp_cruise.vl["SCC11"]["SCCInfoDisplay"] == 4.
-      ret.cruiseState.nonAdaptive = cp_cruise.vl["SCC11"]["SCCInfoDisplay"] == 2.  # Shows 'Cruise Control' on dash
-      ret.cruiseState.speed = cp_cruise.vl["SCC11"]["VSetDis"] * speed_conv
+      ret.cruiseState.standstill = cp_cruise.vl[scc_msg]["SCCInfoDisplay"] == 4.
+      ret.cruiseState.nonAdaptive = cp_cruise.vl[scc_msg]["SCCInfoDisplay"] == 2.  # Shows 'Cruise Control' on dash
+      ret.cruiseState.speed = cp_cruise.vl[scc_msg]["VSetDis"] * speed_conv
+
+    if self.CP.flags & HyundaiFlags.CAN_CANFD_BLENDED:
+      self.msg_364 = copy.copy(cp_cam.vl["ALERTS_364"])
 
     # TODO: Find brake pressure
     ret.brake = 0
@@ -217,7 +222,8 @@ class CarState(CarStateBase):
 
     ret.gearShifter = self.parse_gear_shifter(self.shifter_values.get(gear))
 
-    if not self.CP.openpilotLongitudinalControl or self.CP.flags & HyundaiFlags.CAMERA_SCC:
+    if (not self.CP.openpilotLongitudinalControl or self.CP.flags & HyundaiFlags.CAMERA_SCC) and \
+        not (self.CP.flags & HyundaiFlags.CAN_CANFD_BLENDED):
       aeb_src = "FCA11" if self.CP.flags & HyundaiFlags.USE_FCA.value else "SCC12"
       aeb_sig = "FCA_CmdAct" if self.CP.flags & HyundaiFlags.USE_FCA.value else "AEB_CmdAct"
       aeb_warning = cp_cruise.vl[aeb_src]["CF_VSM_Warn"] != 0
