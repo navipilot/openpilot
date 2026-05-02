@@ -89,6 +89,7 @@ class ConditionalExperimentalMode:
     self.stop_light_detected = False
     self.stop_light_model_detected = False
     self.stop_approach_hold_until = 0.0
+    self.standstill_stop_reason = None
     self.prev_experimental_mode = False  # For hysteresis
     self.mode_hold_until = 0.0
     self.mode_false_since = 0.0
@@ -96,6 +97,9 @@ class ConditionalExperimentalMode:
   def update(self, v_ego, sm, starpilot_toggles):
     now = time.monotonic()
     standstill = bool(sm["carState"].standstill)
+
+    if not standstill:
+      self.standstill_stop_reason = None
 
     self.status_value = CEStatus["OFF"] if self.params.get_bool("SafeMode") else restore_persisted_ce_state(self.params, self.params_memory)
 
@@ -120,14 +124,10 @@ class ConditionalExperimentalMode:
       self.mode_false_since = 0.0
 
       # Keep the stop-light path live at standstill so EXP stays pinned for a red
-      # light / stop sign, but can immediately release to CHILL when the model
-      # clears the stop (green light / open path).
+      # light / stop sign. Stop signs latch until pedal, while stop lights can
+      # immediately release to CHILL when the model clears the stop.
       self.stop_sign_and_light(v_ego, sm, starpilot_toggles.conditional_model_stop_time)
-      standstill_stop_hold = (
-        self.stop_light_detected or
-        getattr(self.starpilot_planner.starpilot_vcruise, "stop_sign_confirmed", False) or
-        getattr(self.starpilot_planner.starpilot_vcruise, "forcing_stop", False)
-      )
+      standstill_stop_hold = self.get_standstill_stop_hold(sm)
 
       self.experimental_mode = standstill_stop_hold
       self.prev_experimental_mode = self.experimental_mode
@@ -140,6 +140,31 @@ class ConditionalExperimentalMode:
       self.prev_experimental_mode = self.experimental_mode
       self.stop_light_detected &= not is_manual_ce_status(self.status_value)
       self.stop_light_filter.x = 0
+
+  def get_standstill_stop_hold(self, sm):
+    dash_stop_sign = (
+      bool(getattr(self.starpilot_planner.starpilot_vcruise, "stop_sign_confirmed", False)) or
+      bool(getattr(sm["starpilotCarState"], "dashboardStopSign", 0) > 0)
+    )
+    force_stop_active = bool(getattr(self.starpilot_planner.starpilot_vcruise, "forcing_stop", False))
+    pedal_override = bool(getattr(sm["carState"], "gasPressed", False) or getattr(sm["starpilotCarState"], "accelPressed", False))
+
+    if pedal_override or not bool(sm["carState"].standstill):
+      self.standstill_stop_reason = None
+      return False
+
+    if dash_stop_sign:
+      self.standstill_stop_reason = "sign"
+    elif self.stop_light_detected or force_stop_active:
+      if self.standstill_stop_reason is None:
+        self.standstill_stop_reason = "light"
+    elif self.standstill_stop_reason == "light":
+      self.standstill_stop_reason = None
+
+    if self.standstill_stop_reason == "sign":
+      return True
+
+    return bool(self.stop_light_detected or force_stop_active)
 
   def check_conditions(self, v_ego, sm, starpilot_toggles):
     below_speed = starpilot_toggles.conditional_limit > v_ego >= 1 and not self.starpilot_planner.starpilot_following.following_lead

@@ -380,11 +380,13 @@ class TestLatControl:
     assert lac_log.active
 
   def test_civic_bosch_modified_pid_scale_curve(self):
-    assert get_civic_bosch_modified_pid_output_scale(0.0, 0.0, 12.0) == 1.0
+    assert get_civic_bosch_modified_pid_output_scale(0.0, 0.0, 12.0) < 1.0
     assert get_civic_bosch_modified_pid_output_scale(20.0, 0.5, 12.0) > get_civic_bosch_modified_pid_output_scale(20.0, 0.0, 12.0)
     assert get_civic_bosch_modified_pid_output_scale(-20.0, -0.5, 12.0) > get_civic_bosch_modified_pid_output_scale(-20.0, 0.0, 12.0)
-    assert get_civic_bosch_modified_pid_output_scale(-20.0, 0.5, 12.0) > get_civic_bosch_modified_pid_output_scale(20.0, 0.5, 12.0)
-    assert get_civic_bosch_modified_pid_output_scale(-20.0, 0.5, 4.0) < get_civic_bosch_modified_pid_output_scale(-20.0, 0.5, 12.0)
+    assert get_civic_bosch_modified_pid_output_scale(20.0, -0.5, 12.0) < get_civic_bosch_modified_pid_output_scale(20.0, 0.0, 12.0)
+    assert get_civic_bosch_modified_pid_output_scale(-20.0, 0.5, 12.0) < get_civic_bosch_modified_pid_output_scale(-20.0, 0.0, 12.0)
+    assert get_civic_bosch_modified_pid_output_scale(-20.0, -0.5, 12.0) > get_civic_bosch_modified_pid_output_scale(20.0, 0.5, 12.0)
+    assert get_civic_bosch_modified_pid_output_scale(-20.0, -0.5, 4.0) < get_civic_bosch_modified_pid_output_scale(-20.0, -0.5, 12.0)
 
   def test_civic_bosch_modified_pid_testing_ground_update_path(self, monkeypatch):
     controller, VM, CS, params, starpilot_toggles = self._build_pid_controller(HONDA.HONDA_CIVIC_BOSCH)

@@ -6,23 +6,9 @@ from opendbc.car.honda import hondacan
 from opendbc.car.honda.values import CAR, CruiseButtons, HONDA_BOSCH, HONDA_BOSCH_CANFD, HONDA_BOSCH_RADARLESS, \
                                      HONDA_BOSCH_TJA_CONTROL, HONDA_NIDEC_ALT_PCM_ACCEL, CarControllerParams, HondaFlags
 from opendbc.car.interfaces import CarControllerBase
-from openpilot.starpilot.common.testing_grounds import testing_ground
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
-CIVIC_BOSCH_MODIFIED_STEER_CAN_MAX = 4864
-
-
-def civic_bosch_modified_lateral_testing_ground_active() -> bool:
-  return testing_ground.use("8", "B")
-
-
-def get_civic_bosch_modified_steer_can_max(base_steer_can_max: int, CP) -> int:
-  if CP.carFingerprint == CAR.HONDA_CIVIC_BOSCH and bool(CP.flags & HondaFlags.EPS_MODIFIED) and civic_bosch_modified_lateral_testing_ground_active():
-    return CIVIC_BOSCH_MODIFIED_STEER_CAN_MAX
-  return base_steer_can_max
-
-
 def get_civic_bosch_modified_torque_lpf_tau(torque_cmd: float, prev_torque_cmd: float, v_ego: float) -> float:
   torque_delta = abs(float(torque_cmd) - float(prev_torque_cmd))
   torque_cmd_abs = abs(float(torque_cmd))
@@ -192,9 +178,6 @@ class CarController(CarControllerBase):
     self.steering_pressed_filter_s = 0.0
     self.steering_pressed_robust_prev = False
 
-  def _modified_civic_active(self) -> bool:
-    return self.CP.carFingerprint == CAR.HONDA_CIVIC_BOSCH and bool(self.CP.flags & HondaFlags.EPS_MODIFIED) and civic_bosch_modified_lateral_testing_ground_active()
-
   def _modified_civic_standard_active(self) -> bool:
     return self.CP.carFingerprint == CAR.HONDA_CIVIC_BOSCH and bool(self.CP.flags & HondaFlags.EPS_MODIFIED)
 
@@ -261,12 +244,8 @@ class CarController(CarControllerBase):
     # **** process the car messages ****
 
     # steer torque is converted back to CAN reference (positive when steering right)
-    steer_can_max = get_civic_bosch_modified_steer_can_max(self.params.STEER_MAX, self.CP)
-    if steer_can_max != self.params.STEER_MAX:
-      apply_torque = int(np.clip(-limited_torque * steer_can_max, -steer_can_max, steer_can_max))
-    else:
-      apply_torque = int(np.interp(-limited_torque * self.params.STEER_MAX,
-                                   self.params.STEER_LOOKUP_BP, self.params.STEER_LOOKUP_V))
+    apply_torque = int(np.interp(-limited_torque * self.params.STEER_MAX,
+                                 self.params.STEER_LOOKUP_BP, self.params.STEER_LOOKUP_V))
 
     # Send CAN commands
     can_sends = []

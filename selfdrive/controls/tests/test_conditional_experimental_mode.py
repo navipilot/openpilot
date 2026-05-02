@@ -57,8 +57,8 @@ def run_stop_light_detector(cem, v_ego, *, steps: int, tracking_lead: bool = Fal
 
 def make_update_sm(*, standstill: bool):
   return {
-    "carState": SimpleNamespace(standstill=standstill, leftBlinker=False, rightBlinker=False),
-    "starpilotCarState": SimpleNamespace(trafficModeEnabled=False),
+    "carState": SimpleNamespace(standstill=standstill, leftBlinker=False, rightBlinker=False, gasPressed=False),
+    "starpilotCarState": SimpleNamespace(trafficModeEnabled=False, dashboardStopSign=0, accelPressed=False),
   }
 
 
@@ -206,6 +206,21 @@ def test_standstill_update_can_activate_exp_from_red_light_detection(monkeypatch
   assert cem.status_value == conditional_experimental_mode_module.CEStatus["STOP_LIGHT"]
 
 
+def test_standstill_update_can_activate_exp_from_dashboard_stop_sign(monkeypatch):
+  cem = make_cem(model_length=80.0, model_stopped=False)
+  toggles = make_update_toggles()
+  sm = make_update_sm(standstill=True)
+  sm["starpilotCarState"].dashboardStopSign = 1
+
+  monkeypatch.setattr(cem, "stop_sign_and_light", lambda *args, **kwargs: None)
+
+  cem.update(0.0, sm, toggles)
+
+  assert cem.experimental_mode
+  assert cem.standstill_stop_reason == "sign"
+  assert cem.status_value == conditional_experimental_mode_module.CEStatus["STOP_LIGHT"]
+
+
 def test_standstill_green_light_clears_exp_immediately(monkeypatch):
   cem = make_cem(model_length=80.0, model_stopped=False)
   toggles = make_update_toggles()
@@ -257,6 +272,43 @@ def test_standstill_force_stop_keeps_exp_on_even_if_red_light_latch_clears(monke
 
   assert cem.experimental_mode
   assert cem.status_value == conditional_experimental_mode_module.CEStatus["STOP_LIGHT"]
+
+
+def test_standstill_stop_sign_latches_until_pedal_even_after_force_stop_ends(monkeypatch):
+  cem = make_cem(model_length=80.0, model_stopped=False)
+  toggles = make_update_toggles()
+  sm = make_update_sm(standstill=True)
+  sm["starpilotCarState"].dashboardStopSign = 1
+
+  monkeypatch.setattr(cem, "stop_sign_and_light", lambda *args, **kwargs: None)
+  cem.update(0.0, sm, toggles)
+
+  assert cem.experimental_mode
+  assert cem.standstill_stop_reason == "sign"
+
+  sm["starpilotCarState"].dashboardStopSign = 0
+  cem.update(0.0, sm, toggles)
+
+  assert cem.experimental_mode
+  assert cem.standstill_stop_reason == "sign"
+
+
+def test_standstill_stop_sign_releases_on_pedal(monkeypatch):
+  cem = make_cem(model_length=80.0, model_stopped=False)
+  toggles = make_update_toggles()
+  sm = make_update_sm(standstill=True)
+  sm["starpilotCarState"].dashboardStopSign = 1
+
+  monkeypatch.setattr(cem, "stop_sign_and_light", lambda *args, **kwargs: None)
+  cem.update(0.0, sm, toggles)
+  assert cem.experimental_mode
+
+  sm["starpilotCarState"].dashboardStopSign = 0
+  sm["carState"].gasPressed = True
+  cem.update(0.0, sm, toggles)
+
+  assert not cem.experimental_mode
+  assert cem.standstill_stop_reason is None
 
 
 def test_slow_lead_holds_through_tracking_flap_for_high_confidence_vision_lead():

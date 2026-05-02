@@ -6,8 +6,6 @@ from opendbc.car.structs import CarParams
 from opendbc.car import gen_empty_fingerprint
 from opendbc.car.honda.interface import CarInterface
 from opendbc.car.honda.carcontroller import (
-  CIVIC_BOSCH_MODIFIED_STEER_CAN_MAX,
-  get_civic_bosch_modified_steer_can_max,
   get_civic_bosch_modified_steering_pressed,
   get_civic_bosch_modified_torque_lpf_tau,
 )
@@ -27,17 +25,6 @@ class TestHondaFingerprint:
 
   def test_tja_bosch_only(self):
     assert set(HONDA_BOSCH_TJA_CONTROL).issubset(set(HONDA_BOSCH)), "Nidec car found in TJA control list"
-
-  def test_modified_civic_steer_can_max_is_scoped(self, monkeypatch):
-    CP = CarParams.new_message()
-    CP.carFingerprint = CAR.HONDA_CIVIC_BOSCH
-    CP.flags = int(HondaFlags.BOSCH | HondaFlags.EPS_MODIFIED)
-
-    monkeypatch.setattr("opendbc.car.honda.carcontroller.civic_bosch_modified_lateral_testing_ground_active", lambda: True)
-    assert get_civic_bosch_modified_steer_can_max(4096, CP) == CIVIC_BOSCH_MODIFIED_STEER_CAN_MAX
-
-    CP.flags = int(HondaFlags.BOSCH)
-    assert get_civic_bosch_modified_steer_can_max(4096, CP) == 4096
 
   def test_modified_civic_torque_lpf_tau_reacts_to_sign_change(self):
     assert get_civic_bosch_modified_torque_lpf_tau(0.7, -0.1, 25.0) == 0.10
