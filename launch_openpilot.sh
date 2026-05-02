@@ -10,6 +10,8 @@ for dst in ./panda/board/obj ./panda/board/jungle/obj; do
   if [[ -d "$dst" ]]; then
     cp -f ./apps/bootstub.panda_h7.bin "$dst/bootstub.panda_h7.bin"
     cp -f ./apps/bootstub.panda.bin "$dst/bootstub.panda.bin"
+    cp -f ./apps/panda_h7.bin "$dst/panda_h7.bin"
+    cp -f ./apps/panda.bin "$dst/panda.bin"
   fi
 done
 
