@@ -848,6 +848,32 @@
     },
     {
       "group": "시작",
+      "name": "LateralControlEnabled",
+      "title": "横向控制开关",
+      "descr": "开启/关闭横向控制功能",
+      "egroup": "启动",
+      "etitle": "横向控制启用",
+      "edescr": "启用或禁用横向控制功能",
+      "min": 0,
+      "max": 1,
+      "default": 1,
+      "unit": 1
+    },
+    {
+      "group": "시작",
+      "name": "LateralControlMinSpeed",
+      "title": "横向控制最低速度(km/h)",
+      "descr": "达到此速度后才启用横向控制",
+      "egroup": "启动",
+      "etitle": "横向控制最低速度(km/h)",
+      "edescr": "达到该速度后才启用横向控制",
+      "min": 0,
+      "max": 120,
+      "default": 55,
+      "unit": 1
+    },
+    {
+      "group": "시작",
       "name": "RecordRoadCam",
       "title": "RoadCam녹화",
       "descr": "1: 일반카메라\n 2: 일반카메라 + 광각카메라",

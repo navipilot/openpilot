@@ -166,6 +166,8 @@ inline static std::unordered_map<std::string, uint32_t> keys = {
     {"AutoGasTokSpeed", PERSISTENT},
     {"AutoGasSyncSpeed", PERSISTENT},
     {"AutoEngage", PERSISTENT},
+    {"LateralControlEnabled", PERSISTENT},
+    {"LateralControlMinSpeed", PERSISTENT},
     {"DisableMinSteerSpeed", PERSISTENT},
     {"AutoCurveSpeedLowerLimit", PERSISTENT},
     {"AutoCurveSpeedFactor", PERSISTENT},
