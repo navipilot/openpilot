@@ -57,7 +57,7 @@
 #define SAFETY_HYUNDAI_CANFD 28U
 #define SAFETY_RIVIAN 33U
 #define SAFETY_VOLKSWAGEN_MEB 34U
-#define SAFETY_CHANGAN 35U
+#define SAFETY_CHANGAN 36U
 
 uint32_t GET_BYTES(const CANPacket_t *msg, int start, int len) {
   uint32_t ret = 0U;
@@ -664,7 +664,7 @@ bool steer_torque_cmd_checks(int desired_torque, int steer_req, const TorqueStee
 
   bool aol_allowed = true;
   if (controls_allowed) acc_main_on = controls_allowed;
-  
+
   if (controls_allowed || aol_allowed) {
     // *** global torque limit check ***
     violation |= max_limit_check(desired_torque, limits.max_steer, -limits.max_steer);
