@@ -14,6 +14,7 @@ from openpilot.system.hardware import HARDWARE
 from openpilot.system.ui.lib.application import gui_app, FontWeight, MouseEvent, MousePos
 from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.lib.scroll_panel2 import GuiScrollPanel2
+from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.widgets import DialogResult, Widget
 from openpilot.system.ui.widgets.confirm_dialog import ConfirmDialog, alert_dialog
 from openpilot.system.ui.widgets.keyboard import Keyboard
@@ -36,7 +37,6 @@ from openpilot.selfdrive.ui.layouts.settings.starpilot.aethergrid import (
   init_list_panel,
   draw_list_group_shell,
   draw_list_scroll_fades,
-  draw_metric_strip,
   draw_section_header,
   draw_selection_list_row,
   draw_settings_list_row,
@@ -83,18 +83,18 @@ class SystemSettingsManagerView(Widget):
   HEADER_SUBTITLE_HEIGHT = 24
   HEADER_SUMMARY_GAP = 12
   HEADER_CARD_HEIGHT = 108
-  TAB_HEIGHT = 52
+  TAB_HEIGHT = 56
   TAB_GAP = 10
   TAB_BOTTOM_GAP = 18
   SECTION_GAP = AETHER_LIST_METRICS.section_gap
   SECTION_HEADER_HEIGHT = AETHER_LIST_METRICS.section_header_height
   SECTION_HEADER_GAP = AETHER_LIST_METRICS.section_header_gap
-  ROW_HEIGHT = AETHER_COMPACT_ROW_HEIGHT
+  ROW_HEIGHT = AETHER_LIST_METRICS.row_height
   FADE_HEIGHT = AETHER_LIST_METRICS.fade_height
   COLUMN_GAP = 22
   TWO_COLUMN_BREAKPOINT = 1180
-  ACTION_PILL_WIDTH = 108
-  DANGER_PILL_WIDTH = 96
+  ACTION_PILL_WIDTH = 132
+  DANGER_PILL_WIDTH = 112
 
   PANEL_STYLE = DEFAULT_PANEL_STYLE
 
@@ -526,24 +526,34 @@ class SystemSettingsManagerView(Widget):
     inset = 18
     left_x = rect.x + inset
     left_w = rect.width * 0.40
-    gui_label(rl.Rectangle(left_x, rect.y + 10, left_w, 22), tr("Current Drive State"), 20, AetherListColors.MUTED, FontWeight.MEDIUM)
-    gui_label(rl.Rectangle(left_x, rect.y + 34, left_w, 28), self._controller._get_force_drive_state(), 24, AetherListColors.HEADER, FontWeight.MEDIUM)
-    draw_metric_strip(
-      rl.Rectangle(left_x, rect.y + 70, max(240.0, rect.width * 0.38), 30),
-      [
-        (tr("Storage"), self._controller.storage_summary()),
-        (tr("System Backups"), self._controller.backup_count_text()),
-        (tr("Toggle Snapshots"), self._controller.toggle_backup_count_text()),
-      ],
-      style=self.PANEL_STYLE,
-      label_top_offset=0,
-      value_top_offset=14,
-      divider_top_offset=2,
-      divider_bottom_offset=16,
-    )
+    gui_label(rl.Rectangle(left_x, rect.y + 9, left_w, 22), tr("Current Drive State"), 20, AetherListColors.MUTED, FontWeight.MEDIUM)
+    gui_label(rl.Rectangle(left_x, rect.y + 33, left_w, 28), self._controller._get_force_drive_state(), 24, AetherListColors.HEADER, FontWeight.MEDIUM)
 
     control_w = max(300.0, min(420.0, rect.width * 0.34))
-    control_rect = rl.Rectangle(rect.x + rect.width - control_w - inset, rect.y + 14, control_w, rect.height - 28)
+    control_x = rect.x + rect.width - control_w - inset
+
+    metric_col_x = left_x + left_w + 24
+    metric_col_w = control_x - 24 - metric_col_x
+    metric_rows = [
+      (tr("Storage"), self._controller.storage_summary()),
+      (tr("System Backups"), self._controller.backup_count_text()),
+      (tr("Toggle Snapshots"), self._controller.toggle_backup_count_text()),
+    ]
+    metric_row_h = 18
+    metric_row_gap = 6
+    metric_start_y = rect.y + 14
+
+    label_font = gui_app.font(FontWeight.MEDIUM)
+    for i, (label, value) in enumerate(metric_rows):
+      row_y = metric_start_y + i * (metric_row_h + metric_row_gap)
+      label_w = measure_text_cached(label_font, label, 18).x + 4
+      gui_label(rl.Rectangle(metric_col_x, row_y, label_w, metric_row_h + 2),
+                label, 18, AetherListColors.MUTED, FontWeight.MEDIUM)
+      value_x = metric_col_x + label_w + 12
+      gui_label(rl.Rectangle(value_x, row_y, metric_col_x + metric_col_w - value_x, metric_row_h + 2),
+                value, 18, AetherListColors.HEADER, FontWeight.MEDIUM)
+
+    control_rect = rl.Rectangle(control_x, rect.y + 14, control_w, rect.height - 28)
     self._drive_mode_control.render(control_rect)
 
   def _measure_content_height(self, width: float) -> float:
@@ -614,8 +624,8 @@ class SystemSettingsManagerView(Widget):
         current=self._active_tab_key == tab["id"],
         hovered=hovered,
         pressed=pressed,
-        title_size=19,
-        subtitle_size=14,
+        title_size=24,
+        subtitle_size=17,
         show_underline=True,
         style=self.PANEL_STYLE,
       )
@@ -703,8 +713,8 @@ class SystemSettingsManagerView(Widget):
       pressed=pressed,
       is_last=is_last,
       show_chevron=False,
-      title_size=24,
-      subtitle_size=18,
+      title_size=30,
+      subtitle_size=22,
       style=self.PANEL_STYLE,
     )
 
@@ -738,13 +748,13 @@ class SystemSettingsManagerView(Widget):
       hovered=hovered,
       pressed=pressed,
       is_last=is_last,
-      action_width=154,
+      action_width=188,
       action_pill=True,
-      action_pill_height=40,
-      action_pill_width=92 if count == 0 else self.ACTION_PILL_WIDTH,
-      title_size=26,
-      subtitle_size=17,
-      action_text_size=15,
+      action_pill_height=44,
+      action_pill_width=108 if count == 0 else self.ACTION_PILL_WIDTH,
+      title_size=34,
+      subtitle_size=22,
+      action_text_size=18,
       row_separator=self.PANEL_STYLE.divider_color,
       action_fill=AetherListColors.CURRENT_BG,
       action_border=rl.Color(89, 116, 151, 42),
@@ -786,13 +796,13 @@ class SystemSettingsManagerView(Widget):
       hovered=hovered,
       pressed=pressed,
       is_last=is_last,
-      action_width=154,
+      action_width=188,
       action_pill=True,
-      action_pill_height=40,
+      action_pill_height=44,
       action_pill_width=self.DANGER_PILL_WIDTH if danger else self.ACTION_PILL_WIDTH,
-      title_size=26,
-      subtitle_size=17,
-      action_text_size=15,
+      title_size=34,
+      subtitle_size=22,
+      action_text_size=18,
       row_separator=self.PANEL_STYLE.divider_color,
       action_fill=action_fill,
       action_border=action_border,

@@ -333,8 +333,8 @@ def draw_list_panel_shell(frame: AetherListFrame, style: PanelStyle | None = Non
     _draw_rounded_stroke(glow_rect, _with_alpha(glow, 14), radius_px=20)
 
 
-def init_list_panel(rect: rl.Rectangle, style: PanelStyle | None = None) -> tuple[AetherListFrame, rl.Rectangle, float]:
-  frame = build_list_panel_frame(rect)
+def init_list_panel(rect: rl.Rectangle, style: PanelStyle | None = None, metrics: AetherListMetrics = AETHER_LIST_METRICS) -> tuple[AetherListFrame, rl.Rectangle, float]:
+  frame = build_list_panel_frame(rect, metrics)
   draw_list_panel_shell(frame, style)
   scroll_rect = frame.scroll
   content_width = scroll_rect.width - AETHER_LIST_METRICS.content_right_gutter
@@ -575,10 +575,13 @@ def draw_tab_card(
   if subtitle:
     resolved_title_color = title_color or (style.title_color if current else style.subtitle_color)
     resolved_subtitle_color = subtitle_color or (style.title_color if current else style.muted_color)
+    gap = 4
+    total_text_h = title_size + gap + subtitle_size
+    text_start_y = rect.y + (rect.height - total_text_h) / 2
     _draw_text_fit_common(
       gui_app.font(FontWeight.MEDIUM),
       title,
-      rl.Vector2(rect.x + 12, rect.y + 7),
+      rl.Vector2(rect.x + 12, text_start_y),
       max(1.0, rect.width - 24),
       title_size,
       align_center=True,
@@ -587,7 +590,7 @@ def draw_tab_card(
     _draw_text_fit_common(
       gui_app.font(FontWeight.NORMAL),
       subtitle,
-      rl.Vector2(rect.x + 12, rect.y + 26),
+      rl.Vector2(rect.x + 12, text_start_y + title_size + gap),
       max(1.0, rect.width - 24),
       subtitle_size,
       align_center=True,

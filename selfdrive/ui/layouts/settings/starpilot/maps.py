@@ -75,8 +75,8 @@ BROWSER_SECTION_HEADER_HEIGHT = AETHER_LIST_METRICS.section_header_height
 BROWSER_SECTION_HEADER_GAP = AETHER_LIST_METRICS.section_header_gap
 BROWSER_INSET = AETHER_LIST_METRICS.content_right_gutter
 BROWSER_TAB_GAP = AETHER_LIST_METRICS.section_header_gap
-BROWSER_CONTEXT_TAB_HEIGHT = 52
-BROWSER_REGION_ROW_HEIGHT = AETHER_COMPACT_ROW_HEIGHT
+BROWSER_CONTEXT_TAB_HEIGHT = 56
+BROWSER_REGION_ROW_HEIGHT = AETHER_LIST_METRICS.row_height
 BROWSER_EMPTY_STATE_HEIGHT = 128
 STATUS_CARD_INSET = BROWSER_INSET
 STATUS_BUTTON_HEIGHT = 52
@@ -92,6 +92,7 @@ MAPS_PANEL_STYLE = replace(
   current_border=rl.Color(16, 185, 129, 42),
   underline_color=rl.Color(16, 185, 129, 150),
 )
+MAPS_METRICS = replace(AETHER_LIST_METRICS, header_height=240)
 
 COUNTRIES_SECTION = next(section for section in MAPS_CATALOG if section["key"] == "countries")
 STATES_SECTION = next(section for section in MAPS_CATALOG if section["key"] == "states")
@@ -253,11 +254,17 @@ class MapStatusCard(Widget):
         divider_bottom_offset=16,
       )
 
-    primary_rect = rl.Rectangle(actions_x, rect.y + 10, actions_w, STATUS_BUTTON_HEIGHT)
-    bottom_y = primary_rect.y + primary_rect.height + STATUS_BUTTON_GAP
-    remove_w = max(132.0, min(154.0, actions_w * 0.42))
-    self._remove_rect = rl.Rectangle(actions_x, bottom_y, remove_w, STATUS_REMOVE_HEIGHT)
-    schedule_rect = rl.Rectangle(actions_x + remove_w + 10, bottom_y, actions_w - remove_w - 10, STATUS_REMOVE_HEIGHT)
+    action_top = rect.y + 12
+    col_gap = 10
+    action_h = rect.height - 24
+    left_col_w = actions_w * 0.42
+    right_col_w = actions_w - left_col_w - col_gap
+    left_btn_gap = 6
+    left_btn_h = (action_h - left_btn_gap) / 2
+
+    self._remove_rect = rl.Rectangle(actions_x, action_top, left_col_w, left_btn_h)
+    schedule_rect = rl.Rectangle(actions_x, action_top + left_btn_h + left_btn_gap, left_col_w, left_btn_h)
+    primary_rect = rl.Rectangle(actions_x + left_col_w + col_gap, action_top, right_col_w, action_h)
 
     self._primary_button.render(primary_rect)
     self._secondary_button.render(schedule_rect)
@@ -273,7 +280,7 @@ class MapStatusCard(Widget):
     )
 
     if self._controller._download_state.active:
-      center = rl.Vector2(actions_x + actions_w - 22, primary_rect.y + primary_rect.height / 2)
+      center = rl.Vector2(primary_rect.x + primary_rect.width - 22, primary_rect.y + primary_rect.height / 2)
       draw_busy_ring(center, rl.get_time() * 160, AetherListColors.PRIMARY, inner_radius=9, outer_radius=13, sweep=210, thickness=20)
 
 
@@ -353,7 +360,7 @@ class MapBrowserCard(Widget):
         current=current,
         hovered=hovered,
         pressed=pressed,
-        title_size=22,
+        title_size=28,
         style=MAPS_PANEL_STYLE,
       )
 
@@ -392,8 +399,8 @@ class MapBrowserCard(Widget):
         current=current,
         hovered=hovered,
         pressed=pressed,
-        title_size=19,
-        subtitle_size=14,
+        title_size=24,
+        subtitle_size=17,
         show_underline=True,
         style=MAPS_PANEL_STYLE,
       )
@@ -403,11 +410,11 @@ class MapBrowserCard(Widget):
       rect,
       title,
       body,
-      title_size=26,
-      body_size=19,
+      title_size=32,
+      body_size=24,
       body_inset_x=40,
       title_top_padding=24,
-      body_height=44,
+      body_height=48,
       border=rl.Color(255, 255, 255, 10),
       style=MAPS_PANEL_STYLE,
     )
@@ -437,13 +444,13 @@ class MapBrowserCard(Widget):
         hovered=hovered,
         pressed=self._pressed_target == target_key,
         is_last=index == len(regions) - 1,
-        action_width=142,
+        action_width=188,
         action_pill=True,
-        action_text_size=15,
-        action_pill_height=40,
-        action_pill_width=112 if selected else 84,
-        title_size=26,
-        subtitle_size=17,
+        action_text_size=18,
+        action_pill_height=44,
+        action_pill_width=132 if selected else 108,
+        title_size=34,
+        subtitle_size=22,
         row_separator=MAPS_PANEL_STYLE.divider_color,
         current_bg=MAPS_PANEL_STYLE.current_fill,
         current_border=MAPS_PANEL_STYLE.current_border,
@@ -456,7 +463,7 @@ class MapBrowserCard(Widget):
     return self._controller._browse_regions_for_active_group()
 
   def _render_section_header(self, rect: rl.Rectangle, title: str, *, count_text: str | None = None):
-    draw_section_header(rect, title, trailing_text=count_text or "", title_size=24, trailing_size=20, style=MAPS_PANEL_STYLE)
+    draw_section_header(rect, title, trailing_text=count_text or "", title_size=28, trailing_size=22, style=MAPS_PANEL_STYLE)
 
   def _measure_height(self, width: float) -> float:
     if self._controller._showing_source_picker():
@@ -1123,7 +1130,7 @@ class StarPilotMapsLayout(StarPilotPanel):
 
   def _render(self, rect: rl.Rectangle):
     self.set_rect(rect)
-    frame, scroll_rect, content_width = init_list_panel(rect, MAPS_PANEL_STYLE)
+    frame, scroll_rect, content_width = init_list_panel(rect, MAPS_PANEL_STYLE, MAPS_METRICS)
 
     hdr = frame.header
     draw_settings_panel_header(hdr, tr("Map Data"), tr("Use offline maps for speed-limit control and keep only the regions you need."),
