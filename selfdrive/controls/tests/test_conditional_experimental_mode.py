@@ -28,14 +28,14 @@ class FakeParams:
 def make_cem(*, model_length: float, model_stopped: bool = False, tracking_lead: bool = False,
              lead_status: bool = False, lead_d_rel: float = float("inf"),
              lead_v_lead: float = 0.0, lead_model_prob: float = 0.0, lead_radar: bool = False,
-             stop_sign_confirmed: bool = False):
+             stop_sign_confirmed: bool = False, forcing_stop: bool = False):
   planner = SimpleNamespace(
     params=FakeParams(),
     params_memory=FakeParams(),
     model_length=model_length,
     model_stopped=model_stopped,
     tracking_lead=tracking_lead,
-    starpilot_vcruise=SimpleNamespace(stop_sign_confirmed=stop_sign_confirmed),
+    starpilot_vcruise=SimpleNamespace(stop_sign_confirmed=stop_sign_confirmed, forcing_stop=forcing_stop),
     starpilot_following=SimpleNamespace(slower_lead=False, following_lead=False),
     lead_one=SimpleNamespace(status=lead_status, dRel=lead_d_rel, vLead=lead_v_lead,
                              modelProb=lead_model_prob, radar=lead_radar),
@@ -232,6 +232,26 @@ def test_standstill_dashboard_stop_sign_keeps_exp_on(monkeypatch):
   sm = make_update_sm(standstill=True)
 
   monkeypatch.setattr(cem, "stop_sign_and_light", lambda *args, **kwargs: None)
+
+  cem.update(0.0, sm, toggles)
+
+  assert cem.experimental_mode
+  assert cem.status_value == conditional_experimental_mode_module.CEStatus["STOP_LIGHT"]
+
+
+def test_standstill_force_stop_keeps_exp_on_even_if_red_light_latch_clears(monkeypatch):
+  cem = make_cem(model_length=80.0, model_stopped=False, forcing_stop=True)
+  toggles = make_update_toggles()
+  sm = make_update_sm(standstill=True)
+
+  cem.stop_light_detected = True
+  cem.experimental_mode = True
+
+  def clear_red_light(*args, **kwargs):
+    cem.stop_light_detected = False
+    cem.stop_light_model_detected = False
+
+  monkeypatch.setattr(cem, "stop_sign_and_light", clear_red_light)
 
   cem.update(0.0, sm, toggles)
 

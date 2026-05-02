@@ -123,7 +123,11 @@ class ConditionalExperimentalMode:
       # light / stop sign, but can immediately release to CHILL when the model
       # clears the stop (green light / open path).
       self.stop_sign_and_light(v_ego, sm, starpilot_toggles.conditional_model_stop_time)
-      standstill_stop_hold = self.stop_light_detected or getattr(self.starpilot_planner.starpilot_vcruise, "stop_sign_confirmed", False)
+      standstill_stop_hold = (
+        self.stop_light_detected or
+        getattr(self.starpilot_planner.starpilot_vcruise, "stop_sign_confirmed", False) or
+        getattr(self.starpilot_planner.starpilot_vcruise, "forcing_stop", False)
+      )
 
       self.experimental_mode = standstill_stop_hold
       self.prev_experimental_mode = self.experimental_mode
