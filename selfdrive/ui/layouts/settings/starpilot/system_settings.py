@@ -22,7 +22,7 @@ from openpilot.system.ui.widgets.option_dialog import MultiOptionDialog
 from openpilot.system.ui.widgets.label import gui_label
 
 from openpilot.selfdrive.ui.ui_state import ui_state
-from openpilot.selfdrive.ui.layouts.settings.starpilot.panel import StarPilotPanel
+from openpilot.selfdrive.ui.layouts.settings.starpilot.panel import _SettingsPage
 from openpilot.selfdrive.ui.layouts.settings.starpilot.aethergrid import (
   AETHER_COMPACT_ROW_HEIGHT,
   AETHER_LIST_METRICS,
@@ -811,7 +811,7 @@ class SystemSettingsManagerView(Widget):
       subtitle_color=AetherListColors.SUBTEXT if not danger else rl.Color(203, 171, 178, 255),
     )
 
-class StarPilotSystemLayout(StarPilotPanel):
+class StarPilotSystemLayout(_SettingsPage):
   _BACKUP_NAME_SANITIZE_RE = re.compile(r"[^A-Za-z0-9._-]+")
 
   def __init__(self):
@@ -826,13 +826,8 @@ class StarPilotSystemLayout(StarPilotPanel):
     self._refresh_storage_cache(force=True)
 
   def show_event(self):
-    super().show_event()
     self._refresh_storage_cache(force=True)
-    self._manager_view.show_event()
-
-  def hide_event(self):
-    super().hide_event()
-    self._manager_view.hide_event()
+    super().show_event()
 
   def _render(self, rect: rl.Rectangle):
     if self._pending_storage_text is not None:
@@ -843,7 +838,7 @@ class StarPilotSystemLayout(StarPilotPanel):
         self._storage_updated_at = rl.get_time()
       self._storage_refresh_pending = False
     self._refresh_storage_cache()
-    self._manager_view.render(rect)
+    super()._render(rect)
 
   def _refresh_storage_cache(self, force: bool = False):
     now = rl.get_time()

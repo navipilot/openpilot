@@ -7,8 +7,10 @@ import pyray as rl
 
 from openpilot.common.params import Params
 from openpilot.system.ui.lib.multilang import tr
-from openpilot.system.ui.widgets import Widget
-from openpilot.selfdrive.ui.layouts.settings.starpilot.aethergrid import TileGrid, HubTile, ToggleTile, ValueTile, SliderTile, SPACING
+from openpilot.system.ui.lib.application import gui_app
+from openpilot.system.ui.widgets import DialogResult, Widget
+from openpilot.system.ui.widgets.option_dialog import MultiOptionDialog
+from openpilot.selfdrive.ui.layouts.settings.starpilot.aethergrid import TileGrid, HubTile, ToggleTile, ValueTile, SliderTile, SPACING, AetherSliderDialog
 from openpilot.selfdrive.ui.layouts.settings.starpilot.sectioned_panel import SectionedTileLayout, TileSection
 
 
@@ -288,3 +290,94 @@ def create_master_toggle_panel(toggle_specs: list[dict], sub_panels: dict[str, W
     panel.CATEGORIES = categories + list(extra_categories or [])
     panel._rebuild_grid()
     return panel
+
+
+# ═══════════════════════════════════════════════════════════════
+# _SettingsPage — shared base for AetherSettingsView-backed panels
+# ═══════════════════════════════════════════════════════════════
+
+class _SettingsPage(StarPilotPanel):
+  """Base for settings pages backed by an AetherSettingsView-like manager.
+
+  Provides default ``_render`` / ``show_event`` / ``hide_event`` that
+  delegate to ``_manager_view`` with automatic sub-panel routing, plus
+  shared slider and selector dialog helpers.
+  """
+
+  SLIDER_COLOR = "#597497"
+
+  def __init__(self):
+    super().__init__()
+    self._manager_view: Widget | None = None
+
+  def _wire_sub_panels(self):
+    """Wire navigation callbacks on all child sub-panels."""
+    for child in self._sub_panels.values():
+      if hasattr(child, "set_navigate_callback"):
+        child.set_navigate_callback(self._navigate_to)
+      if hasattr(child, "set_back_callback"):
+        child.set_back_callback(self._go_back)
+
+  def _render(self, rect):
+    if self._current_sub_panel and self._current_sub_panel in self._sub_panels:
+      self._sub_panels[self._current_sub_panel].render(rect)
+    elif self._manager_view is not None:
+      self._manager_view.render(rect)
+
+  def show_event(self):
+    super().show_event()
+    if self._current_sub_panel and self._current_sub_panel in self._sub_panels:
+      self._sub_panels[self._current_sub_panel].show_event()
+    elif self._manager_view is not None:
+      self._manager_view.show_event()
+
+  def hide_event(self):
+    super().hide_event()
+    if self._current_sub_panel and self._current_sub_panel in self._sub_panels:
+      self._sub_panels[self._current_sub_panel].hide_event()
+    elif self._manager_view is not None:
+      self._manager_view.hide_event()
+
+  # ── shared dialog helpers ──
+
+  def _show_slider(self, key, min_v, max_v, step=1, unit="",
+                   value_type="int", current_value=None, title=None):
+    """Unified slider dialog (int/float).
+    
+    title: if provided, used as dialog title; otherwise uses tr(key).
+    """
+    def on_close(res, val):
+      if res == DialogResult.CONFIRM:
+        if value_type == "float":
+          self._params.put_float(key, float(val))
+        else:
+          self._params.put_int(key, int(val))
+    if current_value is None:
+      current_value = self._params.get_float(key) if value_type == "float" else self._params.get_int(key)
+    dialog_title = tr(title) if title else tr(key)
+    gui_app.push_widget(AetherSliderDialog(dialog_title, min_v, max_v, step, current_value, on_close,
+                                           unit=unit, color=self.SLIDER_COLOR))
+
+  def _show_string_select(self, key, options, default="None"):
+    """String-based multi-option selector (puts string via params.put)."""
+    current = self._params.get(key, encoding="utf-8") or default
+
+    def on_select(res):
+      if res == DialogResult.CONFIRM and dialog.selection:
+        self._params.put(key, dialog.selection)
+
+    dialog = MultiOptionDialog(tr(key), options, current, callback=on_select)
+    gui_app.push_widget(dialog)
+
+  def _show_labeled_select(self, title, key, options, current_value):
+    """Integer-based multi-option selector with label/value pairs (puts int)."""
+    option_labels = [tr(label) for _, label in options]
+    label_to_value = {tr(label): value for value, label in options}
+    default = next((tr(label) for value, label in options if value == current_value), option_labels[0])
+
+    def on_select(res):
+      if res == DialogResult.CONFIRM and dialog.selection:
+        self._params.put_int(key, label_to_value[dialog.selection])
+
+    dialog = MultiOptionDialog(tr(title), option_labels, default, callback=on_select)
+    gui_app.push_widget(dialog)

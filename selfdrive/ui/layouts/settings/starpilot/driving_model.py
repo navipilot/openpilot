@@ -30,14 +30,13 @@ from openpilot.system.ui.widgets import DialogResult, Widget
 from openpilot.system.ui.widgets.confirm_dialog import ConfirmDialog, alert_dialog
 from openpilot.system.ui.widgets.label import gui_label
 from openpilot.system.ui.widgets.option_dialog import MultiOptionDialog
-from openpilot.selfdrive.ui.layouts.settings.starpilot.panel import StarPilotPanel
+from openpilot.selfdrive.ui.layouts.settings.starpilot.panel import _SettingsPage
 from openpilot.selfdrive.ui.layouts.settings.starpilot.aethergrid import (
   AETHER_LIST_METRICS,
   AetherButton,
   AetherChip,
   AetherListColors,
   AetherScrollbar,
-  AetherSliderDialog,
   DEFAULT_PANEL_STYLE,
   _point_hits,
   draw_action_rail,
@@ -616,7 +615,7 @@ class DrivingModelManagerView(Widget):
     return alpha, offset_y, scale
 
 
-class StarPilotDrivingModelLayout(StarPilotPanel):
+class StarPilotDrivingModelLayout(_SettingsPage):
   def __init__(self):
     super().__init__()
 
@@ -647,17 +646,12 @@ class StarPilotDrivingModelLayout(StarPilotPanel):
 
   def _render(self, rect: rl.Rectangle):
     self._update_state()
-    self._manager_view.render(rect)
+    super()._render(rect)
 
   def show_event(self):
     super().show_event()
     self._fetch_manifest_async()
     self._update_model_metadata()
-    self._manager_view.show_event()
-
-  def hide_event(self):
-    super().hide_event()
-    self._manager_view.hide_event()
 
   def _fetch_manifest_async(self):
     if self._manifest_fetch_thread is not None and self._manifest_fetch_thread.is_alive():
@@ -1156,22 +1150,10 @@ class StarPilotDrivingModelLayout(StarPilotPanel):
     self._update_model_metadata()
 
   def _on_recovery_power_clicked(self):
-    def on_close(res, val):
-      if res == DialogResult.CONFIRM:
-        self._params.put_float("RecoveryPower", float(val))
-
-    gui_app.push_widget(
-      AetherSliderDialog(tr("Recovery Power"), 0.5, 2.0, 0.1, self._params.get_float("RecoveryPower"), on_close, unit="x", color="#597497")
-    )
+    self._show_slider("RecoveryPower", 0.5, 2.0, step=0.1, unit="x", value_type="float", title="Recovery Power")
 
   def _on_stop_distance_clicked(self):
-    def on_close(res, val):
-      if res == DialogResult.CONFIRM:
-        self._params.put_float("StopDistance", float(val))
-
-    gui_app.push_widget(
-      AetherSliderDialog(tr("Stop Distance"), 4.0, 10.0, 0.1, self._params.get_float("StopDistance"), on_close, unit="m", color="#597497")
-    )
+    self._show_slider("StopDistance", 4.0, 10.0, step=0.1, unit="m", value_type="float", title="Stop Distance")
 
   def _on_blacklist_clicked(self):
     blacklisted = [m.strip() for m in (self._params.get("BlacklistedModels", encoding="utf-8") or "").split(",") if m.strip()]
