@@ -147,6 +147,7 @@ class ConditionalExperimentalMode:
       bool(getattr(sm["starpilotCarState"], "dashboardStopSign", 0) > 0)
     )
     force_stop_active = bool(getattr(self.starpilot_planner.starpilot_vcruise, "forcing_stop", False))
+    model_stopped = bool(getattr(self.starpilot_planner, "model_stopped", False))
     pedal_override = bool(getattr(sm["carState"], "gasPressed", False) or getattr(sm["starpilotCarState"], "accelPressed", False))
 
     if pedal_override or not bool(sm["carState"].standstill):
@@ -155,7 +156,7 @@ class ConditionalExperimentalMode:
 
     if dash_stop_sign:
       self.standstill_stop_reason = "sign"
-    elif self.stop_light_detected or force_stop_active:
+    elif self.stop_light_detected or force_stop_active or model_stopped:
       if self.standstill_stop_reason is None:
         self.standstill_stop_reason = "light"
     elif self.standstill_stop_reason == "light":
@@ -164,7 +165,7 @@ class ConditionalExperimentalMode:
     if self.standstill_stop_reason == "sign":
       return True
 
-    return bool(self.stop_light_detected or force_stop_active)
+    return bool(self.stop_light_detected or force_stop_active or model_stopped)
 
   def check_conditions(self, v_ego, sm, starpilot_toggles):
     below_speed = starpilot_toggles.conditional_limit > v_ego >= 1 and not self.starpilot_planner.starpilot_following.following_lead
