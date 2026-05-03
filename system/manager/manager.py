@@ -40,6 +40,7 @@ STARPILOT_COAST_UP_TO_LEADS_MIGRATION_FLAG = Path("/data") / "starpilot_coast_up
 STARPILOT_PARAM_RENAME_MIGRATION_FLAG = Path("/data") / "starpilot_param_rename_v1"
 STARPILOT_PARAM_CANONICALIZATION_MIGRATION_FLAG = Path("/data") / "starpilot_param_canonicalization_v1"
 STARPILOT_PC_ROOT_MIGRATION_FLAG = Path("/data") / "starpilot_pc_root_v1"
+STARPILOT_REMOVED_PARAM_KEYS = ("HumanFollowing",)
 LEGACY_CARMODEL_MIGRATIONS = {
   "CHEVROLET_BOLT_CC_2019_2021": "CHEVROLET_BOLT_CC_2018_2021",
 }
@@ -146,6 +147,35 @@ def _has_persisted_param_file(params: Params, key: str | bytes) -> bool:
     return False
 
   return bool(path) and os.path.isfile(path)
+
+
+def _remove_persisted_param_file(params: Params, key: str | bytes) -> bool:
+  try:
+    path = params.get_param_path(key)
+  except Exception:
+    return False
+
+  if not path or not os.path.isfile(path):
+    return False
+
+  try:
+    os.remove(path)
+    return True
+  except Exception:
+    cloudlog.exception(f"Failed to remove deprecated param file: {key}")
+    return False
+
+
+def cleanup_removed_starpilot_params(params: Params, params_cache: Params) -> None:
+  removed_keys = []
+  for key in STARPILOT_REMOVED_PARAM_KEYS:
+    removed = _remove_persisted_param_file(params, key)
+    removed = _remove_persisted_param_file(params_cache, key) or removed
+    if removed:
+      removed_keys.append(key)
+
+  if removed_keys:
+    cloudlog.warning(f"Removed deprecated StarPilot params: {removed_keys}")
 
 
 def migrate_starpilot_param_renames(params: Params, params_cache: Params) -> None:
@@ -337,7 +367,6 @@ def migrate_starpilot_default_parity(params: Params, params_cache: Params) -> No
     "AdvancedLateralTune": True,
     "ForceAutoTuneOff": True,
     "HumanAcceleration": False,
-    "HumanFollowing": False,
     "NNFF": False,
     "NNFFLite": False,
   }
@@ -385,7 +414,7 @@ def migrate_disable_humanlike_defaults(params: Params, params_cache: Params) -> 
 
   disabled_keys: list[str] = []
 
-  for key in ("HumanAcceleration", "HumanFollowing", "HumanLaneChanges"):
+  for key in ("HumanAcceleration", "HumanLaneChanges"):
     if not (params.get_bool(key) or params_cache.get_bool(key)):
       continue
 
@@ -615,6 +644,7 @@ def manager_init() -> None:
   # Canonicalize legacy string encodings (e.g. INT params stored as "26.000000")
   # before bulk reads below to avoid repeated cast warnings and UI-side churn.
   migrate_param_type_canonicalization(params)
+  cleanup_removed_starpilot_params(params, params_cache)
   migrate_starpilot_default_parity(params, params_cache)
   migrate_disable_humanlike_defaults(params, params_cache)
   migrate_cluster_offset_default(params, params_cache)

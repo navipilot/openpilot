@@ -9,7 +9,7 @@ from typing import Any
 
 from cereal import custom
 from opendbc.car import DT_CTRL, CanData, structs
-from opendbc.car.car_helpers import interfaces
+from opendbc.car.car_helpers import _apply_disable_openpilot_long, interfaces
 from opendbc.car.chrysler.carstate import CarState as ChryslerCarState
 from opendbc.car.fingerprints import FW_VERSIONS
 from opendbc.car.fw_versions import FW_QUERY_CONFIGS
@@ -18,6 +18,7 @@ from opendbc.car.hyundai.values import CAR as HYUNDAI_CAR, HyundaiStarPilotSafet
 from opendbc.car.gm.values import CAR as GM_CAR, CanBus as GMCanBus, GMSafetyFlags
 from opendbc.car.interfaces import CarInterfaceBase, CarStateBase, get_interface_attr
 from opendbc.car.mock.values import CAR as MOCK
+from opendbc.car.toyota.values import CAR as TOYOTA_CAR, ToyotaSafetyFlags
 from opendbc.car.values import PLATFORMS
 
 DrawType = Callable[[st.SearchStrategy], Any]
@@ -212,6 +213,40 @@ class TestCarInterfaces:
       toggles,
     )
     assert fp_car_params.safetyConfigs[-1].safetyParam & HyundaiStarPilotSafetyFlags.AOL_LKAS_ON_ENGAGE.value
+
+  def test_toyota_disable_openpilot_long_sets_stock_long_safety_flag(self):
+    CarInterface = interfaces[TOYOTA_CAR.TOYOTA_PRIUS_TSS2]
+    fingerprint = {bus: {} for bus in range(8)}
+    toggles = get_test_starpilot_toggles()
+
+    car_params = CarInterface.get_params(
+      TOYOTA_CAR.TOYOTA_PRIUS_TSS2,
+      fingerprint,
+      [],
+      alpha_long=False,
+      is_release=False,
+      docs=False,
+      starpilot_toggles=toggles,
+    )
+    assert car_params.openpilotLongitudinalControl
+    assert not car_params.alphaLongitudinalAvailable
+    assert not (car_params.safetyConfigs[0].safetyParam & ToyotaSafetyFlags.STOCK_LONGITUDINAL.value)
+
+    fp_car_params = CarInterface.get_starpilot_params(
+      TOYOTA_CAR.TOYOTA_PRIUS_TSS2,
+      fingerprint,
+      [],
+      car_params,
+      toggles,
+    )
+
+    _apply_disable_openpilot_long(car_params, fp_car_params)
+
+    assert not car_params.openpilotLongitudinalControl
+    assert car_params.pcmCruise
+    assert fp_car_params.openpilotLongitudinalControlDisabled
+    assert car_params.safetyConfigs[0].safetyParam & ToyotaSafetyFlags.STOCK_LONGITUDINAL.value
+    assert fp_car_params.safetyConfigs[0].safetyParam & ToyotaSafetyFlags.STOCK_LONGITUDINAL.value
 
   # FIXME: Due to the lists used in carParams, Phase.target is very slow and will cause
   #  many generated examples to overrun when max_examples > ~20, don't use it

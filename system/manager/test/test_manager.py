@@ -168,15 +168,11 @@ class TestManager:
     assert params.get("CEModelStopTime") == "3.5"
     assert params_cache.get_bool("NNFF")
 
-    assert Path(params.get_param_path("HumanFollowing")).is_file()
-    assert not params.get_bool("HumanFollowing")
-
   def test_migrate_disable_humanlike_defaults(self, tmp_path, monkeypatch):
     monkeypatch.setattr(manager, "STARPILOT_HUMANLIKE_DISABLE_MIGRATION_FLAG", tmp_path / "starpilot_humanlike_disable_v1")
 
     params = FileBackedFakeParams(tmp_path / "params", {
       "HumanAcceleration": True,
-      "HumanFollowing": True,
     })
     params_cache = FileBackedFakeParams(tmp_path / "cache", {
       "HumanLaneChanges": True,
@@ -185,11 +181,22 @@ class TestManager:
     manager.migrate_disable_humanlike_defaults(params, params_cache)
 
     assert not params.get_bool("HumanAcceleration")
-    assert not params.get_bool("HumanFollowing")
     assert not params.get_bool("HumanLaneChanges")
     assert not params_cache.get_bool("HumanAcceleration")
-    assert not params_cache.get_bool("HumanFollowing")
     assert not params_cache.get_bool("HumanLaneChanges")
+
+  def test_cleanup_removed_starpilot_params(self, tmp_path):
+    params = FileBackedFakeParams(tmp_path / "params", {
+      "HumanFollowing": True,
+    })
+    params_cache = FileBackedFakeParams(tmp_path / "cache", {
+      "HumanFollowing": False,
+    })
+
+    manager.cleanup_removed_starpilot_params(params, params_cache)
+
+    assert not Path(params.get_param_path("HumanFollowing")).exists()
+    assert not Path(params_cache.get_param_path("HumanFollowing")).exists()
 
   def test_migrate_cluster_offset_default_resets_legacy_default_only(self, tmp_path, monkeypatch):
     monkeypatch.setattr(manager, "STARPILOT_CLUSTER_OFFSET_MIGRATION_FLAG", tmp_path / "starpilot_cluster_offset_v1")

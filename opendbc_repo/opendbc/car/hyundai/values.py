@@ -107,6 +107,7 @@ class HyundaiSafetyFlags(IntFlag):
   CANFD_ANGLE_STEERING = 1024
   NON_SCC = 4096
   CAN_CANFD_BLENDED = 8192
+  CANCEL_BTN_ENABLE = 16384
 
 
 class HyundaiStarPilotSafetyFlags(IntFlag):
@@ -670,6 +671,15 @@ class Buttons:
   SET_DECEL = 2
   GAP_DIST = 3
   CANCEL = 4  # on newer models, this is a pause/resume button
+
+
+CANCEL_BUTTON_ENABLE_CARS = frozenset({
+  CAR.HYUNDAI_PALISADE_2023,
+})
+
+
+def hyundai_cancel_button_enables_cruise(car_fingerprint) -> bool:
+  return car_fingerprint in CANCEL_BUTTON_ENABLE_CARS
 
 
 def get_platform_codes(fw_versions: list[bytes]) -> set[tuple[bytes, bytes | None]]:

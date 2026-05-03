@@ -132,7 +132,6 @@ HideSpeedLimit
 HigherBitrate
 HolidayThemes
 HumanAcceleration
-HumanFollowing
 IncreaseThermalLimits
 IncreasedStoppedDistance
 IsDriverViewEnabled

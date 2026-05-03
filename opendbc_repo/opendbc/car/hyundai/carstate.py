@@ -7,7 +7,8 @@ from opendbc.can import CANDefine, CANParser
 from opendbc.car import Bus, create_button_events, structs
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.hyundai.hyundaicanfd import CanBus
-from opendbc.car.hyundai.values import HyundaiFlags, HyundaiStarPilotFlags, CAR, DBC, Buttons, CarControllerParams
+from opendbc.car.hyundai.values import HyundaiFlags, HyundaiStarPilotFlags, CAR, DBC, Buttons, CarControllerParams, \
+                                       hyundai_cancel_button_enables_cruise
 from opendbc.car.interfaces import CarStateBase
 
 ButtonType = structs.CarState.ButtonEvent.Type
@@ -59,6 +60,7 @@ class CarState(CarStateBase):
     self.left_paddle = 0
     self.mode_button = 0
     self.custom_button = 0
+    self.cancel_button_enable_in_progress = False
 
     self.gear_msg_canfd = "ACCELERATOR" if CP.flags & HyundaiFlags.EV else \
                           "GEAR_ALT" if CP.flags & HyundaiFlags.CANFD_ALT_GEARS else \
@@ -108,6 +110,25 @@ class CarState(CarStateBase):
     # To avoid re-engaging when openpilot cancels, check user engagement intention via buttons
     # Main button also can trigger an engagement on these cars
     return any(btn in ENABLE_BUTTONS for btn in self.cruise_buttons) or any(self.main_buttons)
+
+  def create_cruise_button_events(self, cur_button: int, prev_button: int) -> list[structs.CarState.ButtonEvent]:
+    if cur_button != prev_button and prev_button != Buttons.CANCEL and cur_button == Buttons.CANCEL:
+      self.cancel_button_enable_in_progress = (
+        self.CP.openpilotLongitudinalControl and
+        hyundai_cancel_button_enables_cruise(self.CP.carFingerprint) and
+        not self.out.cruiseState.enabled
+      )
+
+    buttons_dict = BUTTONS_DICT
+    if self.cancel_button_enable_in_progress:
+      buttons_dict = BUTTONS_DICT | {Buttons.CANCEL: ButtonType.accelCruise}
+
+    events = create_button_events(cur_button, prev_button, buttons_dict)
+
+    if cur_button != Buttons.CANCEL:
+      self.cancel_button_enable_in_progress = False
+
+    return events
 
   def update(self, can_parsers, starpilot_toggles) -> structs.CarState:
     cp = can_parsers[Bus.pt]
@@ -249,7 +270,7 @@ class CarState(CarStateBase):
     if self.CP.flags & HyundaiFlags.HAS_LDA_BUTTON:
       self.lda_button = cp.vl["BCM_PO_11"]["LDA_BTN"]
 
-    ret.buttonEvents = [*create_button_events(self.cruise_buttons[-1], prev_cruise_buttons, BUTTONS_DICT),
+    ret.buttonEvents = [*self.create_cruise_button_events(self.cruise_buttons[-1], prev_cruise_buttons),
                         *create_button_events(self.main_buttons[-1], prev_main_buttons, {1: ButtonType.mainCruise}),
                         *create_button_events(self.lda_button, prev_lda_button, {1: ButtonType.lkas})]
 
@@ -375,7 +396,7 @@ class CarState(CarStateBase):
     if cp.ts_nanos["BLINKER_STALKS"]["CHECKSUM_MAYBE"] > 0:
       self.stock_blinker_stalks_ts = cp.ts_nanos["BLINKER_STALKS"]["CHECKSUM_MAYBE"]
 
-    ret.buttonEvents = [*create_button_events(self.cruise_buttons[-1], prev_cruise_buttons, BUTTONS_DICT),
+    ret.buttonEvents = [*self.create_cruise_button_events(self.cruise_buttons[-1], prev_cruise_buttons),
                         *create_button_events(self.main_buttons[-1], prev_main_buttons, {1: ButtonType.mainCruise}),
                         *create_button_events(self.lda_button, prev_lda_button, {1: ButtonType.lkas}),
                         *create_button_events(self.left_paddle, prev_left_paddle, {1: ButtonType.altButton2})]

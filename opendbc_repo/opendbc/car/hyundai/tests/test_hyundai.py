@@ -17,7 +17,7 @@ from opendbc.car.hyundai.radar_interface import RADAR_START_ADDR
 from opendbc.car.hyundai.values import CAMERA_SCC_CAR, CANFD_CAR, CAN_GEARS, CAR, CHECKSUM, DATE_FW_ECUS, \
                                          HYBRID_CAR, EV_CAR, FW_QUERY_CONFIG, LEGACY_SAFETY_MODE_CAR, CANFD_FUZZY_WHITELIST, \
                                          UNSUPPORTED_LONGITUDINAL_CAR, PLATFORM_CODE_ECUS, HYUNDAI_VERSION_REQUEST_LONG, \
-                                         CarControllerParams, DBC, HyundaiFlags, get_platform_codes, HyundaiSafetyFlags
+                                         CarControllerParams, DBC, HyundaiFlags, get_platform_codes, HyundaiSafetyFlags, Buttons
 
 LongCtrlState = CarControl.Actuators.LongControlState
 from opendbc.car.hyundai.fingerprints import FW_VERSIONS
@@ -101,6 +101,24 @@ class TestHyundaiFingerprint:
     assert palisade_2023.flags & HyundaiFlags.CAN_CANFD_BLENDED
     assert DBC[palisade_2023.carFingerprint][Bus.pt] == "hyundai_palisade_2023_generated"
     assert palisade_2023.safetyConfigs[-1].safetyParam & HyundaiSafetyFlags.CAN_CANFD_BLENDED
+    assert palisade_2023.safetyConfigs[-1].safetyParam & HyundaiSafetyFlags.CANCEL_BTN_ENABLE
+
+  def test_palisade_2023_pause_resume_button_maps_to_enable(self):
+    toggles = get_test_toggles()
+    CP = CarInterface.get_params(CAR.HYUNDAI_PALISADE_2023, gen_empty_fingerprint(), [], True, False, False, toggles)
+    FPCP = CarInterface.get_starpilot_params(CAR.HYUNDAI_PALISADE_2023, gen_empty_fingerprint(), [], CP, toggles)
+    car_state = CarState(CP, FPCP)
+
+    car_state.out.cruiseState.enabled = False
+    events = car_state.create_cruise_button_events(Buttons.CANCEL, Buttons.NONE)
+    assert [(be.type, be.pressed) for be in events] == [(ButtonType.accelCruise, True)]
+
+    events = car_state.create_cruise_button_events(Buttons.NONE, Buttons.CANCEL)
+    assert [(be.type, be.pressed) for be in events] == [(ButtonType.accelCruise, False)]
+
+    car_state.out.cruiseState.enabled = True
+    events = car_state.create_cruise_button_events(Buttons.CANCEL, Buttons.NONE)
+    assert [(be.type, be.pressed) for be in events] == [(ButtonType.cancel, True)]
 
   def test_palisade_2023_disable_failure_falls_back_to_stock_acc(self, monkeypatch):
     toggles = get_test_toggles()
@@ -129,6 +147,13 @@ class TestHyundaiFingerprint:
     assert CP.stoppingDecelRate == pytest.approx(0.4)
     assert CP.longitudinalActuatorDelay == pytest.approx(0.5)
     assert CP.startingState
+
+  def test_genesis_g90_longitudinal_params_bias_toward_earlier_stop_handoff(self):
+    toggles = get_test_toggles()
+    CP = CarInterface.get_params(CAR.GENESIS_G90, gen_empty_fingerprint(), [], True, False, False, toggles)
+
+    assert CP.vEgoStopping == pytest.approx(0.8)
+    assert CP.stoppingDecelRate == pytest.approx(0.55)
 
   def test_kia_forte_no_scc_fw_match(self):
     car_fw = [
@@ -333,7 +358,7 @@ class TestHyundaiFingerprint:
 
     state = update_genesis_g90_longitudinal_tuning(state, accel_cmd=-2.0, v_ego=0.02,
                                                    long_control_state=LongCtrlState.stopping, long_active=True)
-    assert state.actual_accel == pytest.approx(-0.12)
+    assert state.actual_accel == pytest.approx(-0.10)
     assert not state.release_active
 
   def test_genesis_g90_longitudinal_tuning_gradually_unwinds_into_stop_hold(self):
@@ -341,11 +366,22 @@ class TestHyundaiFingerprint:
 
     state = update_genesis_g90_longitudinal_tuning(state, accel_cmd=-2.0, v_ego=0.5,
                                                    long_control_state=LongCtrlState.stopping, long_active=True)
-    assert state.actual_accel == pytest.approx(-1.975)
+    assert state.actual_accel == pytest.approx(-1.96)
 
     state = update_genesis_g90_longitudinal_tuning(state, accel_cmd=-2.0, v_ego=0.3,
                                                    long_control_state=LongCtrlState.stopping, long_active=True)
-    assert state.actual_accel == pytest.approx(-1.935)
+    assert state.actual_accel == pytest.approx(-1.9)
+
+  def test_genesis_g90_longitudinal_tuning_caps_low_speed_stop_brake(self):
+    state = GenesisG90LongitudinalTuningState(actual_accel=-1.0)
+
+    state = update_genesis_g90_longitudinal_tuning(state, accel_cmd=-0.4, v_ego=0.3,
+                                                   long_control_state=LongCtrlState.stopping, long_active=True)
+    assert state.actual_accel == pytest.approx(-0.94)
+
+    state = update_genesis_g90_longitudinal_tuning(state, accel_cmd=-0.4, v_ego=0.3,
+                                                   long_control_state=LongCtrlState.stopping, long_active=True)
+    assert state.actual_accel == pytest.approx(-0.88)
 
   def test_genesis_g90_longitudinal_tuning_ramps_out_of_stop_hold(self):
     state = GenesisG90LongitudinalTuningState(actual_accel=-0.12, long_control_state_last=LongCtrlState.stopping)

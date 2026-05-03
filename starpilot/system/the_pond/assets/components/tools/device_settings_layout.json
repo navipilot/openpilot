@@ -832,7 +832,7 @@
       {
         "key": "RelaxedFollow",
         "label": "Following Distance",
-        "description": "How many seconds openpilot follows behind lead vehicles when using the \"Relaxed\" profile. Increase for more space; decrease for tighter gaps.\n\nDefault: 1.75 seconds.",
+        "description": "How many seconds openpilot follows behind lead vehicles when using the \"Relaxed\" profile. Increase for more space; decrease for tighter gaps.\n\nDefault: 1.6 seconds.",
         "data_type": "float",
         "ui_type": "numeric",
         "min": 0.5,
@@ -966,14 +966,6 @@
         "key": "HumanAcceleration",
         "label": "Human-Like Acceleration",
         "description": "Acceleration that mimics human behavior by easing the throttle at low speeds and adding extra power when taking off from a stop.",
-        "data_type": "bool",
-        "ui_type": "toggle",
-        "parent_key": "LongitudinalTune"
-      },
-      {
-        "key": "HumanFollowing",
-        "label": "Human-Like Following",
-        "description": "Following behavior that mimics human drivers by closing gaps behind faster vehicles for quicker takeoffs and dynamically adjusting the desired following distance for gentler, more efficient braking.",
         "data_type": "bool",
         "ui_type": "toggle",
         "parent_key": "LongitudinalTune"

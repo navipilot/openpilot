@@ -134,7 +134,7 @@ StarPilotLongitudinalPanel::StarPilotLongitudinalPanel(StarPilotSettingsWindow *
     {"ResetStandardPersonality", tr("Reset to Defaults"), tr("<b>Reset the \"Standard\" profile to defaults.</b>"), ""},
 
     {"RelaxedPersonalityProfile", tr("Relaxed"), tr("<b>Customize the \"Relaxed\" personality profile.</b> Designed for smoother, more comfortable driving with larger gaps."), "../../starpilot/assets/stock_theme/distance_icons/relaxed.png"},
-    {"RelaxedFollow", tr("Following Distance"), tr("<b>How many seconds openpilot follows behind lead vehicles when using the \"Relaxed\" profile.</b> Increase for more space; decrease for tighter gaps.<br><br>Default: 1.75 seconds."), ""},
+    {"RelaxedFollow", tr("Following Distance"), tr("<b>How many seconds openpilot follows behind lead vehicles when using the \"Relaxed\" profile.</b> Increase for more space; decrease for tighter gaps.<br><br>Default: 1.6 seconds."), ""},
     {"RelaxedFollowHigh", tr("High Speed Following Distance"), tr("<b>Following distance for higher speeds in the \"Relaxed\" profile.</b> openpilot smoothly blends from the base value to this value as speed rises."), ""},
     {"RelaxedJerkAcceleration", tr("Acceleration Smoothness"), tr("<b>How smoothly openpilot accelerates with the \"Relaxed\" profile.</b> Increase for gentler starts; decrease for faster but more abrupt takeoffs."), ""},
     {"RelaxedJerkDeceleration", tr("Braking Smoothness"), tr("<b>How smoothly openpilot brakes with the \"Relaxed\" profile.</b> Increase for gentler stops; decrease for quicker but sharper braking."), ""},
@@ -147,7 +147,6 @@ StarPilotLongitudinalPanel::StarPilotLongitudinalPanel(StarPilotSettingsWindow *
     {"AccelerationProfile", tr("Acceleration Profile"), tr("<b>How quickly openpilot speeds up.</b> \"Eco\" is gentle and efficient, \"Sport\" is firmer and more responsive, and \"Sport+\" accelerates at the maximum rate allowed."), ""},
     {"DecelerationProfile", tr("Deceleration Profile"), tr("<b>How firmly openpilot slows down.</b> \"Eco\" favors coasting, \"Sport\" applies stronger braking."), ""},
     {"HumanAcceleration", tr("Human-Like Acceleration"), tr("<b>Acceleration that mimics human behavior</b> by easing the throttle at low speeds and adding extra power when taking off from a stop."), ""},
-    {"HumanFollowing", tr("Human-Like Following"), tr("<b>Following behavior that mimics human drivers</b> by closing gaps behind faster vehicles for quicker takeoffs and dynamically adjusting the desired following distance for gentler, more efficient braking."), ""},
     {"CoastUpToLeads", tr("Coast Up To Leads"), tr("<b>Allow openpilot to coast toward far leads before resuming normal throttle.</b> Disable this if your vehicle shows noticeable gas/brake alternation while approaching distant traffic."), ""},
     {"HumanLaneChanges", tr("Human-Like Lane Changes"), tr("<b>Lane-change behavior that mimics human drivers</b> by anticipating and tracking adjacent vehicles during lane changes."), ""},
     {"LeadDetectionThreshold", tr("Lead Detection Sensitivity"), tr("<b>How sensitive openpilot is to detecting vehicles.</b> Higher sensitivity allows quicker detection at longer distances but may react to non-vehicle objects; lower sensitivity is more conservative and reduces false detections."), ""},

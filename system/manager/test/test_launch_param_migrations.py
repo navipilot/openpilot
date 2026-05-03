@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from openpilot.system.manager.launch_param_migrations import (
+  BRANCH_DEFAULTS_MIGRATION_MARKER,
   DEFAULT_STEER_KP,
   LAUNCH_PARAM_MIGRATION_MARKER,
   apply_launch_param_migrations,
@@ -84,3 +85,59 @@ def test_apply_launch_param_migrations_does_not_reapply_after_marker(tmp_path):
   assert not params.get_bool("LongPitch")
   assert params.get_float("SteerKP") == 0.65
   assert params.get_float("SteerKPStock") == DEFAULT_STEER_KP
+
+
+def test_apply_launch_param_migrations_applies_branch_defaults_for_existing_installs(tmp_path):
+  params = FileBackedFakeParams(tmp_path / "params")
+
+  params.put_bool("LongPitch", False)
+  params.put_bool("ConditionalExperimental", False)
+  params.put_bool("CELead", False)
+  params.put_bool("CESlowerLead", False)
+  params.put_bool("CEStoppedLead", True)
+  params.put_bool("ForceStops", False)
+  params.put_float("AggressiveFollowHigh", 1.25)
+  params.put_float("StandardFollowHigh", 1.45)
+  params.put_float("StandardJerkAcceleration", 50.0)
+  params.put_float("RelaxedFollow", 1.75)
+  params.put_float("RelaxedFollowHigh", 1.75)
+  params.put_float("RelaxedJerkSpeed", 50.0)
+  (tmp_path / "params" / LAUNCH_PARAM_MIGRATION_MARKER).touch()
+
+  apply_launch_param_migrations(params)
+
+  assert not params.get_bool("LongPitch")
+  assert params.get_bool("ConditionalExperimental")
+  assert params.get_bool("CELead")
+  assert params.get_bool("CESlowerLead")
+  assert not params.get_bool("CEStoppedLead")
+  assert params.get_bool("ForceStops")
+  assert params.get_float("AggressiveFollowHigh") == 1.0
+  assert params.get_float("StandardFollowHigh") == 1.2
+  assert params.get_float("StandardJerkAcceleration") == 100.0
+  assert params.get_float("RelaxedFollow") == 1.6
+  assert params.get_float("RelaxedFollowHigh") == 1.4
+  assert params.get_float("RelaxedJerkSpeed") == 100.0
+  assert (tmp_path / "params" / BRANCH_DEFAULTS_MIGRATION_MARKER).is_file()
+
+
+def test_apply_launch_param_migrations_does_not_reapply_branch_defaults_after_marker(tmp_path):
+  params = FileBackedFakeParams(tmp_path / "params")
+  branch_defaults_marker = tmp_path / "params" / BRANCH_DEFAULTS_MIGRATION_MARKER
+
+  params.put_bool("ConditionalExperimental", False)
+  params.put_bool("CEStoppedLead", True)
+  params.put_bool("ForceStops", False)
+  params.put_float("AggressiveFollowHigh", 2.0)
+  params.put_float("StandardJerkAcceleration", 25.0)
+  params.put_float("RelaxedFollow", 2.0)
+  branch_defaults_marker.touch()
+
+  apply_launch_param_migrations(params)
+
+  assert not params.get_bool("ConditionalExperimental")
+  assert params.get_bool("CEStoppedLead")
+  assert not params.get_bool("ForceStops")
+  assert params.get_float("AggressiveFollowHigh") == 2.0
+  assert params.get_float("StandardJerkAcceleration") == 25.0
+  assert params.get_float("RelaxedFollow") == 2.0

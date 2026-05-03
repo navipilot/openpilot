@@ -946,7 +946,6 @@ class StarPilotVariables:
     else:
       toggle.custom_accel_profile_values = [custom_accel_defaults[key] for key in CUSTOM_ACCEL_PROFILE_PARAM_KEYS]
     toggle.human_acceleration = self.get_value("HumanAcceleration", condition=longitudinal_tuning)
-    toggle.human_following = self.get_value("HumanFollowing", condition=longitudinal_tuning)
     toggle.coast_up_to_leads = self.get_value("CoastUpToLeads", condition=longitudinal_tuning)
     if longitudinal_tuning and self.params.get("CoastUpToLeads") is None:
       toggle.coast_up_to_leads = True

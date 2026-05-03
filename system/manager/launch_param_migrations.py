@@ -15,6 +15,39 @@ LEGACY_STEER_KP = 0.7
 QT_STEER_KP_PLACEHOLDER = 1.0
 
 LAUNCH_PARAM_MIGRATION_MARKER = ".starpilot_launch_param_migrations_v2"
+BRANCH_DEFAULTS_MIGRATION_MARKER = ".starpilot_branch_defaults_migrations_v1"
+
+BRANCH_BOOL_DEFAULTS = {
+  "ConditionalExperimental": True,
+  "CELead": True,
+  "CESlowerLead": True,
+  "CEStoppedLead": False,
+  "ForceStops": True,
+}
+
+BRANCH_FLOAT_DEFAULTS = {
+  "AggressiveFollow": 1.25,
+  "AggressiveFollowHigh": 1.0,
+  "AggressiveJerkAcceleration": 50.0,
+  "AggressiveJerkDanger": 100.0,
+  "AggressiveJerkDeceleration": 50.0,
+  "AggressiveJerkSpeed": 50.0,
+  "AggressiveJerkSpeedDecrease": 50.0,
+  "StandardFollow": 1.45,
+  "StandardFollowHigh": 1.2,
+  "StandardJerkAcceleration": 100.0,
+  "StandardJerkDanger": 100.0,
+  "StandardJerkDeceleration": 100.0,
+  "StandardJerkSpeed": 100.0,
+  "StandardJerkSpeedDecrease": 100.0,
+  "RelaxedFollow": 1.6,
+  "RelaxedFollowHigh": 1.4,
+  "RelaxedJerkAcceleration": 100.0,
+  "RelaxedJerkDanger": 100.0,
+  "RelaxedJerkDeceleration": 100.0,
+  "RelaxedJerkSpeed": 100.0,
+  "RelaxedJerkSpeedDecrease": 100.0,
+}
 
 
 class ParamsLike(Protocol):
@@ -33,8 +66,11 @@ def _default_marker_path(params: ParamsLike) -> Path:
   return Path(params.get_param_path()) / LAUNCH_PARAM_MIGRATION_MARKER
 
 
-def apply_launch_param_migrations(params: ParamsLike, marker_path: Path | None = None) -> None:
-  marker = marker_path or _default_marker_path(params)
+def _branch_defaults_marker_path(params: ParamsLike) -> Path:
+  return Path(params.get_param_path()) / BRANCH_DEFAULTS_MIGRATION_MARKER
+
+
+def _apply_legacy_launch_param_migrations(params: ParamsLike, marker: Path) -> None:
   if marker.exists():
     return
 
@@ -59,6 +95,29 @@ def apply_launch_param_migrations(params: ParamsLike, marker_path: Path | None =
     params.put_bool("UsePrebuilt", True)
 
   marker.touch()
+
+
+def _apply_branch_default_migration(params: ParamsLike, marker: Path) -> None:
+  if marker.exists():
+    return
+
+  marker.parent.mkdir(parents=True, exist_ok=True)
+
+  for key, value in BRANCH_BOOL_DEFAULTS.items():
+    params.put_bool(key, value)
+
+  for key, value in BRANCH_FLOAT_DEFAULTS.items():
+    params.put_float(key, value)
+
+  marker.touch()
+
+
+def apply_launch_param_migrations(params: ParamsLike, marker_path: Path | None = None,
+                                  branch_defaults_marker_path: Path | None = None) -> None:
+  _apply_legacy_launch_param_migrations(params, marker_path or _default_marker_path(params))
+  # Keep branch-default rollout on its own marker so older installs that already
+  # have the legacy marker still receive this one-time param reset.
+  _apply_branch_default_migration(params, branch_defaults_marker_path or _branch_defaults_marker_path(params))
 
 
 def main() -> int:

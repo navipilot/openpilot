@@ -99,23 +99,7 @@ class StarPilotFollowing:
       self.desired_follow_distance = 0
 
   def update_follow_values(self, lead_distance, v_ego, v_lead, starpilot_toggles):
-    if starpilot_toggles.human_following and v_lead > v_ego:
-      distance_factor = max(lead_distance - (v_ego * self.t_follow), 1)
-      from starpilot.common.starpilot_variables import get_starpilot_toggles
-      fp_toggles = get_starpilot_toggles()
-      accelerating_offset = float(np.clip(fp_toggles.stop_distance - v_ego, 1, distance_factor))
-
-      self.acceleration_jerk /= accelerating_offset
-      self.speed_jerk /= accelerating_offset
-      self.t_follow /= accelerating_offset
-
-    if (starpilot_toggles.conditional_slower_lead or starpilot_toggles.human_following) and v_lead < v_ego:
+    if starpilot_toggles.conditional_slower_lead and v_lead < v_ego:
       distance_factor = max(lead_distance - (v_lead * self.t_follow), 1)
       braking_offset = float(np.clip(min(v_ego - v_lead, v_lead) - COMFORT_BRAKE, 1, distance_factor))
-
-      if starpilot_toggles.human_following:
-        from starpilot.common.starpilot_variables import get_starpilot_toggles
-        fp_toggles = get_starpilot_toggles()
-        far_lead_offset = max(lead_distance - (v_ego * self.t_follow) - fp_toggles.stop_distance, 0)
-        self.t_follow /= braking_offset + far_lead_offset
       self.slower_lead = braking_offset > 1

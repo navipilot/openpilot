@@ -4,7 +4,8 @@ from opendbc.car.hyundai.hyundaicanfd import CanBus
 from opendbc.car.hyundai.values import HyundaiFlags, CAR, DBC, \
                                                    CANFD_UNSUPPORTED_LONGITUDINAL_CAR, \
                                                    CANFD_SECURITYACCESS_CAR, \
-                                                   UNSUPPORTED_LONGITUDINAL_CAR, HyundaiSafetyFlags
+                                                   UNSUPPORTED_LONGITUDINAL_CAR, HyundaiSafetyFlags, \
+                                                   hyundai_cancel_button_enables_cruise
 from opendbc.car.hyundai.radar_interface import RADAR_START_ADDR
 from opendbc.car.interfaces import CarInterfaceBase
 from opendbc.car.disable_ecu import disable_ecu, ecu_log
@@ -138,6 +139,8 @@ class CarInterface(CarInterfaceBase):
         ret.flags |= HyundaiFlags.HAS_LDA_BUTTON.value
       if ret.flags & HyundaiFlags.CAN_CANFD_BLENDED:
         ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.CAN_CANFD_BLENDED.value
+      if hyundai_cancel_button_enables_cruise(candidate):
+        ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.CANCEL_BTN_ENABLE.value
 
       if candidate == CAR.KIA_FORTE:
         has_scc_fw = any(fw.ecu == Ecu.fwdRadar for fw in car_fw)
@@ -188,6 +191,10 @@ class CarInterface(CarInterfaceBase):
       ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.FCEV_GAS.value
 
     # Car specific configuration overrides
+
+    if candidate == CAR.GENESIS_G90:
+      ret.stoppingDecelRate = 0.55
+      ret.vEgoStopping = 0.8
 
     if candidate == CAR.KIA_OPTIMA_G4_FL:
       ret.steerActuatorDelay = 0.2

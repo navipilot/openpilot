@@ -686,12 +686,7 @@ class StarPilotLongitudinalTuneLayout(_SettingsPage):
                    set_state=lambda s: self._params.put_bool("CoastUpToLeads", s),
                    visible=self._longitudinal_enabled),
       ], column_pair="human_driving", row_height=UTILITY_ROW_HEIGHT),
-      SettingSection(tr_noop("Following"), [
-        SettingRow("HumanFollowing", "toggle", tr_noop("Human-Like Following"),
-                   subtitle=tr_noop("More natural following behavior behind other vehicles."),
-                   get_state=lambda: self._params.get_bool("HumanFollowing"),
-                   set_state=lambda s: self._params.put_bool("HumanFollowing", s),
-                   visible=self._longitudinal_enabled),
+      SettingSection(tr_noop("Lane Changes"), [
         SettingRow("HumanLaneChanges", "toggle", tr_noop("Human-Like Lane Changes"),
                    subtitle=tr_noop("Radar-informed behavior during lane changes."),
                    get_state=lambda: self._params.get_bool("HumanLaneChanges"),

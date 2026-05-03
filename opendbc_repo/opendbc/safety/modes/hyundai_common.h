@@ -54,6 +54,9 @@ bool hyundai_aol_lkas_on_engage = false;
 extern bool hyundai_non_scc;
 bool hyundai_non_scc = false;
 
+extern bool hyundai_cancel_button_enable;
+bool hyundai_cancel_button_enable = false;
+
 static uint8_t hyundai_last_button_interaction;  // button messages since the user pressed an enable button
 
 void hyundai_common_init(uint16_t param) {
@@ -69,6 +72,7 @@ void hyundai_common_init(uint16_t param) {
   const uint16_t HYUNDAI_PARAM_AOL_LKAS_ON_ENGAGE = 2048;
   const uint16_t HYUNDAI_PARAM_NON_SCC = 4096;
   const uint16_t HYUNDAI_PARAM_CAN_CANFD_BLENDED = 8192;
+  const uint16_t HYUNDAI_PARAM_CANCEL_BTN_ENABLE = 16384;
 
   hyundai_ev_gas_signal = GET_FLAG(param, HYUNDAI_PARAM_EV_GAS);
   hyundai_hybrid_gas_signal = !hyundai_ev_gas_signal && GET_FLAG(param, HYUNDAI_PARAM_HYBRID_GAS);
@@ -82,6 +86,7 @@ void hyundai_common_init(uint16_t param) {
   hyundai_has_lda_button = GET_FLAG(param, HYUNDAI_PARAM_HAS_LDA_BUTTON);
   hyundai_aol_lkas_on_engage = GET_FLAG(param, HYUNDAI_PARAM_AOL_LKAS_ON_ENGAGE);
   hyundai_non_scc = GET_FLAG(param, HYUNDAI_PARAM_NON_SCC);
+  hyundai_cancel_button_enable = GET_FLAG(param, HYUNDAI_PARAM_CANCEL_BTN_ENABLE);
 
   hyundai_last_button_interaction = HYUNDAI_PREV_BUTTON_SAMPLES;
 
@@ -125,7 +130,9 @@ void hyundai_common_cruise_buttons_check(const int cruise_button, const bool mai
     // enter controls on falling edge of resume or set
     bool set = (cruise_button != HYUNDAI_BTN_SET) && (cruise_button_prev == HYUNDAI_BTN_SET);
     bool res = (cruise_button != HYUNDAI_BTN_RESUME) && (cruise_button_prev == HYUNDAI_BTN_RESUME);
-    if (set || res) {
+    bool cancel_enable = hyundai_cancel_button_enable && !cruise_engaged_prev &&
+                         (cruise_button != HYUNDAI_BTN_CANCEL) && (cruise_button_prev == HYUNDAI_BTN_CANCEL);
+    if (set || res || cancel_enable) {
       controls_allowed = true;
 
       if (hyundai_aol_lkas_on_engage && ((alternative_experience & ALT_EXP_ALWAYS_ON_LATERAL) != 0)) {
@@ -134,7 +141,7 @@ void hyundai_common_cruise_buttons_check(const int cruise_button, const bool mai
     }
 
     // exit controls on cancel press
-    if (cruise_button == HYUNDAI_BTN_CANCEL) {
+    if ((cruise_button == HYUNDAI_BTN_CANCEL) && !(hyundai_cancel_button_enable && !cruise_engaged_prev)) {
       controls_allowed = false;
     }
 

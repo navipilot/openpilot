@@ -11,6 +11,7 @@ from opendbc.car.structs import CarParams, CarParamsT
 from opendbc.car.fingerprints import eliminate_incompatible_cars, all_legacy_fingerprint_cars
 from opendbc.car.fw_versions import ObdCallback, get_fw_versions_ordered, get_present_ecus, match_fw_to_car
 from opendbc.car.mock.values import CAR as MOCK
+from opendbc.car.toyota.values import ToyotaSafetyFlags
 from opendbc.car.values import BRANDS
 from opendbc.car.vin import get_vin, is_valid_vin, VIN_UNKNOWN
 from openpilot.common.params import Params
@@ -106,6 +107,20 @@ def _normalize_gm_bolt_candidate(candidate: str | None, fingerprints: dict[int, 
     return "CHEVROLET_BOLT_ACC_2022_2023"
 
   return candidate
+
+
+def _apply_disable_openpilot_long(CP: CarParams, FPCP: StarPilotCarParams) -> None:
+  CP.openpilotLongitudinalControl = False
+  CP.pcmCruise = True
+  FPCP.openpilotLongitudinalControlDisabled = True
+
+  if CP.brand == "toyota":
+    # Toyota stock longitudinal safety changes the forwarding rules so the
+    # camera's ACC_CONTROL message can reach the PT bus again.
+    for cfg in CP.safetyConfigs:
+      cfg.safetyParam |= ToyotaSafetyFlags.STOCK_LONGITUDINAL.value
+    for cfg in FPCP.safetyConfigs:
+      cfg.safetyParam |= ToyotaSafetyFlags.STOCK_LONGITUDINAL.value
 
 
 def _normalize_gm_volt_candidate(candidate: str | None, fingerprints: dict[int, dict]) -> str | None:
@@ -318,8 +333,7 @@ def get_car(can_recv: CanRecvCallable, can_send: CanSendCallable, set_obd_multip
   FPCP: StarPilotCarParams = CarInterface.get_starpilot_params(candidate, fingerprints, car_fw, CP, starpilot_toggles)
 
   if not CP.alphaLongitudinalAvailable and starpilot_toggles.disable_openpilot_long:
-    CP.openpilotLongitudinalControl = False
-    FPCP.openpilotLongitudinalControlDisabled = True
+    _apply_disable_openpilot_long(CP, FPCP)
 
   return interfaces[CP.carFingerprint](CP, FPCP)
 

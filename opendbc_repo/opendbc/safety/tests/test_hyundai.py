@@ -291,7 +291,8 @@ class TestHyundaiCanCanfdBlendedLongitudinalSafety(HyundaiLongitudinalBase, Test
   def setUp(self):
     self.packer = CANPackerSafety("hyundai_palisade_2023_generated")
     self.safety = libsafety_py.libsafety
-    self.safety.set_safety_hooks(CarParams.SafetyModel.hyundai, HyundaiSafetyFlags.CAN_CANFD_BLENDED | HyundaiSafetyFlags.LONG)
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hyundai,
+                                 HyundaiSafetyFlags.CAN_CANFD_BLENDED | HyundaiSafetyFlags.LONG | HyundaiSafetyFlags.CANCEL_BTN_ENABLE)
     self.safety.init_tests()
 
   def _accel_msg(self, accel, aeb_req=False, aeb_decel=0):
@@ -303,6 +304,15 @@ class TestHyundaiCanCanfdBlendedLongitudinalSafety(HyundaiLongitudinalBase, Test
 
   def test_no_aeb_fca11(self):
     pass
+
+  def test_cancel_button_enables_controls_from_standby(self):
+    self.assertFalse(self.safety.get_controls_allowed())
+
+    self._rx(self._button_msg(Buttons.CANCEL))
+    self.assertFalse(self.safety.get_controls_allowed())
+
+    self._rx(self._button_msg(Buttons.NONE))
+    self.assertTrue(self.safety.get_controls_allowed())
 
 
 class TestHyundaiLongitudinalSafetyCameraSCC(HyundaiLongitudinalBase, TestHyundaiSafety):

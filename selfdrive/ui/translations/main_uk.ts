@@ -2247,14 +2247,6 @@
         <translation>&lt;b&gt;Прискорення, що імітує поведінку людини&lt;/b&gt;, шляхом послаблення дросельної заслінки на низьких швидкостях і додавання додаткової потужності при рушанні з місця.</translation>
     </message>
     <message>
-        <source>Human-Like Following</source>
-        <translation>Людиноподібне слідування</translation>
-    </message>
-    <message>
-        <source>&lt;b&gt;Following behavior that mimics human drivers&lt;/b&gt; by closing gaps behind faster vehicles for quicker takeoffs and dynamically adjusting the desired following distance for gentler, more efficient braking.</source>
-        <translation>&lt;b&gt;Поведінка, що імітує поведінку водіїв-людей&lt;/b&gt;, шляхом скорочення відстані за швидшими транспортними засобами для швидшого старту та динамічного регулювання бажаної відстані для більш плавного та ефективного гальмування.</translation>
-    </message>
-    <message>
         <source>Lead Detection Sensitivity</source>
         <translation>Чутливість виявлення лідера</translation>
     </message>

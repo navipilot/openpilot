@@ -27,10 +27,10 @@ HYUNDAI_CANFD_SCC_DECEL_STEP = 12.5 / 50.0
 IONIQ_6_RESPONSE_MULTIPLIER = 1.2
 IONIQ_6_CANFD_SCC_ACCEL_STEP = (6.0 / 50.0) * IONIQ_6_RESPONSE_MULTIPLIER
 IONIQ_6_CANFD_SCC_DECEL_STEP = (15.0 / 50.0) * IONIQ_6_RESPONSE_MULTIPLIER
-GENESIS_G90_STOP_HOLD_SPEED_BP = [0.0, 0.03, 0.08, 0.16, 0.3, 0.5]
-GENESIS_G90_STOP_HOLD_ACCEL_V = [-0.12, -0.12, -0.15, -0.22, -0.50, -0.95]
-GENESIS_G90_STOP_HOLD_RELAX_SPEED_BP = [0.0, 0.08, 0.16, 0.3, 0.5]
-GENESIS_G90_STOP_HOLD_RELAX_STEP_V = [0.08, 0.08, 0.06, 0.04, 0.025]
+GENESIS_G90_STOP_HOLD_SPEED_BP = [0.0, 0.03, 0.08, 0.16, 0.3, 0.5, 0.8, 1.2, 2.0, 3.0]
+GENESIS_G90_STOP_HOLD_ACCEL_V = [-0.10, -0.10, -0.12, -0.18, -0.30, -0.50, -0.75, -1.00, -1.40, -1.80]
+GENESIS_G90_STOP_HOLD_RELAX_SPEED_BP = [0.0, 0.08, 0.16, 0.3, 0.5, 0.8, 1.2, 2.0, 3.0]
+GENESIS_G90_STOP_HOLD_RELAX_STEP_V = [0.10, 0.10, 0.08, 0.06, 0.04, 0.035, 0.03, 0.022, 0.018]
 GENESIS_G90_RELEASE_SPEED_BP = [0.0, 0.3, 0.6]
 GENESIS_G90_RELEASE_ACCEL_STEP_V = [0.05, 0.07, 0.11]
 GENESIS_G90_RELEASE_DECEL_STEP_V = [0.16, 0.18, 0.18]
@@ -163,7 +163,8 @@ def update_genesis_g90_longitudinal_tuning(state: GenesisG90LongitudinalTuningSt
   stopping = long_control_state == LongCtrlState.stopping
   if stopping and v_ego <= GENESIS_G90_STOP_HOLD_SPEED_BP[-1]:
     state.release_active = False
-    target_hold = float(np.interp(v_ego, GENESIS_G90_STOP_HOLD_SPEED_BP, GENESIS_G90_STOP_HOLD_ACCEL_V))
+    stop_brake_cap = float(np.interp(v_ego, GENESIS_G90_STOP_HOLD_SPEED_BP, GENESIS_G90_STOP_HOLD_ACCEL_V))
+    target_hold = min(0.0, max(accel_cmd, stop_brake_cap))
     if state.actual_accel < target_hold:
       relax_step = float(np.interp(v_ego, GENESIS_G90_STOP_HOLD_RELAX_SPEED_BP, GENESIS_G90_STOP_HOLD_RELAX_STEP_V))
       state.actual_accel = min(state.actual_accel + relax_step, target_hold)
