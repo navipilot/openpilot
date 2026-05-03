@@ -2833,6 +2833,12 @@ static void drawLaneCenterIndicator(const UIState *s) {
   const SubMaster &sm = *(s->sm);
   if (!sm.alive("modelV2")) return;
 
+  int mode_normal = Params().getInt("ShowPathMode");
+  int mode_lane = Params().getInt("ShowPathModeLane");
+  bool active_lane = sm.alive("controlsState") ? sm["controlsState"].getControlsState().getActiveLaneLine() : false;
+  int current_mode = active_lane ? mode_lane : mode_normal;
+  if (current_mode != 16) return;
+
   const auto &model = sm["modelV2"].getModelV2();
   const auto lane_lines = model.getLaneLines();
   const auto lane_line_probs = model.getLaneLineProbs();
@@ -2955,10 +2961,6 @@ static void drawLaneCenterIndicator(const UIState *s) {
     }
   }
   // 내부 채우기: 하단 완전 불투명(255) → 상단 약 5% 불투명(alpha=13)
-  int mode_normal = Params().getInt("ShowPathMode");
-  int mode_lane = Params().getInt("ShowPathModeLane");
-  bool active_lane = sm.alive("controlsState") ? sm["controlsState"].getControlsState().getActiveLaneLine() : false;
-  int current_mode = active_lane ? mode_lane : mode_normal;
 
   if (current_mode != 16) {
     NVGcolor fill_bot = gradColor(lead_danger, 255);
