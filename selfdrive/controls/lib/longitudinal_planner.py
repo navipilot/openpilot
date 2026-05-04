@@ -99,8 +99,8 @@ UNCERT_SLOPE_TRIG = 0.12  # per second
 UNCERT_MAG_TRIG = 0.50
 
 # Lookup table for turns
-_A_TOTAL_MAX_V = [1.7, 3.2]
-_A_TOTAL_MAX_BP = [20., 40.]
+_A_TOTAL_MAX_V = [3.5, 3.5, 3.2]
+_A_TOTAL_MAX_BP = [0., 20., 40.]
 
 
 def get_longitudinal_personality(sm):
