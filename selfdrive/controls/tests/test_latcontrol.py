@@ -414,6 +414,20 @@ class TestLatControl:
 
     assert captured["threshold"] == pytest.approx(0.3)
 
+  def test_modified_civic_b_torque_path_scales_lat_accel_factor(self, monkeypatch):
+    CarInterface = interfaces[HONDA.HONDA_CIVIC_BOSCH]
+    CP = CarInterface.get_non_essential_params(HONDA.HONDA_CIVIC_BOSCH)
+    CP.flags |= int(HondaFlags.EPS_MODIFIED)
+    CP.lateralTuning.init("torque")
+    CP.lateralTuning.torque.latAccelFactor = 3.0
+    CP.lateralTuning.torque.friction = 0.1
+
+    monkeypatch.setattr(latcontrol_torque, "civic_bosch_modified_lateral_testing_ground_active", lambda: True)
+    CI = CarInterface(CP, custom.StarPilotCarParams.new_message())
+    controller = LatControlTorque(CP.as_reader(), CI, DT_CTRL)
+
+    assert controller.torque_params.latAccelFactor == pytest.approx(3.0 * 1.10)
+
   def test_modified_civic_b_torque_ff_scale_curve(self):
     steady_left = get_civic_bosch_modified_b_ff_scale(0.5, 0.0, 12.0)
     steady_right = get_civic_bosch_modified_b_ff_scale(-0.5, 0.0, 12.0)
