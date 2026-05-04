@@ -17,20 +17,27 @@ def get_civic_bosch_modified_pid_output_scale(desired_angle_deg: float, desired_
   speed_weight = min(max((v_ego - 4.0) / 10.0, 0.0), 1.0)
   center_speed_weight = 0.70 + (0.30 * speed_weight)
   center_weight = min(max((18.0 - abs_angle) / 18.0, 0.0), 1.0)
+  mid_turn_weight = min(max((abs_angle - 10.0) / 10.0, 0.0), 1.0)
   angle_weight = min(max((abs_angle - 18.0) / 10.0, 0.0), 1.0)
   phase = desired_angle_deg * desired_angle_delta_deg
 
   is_left = desired_angle_deg > 0.0
   center_taper = 0.32
+  mid_turn_scale = 0.08 if is_left else -0.06
+  mid_turn_turn_in_scale = 0.05 if is_left else -0.04
+  mid_turn_unwind_scale = -0.03 if is_left else 0.06
   base_scale = 0.12 if is_left else 0.10
   turn_in_scale = 0.12 if is_left else 0.12
   unwind_scale = 0.14 if is_left else 0.18
 
   scale = 1.0 - (center_speed_weight * center_weight * center_taper)
+  scale += speed_weight * mid_turn_weight * mid_turn_scale
   scale += speed_weight * angle_weight * base_scale
   if phase > 0.2:
+    scale += speed_weight * mid_turn_weight * mid_turn_turn_in_scale
     scale += speed_weight * angle_weight * turn_in_scale
   elif phase < -0.2:
+    scale += speed_weight * mid_turn_weight * mid_turn_unwind_scale
     scale -= speed_weight * angle_weight * unwind_scale
 
   return max(scale, 0.70)
