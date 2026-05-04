@@ -23,9 +23,9 @@ def get_civic_bosch_modified_pid_output_scale(desired_angle_deg: float, desired_
 
   is_left = desired_angle_deg > 0.0
   center_taper = 0.32
-  mid_turn_scale = 0.08 if is_left else -0.06
-  mid_turn_turn_in_scale = 0.05 if is_left else -0.04
-  mid_turn_unwind_scale = -0.03 if is_left else 0.06
+  mid_turn_scale = 0.12 if is_left else -0.10
+  mid_turn_turn_in_scale = 0.08 if is_left else -0.08
+  mid_turn_unwind_scale = -0.05 if is_left else -0.08
   base_scale = 0.12 if is_left else 0.10
   turn_in_scale = 0.12 if is_left else 0.12
   unwind_scale = 0.14 if is_left else 0.18
@@ -46,20 +46,22 @@ def get_civic_bosch_modified_pid_output_scale(desired_angle_deg: float, desired_
 def get_civic_bosch_modified_pid_output_alpha(desired_angle_deg: float, desired_angle_delta_deg: float,
                                               v_ego: float, output_torque: float, prev_output_torque: float) -> float:
   abs_angle = abs(desired_angle_deg)
-  if abs_angle < 3.0 or abs_angle > 22.0:
+  if abs_angle < 0.75 or abs_angle > 22.0:
     return 1.0
 
   speed_weight = min(max((v_ego - 4.0) / 10.0, 0.0), 1.0)
-  onset = min(max((abs_angle - 3.0) / 5.0, 0.0), 1.0)
+  onset = min(max((abs_angle - 0.75) / 5.25, 0.0), 1.0)
   cutoff = min(max((22.0 - abs_angle) / 8.0, 0.0), 1.0)
   band_weight = onset * cutoff
+  small_curve_weight = min(max((10.0 - abs_angle) / 4.0, 0.0), 1.0)
   large_turn_weight = min(max((abs_angle - 16.0) / 6.0, 0.0), 1.0)
   transition_weight = min(abs(desired_angle_delta_deg) / 0.35, 1.0)
   sign_change_weight = 1.0 if (output_torque * prev_output_torque) < 0.0 else 0.0
 
   smoothing = band_weight * (0.36 + (0.22 * speed_weight) + (0.12 * transition_weight) + (0.12 * sign_change_weight))
+  smoothing *= 1.0 + (0.25 * small_curve_weight)
   smoothing *= 1.0 - (0.50 * large_turn_weight)
-  return min(max(1.0 - smoothing, 0.18), 1.0)
+  return min(max(1.0 - smoothing, 0.16), 1.0)
 
 
 class LatControlPID(LatControl):
