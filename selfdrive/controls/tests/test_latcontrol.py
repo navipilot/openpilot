@@ -263,7 +263,7 @@ class TestLatControl:
     assert get_ioniq_6_output_taper_scale(-1.2, 0.7, 25.0) <= get_ioniq_6_output_taper_scale(-1.2, 0.0, 25.0)
 
   def test_ioniq_6_friction_threshold_curve(self):
-    base = max(get_friction_threshold(6.0), 0.35)
+    base = max(get_friction_threshold(6.0), 0.36)
     left_turn_in = get_ioniq_6_friction_threshold(6.0, 0.5, 0.8)
     right_turn_in = get_ioniq_6_friction_threshold(6.0, -0.5, -0.8)
     left_unwind = get_ioniq_6_friction_threshold(6.0, 0.5, -0.8)
@@ -271,7 +271,7 @@ class TestLatControl:
     assert max(left_turn_in, right_turn_in) < base
     assert left_unwind >= base
     assert right_unwind >= base
-    assert get_ioniq_6_friction_threshold(25.0, 0.0, 0.0) >= 0.35
+    assert get_ioniq_6_friction_threshold(25.0, 0.0, 0.0) >= 0.36
 
   def test_ioniq_6_friction_scale_curve(self):
     base = get_ioniq_6_friction_scale(25.0, 0.5, 0.8)
