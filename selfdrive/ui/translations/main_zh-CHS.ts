@@ -315,27 +315,29 @@
         <source>openpilot learns to drive by watching humans, like you, drive.
 
 Firehose Mode allows you to maximize your training data uploads to improve openpilot&apos;s driving models. More data means bigger models, which means better Experimental Mode.</source>
-        <translation type="unfinished"></translation>
+        <translation>openpilot 通过观察像你一样的人类驾驶来学习。
+
+Firehose 模式可让你最大化上传训练数据，以改进 openpilot 的驾驶模型。数据越多，模型越大，实验模式表现越好。</translation>
     </message>
     <message>
         <source>Firehose Mode: ACTIVE</source>
-        <translation type="unfinished"></translation>
+        <translation>Firehose 模式：已启用</translation>
     </message>
     <message>
         <source>For maximum effectiveness, bring your device inside and connect to a good USB-C adapter and Wi-Fi weekly.&lt;br&gt;&lt;br&gt;Firehose Mode can also work while you&apos;re driving if connected to a hotspot or unlimited SIM card.&lt;br&gt;&lt;br&gt;&lt;br&gt;&lt;b&gt;Frequently Asked Questions&lt;/b&gt;&lt;br&gt;&lt;br&gt;&lt;i&gt;Does it matter how or where I drive?&lt;/i&gt; Nope, just drive as you normally would.&lt;br&gt;&lt;br&gt;&lt;i&gt;What&apos;s a good USB-C adapter?&lt;/i&gt; Any fast phone or laptop charger should be fine.&lt;br&gt;&lt;br&gt;&lt;i&gt;Does it matter which software I run?&lt;/i&gt; Yes, only upstream openpilot (and particular forks) are able to be used for training.</source>
-        <translation type="unfinished"></translation>
+        <translation>为获得最佳效果，建议每周将设备带到室内，连接优质 USB-C 适配器和 Wi-Fi。&lt;br&gt;&lt;br&gt;如果连接热点或不限量 SIM 卡，Firehose 模式在行驶中也可工作。&lt;br&gt;&lt;br&gt;&lt;br&gt;&lt;b&gt;常见问题&lt;/b&gt;&lt;br&gt;&lt;br&gt;&lt;i&gt;我怎么开、在哪开有影响吗？&lt;/i&gt; 没影响，像平时一样驾驶即可。&lt;br&gt;&lt;br&gt;&lt;i&gt;什么算好的 USB-C 适配器？&lt;/i&gt; 任意手机或笔记本快充适配器通常都可以。&lt;br&gt;&lt;br&gt;&lt;i&gt;运行哪个软件有影响吗？&lt;/i&gt; 有影响，只有上游 openpilot（以及部分特定分支）可用于训练。</translation>
     </message>
     <message>
         <source>&lt;b&gt;%1 %2&lt;/b&gt; of your driving are in the training dataset so far.</source>
-        <translation type="unfinished"></translation>
+        <translation>截至目前，你的驾驶数据中有 &lt;b&gt;%1 %2&lt;/b&gt; 已进入训练数据集。</translation>
     </message>
     <message>
         <source>ACTIVE</source>
-        <translation type="unfinished"></translation>
+        <translation>已启用</translation>
     </message>
     <message>
         <source>&lt;span stylesheet=&apos;font-size: 60px; font-weight: bold; color: #e74c3c;&apos;&gt;INACTIVE&lt;/span&gt;: connect to unmetered network</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;span stylesheet=&apos;font-size: 60px; font-weight: bold; color: #e74c3c;&apos;&gt;未启用&lt;/span&gt;：请连接非计量网络</translation>
     </message>
 </context>
 <context>
@@ -993,11 +995,11 @@ This may take up to a minute.</source>
     </message>
     <message>
         <source>Welcome to openpilot</source>
-        <translation type="unfinished"></translation>
+        <translation>欢迎使用 openpilot</translation>
     </message>
     <message>
         <source>You must accept the Terms and Conditions to use openpilot. Read the latest terms at &lt;span style=&apos;color: #465BEA;&apos;&gt;https://comma.ai/terms&lt;/span&gt; before continuing.</source>
-        <translation type="unfinished"></translation>
+        <translation>使用 openpilot 前必须接受条款与条件。继续前请先阅读最新条款：&lt;span style=&apos;color: #465BEA;&apos;&gt;https://comma.ai/terms&lt;/span&gt;。</translation>
     </message>
 </context>
 <context>
@@ -1109,6 +1111,317 @@ This may take up to a minute.</source>
     <message>
         <source>Enable driver monitoring even when openpilot is not engaged.</source>
         <translation>即使在openpilot未激活时也启用驾驶员监控。</translation>
+    </message>
+</context>
+<context>
+    <name>CarrotPanel</name>
+    <message>
+        <source>Start</source>
+        <translation>开始</translation>
+    </message>
+    <message>
+        <source>Cruise</source>
+        <translation>巡航</translation>
+    </message>
+    <message>
+        <source>Speed</source>
+        <translation>速度</translation>
+    </message>
+    <message>
+        <source>Tuning</source>
+        <translation>调校</translation>
+    </message>
+    <message>
+        <source>Disp</source>
+        <translation>显示</translation>
+    </message>
+    <message>
+        <source>Path</source>
+        <translation>路径</translation>
+    </message>
+    <message>
+        <source>SELECT YOUR CAR</source>
+        <translation>选择你的车型</translation>
+    </message>
+    <message>
+        <source>Select Manufacturer</source>
+        <translation>选择厂商</translation>
+    </message>
+    <message>
+        <source>Select your car</source>
+        <translation>选择你的车型</translation>
+    </message>
+    <message>
+        <source>Lateral Control Enabled</source>
+        <translation>横向控制开关</translation>
+    </message>
+    <message>
+        <source>Enable or disable lateral control function</source>
+        <translation>启用或禁用横向控制功能</translation>
+    </message>
+    <message>
+        <source>Lateral Control Min Speed</source>
+        <translation>横向控制最低速度</translation>
+    </message>
+    <message>
+        <source>Minimum speed (km/h) to enable lateral control</source>
+        <translation>启用横向控制的最低车速（km/h）</translation>
+    </message>
+    <message>
+        <source>HYUNDAI: CAMERA SCC</source>
+        <translation>现代：摄像头 SCC</translation>
+    </message>
+    <message>
+        <source>1:Connect the SCC&apos;s CAN line to CAM, 2:Sync Cruise state, 3:StockLong</source>
+        <translation>1：将 SCC 的 CAN 线连接到摄像头，2：同步巡航状态，3：原厂纵向</translation>
+    </message>
+    <message>
+        <source>CANFD: HDA2 mode</source>
+        <translation>CANFD：HDA2 模式</translation>
+    </message>
+    <message>
+        <source>1:HDA2,2:HDA2+BSM</source>
+        <translation>1：HDA2，2：HDA2+BSD</translation>
+    </message>
+    <message>
+        <source>Enable Radar Track</source>
+        <translation>启用雷达轨迹</translation>
+    </message>
+    <message>
+        <source>1:Enable RadarTrack, -1,2:Disable use HKG SCC radar at all times</source>
+        <translation>1：启用雷达轨迹，-1/2：始终不使用 HKG SCC 雷达</translation>
+    </message>
+    <message>
+        <source>Auto Cruise control</source>
+        <translation>自动巡航控制</translation>
+    </message>
+    <message>
+        <source>Softhold, Auto Cruise ON/OFF control</source>
+        <translation>Softhold 与自动巡航开关控制</translation>
+    </message>
+    <message>
+        <source>CRUISE: Auto ON distance(0cm)</source>
+        <translation>巡航：自动开启距离（0cm）</translation>
+    </message>
+    <message>
+        <source>When GAS/Brake is OFF, Cruise ON when the lead car gets closer.</source>
+        <translation>当油门/刹车都未踩下时，前车靠近将自动开启巡航。</translation>
+    </message>
+    <message>
+        <source>Auto Engage control on start</source>
+        <translation>起步自动接管控制</translation>
+    </message>
+    <message>
+        <source>1:SteerEnable, 2:Steer/Cruise Engage</source>
+        <translation>1：仅转向接管，2：转向与巡航接管</translation>
+    </message>
+    <message>
+        <source>Auto AccelTok speed</source>
+        <translation>自动油门接管速度</translation>
+    </message>
+    <message>
+        <source>Gas(Accel)Tok enable speed</source>
+        <translation>油门接管启用速度</translation>
+    </message>
+    <message>
+        <source>Read Cruise Speed from PCM</source>
+        <translation>从 PCM 读取巡航速度</translation>
+    </message>
+    <message>
+        <source>Toyota must set to 1, Honda 3</source>
+        <translation>丰田建议设为 1，本田设为 3</translation>
+    </message>
+    <message>
+        <source>Sound Volume(100%)</source>
+        <translation>声音音量（100%）</translation>
+    </message>
+    <message>
+        <source>Sound Volume, Engage(10%)</source>
+        <translation>接管提示音量（10%）</translation>
+    </message>
+    <message>
+        <source>Power off time (min)</source>
+        <translation>关机等待时间（分钟）</translation>
+    </message>
+    <message>
+        <source>EnableConnect</source>
+        <translation>启用 Connect</translation>
+    </message>
+    <message>
+        <source>Your device may be banned by Comma</source>
+        <translation>你的设备可能会被 Comma 限制</translation>
+    </message>
+    <message>
+        <source>Mapbox Style(0)</source>
+        <translation>Mapbox 样式（0）</translation>
+    </message>
+    <message>
+        <source>Record Road camera(0)</source>
+        <translation>录制道路摄像头（0）</translation>
+    </message>
+    <message>
+        <source>1:RoadCam, 2:RoadCam+WideRoadCam</source>
+        <translation>1：道路摄像头，2：道路摄像头+广角道路摄像头</translation>
+    </message>
+    <message>
+        <source>Use HDP(CCNC)(0)</source>
+        <translation>使用 HDP(CCNC)（0）</translation>
+    </message>
+    <message>
+        <source>1:While Using APN, 2:Always</source>
+        <translation>1：使用 APN 时，2：始终使用</translation>
+    </message>
+    <message>
+        <source>NNFF</source>
+        <translation>NNFF</translation>
+    </message>
+    <message>
+        <source>Twilsonco&apos;s NNFF(Reboot required)</source>
+        <translation>Twilsonco 的 NNFF（需要重启）</translation>
+    </message>
+    <message>
+        <source>NNFFLite</source>
+        <translation>NNFFLite</translation>
+    </message>
+    <message>
+        <source>Twilsonco&apos;s NNFF-Lite(Reboot required)</source>
+        <translation>Twilsonco 的 NNFF-Lite（需要重启）</translation>
+    </message>
+    <message>
+        <source>Auto update Cruise speed</source>
+        <translation>自动更新巡航速度</translation>
+    </message>
+    <message>
+        <source>Disable Min.SteerSpeed</source>
+        <translation>禁用最低转向速度限制</translation>
+    </message>
+    <message>
+        <source>Disable DM</source>
+        <translation>禁用驾驶员监控</translation>
+    </message>
+    <message>
+        <source>Hotspot enabled on boot</source>
+        <translation>开机自动开启热点</translation>
+    </message>
+    <message>
+        <source>Enable Software Menu</source>
+        <translation>启用软件菜单</translation>
+    </message>
+    <message>
+        <source>IsLdwsCar</source>
+        <translation>LDWS 车型标记</translation>
+    </message>
+    <message>
+        <source>CURVE: Lower limit speed(30)</source>
+        <translation>弯道：最低限速（30）</translation>
+    </message>
+    <message>
+        <source>When you approach a curve, reduce your speed. Minimum speed</source>
+        <translation>接近弯道时自动降速。此项为最低速度。</translation>
+    </message>
+    <message>
+        <source>CURVE: Auto Control ratio(100%)</source>
+        <translation>弯道：自动控制比例（100%）</translation>
+    </message>
+    <message>
+        <source>CURVE: Aggressiveness (100%)</source>
+        <translation>弯道：激进程度（100%）</translation>
+    </message>
+    <message>
+        <source>RoadSpeedLimitOffset(-1)</source>
+        <translation>道路限速偏移（-1）</translation>
+    </message>
+    <message>
+        <source>-1:NotUsed,RoadLimitSpeed+Offset</source>
+        <translation>-1：不使用，其他值：道路限速+偏移</translation>
+    </message>
+    <message>
+        <source>Auto Roadlimit Speed adjust (50%)</source>
+        <translation>自动道路限速调整（50%）</translation>
+    </message>
+    <message>
+        <source>SpeedCamDecelEnd(6s)</source>
+        <translation>测速相机减速结束点（6秒）</translation>
+    </message>
+    <message>
+        <source>Sets the deceleration completion point. A larger value completes deceleration farther away from the camera.</source>
+        <translation>设置减速完成点。数值越大，离相机越远时完成减速。</translation>
+    </message>
+    <message>
+        <source>NaviSpeedControlMode(2)</source>
+        <translation>导航限速控制模式（2）</translation>
+    </message>
+    <message>
+        <source>0:No slowdown, 1: speed camera, 2: + accident prevention bump, 3: + mobile camera</source>
+        <translation>0：不减速，1：测速相机，2：+减速带，3：+移动测速</translation>
+    </message>
+    <message>
+        <source>SpeedCamDecelRatex0.01m/s^2(80)</source>
+        <translation>测速相机减速度 x0.01m/s²（80）</translation>
+    </message>
+    <message>
+        <source>Lower number, slows down from a greater distance</source>
+        <translation>数值越小，越早开始减速。</translation>
+    </message>
+    <message>
+        <source>SpeedCamSafetyFactor(105%)</source>
+        <translation>测速相机安全系数（105%）</translation>
+    </message>
+    <message>
+        <source>SpeedBumpTimeDistance(1s)</source>
+        <translation>减速带时间距离（1秒）</translation>
+    </message>
+    <message>
+        <source>SpeedBumpSpeed(35Km/h)</source>
+        <translation>减速带速度（35km/h）</translation>
+    </message>
+    <message>
+        <source>NaviCountDown mode(2)</source>
+        <translation>导航倒计时模式（2）</translation>
+    </message>
+    <message>
+        <source>0: off, 1:tbt+camera, 2:tbt+camera+bump</source>
+        <translation>0：关闭，1：转向+相机，2：转向+相机+减速带</translation>
+    </message>
+    <message>
+        <source>Turn Speed control mode(1)</source>
+        <translation>转弯速度控制模式（1）</translation>
+    </message>
+    <message>
+        <source>0: off, 1:vision, 2:vision+route, 3: route</source>
+        <translation>0：关闭，1：视觉，2：视觉+路线，3：路线</translation>
+    </message>
+    <message>
+        <source>Map TurnSpeed Factor(100)</source>
+        <translation>地图转弯速度系数（100）</translation>
+    </message>
+    <message>
+        <source>ATC: Auto turn control(0)</source>
+        <translation>ATC：自动转向控制（0）</translation>
+    </message>
+    <message>
+        <source>0:None, 1: lane change, 2: lane change + speed, 3: speed</source>
+        <translation>0：关闭，1：仅变道，2：变道+速度，3：仅速度</translation>
+    </message>
+    <message>
+        <source>ATC: Turn Speed (20)</source>
+        <translation>ATC：转弯速度（20）</translation>
+    </message>
+    <message>
+        <source>0:None, turn speed</source>
+        <translation>0：关闭，其它值为转弯速度</translation>
+    </message>
+    <message>
+        <source>ATC: Turn CtrlDistTime (6)</source>
+        <translation>ATC：转弯控制距离时间（6）</translation>
+    </message>
+    <message>
+        <source>dist=speed*time</source>
+        <translation>距离=速度×时间</translation>
+    </message>
+    <message>
+        <source>ATC Auto Map Change(0)</source>
+        <translation>ATC 自动地图切换（0）</translation>
     </message>
 </context>
 <context>
