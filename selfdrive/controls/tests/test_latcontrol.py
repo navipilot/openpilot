@@ -260,7 +260,7 @@ class TestLatControl:
     assert get_ioniq_6_output_taper_scale(1.2, 0.0, 25.0) > 0.94
 
   def test_ioniq_6_friction_threshold_curve(self):
-    base = max(get_friction_threshold(6.0), 0.34)
+    base = max(get_friction_threshold(6.0), 0.36)
     left_turn_in = get_ioniq_6_friction_threshold(6.0, 0.5, 0.8)
     right_turn_in = get_ioniq_6_friction_threshold(6.0, -0.5, -0.8)
     left_unwind = get_ioniq_6_friction_threshold(6.0, 0.5, -0.8)
@@ -268,7 +268,7 @@ class TestLatControl:
     assert max(left_turn_in, right_turn_in) < base
     assert left_unwind >= base
     assert right_unwind >= base
-    assert get_ioniq_6_friction_threshold(25.0, 0.0, 0.0) >= 0.34
+    assert get_ioniq_6_friction_threshold(25.0, 0.0, 0.0) >= 0.36
 
   def test_ioniq_6_friction_scale_curve(self):
     base = get_ioniq_6_friction_scale(25.0, 0.5, 0.8)
@@ -369,7 +369,7 @@ class TestLatControl:
     _, _, lac_log = controller.update(True, CS, VM, params, False, 0.0025, False, 0.2, None, None, starpilot_toggles)
 
     assert lac_log.active
-    assert controller.torque_params.latAccelFactor == pytest.approx(3.0 * 1.22)
+    assert controller.torque_params.latAccelFactor == pytest.approx(3.0 * 1.24)
 
   def test_ioniq_6_update_path_does_not_post_taper_output(self, monkeypatch):
     base_controller, VM, CS, params, starpilot_toggles = self._build_torque_controller(HYUNDAI.HYUNDAI_IONIQ_6)
