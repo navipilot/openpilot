@@ -99,6 +99,9 @@ def create_steering_messages(packer, CP, CAN, enabled, lat_active, apply_torque,
     "LKA_ASSIST": 0,
     "STEER_REQ": 0 if CP.flags & HyundaiFlags.CANFD_ANGLE_STEERING else (1 if lat_active else 0),
     "STEER_MODE": 0,
+    "DAMP_FACTOR": 100,
+    "NEW_SIGNAL_1": 0,
+    "NEW_SIGNAL_2": 0,
   }
 
   lkas_values = copy.copy(control_values)
@@ -111,9 +114,6 @@ def create_steering_messages(packer, CP, CAN, enabled, lat_active, apply_torque,
   else:
     lfa_values = copy.copy(control_values)
     lfa_values["HAS_LANE_SAFETY"] = 0  # hide LKAS settings
-    lfa_values["NEW_SIGNAL_1"] = 0
-    lfa_values["NEW_SIGNAL_2"] = 0
-    lfa_values["DAMP_FACTOR"] = 100  # can potentially tuned for better perf [3, 200]
 
   if CP.flags & HyundaiFlags.CANFD_ANGLE_STEERING and CP.flags & HyundaiFlags.CANFD_LKA_STEERING_ALT:
     lkas_values["ADAS_StrAnglReqVal"] = apply_angle
