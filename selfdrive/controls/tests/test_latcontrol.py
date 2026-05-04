@@ -429,7 +429,7 @@ class TestLatControl:
     CI = CarInterface(CP, custom.StarPilotCarParams.new_message())
     controller = LatControlTorque(CP.as_reader(), CI, DT_CTRL)
 
-    assert controller.torque_params.latAccelFactor == pytest.approx(3.0 * 1.10)
+    assert controller.torque_params.latAccelFactor == pytest.approx(3.0 * 1.20)
 
   def test_modified_civic_b_torque_ff_scale_curve(self):
     steady_left = get_civic_bosch_modified_b_ff_scale(0.5, 0.0, 12.0)
