@@ -63,7 +63,7 @@ def get_default_params():
     ("AutoGasTokSpeed", "0"),
     ("AutoGasSyncSpeed", "1"),
     ("AutoEngage", "0"),
-    ("LateralControlEnabled", "0"),
+    ("LateralControlEnabled", "1"),
     ("LateralControlMinSpeed", "55"),
     ("DisableMinSteerSpeed", "0"),
     ("SoftHoldMode", "0"),

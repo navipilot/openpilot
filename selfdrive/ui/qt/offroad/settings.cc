@@ -828,7 +828,7 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
   startToggles->addItem(new CValueControl("AutoCruiseControl", tr("Auto Cruise control"), tr("Softhold, Auto Cruise ON/OFF control"), 0, 3, 1));
   startToggles->addItem(new CValueControl("CruiseOnDist", tr("CRUISE: Auto ON distance(0cm)"), tr("When GAS/Brake is OFF, Cruise ON when the lead car gets closer."), 0, 2500, 50));
   startToggles->addItem(new CValueControl("AutoEngage", tr("Auto Engage control on start"), tr("1:SteerEnable, 2:Steer/Cruise Engage"), 0, 2, 1));
-  startToggles->addItem(new CValueControl("LateralControlEnabled", tr("Lateral Control Enabled"), tr("Enable or disable lateral control function"), 0, 1, 0));
+  startToggles->addItem(new ParamControl("LateralControlEnabled", tr("Lateral Control Enabled"), tr("Enable or disable lateral control function"), "", this));
   startToggles->addItem(new CValueControl("LateralControlMinSpeed", tr("Lateral Control Min Speed"), tr("Minimum speed (km/h) to enable lateral control"), 0, 120, 55));
   startToggles->addItem(new CValueControl("AutoGasTokSpeed", tr("Auto AccelTok speed"), tr("Gas(Accel)Tok enable speed"), 0, 200, 5));
   startToggles->addItem(new CValueControl("SpeedFromPCM", tr("Read Cruise Speed from PCM"), tr("Toyota must set to 1, Honda 3"), 0, 3, 1));
