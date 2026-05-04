@@ -109,3 +109,12 @@ STEER_THRESHOLD = 15
 EPS_SCALE = defaultdict(lambda: 73)
 
 DBC = CAR.create_dbc_map()
+
+if __name__ == "__main__":
+  cars = []
+  for platform in CAR:
+    for doc in platform.config.car_docs:
+      cars.append(doc.name)
+  cars.sort()
+  for c in cars:
+    print(c)
