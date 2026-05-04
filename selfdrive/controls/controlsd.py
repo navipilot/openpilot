@@ -109,13 +109,27 @@ class Controls:
     # Check which actuators can be enabled
     standstill = abs(CS.vEgo) <= max(self.CP.minSteerSpeed, MIN_LATERAL_CONTROL_SPEED) or CS.standstill
 
-    lateral_control_enabled = self.params.get_int("LateralControlEnabled") == 1
+    # 获取新参数
+    lateral_control_enabled = self.params.get_int("LateralControlEnabled") == 1  # 修正：使用get_int()
     lateral_min_speed_kph = self.params.get_int("LateralControlMinSpeed")
-    lateral_min_speed_ms = lateral_min_speed_kph * CV.KPH_TO_MS
+    lateral_min_speed_ms = lateral_min_speed_kph * CV.KPH_TO_MS  # 转换为 m/s
 
+    # 修改横向控制激活条件 - 保留原有的active条件
     CC.latActive = ((self.sm['selfdriveState'].active or lateral_control_enabled) and
-            lateral_control_enabled and driving_gear and CS.vEgo >= lateral_min_speed_ms and CS.latEnabled and
-                    not CS.steerFaultTemporary and not CS.steerFaultPermanent and not standstill)
+                    lateral_control_enabled and
+                    driving_gear and
+                    CS.vEgo >= lateral_min_speed_ms and
+                    CS.latEnabled and
+                    not CS.steerFaultTemporary and
+                    not CS.steerFaultPermanent and
+                    not standstill)
+
+    if self.sm.frame % 100 == 0:
+      print(f"[LAT_DBG] latActive={CC.latActive} enabled={lateral_control_enabled} active={self.sm['selfdriveState'].active} "
+            f"vEgoKph={CS.vEgo * CV.MS_TO_KPH:.1f} minKph={lateral_min_speed_kph} drivingGear={driving_gear} "
+            f"latEnabled={CS.latEnabled} steerFaultTmp={CS.steerFaultTemporary} steerFaultPerm={CS.steerFaultPermanent} "
+            f"standstill={standstill}")
+
     CC.longActive = CC.enabled and not any(e.overrideLongitudinal for e in self.sm['onroadEvents']) and self.CP.openpilotLongitudinalControl
 
     actuators = CC.actuators
@@ -148,6 +162,10 @@ class Controls:
     if steer_actuator_delay == 0.0:
       steer_actuator_delay = self.sm['liveDelay'].lateralDelay
 
+    def smooth_value(val, prev_val, tau):
+      alpha = 1 - np.exp(-DT_CTRL / tau) if tau > 0 else 1
+      return alpha * val + (1 - alpha) * prev_val
+
     if len(model_v2.position.yStd) > 0:
       yStd = np.interp(steer_actuator_delay + lat_smooth_seconds, ModelConstants.T_IDXS, model_v2.position.yStd)
       self.yStd = yStd * 0.02 + self.yStd * 0.98
@@ -160,10 +178,6 @@ class Controls:
       if len(lat_plan.curvatures) == 0:
         new_desired_curvature = self.curvature
       else:
-        def smooth_value(val, prev_val, tau):
-          alpha = 1 - np.exp(-DT_CTRL / tau) if tau > 0 else 1
-          return alpha * val + (1 - alpha) * prev_val
-
         curvature = get_lag_adjusted_curvature(self.CP, CS.vEgo, lat_plan.psis, lat_plan.curvatures, steer_actuator_delay + lat_smooth_seconds, lat_plan.distances)
 
         new_desired_curvature = smooth_value(curvature, self.desired_curvature, lat_smooth_seconds)

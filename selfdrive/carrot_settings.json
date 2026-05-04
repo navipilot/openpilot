@@ -1330,6 +1330,32 @@
     },
     {
       "group": "시작",
+      "name": "LateralControlEnabled",
+      "title": "横向控制开关(0)",
+      "descr": "0:关闭\n1:开启",
+      "egroup": "启动",
+      "etitle": "横向控制开关(0)",
+      "edescr": "0:关闭, 1:开启",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "시작",
+      "name": "LateralControlMinSpeed",
+      "title": "横向控制最低速度(55km/h)",
+      "descr": "横向控制启用最低速度",
+      "egroup": "启动",
+      "etitle": "横向控制最低速度(55km/h)",
+      "edescr": "横向控制启用最低速度",
+      "min": 0,
+      "max": 120,
+      "default": 55,
+      "unit": 5
+    },
+    {
+      "group": "시작",
       "name": "MaxAngleFrames",
       "title": "MaxAngleFrames(89)",
       "descr": "89 권장",
