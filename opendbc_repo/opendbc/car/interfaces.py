@@ -183,14 +183,13 @@ class CarInterfaceBase(ABC):
     ret.tireStiffnessFront, ret.tireStiffnessRear = scale_tire_stiffness(ret.mass, ret.wheelbase, ret.centerToFront, ret.tireStiffnessFactor)
 
     toggles_to_check = ("force_torque_controller", "nnff", "nnff_lite")
-    modified_civic_b_force_torque = (
+    modified_civic_force_torque = (
       candidate == HONDA.HONDA_CIVIC_BOSCH and
-      bool(ret.flags & HondaFlags.EPS_MODIFIED) and
-      testing_ground.use("8", "B")
+      bool(ret.flags & HondaFlags.EPS_MODIFIED)
     )
     if ret.steerControlType != structs.CarParams.SteerControlType.angle and (
       any(getattr(starpilot_toggles, toggle, False) for toggle in toggles_to_check) or
-      modified_civic_b_force_torque
+      modified_civic_force_torque
     ):
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 

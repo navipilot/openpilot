@@ -230,21 +230,21 @@ IONIQ_6_FF_CUTOFF = 0.48
 IONIQ_6_FF_CUTOFF_WIDTH = 0.12
 IONIQ_6_TRANSITION_SPEED = 10.0
 IONIQ_6_PHASE_SCALE = 0.10
-IONIQ_6_TURN_IN_BOOST_LEFT = 1.20
-IONIQ_6_TURN_IN_BOOST_RIGHT = 1.28
-IONIQ_6_UNWIND_TAPER_LEFT = 2.02
-IONIQ_6_UNWIND_TAPER_RIGHT = 4.65
+IONIQ_6_TURN_IN_BOOST_LEFT = 1.28
+IONIQ_6_TURN_IN_BOOST_RIGHT = 1.36
+IONIQ_6_UNWIND_TAPER_LEFT = 2.18
+IONIQ_6_UNWIND_TAPER_RIGHT = 5.05
 IONIQ_6_FRICTION_MULT = 0.965
 IONIQ_6_FRICTION_LAT_RISE = 0.20
 IONIQ_6_FRICTION_JERK_RISE = 0.24
-IONIQ_6_TURN_IN_THRESHOLD_REDUCTION_LEFT = 0.42
-IONIQ_6_TURN_IN_THRESHOLD_REDUCTION_RIGHT = 0.58
-IONIQ_6_UNWIND_THRESHOLD_INCREASE_LEFT = 2.25
-IONIQ_6_UNWIND_THRESHOLD_INCREASE_RIGHT = 5.35
-IONIQ_6_TURN_IN_FRICTION_BOOST_LEFT = 0.22
-IONIQ_6_TURN_IN_FRICTION_BOOST_RIGHT = 0.36
-IONIQ_6_UNWIND_FRICTION_REDUCTION_LEFT = 1.95
-IONIQ_6_UNWIND_FRICTION_REDUCTION_RIGHT = 4.90
+IONIQ_6_TURN_IN_THRESHOLD_REDUCTION_LEFT = 0.46
+IONIQ_6_TURN_IN_THRESHOLD_REDUCTION_RIGHT = 0.64
+IONIQ_6_UNWIND_THRESHOLD_INCREASE_LEFT = 2.40
+IONIQ_6_UNWIND_THRESHOLD_INCREASE_RIGHT = 5.80
+IONIQ_6_TURN_IN_FRICTION_BOOST_LEFT = 0.24
+IONIQ_6_TURN_IN_FRICTION_BOOST_RIGHT = 0.40
+IONIQ_6_UNWIND_FRICTION_REDUCTION_LEFT = 2.15
+IONIQ_6_UNWIND_FRICTION_REDUCTION_RIGHT = 5.30
 IONIQ_6_CENTER_TAPER_MAX = 0.056
 IONIQ_6_CENTER_TAPER_LAT = 0.22
 IONIQ_6_CENTER_TAPER_LAT_WIDTH = 0.02
@@ -267,12 +267,12 @@ IONIQ_6_DIRECTIONAL_TAPER_FLOOR_LEFT = 0.48
 IONIQ_6_DIRECTIONAL_TAPER_FLOOR_RIGHT = 0.52
 IONIQ_6_DIRECTIONAL_TAPER_UNWIND_FLOOR_LEFT = 0.10
 IONIQ_6_DIRECTIONAL_TAPER_UNWIND_FLOOR_RIGHT = 0.04
-IONIQ_6_HEAVY_DIRECTIONAL_TAPER_LAT_START = 0.95
-IONIQ_6_HEAVY_DIRECTIONAL_TAPER_LAT_WIDTH = 0.10
-IONIQ_6_HEAVY_DIRECTIONAL_TAPER_BASE_LEFT = 0.12
-IONIQ_6_HEAVY_DIRECTIONAL_TAPER_BASE_RIGHT = 0.22
-IONIQ_6_HEAVY_DIRECTIONAL_TAPER_UNWIND_LEFT = 0.42
-IONIQ_6_HEAVY_DIRECTIONAL_TAPER_UNWIND_RIGHT = 0.70
+IONIQ_6_HEAVY_DIRECTIONAL_TAPER_LAT_START = 0.82
+IONIQ_6_HEAVY_DIRECTIONAL_TAPER_LAT_WIDTH = 0.12
+IONIQ_6_HEAVY_DIRECTIONAL_TAPER_BASE_LEFT = 0.15
+IONIQ_6_HEAVY_DIRECTIONAL_TAPER_BASE_RIGHT = 0.26
+IONIQ_6_HEAVY_DIRECTIONAL_TAPER_UNWIND_LEFT = 0.50
+IONIQ_6_HEAVY_DIRECTIONAL_TAPER_UNWIND_RIGHT = 0.82
 IONIQ_6_OUTPUT_TAPER_SPEED = 8.5
 IONIQ_6_OUTPUT_TAPER_SPEED_WIDTH = 2.5
 IONIQ_6_OUTPUT_CENTER_TAPER_BLEND = 0.90
@@ -1074,7 +1074,7 @@ class LatControlTorque(LatControl):
     self.torque_ki_mult = 1.0
     if self.is_ioniq_6:
       self.torque_params.latAccelFactor *= IONIQ_6_BASE_LAT_ACCEL_FACTOR_MULT
-    if self.is_civic_bosch_modified and civic_bosch_modified_lateral_testing_ground_active():
+    if self.is_civic_bosch_modified:
       self.torque_params.latAccelFactor *= CIVIC_BOSCH_MODIFIED_B_LAT_ACCEL_FACTOR_MULT
     if self.is_bolt:
       kp_scale = getattr(self.torque_params, "kp", getattr(self.torque_params, "kpDEPRECATED", 1.0))
@@ -1089,7 +1089,7 @@ class LatControlTorque(LatControl):
   def update_live_torque_params(self, latAccelFactor, latAccelOffset, friction):
     if self.is_ioniq_6:
       latAccelFactor *= IONIQ_6_BASE_LAT_ACCEL_FACTOR_MULT
-    if self.is_civic_bosch_modified and civic_bosch_modified_lateral_testing_ground_active():
+    if self.is_civic_bosch_modified:
       latAccelFactor *= CIVIC_BOSCH_MODIFIED_B_LAT_ACCEL_FACTOR_MULT
     self.torque_params.latAccelFactor = latAccelFactor
     self.torque_params.latAccelOffset = latAccelOffset
@@ -1194,7 +1194,7 @@ class LatControlTorque(LatControl):
         ff *= get_volt_plexy_ff_scale(setpoint, desired_lateral_jerk, CS.vEgo)
         friction_threshold = get_volt_plexy_friction_threshold(CS.vEgo, setpoint, desired_lateral_jerk)
         friction_scale = get_volt_plexy_friction_scale(CS.vEgo, setpoint, desired_lateral_jerk)
-      elif self.is_civic_bosch_modified and civic_bosch_modified_lateral_testing_ground_active():
+      elif self.is_civic_bosch_modified:
         ff *= get_civic_bosch_modified_b_ff_scale(setpoint, desired_lateral_jerk, CS.vEgo)
         friction_threshold = CIVIC_BOSCH_MODIFIED_B_FIXED_FRICTION_THRESHOLD
         friction_scale = get_civic_bosch_modified_b_friction_scale(CS.vEgo, setpoint, desired_lateral_jerk)

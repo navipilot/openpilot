@@ -411,7 +411,6 @@ class TestLatControl:
       captured["threshold"] = friction_threshold
       return 0.0
 
-    monkeypatch.setattr(latcontrol_torque, "civic_bosch_modified_lateral_testing_ground_active", lambda: True)
     monkeypatch.setattr(latcontrol_torque, "get_friction", fake_get_friction)
     controller.update(True, CS, VM, params, False, 0.0025, False, 0.2, None, None, SimpleNamespace())
 
@@ -425,7 +424,6 @@ class TestLatControl:
     CP.lateralTuning.torque.latAccelFactor = 3.0
     CP.lateralTuning.torque.friction = 0.1
 
-    monkeypatch.setattr(latcontrol_torque, "civic_bosch_modified_lateral_testing_ground_active", lambda: True)
     CI = CarInterface(CP, custom.StarPilotCarParams.new_message())
     controller = LatControlTorque(CP.as_reader(), CI, DT_CTRL)
 
