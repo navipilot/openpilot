@@ -55,6 +55,8 @@ IONIQ_6_STOP_RELEASE_JERK_V = [3.6 * IONIQ_6_RESPONSE_MULTIPLIER,
                                4.8 * IONIQ_6_RESPONSE_MULTIPLIER]
 IONIQ_6_IPEDAL_PRESS_SEND_COUNT = 6
 IONIQ_6_IPEDAL_LATCH_PRESS_SEND_COUNT = 10
+IONIQ_6_MAX_REGEN_STATE = 0x3C
+IONIQ_6_MAX_REGEN_STATE_2 = 0x01
 IONIQ_6_IPEDAL_REGEN_STATE = 0x50
 IONIQ_6_IPEDAL_REGEN_STATE_2_PENDING = 0x01
 IONIQ_6_IPEDAL_PROGRESS_RETRY_WAIT_FRAMES = 10
@@ -248,6 +250,7 @@ class CarController(CarControllerBase):
     self._ioniq_6_last_ipedal_regen_state = 0
     self._ioniq_6_last_ipedal_regen_state_2 = 0
     self._ioniq_6_last_buttons_counter = 0
+    self._ioniq_6_last_regen_control_counter = -1
     self._ioniq_6_last_gear = structs.CarState.GearShifter.unknown
     self._genesis_g90_long_tuning = GenesisG90LongitudinalTuningState()
 
@@ -270,6 +273,7 @@ class CarController(CarControllerBase):
       self._ioniq_6_last_ipedal_regen_state = int(getattr(CS, "ipedal_regen_state", 0))
       self._ioniq_6_last_ipedal_regen_state_2 = int(getattr(CS, "ipedal_regen_state_2", 0))
       self._ioniq_6_last_buttons_counter = int(getattr(CS, "buttons_counter", 0))
+      self._ioniq_6_last_regen_control_counter = int(getattr(CS, "ioniq_6_regen_control_msg", {}).get("COUNTER", -1))
       self._ioniq_6_last_gear = CS.out.gearShifter
       return can_sends
 
@@ -277,8 +281,13 @@ class CarController(CarControllerBase):
     regen_state = int(getattr(CS, "ipedal_regen_state", 0))
     regen_state_2 = int(getattr(CS, "ipedal_regen_state_2", 0))
     buttons_counter = int(getattr(CS, "buttons_counter", 0))
+    regen_control_msg = getattr(CS, "ioniq_6_regen_control_msg", {})
+    regen_control_counter = int(regen_control_msg.get("COUNTER", -1))
+    has_regen_control_msg = bool(regen_control_msg) and getattr(CS, "ioniq_6_regen_control_ts", 0) > 0
     regen_state_changed = regen_state != self._ioniq_6_last_ipedal_regen_state or regen_state_2 != self._ioniq_6_last_ipedal_regen_state_2
     buttons_counter_changed = buttons_counter != self._ioniq_6_last_buttons_counter
+    regen_control_counter_changed = regen_control_counter != self._ioniq_6_last_regen_control_counter
+    max_regen_state = regen_state == IONIQ_6_MAX_REGEN_STATE and regen_state_2 == IONIQ_6_MAX_REGEN_STATE_2
     ipedal_latch_pending = regen_state == IONIQ_6_IPEDAL_REGEN_STATE and regen_state_2 == IONIQ_6_IPEDAL_REGEN_STATE_2_PENDING
     drive = gear == structs.CarState.GearShifter.drive
     park = gear == structs.CarState.GearShifter.park
@@ -302,7 +311,7 @@ class CarController(CarControllerBase):
 
     if target_gear and self._ioniq_6_always_ipedal_pending and not CS.ipedal_active and not CC.enabled:
       if self._ioniq_6_always_ipedal_press_remaining == 0 and self.frame >= self._ioniq_6_always_ipedal_retry_frame:
-        self._ioniq_6_always_ipedal_press_remaining = IONIQ_6_IPEDAL_LATCH_PRESS_SEND_COUNT if ipedal_latch_pending \
+        self._ioniq_6_always_ipedal_press_remaining = IONIQ_6_IPEDAL_LATCH_PRESS_SEND_COUNT if (max_regen_state or ipedal_latch_pending) \
                                                       else IONIQ_6_IPEDAL_PRESS_SEND_COUNT
 
       # Mirror the current stock counter after seeing the real CRUISE_BUTTONS frame land on the bus.
@@ -317,9 +326,16 @@ class CarController(CarControllerBase):
           retry_wait_frames = IONIQ_6_IPEDAL_PROGRESS_RETRY_WAIT_FRAMES if regen_state_changed else IONIQ_6_IPEDAL_RETRY_WAIT_FRAMES
           self._ioniq_6_always_ipedal_retry_frame = self.frame + retry_wait_frames
 
+      # The drivetrain latch uses a second HKG CAN-FD request path in addition to the left paddle bit.
+      # Once the cluster-facing regen state reaches max regen, mirror the live stock frame and only
+      # flip the request bytes that the physical paddle toggles for the final i-Pedal latch step.
+      if max_regen_state and has_regen_control_msg and regen_control_counter_changed:
+        can_sends.append(hyundaicanfd.create_ioniq_6_regen_control(self.packer, self.CP, self.CAN, regen_control_msg))
+
     self._ioniq_6_last_ipedal_regen_state = regen_state
     self._ioniq_6_last_ipedal_regen_state_2 = regen_state_2
     self._ioniq_6_last_buttons_counter = buttons_counter
+    self._ioniq_6_last_regen_control_counter = regen_control_counter
     self._ioniq_6_last_gear = gear
     return can_sends
 

@@ -164,6 +164,8 @@ IONIQ_6_CRUISE_BUTTONS_BASE_CHECKSUMS = (
 )
 IONIQ_6_CRUISE_BUTTONS_LEFT_PADDLE_CHECKSUM_XOR = 0x77
 IONIQ_6_CRUISE_BUTTONS_RIGHT_PADDLE_CHECKSUM_XOR = 0xD4
+IONIQ_6_REGEN_CONTROL_REQ_BYTE24 = 0xC0
+IONIQ_6_REGEN_CONTROL_REQ_BYTE27 = 0x00
 
 
 def get_ioniq_6_cruise_buttons_next_counter(counter: int) -> int:
@@ -198,6 +200,21 @@ def create_ioniq_6_paddle_buttons(packer, CP, CAN, cnt, left_paddle=False, right
 
   bus = CAN.ECAN if CP.flags & HyundaiFlags.CANFD_LKA_STEERING else CAN.CAM
   return address, bytes(dat), bus
+
+
+def create_ioniq_6_regen_control(packer, CP, CAN, base_values,
+                                  req_byte24=IONIQ_6_REGEN_CONTROL_REQ_BYTE24,
+                                  req_byte27=IONIQ_6_REGEN_CONTROL_REQ_BYTE27):
+  values = {k: v for k, v in base_values.items() if k != "CHECKSUM"}
+  address = packer.dbc.name_to_msg["IONIQ_6_REGEN_CONTROL"].address
+  dat = bytearray(packer.pack(address, values))
+  dat[24] = req_byte24
+  dat[27] = req_byte27
+
+  checksum = hkg_can_fd_checksum(address, None, dat)
+  dat[0] = checksum & 0xFF
+  dat[1] = (checksum >> 8) & 0xFF
+  return address, bytes(dat), CAN.ECAN
 
 
 def create_buttons(packer, CP, CAN, cnt, btn=0, base_values=None, left_paddle=False, right_paddle=False):

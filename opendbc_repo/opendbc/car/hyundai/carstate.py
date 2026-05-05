@@ -24,6 +24,8 @@ BUTTONS_DICT = {Buttons.RES_ACCEL: ButtonType.accelCruise, Buttons.SET_DECEL: Bu
 
 IONIQ_6_BLINDSPOT_RIGHT_MASK = 0x08
 IONIQ_6_BLINDSPOT_LEFT_MASK = 0x10
+IONIQ_6_MAX_REGEN_STATE = 0x3C
+IONIQ_6_MAX_REGEN_STATE_2 = 0x01
 IONIQ_6_IPEDAL_INTERMEDIATE_REGEN_STATE = 0x50
 IONIQ_6_IPEDAL_INTERMEDIATE_REGEN_STATE_2 = 0x01
 IONIQ_6_IPEDAL_REGEN_STATE = 0x50
@@ -49,6 +51,10 @@ def decode_ioniq_6_blindspot_radar_state(state: int) -> tuple[bool, bool]:
 
 def decode_ioniq_6_ipedal_state(regen_state: int, regen_state_2: int) -> bool:
   return int(regen_state) == IONIQ_6_IPEDAL_REGEN_STATE and int(regen_state_2) == IONIQ_6_IPEDAL_REGEN_STATE_2
+
+
+def decode_ioniq_6_max_regen_state(regen_state: int, regen_state_2: int) -> bool:
+  return int(regen_state) == IONIQ_6_MAX_REGEN_STATE and int(regen_state_2) == IONIQ_6_MAX_REGEN_STATE_2
 
 
 def decode_ioniq_6_ipedal_intermediate_state(regen_state: int, regen_state_2: int) -> bool:
@@ -77,6 +83,8 @@ class CarState(CarStateBase):
     self.ipedal_active = False
     self.ipedal_regen_state = 0
     self.ipedal_regen_state_2 = 0
+    self.ioniq_6_regen_control_msg = {}
+    self.ioniq_6_regen_control_ts = 0
 
     self.gear_msg_canfd = "ACCELERATOR" if CP.flags & HyundaiFlags.EV else \
                           "GEAR_ALT" if CP.flags & HyundaiFlags.CANFD_ALT_GEARS else \
@@ -408,6 +416,9 @@ class CarState(CarStateBase):
         self.ipedal_regen_state = int(msla.get("EV_REGEN_STATE", 0))
         self.ipedal_regen_state_2 = int(msla.get("EV_REGEN_STATE_2", 0))
         self.ipedal_active = decode_ioniq_6_ipedal_state(self.ipedal_regen_state, self.ipedal_regen_state_2)
+        if cp.ts_nanos["IONIQ_6_REGEN_CONTROL"]["CHECKSUM"] > 0:
+          self.ioniq_6_regen_control_msg = copy.copy(cp.vl["IONIQ_6_REGEN_CONTROL"])
+          self.ioniq_6_regen_control_ts = cp.ts_nanos["IONIQ_6_REGEN_CONTROL"]["CHECKSUM"]
 
     prev_cruise_buttons = self.cruise_buttons[-1]
     prev_main_buttons = self.main_buttons[-1]
@@ -484,6 +495,8 @@ class CarState(CarStateBase):
     if CP.flags & HyundaiFlags.EV:
       msgs.append(("DRIVE_MODE_EV", 0))  # optional: not all CAN-FD EV variants publish drive mode
       msgs.append(("MANUAL_SPEED_LIMIT_ASSIST", 0))  # optional: used for non-adaptive cruise state and Ioniq 6 i-Pedal latch detection
+      if CP.carFingerprint == CAR.HYUNDAI_IONIQ_6:
+        msgs.append(("IONIQ_6_REGEN_CONTROL", 0))
     msgs.append(("STEERING_WHEEL_MEDIA_BUTTONS", 0))  # optional: absent or slower on some CAN-FD variants
     cam_msgs.append(("ADAS_0x380", 0))  # optional: dashboard stop-sign signal, only on ADAS-equipped HKG CANFD
     return {
