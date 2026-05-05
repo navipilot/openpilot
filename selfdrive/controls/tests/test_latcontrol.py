@@ -456,6 +456,24 @@ class TestLatControl:
     assert unwind_left < 1.0
     assert unwind_right < unwind_left
 
+  def test_modified_civic_b_variant_extra_torque_shaping_curve(self, monkeypatch):
+    base_steady_right = get_civic_bosch_modified_b_ff_scale(-0.5, 0.0, 12.0)
+    base_turn_in_right = get_civic_bosch_modified_b_ff_scale(-0.5, -0.8, 12.0)
+    base_unwind_right = get_civic_bosch_modified_b_ff_scale(-0.5, 0.8, 12.0)
+    base_unwind_right_friction = get_civic_bosch_modified_b_friction_scale(12.0, -0.5, 0.8)
+
+    monkeypatch.setattr(latcontrol_torque, "civic_bosch_modified_lateral_testing_ground_active", lambda: True)
+
+    variant_steady_right = get_civic_bosch_modified_b_ff_scale(-0.5, 0.0, 12.0)
+    variant_turn_in_right = get_civic_bosch_modified_b_ff_scale(-0.5, -0.8, 12.0)
+    variant_unwind_right = get_civic_bosch_modified_b_ff_scale(-0.5, 0.8, 12.0)
+    variant_unwind_right_friction = get_civic_bosch_modified_b_friction_scale(12.0, -0.5, 0.8)
+
+    assert variant_steady_right < base_steady_right
+    assert variant_turn_in_right >= base_turn_in_right
+    assert variant_unwind_right < base_unwind_right
+    assert variant_unwind_right_friction < base_unwind_right_friction
+
   def test_kia_ev6_testing_ground_update_path(self, monkeypatch):
     controller, VM, CS, params, starpilot_toggles = self._build_torque_controller(HYUNDAI.KIA_EV6)
     monkeypatch.setattr(latcontrol_torque, "kia_ev6_lateral_testing_ground_active", lambda: True)

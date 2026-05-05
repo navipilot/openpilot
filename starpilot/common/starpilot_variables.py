@@ -77,6 +77,13 @@ LEGACY_STARPILOT_STATS_KEY_RENAMES = {
   "FrogPilotSeconds": "StarPilotSeconds",
 }
 
+LEGACY_VOLT_STOCK_ACC_CARS = {
+  GM_CAR.CHEVROLET_VOLT,
+  GM_CAR.CHEVROLET_VOLT_2019,
+  GM_CAR.CHEVROLET_VOLT_ASCM,
+  GM_CAR.CHEVROLET_VOLT_CAMERA,
+}
+
 RESOURCES_REPO = os.getenv("STARPILOT_RESOURCES_REPO", "firestar5683/StarPilot-Resources")
 
 ACTIVE_THEME_PATH = Path(BASEDIR) / "starpilot/assets/active_theme"
@@ -1193,15 +1200,10 @@ class StarPilotVariables:
       condition=toggle.car_make == "gm" and toggle.has_pedal and "BOLT" in toggle.car_model,
     )
 
-    gm_auto_hold_supported = toggle.car_model in {
-      GM_CAR.CHEVROLET_VOLT,
-      GM_CAR.CHEVROLET_VOLT_2019,
-      GM_CAR.CHEVROLET_VOLT_ASCM,
-      GM_CAR.CHEVROLET_VOLT_CAMERA,
-    }
+    gm_auto_hold_supported = toggle.car_model in LEGACY_VOLT_STOCK_ACC_CARS
     toggle.gm_auto_hold = self.get_value("GMAutoHold", condition=gm_auto_hold_supported)
 
-    toggle.volt_sng = self.get_value("VoltSNG", condition=toggle.car_model == "CHEVROLET_VOLT")
+    toggle.volt_sng = self.get_value("VoltSNG", condition=toggle.car_model in LEGACY_VOLT_STOCK_ACC_CARS)
 
     process_starpilot_toggles.cache_clear()
     self.params_memory.remove("StarPilotTogglesUpdated")

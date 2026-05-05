@@ -64,6 +64,16 @@ CIVIC_BOSCH_MODIFIED_B_TURN_IN_FRICTION_BOOST_LEFT = 0.02
 CIVIC_BOSCH_MODIFIED_B_TURN_IN_FRICTION_BOOST_RIGHT = 0.00
 CIVIC_BOSCH_MODIFIED_B_UNWIND_FRICTION_REDUCTION_LEFT = 0.26
 CIVIC_BOSCH_MODIFIED_B_UNWIND_FRICTION_REDUCTION_RIGHT = 0.40
+CIVIC_BOSCH_MODIFIED_B_VARIANT_FF_REDUCTION_LEFT = 0.04
+CIVIC_BOSCH_MODIFIED_B_VARIANT_FF_REDUCTION_RIGHT = 0.10
+CIVIC_BOSCH_MODIFIED_B_VARIANT_TURN_IN_BOOST_LEFT = 0.02
+CIVIC_BOSCH_MODIFIED_B_VARIANT_TURN_IN_BOOST_RIGHT = 0.08
+CIVIC_BOSCH_MODIFIED_B_VARIANT_UNWIND_TAPER_LEFT = 0.16
+CIVIC_BOSCH_MODIFIED_B_VARIANT_UNWIND_TAPER_RIGHT = 0.26
+CIVIC_BOSCH_MODIFIED_B_VARIANT_TURN_IN_FRICTION_BOOST_LEFT = 0.01
+CIVIC_BOSCH_MODIFIED_B_VARIANT_TURN_IN_FRICTION_BOOST_RIGHT = 0.03
+CIVIC_BOSCH_MODIFIED_B_VARIANT_UNWIND_FRICTION_REDUCTION_LEFT = 0.08
+CIVIC_BOSCH_MODIFIED_B_VARIANT_UNWIND_FRICTION_REDUCTION_RIGHT = 0.16
 
 BOLT_2022_2023_CARS = (
   GM_CAR.CHEVROLET_BOLT_ACC_2022_2023,
@@ -375,15 +385,30 @@ def get_civic_bosch_modified_b_ff_scale(desired_lateral_accel: float, desired_la
   turn_in_weight = max(phase, 0.0)
   unwind_weight = max(-phase, 0.0)
   low_speed_factor = _civic_bosch_modified_b_low_speed_factor(v_ego)
+  variant_active = civic_bosch_modified_lateral_testing_ground_active()
+  if variant_active:
+    base_reduction += (_civic_bosch_modified_b_side_value(desired_lateral_accel,
+                                                           CIVIC_BOSCH_MODIFIED_B_VARIANT_FF_REDUCTION_LEFT,
+                                                           CIVIC_BOSCH_MODIFIED_B_VARIANT_FF_REDUCTION_RIGHT) * onset * cutoff)
 
   turn_in_boost = 1.0 + (_civic_bosch_modified_b_side_value(desired_lateral_accel,
                                                              CIVIC_BOSCH_MODIFIED_B_TURN_IN_BOOST_LEFT,
                                                              CIVIC_BOSCH_MODIFIED_B_TURN_IN_BOOST_RIGHT) *
                           turn_in_weight * (0.40 + 0.60 * low_speed_factor))
+  if variant_active:
+    turn_in_boost *= 1.0 + (_civic_bosch_modified_b_side_value(desired_lateral_accel,
+                                                                CIVIC_BOSCH_MODIFIED_B_VARIANT_TURN_IN_BOOST_LEFT,
+                                                                CIVIC_BOSCH_MODIFIED_B_VARIANT_TURN_IN_BOOST_RIGHT) *
+                             turn_in_weight * (0.40 + 0.60 * low_speed_factor))
   unwind_taper = 1.0 - (_civic_bosch_modified_b_side_value(desired_lateral_accel,
                                                             CIVIC_BOSCH_MODIFIED_B_UNWIND_TAPER_LEFT,
                                                             CIVIC_BOSCH_MODIFIED_B_UNWIND_TAPER_RIGHT) *
                          unwind_weight * (0.35 + 0.65 * low_speed_factor))
+  if variant_active:
+    unwind_taper *= 1.0 - (_civic_bosch_modified_b_side_value(desired_lateral_accel,
+                                                               CIVIC_BOSCH_MODIFIED_B_VARIANT_UNWIND_TAPER_LEFT,
+                                                               CIVIC_BOSCH_MODIFIED_B_VARIANT_UNWIND_TAPER_RIGHT) *
+                            unwind_weight * (0.35 + 0.65 * low_speed_factor))
   return (1.0 - base_reduction) * turn_in_boost * max(unwind_taper, 0.0)
 
 
@@ -398,16 +423,27 @@ def get_civic_bosch_modified_b_friction_scale(v_ego: float, desired_lateral_acce
   phase = _civic_bosch_modified_b_transition_phase(desired_lateral_accel, desired_lateral_jerk)
   turn_in_weight = max(phase, 0.0)
   unwind_weight = max(-phase, 0.0)
+  variant_active = civic_bosch_modified_lateral_testing_ground_active()
 
   friction_scale = 1.0
   friction_scale += (_civic_bosch_modified_b_side_value(desired_lateral_accel,
                                                          CIVIC_BOSCH_MODIFIED_B_TURN_IN_FRICTION_BOOST_LEFT,
                                                          CIVIC_BOSCH_MODIFIED_B_TURN_IN_FRICTION_BOOST_RIGHT) *
                      envelope * turn_in_weight)
+  if variant_active:
+    friction_scale += (_civic_bosch_modified_b_side_value(desired_lateral_accel,
+                                                           CIVIC_BOSCH_MODIFIED_B_VARIANT_TURN_IN_FRICTION_BOOST_LEFT,
+                                                           CIVIC_BOSCH_MODIFIED_B_VARIANT_TURN_IN_FRICTION_BOOST_RIGHT) *
+                       envelope * turn_in_weight)
   friction_scale -= (_civic_bosch_modified_b_side_value(desired_lateral_accel,
                                                          CIVIC_BOSCH_MODIFIED_B_UNWIND_FRICTION_REDUCTION_LEFT,
                                                          CIVIC_BOSCH_MODIFIED_B_UNWIND_FRICTION_REDUCTION_RIGHT) *
                      envelope * unwind_weight)
+  if variant_active:
+    friction_scale -= (_civic_bosch_modified_b_side_value(desired_lateral_accel,
+                                                           CIVIC_BOSCH_MODIFIED_B_VARIANT_UNWIND_FRICTION_REDUCTION_LEFT,
+                                                           CIVIC_BOSCH_MODIFIED_B_VARIANT_UNWIND_FRICTION_REDUCTION_RIGHT) *
+                       envelope * unwind_weight)
   return min(max(friction_scale, 0.82), 1.06)
 
 

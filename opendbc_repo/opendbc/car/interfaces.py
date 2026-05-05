@@ -247,6 +247,9 @@ class CarInterfaceBase(ABC):
           if 0x23 in fingerprint[0]:
             fp_ret.flags |= ToyotaStarPilotFlags.ZSS.value
 
+      elif platform.config.platform_str == "TESLA_MODEL_S_PREAP":
+        fp_ret.canUsePedal = True
+
     return fp_ret
 
   @staticmethod
