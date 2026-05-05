@@ -397,7 +397,8 @@ class CarState(CarStateBase):
       ret.cruiseState.nonAdaptive = cp.vl["MANUAL_SPEED_LIMIT_ASSIST"]["MSLA_ENABLED"] == 1
       if self.CP.carFingerprint == CAR.HYUNDAI_IONIQ_6:
         msla = cp.vl["MANUAL_SPEED_LIMIT_ASSIST"]
-        self.ipedal_active = decode_ioniq_6_ipedal_state(msla["EV_REGEN_STATE"], msla["EV_REGEN_STATE_2"])
+        # Tolerate older/stale DBCs that do not yet expose the inferred regen state signals.
+        self.ipedal_active = decode_ioniq_6_ipedal_state(msla.get("EV_REGEN_STATE", 0), msla.get("EV_REGEN_STATE_2", 0))
 
     prev_cruise_buttons = self.cruise_buttons[-1]
     prev_main_buttons = self.main_buttons[-1]
@@ -473,6 +474,7 @@ class CarState(CarStateBase):
     ]
     if CP.flags & HyundaiFlags.EV:
       msgs.append(("DRIVE_MODE_EV", 0))  # optional: not all CAN-FD EV variants publish drive mode
+      msgs.append(("MANUAL_SPEED_LIMIT_ASSIST", 0))  # optional: used for non-adaptive cruise state and Ioniq 6 i-Pedal latch detection
     msgs.append(("STEERING_WHEEL_MEDIA_BUTTONS", 0))  # optional: absent or slower on some CAN-FD variants
     cam_msgs.append(("ADAS_0x380", 0))  # optional: dashboard stop-sign signal, only on ADAS-equipped HKG CANFD
     return {

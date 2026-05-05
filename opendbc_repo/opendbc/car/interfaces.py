@@ -232,6 +232,8 @@ class CarInterfaceBase(ABC):
           fp_ret.safetyConfigs[-1].safetyParam |= HyundaiStarPilotSafetyFlags.HAS_LDA_BUTTON.value
         if starpilot_toggles.always_on_lateral_lkas:
           fp_ret.safetyConfigs[-1].safetyParam |= HyundaiStarPilotSafetyFlags.AOL_LKAS_ON_ENGAGE.value
+        if candidate == HYUNDAI.HYUNDAI_IONIQ_6 and getattr(starpilot_toggles, "always_ipedal", False):
+          fp_ret.safetyConfigs[-1].safetyParam |= HyundaiStarPilotSafetyFlags.ALLOW_IPEDAL_PADDLE.value
 
       elif platform in TOYOTA:
         fp_ret.canUsePedal = not CP.autoResumeSng

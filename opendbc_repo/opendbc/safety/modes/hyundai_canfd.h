@@ -56,6 +56,7 @@
 static bool hyundai_canfd_alt_buttons = false;
 static bool hyundai_canfd_lka_steering_alt = false;
 static bool hyundai_canfd_angle_steering = false;
+static bool hyundai_canfd_allow_ipedal_paddle = false;
 
 static unsigned int hyundai_canfd_get_lka_addr(void) {
   return hyundai_canfd_lka_steering_alt ? 0x110U : 0x50U;
@@ -228,10 +229,21 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *msg) {
   // cruise buttons check
   if (msg->addr == 0x1cfU) {
     int button = msg->data[2] & 0x7U;
+    bool main_button = GET_BIT(msg, 19U) || GET_BIT(msg, 21U);
+    bool lkas_button = GET_BIT(msg, 23U);
+    bool right_paddle = GET_BIT(msg, 25U);
+    bool left_paddle = GET_BIT(msg, 27U);
     bool is_cancel = (button == HYUNDAI_BTN_CANCEL);
     bool is_resume = (button == HYUNDAI_BTN_RESUME);
+    bool is_left_paddle_only = hyundai_canfd_allow_ipedal_paddle &&
+                               !controls_allowed &&
+                               (button == HYUNDAI_BTN_NONE) &&
+                               !main_button &&
+                               !lkas_button &&
+                               !right_paddle &&
+                               left_paddle;
 
-    bool allowed = (is_cancel && cruise_engaged_prev) || (is_resume && controls_allowed);
+    bool allowed = (is_cancel && cruise_engaged_prev) || (is_resume && controls_allowed) || is_left_paddle_only;
     if (!allowed) {
       tx = false;
     }
@@ -278,6 +290,7 @@ static safety_config hyundai_canfd_init(uint16_t param) {
   const uint16_t HYUNDAI_PARAM_CANFD_LKA_STEERING_ALT = 128;
   const uint16_t HYUNDAI_PARAM_CANFD_ALT_BUTTONS = 32;
   const uint16_t HYUNDAI_PARAM_CANFD_ANGLE_STEERING = 1024;
+  const uint16_t HYUNDAI_PARAM_ALLOW_IPEDAL_PADDLE = 32768;
 
   static const CanMsg HYUNDAI_CANFD_LKA_STEERING_TX_MSGS[] = {
     HYUNDAI_CANFD_LKA_STEERING_COMMON_TX_MSGS(0, 1)
@@ -330,6 +343,7 @@ static safety_config hyundai_canfd_init(uint16_t param) {
   hyundai_canfd_alt_buttons = GET_FLAG(param, HYUNDAI_PARAM_CANFD_ALT_BUTTONS);
   hyundai_canfd_lka_steering_alt = GET_FLAG(param, HYUNDAI_PARAM_CANFD_LKA_STEERING_ALT);
   hyundai_canfd_angle_steering = GET_FLAG(param, HYUNDAI_PARAM_CANFD_ANGLE_STEERING);
+  hyundai_canfd_allow_ipedal_paddle = GET_FLAG(param, HYUNDAI_PARAM_ALLOW_IPEDAL_PADDLE);
 
   safety_config ret;
   if (hyundai_longitudinal) {

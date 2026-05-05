@@ -427,6 +427,47 @@ class TestHyundaiCanfdLKASteeringEV(TestHyundaiCanfdBase):
     self.safety.set_safety_hooks(CarParams.SafetyModel.hyundaiCanfd, HyundaiSafetyFlags.CANFD_LKA_STEERING | HyundaiSafetyFlags.EV_GAS)
     self.safety.init_tests()
 
+  def _paddle_msg(self, left_paddle=0, right_paddle=0, buttons=0, main_button=0, lka_button=0, bus=None):
+    if bus is None:
+      bus = self.BUTTONS_TX_BUS
+    values = {
+      "CRUISE_BUTTONS": buttons,
+      "ADAPTIVE_CRUISE_MAIN_BTN": main_button,
+      "LDA_BTN": lka_button,
+      "RIGHT_PADDLE": right_paddle,
+      "LEFT_PADDLE": left_paddle,
+      "SET_ME_1": 1,
+    }
+    return self.packer.make_can_msg_safety("CRUISE_BUTTONS", bus, values)
+
+  def test_left_paddle_send(self):
+    for controls_allowed in (True, False):
+      self.safety.set_controls_allowed(controls_allowed)
+      self.assertFalse(self._tx(self._paddle_msg(left_paddle=1)))
+
+
+class TestHyundaiCanfdLKASteeringEVAlwaysIPedal(TestHyundaiCanfdLKASteeringEV):
+
+  def setUp(self):
+    self.packer = CANPackerSafety("hyundai_canfd_generated")
+    self.safety = libsafety_py.libsafety
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hyundaiCanfd,
+                                 HyundaiSafetyFlags.CANFD_LKA_STEERING |
+                                 HyundaiSafetyFlags.EV_GAS |
+                                 HyundaiStarPilotSafetyFlags.ALLOW_IPEDAL_PADDLE)
+    self.safety.init_tests()
+
+  def test_left_paddle_send(self):
+    self.safety.set_controls_allowed(False)
+    self.assertTrue(self._tx(self._paddle_msg(left_paddle=1)))
+    self.assertFalse(self._tx(self._paddle_msg(right_paddle=1)))
+    self.assertFalse(self._tx(self._paddle_msg(left_paddle=1, buttons=1)))
+    self.assertFalse(self._tx(self._paddle_msg(left_paddle=1, main_button=1)))
+    self.assertFalse(self._tx(self._paddle_msg(left_paddle=1, lka_button=1)))
+
+    self.safety.set_controls_allowed(True)
+    self.assertFalse(self._tx(self._paddle_msg(left_paddle=1)))
+
 
 # TODO: Handle ICE and HEV configurations once we see cars that use the new messages
 class TestHyundaiCanfdLKASteeringAltEV(TestHyundaiCanfdBase):
