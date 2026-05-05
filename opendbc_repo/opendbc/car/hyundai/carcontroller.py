@@ -244,10 +244,10 @@ class CarController(CarControllerBase):
     self._ioniq_6_always_ipedal_pending = False
     self._ioniq_6_always_ipedal_press_remaining = 0
     self._ioniq_6_always_ipedal_retry_frame = 0
-    self._ioniq_6_always_ipedal_counter = 0
     self._ioniq_6_always_ipedal_startup_park_done = False
     self._ioniq_6_last_ipedal_regen_state = 0
     self._ioniq_6_last_ipedal_regen_state_2 = 0
+    self._ioniq_6_last_buttons_counter = 0
     self._ioniq_6_last_gear = structs.CarState.GearShifter.unknown
     self._genesis_g90_long_tuning = GenesisG90LongitudinalTuningState()
 
@@ -269,13 +269,16 @@ class CarController(CarControllerBase):
       self._ioniq_6_always_ipedal_startup_park_done = False
       self._ioniq_6_last_ipedal_regen_state = int(getattr(CS, "ipedal_regen_state", 0))
       self._ioniq_6_last_ipedal_regen_state_2 = int(getattr(CS, "ipedal_regen_state_2", 0))
+      self._ioniq_6_last_buttons_counter = int(getattr(CS, "buttons_counter", 0))
       self._ioniq_6_last_gear = CS.out.gearShifter
       return can_sends
 
     gear = CS.out.gearShifter
     regen_state = int(getattr(CS, "ipedal_regen_state", 0))
     regen_state_2 = int(getattr(CS, "ipedal_regen_state_2", 0))
+    buttons_counter = int(getattr(CS, "buttons_counter", 0))
     regen_state_changed = regen_state != self._ioniq_6_last_ipedal_regen_state or regen_state_2 != self._ioniq_6_last_ipedal_regen_state_2
+    buttons_counter_changed = buttons_counter != self._ioniq_6_last_buttons_counter
     ipedal_latch_pending = regen_state == IONIQ_6_IPEDAL_REGEN_STATE and regen_state_2 == IONIQ_6_IPEDAL_REGEN_STATE_2_PENDING
     drive = gear == structs.CarState.GearShifter.drive
     park = gear == structs.CarState.GearShifter.park
@@ -301,13 +304,14 @@ class CarController(CarControllerBase):
       if self._ioniq_6_always_ipedal_press_remaining == 0 and self.frame >= self._ioniq_6_always_ipedal_retry_frame:
         self._ioniq_6_always_ipedal_press_remaining = IONIQ_6_IPEDAL_LATCH_PRESS_SEND_COUNT if ipedal_latch_pending \
                                                       else IONIQ_6_IPEDAL_PRESS_SEND_COUNT
-        self._ioniq_6_always_ipedal_counter = hyundaicanfd.get_ioniq_6_cruise_buttons_next_counter(CS.buttons_counter)
 
-      if self._ioniq_6_always_ipedal_press_remaining > 0 and self.frame % 2 == 0:
+      # Mirror the current stock counter after seeing the real CRUISE_BUTTONS frame land on the bus.
+      # Sending the next counter early creates a paddle frame that gets followed by the stock no-paddle
+      # frame for that same counter, which matches the "UI changed but drivetrain didn't latch" behavior.
+      if self._ioniq_6_always_ipedal_press_remaining > 0 and buttons_counter_changed and \
+         0 <= buttons_counter < hyundaicanfd.IONIQ_6_CRUISE_BUTTONS_COUNTER_MAX:
         can_sends.append(hyundaicanfd.create_ioniq_6_paddle_buttons(self.packer, self.CP, self.CAN,
-                                                                    self._ioniq_6_always_ipedal_counter, left_paddle=True))
-        self._ioniq_6_always_ipedal_counter = hyundaicanfd.get_ioniq_6_cruise_buttons_next_counter(
-          self._ioniq_6_always_ipedal_counter)
+                                                                    buttons_counter, left_paddle=True))
         self._ioniq_6_always_ipedal_press_remaining -= 1
         if self._ioniq_6_always_ipedal_press_remaining == 0:
           retry_wait_frames = IONIQ_6_IPEDAL_PROGRESS_RETRY_WAIT_FRAMES if regen_state_changed else IONIQ_6_IPEDAL_RETRY_WAIT_FRAMES
@@ -315,6 +319,7 @@ class CarController(CarControllerBase):
 
     self._ioniq_6_last_ipedal_regen_state = regen_state
     self._ioniq_6_last_ipedal_regen_state_2 = regen_state_2
+    self._ioniq_6_last_buttons_counter = buttons_counter
     self._ioniq_6_last_gear = gear
     return can_sends
 

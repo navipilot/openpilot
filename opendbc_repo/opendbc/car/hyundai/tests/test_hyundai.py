@@ -374,14 +374,20 @@ class TestHyundaiFingerprint:
     parser.update([(1, sends)])
 
     assert sends
-    assert sends[0][1].hex() == "9060002800000000"
+    assert sends[0][1].hex() == "4650002800000000"
     assert parser.vl["CRUISE_BUTTONS"]["LEFT_PADDLE"] == 1
-    assert parser.vl["CRUISE_BUTTONS"]["COUNTER"] == 6
+    assert parser.vl["CRUISE_BUTTONS"]["COUNTER"] == 5
     assert controller._ioniq_6_always_ipedal_pending
     assert not controller._ioniq_6_always_ipedal_startup_park_done
 
+    controller.frame = 1
+    sends = controller._update_ioniq_6_always_ipedal(cc, cs, toggles)
+
+    assert sends == []
+
     controller.frame = 2
     cs.out.gearShifter = structs.CarState.GearShifter.drive
+    cs.buttons_counter = 6
     sends = controller._update_ioniq_6_always_ipedal(cc, cs, toggles)
 
     assert sends
