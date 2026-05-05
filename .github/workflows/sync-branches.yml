@@ -57,6 +57,10 @@ jobs:
           add_or_update_remote gitop https://jihulab.com/fishop/openpilot.git
           git fetch gitop cp --no-tags || echo "⚠️ gitop cp fetch failed"
 
+          # Fishop (jihulab) - 新增
+          add_or_update_remote fishop_remote https://jihulab.com/fishop/openpilot.git
+          git fetch fishop_remote cp --no-tags || echo "⚠️ fishop cp fetch failed"
+
       - name: Push branches to your repository (force sync)
         run: |
           set +e
@@ -88,6 +92,8 @@ jobs:
           sync_branch Dragonpilot dragonpilot/pre-build
           sync_branch StarPilot starpilot/StarPilot
           sync_branch gitop gitop/cp
+          # 新增：将 jihulab 的 cp 分支同步到你仓库的 fishop 分支
+          sync_branch fishop fishop_remote/cp
 
       - name: Tag sync timestamp
         run: |
