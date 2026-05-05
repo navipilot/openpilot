@@ -285,7 +285,7 @@ class LongitudinalPlanner:
 
   @property
   def mlsim(self):
-    return self.generation in ("v8", "v10", "v11", "v12", "v13")
+    return self.generation in ("v8", "v10", "v11", "v12", "v13", "v14")
 
   def get_mpc_mode(self) -> str:
     if not self.mlsim:
