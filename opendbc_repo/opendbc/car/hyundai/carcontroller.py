@@ -54,6 +54,10 @@ IONIQ_6_STOP_RELEASE_JERK_V = [3.6 * IONIQ_6_RESPONSE_MULTIPLIER,
                                4.2 * IONIQ_6_RESPONSE_MULTIPLIER,
                                4.8 * IONIQ_6_RESPONSE_MULTIPLIER]
 IONIQ_6_IPEDAL_PRESS_SEND_COUNT = 6
+IONIQ_6_IPEDAL_LATCH_PRESS_SEND_COUNT = 10
+IONIQ_6_IPEDAL_REGEN_STATE = 0x50
+IONIQ_6_IPEDAL_REGEN_STATE_2_PENDING = 0x01
+IONIQ_6_IPEDAL_PROGRESS_RETRY_WAIT_FRAMES = 10
 IONIQ_6_IPEDAL_RETRY_WAIT_FRAMES = 30
 
 
@@ -242,6 +246,8 @@ class CarController(CarControllerBase):
     self._ioniq_6_always_ipedal_retry_frame = 0
     self._ioniq_6_always_ipedal_counter = 0
     self._ioniq_6_always_ipedal_startup_park_done = False
+    self._ioniq_6_last_ipedal_regen_state = 0
+    self._ioniq_6_last_ipedal_regen_state_2 = 0
     self._ioniq_6_last_gear = structs.CarState.GearShifter.unknown
     self._genesis_g90_long_tuning = GenesisG90LongitudinalTuningState()
 
@@ -261,10 +267,16 @@ class CarController(CarControllerBase):
     if self.CP.carFingerprint != CAR.HYUNDAI_IONIQ_6 or not getattr(starpilot_toggles, "always_ipedal", False):
       self._reset_ioniq_6_always_ipedal()
       self._ioniq_6_always_ipedal_startup_park_done = False
+      self._ioniq_6_last_ipedal_regen_state = int(getattr(CS, "ipedal_regen_state", 0))
+      self._ioniq_6_last_ipedal_regen_state_2 = int(getattr(CS, "ipedal_regen_state_2", 0))
       self._ioniq_6_last_gear = CS.out.gearShifter
       return can_sends
 
     gear = CS.out.gearShifter
+    regen_state = int(getattr(CS, "ipedal_regen_state", 0))
+    regen_state_2 = int(getattr(CS, "ipedal_regen_state_2", 0))
+    regen_state_changed = regen_state != self._ioniq_6_last_ipedal_regen_state or regen_state_2 != self._ioniq_6_last_ipedal_regen_state_2
+    ipedal_latch_pending = regen_state == IONIQ_6_IPEDAL_REGEN_STATE and regen_state_2 == IONIQ_6_IPEDAL_REGEN_STATE_2_PENDING
     drive = gear == structs.CarState.GearShifter.drive
     park = gear == structs.CarState.GearShifter.park
     drive_edge = drive and self._ioniq_6_last_gear != structs.CarState.GearShifter.drive
@@ -287,7 +299,8 @@ class CarController(CarControllerBase):
 
     if target_gear and self._ioniq_6_always_ipedal_pending and not CS.ipedal_active and not CC.enabled:
       if self._ioniq_6_always_ipedal_press_remaining == 0 and self.frame >= self._ioniq_6_always_ipedal_retry_frame:
-        self._ioniq_6_always_ipedal_press_remaining = IONIQ_6_IPEDAL_PRESS_SEND_COUNT
+        self._ioniq_6_always_ipedal_press_remaining = IONIQ_6_IPEDAL_LATCH_PRESS_SEND_COUNT if ipedal_latch_pending \
+                                                      else IONIQ_6_IPEDAL_PRESS_SEND_COUNT
         self._ioniq_6_always_ipedal_counter = hyundaicanfd.get_ioniq_6_cruise_buttons_next_counter(CS.buttons_counter)
 
       if self._ioniq_6_always_ipedal_press_remaining > 0 and self.frame % 2 == 0:
@@ -297,8 +310,11 @@ class CarController(CarControllerBase):
           self._ioniq_6_always_ipedal_counter)
         self._ioniq_6_always_ipedal_press_remaining -= 1
         if self._ioniq_6_always_ipedal_press_remaining == 0:
-          self._ioniq_6_always_ipedal_retry_frame = self.frame + IONIQ_6_IPEDAL_RETRY_WAIT_FRAMES
+          retry_wait_frames = IONIQ_6_IPEDAL_PROGRESS_RETRY_WAIT_FRAMES if regen_state_changed else IONIQ_6_IPEDAL_RETRY_WAIT_FRAMES
+          self._ioniq_6_always_ipedal_retry_frame = self.frame + retry_wait_frames
 
+    self._ioniq_6_last_ipedal_regen_state = regen_state
+    self._ioniq_6_last_ipedal_regen_state_2 = regen_state_2
     self._ioniq_6_last_gear = gear
     return can_sends
 

@@ -24,6 +24,8 @@ BUTTONS_DICT = {Buttons.RES_ACCEL: ButtonType.accelCruise, Buttons.SET_DECEL: Bu
 
 IONIQ_6_BLINDSPOT_RIGHT_MASK = 0x08
 IONIQ_6_BLINDSPOT_LEFT_MASK = 0x10
+IONIQ_6_IPEDAL_INTERMEDIATE_REGEN_STATE = 0x50
+IONIQ_6_IPEDAL_INTERMEDIATE_REGEN_STATE_2 = 0x01
 IONIQ_6_IPEDAL_REGEN_STATE = 0x50
 IONIQ_6_IPEDAL_REGEN_STATE_2 = 0x03
 
@@ -49,6 +51,10 @@ def decode_ioniq_6_ipedal_state(regen_state: int, regen_state_2: int) -> bool:
   return int(regen_state) == IONIQ_6_IPEDAL_REGEN_STATE and int(regen_state_2) == IONIQ_6_IPEDAL_REGEN_STATE_2
 
 
+def decode_ioniq_6_ipedal_intermediate_state(regen_state: int, regen_state_2: int) -> bool:
+  return int(regen_state) == IONIQ_6_IPEDAL_INTERMEDIATE_REGEN_STATE and int(regen_state_2) == IONIQ_6_IPEDAL_INTERMEDIATE_REGEN_STATE_2
+
+
 class CarState(CarStateBase):
   @staticmethod
   def get_canfd_blinker_sig_names(car_fingerprint, use_alt_lamp: bool) -> tuple[str, str]:
@@ -69,6 +75,8 @@ class CarState(CarStateBase):
     self.cancel_button_enable_in_progress = False
     self.cruise_buttons_msg = {}
     self.ipedal_active = False
+    self.ipedal_regen_state = 0
+    self.ipedal_regen_state_2 = 0
 
     self.gear_msg_canfd = "ACCELERATOR" if CP.flags & HyundaiFlags.EV else \
                           "GEAR_ALT" if CP.flags & HyundaiFlags.CANFD_ALT_GEARS else \
@@ -397,8 +405,9 @@ class CarState(CarStateBase):
       ret.cruiseState.nonAdaptive = cp.vl["MANUAL_SPEED_LIMIT_ASSIST"]["MSLA_ENABLED"] == 1
       if self.CP.carFingerprint == CAR.HYUNDAI_IONIQ_6:
         msla = cp.vl["MANUAL_SPEED_LIMIT_ASSIST"]
-        # Tolerate older/stale DBCs that do not yet expose the inferred regen state signals.
-        self.ipedal_active = decode_ioniq_6_ipedal_state(msla.get("EV_REGEN_STATE", 0), msla.get("EV_REGEN_STATE_2", 0))
+        self.ipedal_regen_state = int(msla.get("EV_REGEN_STATE", 0))
+        self.ipedal_regen_state_2 = int(msla.get("EV_REGEN_STATE_2", 0))
+        self.ipedal_active = decode_ioniq_6_ipedal_state(self.ipedal_regen_state, self.ipedal_regen_state_2)
 
     prev_cruise_buttons = self.cruise_buttons[-1]
     prev_main_buttons = self.main_buttons[-1]

@@ -9,7 +9,8 @@ from opendbc.car.structs import CarControl, CarParams
 from opendbc.car.fw_versions import build_fw_dict, match_fw_to_car
 from opendbc.car.hyundai.carcontroller import CarController, Ioniq6LongitudinalTuningState, GenesisG90LongitudinalTuningState, \
                                               update_ioniq_6_longitudinal_tuning, update_genesis_g90_longitudinal_tuning
-from opendbc.car.hyundai.carstate import CarState, decode_ioniq_6_blindspot_radar_state, decode_ioniq_6_ipedal_state
+from opendbc.car.hyundai.carstate import CarState, decode_ioniq_6_blindspot_radar_state, decode_ioniq_6_ipedal_intermediate_state, \
+                                        decode_ioniq_6_ipedal_state
 from opendbc.car.hyundai.interface import CarInterface
 from opendbc.car.hyundai import hyundaican, hyundaicanfd
 from opendbc.car.hyundai.hyundaicanfd import CanBus
@@ -296,6 +297,8 @@ class TestHyundaiFingerprint:
 
   def test_ioniq_6_ipedal_state_decode(self):
     assert not decode_ioniq_6_ipedal_state(0x3C, 0x01)
+    assert not decode_ioniq_6_ipedal_state(0x50, 0x01)
+    assert decode_ioniq_6_ipedal_intermediate_state(0x50, 0x01)
     assert decode_ioniq_6_ipedal_state(0x50, 0x03)
 
   def test_ioniq_6_msla_regen_signals_decode(self):
@@ -393,6 +396,38 @@ class TestHyundaiFingerprint:
     assert sends == []
     assert not controller._ioniq_6_always_ipedal_pending
     assert controller._ioniq_6_always_ipedal_press_remaining == 0
+
+  def test_ioniq_6_always_ipedal_uses_stronger_followup_pull_for_intermediate_latch_state(self):
+    toggles = get_test_toggles()
+    toggles.always_ipedal = True
+    CP = CarInterface.get_params(CAR.HYUNDAI_IONIQ_6, gen_empty_fingerprint(), [], True, False, False, toggles)
+
+    controller = CarController(DBC[CP.carFingerprint], CP)
+    cs = SimpleNamespace(
+      out=SimpleNamespace(gearShifter=structs.CarState.GearShifter.drive),
+      ipedal_active=False,
+      ipedal_regen_state=0x50,
+      ipedal_regen_state_2=0x01,
+      buttons_counter=5,
+      cruise_buttons_msg={
+        "_CHECKSUM": 0,
+        "COUNTER": 5,
+        "CRUISE_BUTTONS": 0,
+        "ADAPTIVE_CRUISE_MAIN_BTN": 0,
+        "NORMAL_CRUISE_MAIN_BTN": 0,
+        "LDA_BTN": 0,
+        "RIGHT_PADDLE": 0,
+        "LEFT_PADDLE": 0,
+        "SET_ME_1": 1,
+      },
+    )
+    cc = SimpleNamespace(enabled=False)
+
+    controller._ioniq_6_last_gear = structs.CarState.GearShifter.reverse
+    sends = controller._update_ioniq_6_always_ipedal(cc, cs, toggles)
+
+    assert sends
+    assert controller._ioniq_6_always_ipedal_press_remaining == 9
 
   def test_ioniq_6_longitudinal_params_match_canfd_tune(self):
     toggles = get_test_toggles()
