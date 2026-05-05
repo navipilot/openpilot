@@ -241,6 +241,7 @@ class CarController(CarControllerBase):
     self._ioniq_6_always_ipedal_press_remaining = 0
     self._ioniq_6_always_ipedal_retry_frame = 0
     self._ioniq_6_always_ipedal_counter = 0
+    self._ioniq_6_always_ipedal_startup_park_done = False
     self._ioniq_6_last_gear = structs.CarState.GearShifter.unknown
     self._genesis_g90_long_tuning = GenesisG90LongitudinalTuningState()
 
@@ -249,41 +250,56 @@ class CarController(CarControllerBase):
     self._ioniq_6_always_ipedal_press_remaining = 0
     self._ioniq_6_always_ipedal_retry_frame = 0
 
+  def _arm_ioniq_6_always_ipedal(self) -> None:
+    self._ioniq_6_always_ipedal_pending = True
+    self._ioniq_6_always_ipedal_press_remaining = 0
+    self._ioniq_6_always_ipedal_retry_frame = self.frame
+
   def _update_ioniq_6_always_ipedal(self, CC, CS, starpilot_toggles):
     can_sends = []
 
     if self.CP.carFingerprint != CAR.HYUNDAI_IONIQ_6 or not getattr(starpilot_toggles, "always_ipedal", False):
       self._reset_ioniq_6_always_ipedal()
+      self._ioniq_6_always_ipedal_startup_park_done = False
       self._ioniq_6_last_gear = CS.out.gearShifter
       return can_sends
 
-    drive = CS.out.gearShifter == structs.CarState.GearShifter.drive
+    gear = CS.out.gearShifter
+    drive = gear == structs.CarState.GearShifter.drive
+    park = gear == structs.CarState.GearShifter.park
     drive_edge = drive and self._ioniq_6_last_gear != structs.CarState.GearShifter.drive
+    startup_park = park and not self._ioniq_6_always_ipedal_startup_park_done
+    startup_park_edge = startup_park and self._ioniq_6_last_gear != structs.CarState.GearShifter.park
+    target_gear = drive or startup_park
 
-    if drive_edge:
-      self._ioniq_6_always_ipedal_pending = not CS.ipedal_active
-      self._ioniq_6_always_ipedal_press_remaining = 0
-      self._ioniq_6_always_ipedal_retry_frame = self.frame
-    elif not drive or CS.ipedal_active:
+    if gear == structs.CarState.GearShifter.unknown:
+      self._ioniq_6_always_ipedal_startup_park_done = False
+    elif not park and not self._ioniq_6_always_ipedal_startup_park_done:
+      self._ioniq_6_always_ipedal_startup_park_done = True
+
+    if (startup_park_edge or drive_edge) and not CS.ipedal_active:
+      self._arm_ioniq_6_always_ipedal()
+    elif not target_gear or CS.ipedal_active:
       self._reset_ioniq_6_always_ipedal()
     elif CC.enabled:
       self._ioniq_6_always_ipedal_pending = False
       self._ioniq_6_always_ipedal_press_remaining = 0
 
-    if drive and self._ioniq_6_always_ipedal_pending and not CS.ipedal_active and not CC.enabled:
+    if target_gear and self._ioniq_6_always_ipedal_pending and not CS.ipedal_active and not CC.enabled:
       if self._ioniq_6_always_ipedal_press_remaining == 0 and self.frame >= self._ioniq_6_always_ipedal_retry_frame:
         self._ioniq_6_always_ipedal_press_remaining = IONIQ_6_IPEDAL_PRESS_SEND_COUNT
-        self._ioniq_6_always_ipedal_counter = (int(CS.buttons_counter) + 1) % 0x10
+        self._ioniq_6_always_ipedal_counter = hyundaicanfd.get_ioniq_6_cruise_buttons_next_counter(CS.buttons_counter)
 
       if self._ioniq_6_always_ipedal_press_remaining > 0 and self.frame % 2 == 0:
-        can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, self._ioniq_6_always_ipedal_counter,
-                                                     base_values=CS.cruise_buttons_msg, left_paddle=True))
-        self._ioniq_6_always_ipedal_counter = (self._ioniq_6_always_ipedal_counter + 1) % 0x10
+        can_sends.append(hyundaicanfd.create_ioniq_6_paddle_buttons(self.packer, self.CP, self.CAN,
+                                                                    self._ioniq_6_always_ipedal_counter, left_paddle=True))
+        self._ioniq_6_always_ipedal_counter = hyundaicanfd.get_ioniq_6_cruise_buttons_next_counter(
+          self._ioniq_6_always_ipedal_counter)
         self._ioniq_6_always_ipedal_press_remaining -= 1
         if self._ioniq_6_always_ipedal_press_remaining == 0:
           self._ioniq_6_always_ipedal_retry_frame = self.frame + IONIQ_6_IPEDAL_RETRY_WAIT_FRAMES
 
-    self._ioniq_6_last_gear = CS.out.gearShifter
+    self._ioniq_6_last_gear = gear
     return can_sends
 
   def update(self, CC, CS, now_nanos, starpilot_toggles):

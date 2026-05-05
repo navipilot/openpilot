@@ -321,7 +321,25 @@ class TestHyundaiFingerprint:
     assert parser.vl["MANUAL_SPEED_LIMIT_ASSIST"]["EV_REGEN_STATE"] == 0x50
     assert parser.vl["MANUAL_SPEED_LIMIT_ASSIST"]["EV_REGEN_STATE_2"] == 0x03
 
-  def test_ioniq_6_always_ipedal_spoofs_left_paddle_until_latched(self):
+  @pytest.mark.parametrize(("counter", "expected_hex"), [
+    (0, "2100002800000000"),
+    (7, "2970002800000000"),
+    (14, "31e0002800000000"),
+  ])
+  def test_ioniq_6_left_paddle_message_matches_stock(self, counter, expected_hex):
+    CP = CarParams.new_message()
+    CP.carFingerprint = CAR.HYUNDAI_IONIQ_6
+    CP.flags = int(HyundaiFlags.CANFD | HyundaiFlags.CANFD_LKA_STEERING)
+
+    msg = hyundaicanfd.create_ioniq_6_paddle_buttons(CANPacker(DBC[CP.carFingerprint][Bus.pt]), CP, CanBus(CP),
+                                                     counter, left_paddle=True)
+    assert msg[1].hex() == expected_hex
+
+  def test_ioniq_6_buttons_counter_wraps_like_stock(self):
+    assert hyundaicanfd.get_ioniq_6_cruise_buttons_next_counter(13) == 14
+    assert hyundaicanfd.get_ioniq_6_cruise_buttons_next_counter(14) == 0
+
+  def test_ioniq_6_always_ipedal_spoofs_left_paddle_in_startup_park_and_drive_until_latched(self):
     toggles = get_test_toggles()
     toggles.always_ipedal = True
     CP = CarInterface.get_params(CAR.HYUNDAI_IONIQ_6, gen_empty_fingerprint(), [], True, False, False, toggles)
@@ -332,7 +350,7 @@ class TestHyundaiFingerprint:
     parser = CANParser(DBC[CP.carFingerprint][Bus.pt], [("CRUISE_BUTTONS", 0)], parser_bus)
 
     cs = SimpleNamespace(
-      out=SimpleNamespace(gearShifter=structs.CarState.GearShifter.drive),
+      out=SimpleNamespace(gearShifter=structs.CarState.GearShifter.park),
       ipedal_active=False,
       buttons_counter=5,
       cruise_buttons_msg={
@@ -349,16 +367,26 @@ class TestHyundaiFingerprint:
     )
     cc = SimpleNamespace(enabled=False)
 
-    controller._ioniq_6_last_gear = structs.CarState.GearShifter.reverse
     sends = controller._update_ioniq_6_always_ipedal(cc, cs, toggles)
     parser.update([(1, sends)])
 
     assert sends
+    assert sends[0][1].hex() == "9060002800000000"
     assert parser.vl["CRUISE_BUTTONS"]["LEFT_PADDLE"] == 1
     assert parser.vl["CRUISE_BUTTONS"]["COUNTER"] == 6
     assert controller._ioniq_6_always_ipedal_pending
+    assert not controller._ioniq_6_always_ipedal_startup_park_done
 
     controller.frame = 2
+    cs.out.gearShifter = structs.CarState.GearShifter.drive
+    sends = controller._update_ioniq_6_always_ipedal(cc, cs, toggles)
+
+    assert sends
+    assert sends[0][1].hex() == "9060002800000000"
+    assert controller._ioniq_6_always_ipedal_pending
+    assert controller._ioniq_6_always_ipedal_startup_park_done
+
+    controller.frame = 4
     cs.ipedal_active = True
     sends = controller._update_ioniq_6_always_ipedal(cc, cs, toggles)
 

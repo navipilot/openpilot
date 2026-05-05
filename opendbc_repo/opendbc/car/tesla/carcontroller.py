@@ -6,7 +6,7 @@ from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.tesla.teslacan import TeslaCAN
 from opendbc.car.tesla.preap.carcontroller import PreAPLongController, init_preap_can
 from opendbc.car.tesla.preap.stock_cc_spoofer import StockCCSpoofer
-from opendbc.car.tesla.values import CAR, CarControllerParams
+from opendbc.car.tesla.values import CANBUS, CAR, CarControllerParams
 from opendbc.car.vehicle_model import VehicleModel
 
 
