@@ -24,6 +24,8 @@ BUTTONS_DICT = {Buttons.RES_ACCEL: ButtonType.accelCruise, Buttons.SET_DECEL: Bu
 
 IONIQ_6_BLINDSPOT_RIGHT_MASK = 0x08
 IONIQ_6_BLINDSPOT_LEFT_MASK = 0x10
+IONIQ_6_IPEDAL_REGEN_STATE = 0x50
+IONIQ_6_IPEDAL_REGEN_STATE_2 = 0x03
 
 
 def calculate_canfd_speed_limit(CP, FPCP, cp, cp_cam, speed_factor):
@@ -41,6 +43,10 @@ def calculate_canfd_speed_limit(CP, FPCP, cp, cp_cam, speed_factor):
 def decode_ioniq_6_blindspot_radar_state(state: int) -> tuple[bool, bool]:
   state_int = int(state)
   return bool(state_int & IONIQ_6_BLINDSPOT_LEFT_MASK), bool(state_int & IONIQ_6_BLINDSPOT_RIGHT_MASK)
+
+
+def decode_ioniq_6_ipedal_state(regen_state: int, regen_state_2: int) -> bool:
+  return int(regen_state) == IONIQ_6_IPEDAL_REGEN_STATE and int(regen_state_2) == IONIQ_6_IPEDAL_REGEN_STATE_2
 
 
 class CarState(CarStateBase):
@@ -61,6 +67,8 @@ class CarState(CarStateBase):
     self.mode_button = 0
     self.custom_button = 0
     self.cancel_button_enable_in_progress = False
+    self.cruise_buttons_msg = {}
+    self.ipedal_active = False
 
     self.gear_msg_canfd = "ACCELERATOR" if CP.flags & HyundaiFlags.EV else \
                           "GEAR_ALT" if CP.flags & HyundaiFlags.CANFD_ALT_GEARS else \
@@ -309,6 +317,7 @@ class CarState(CarStateBase):
 
     self.is_metric = cp.vl["CRUISE_BUTTONS_ALT"]["DISTANCE_UNIT"] != 1
     speed_factor = CV.KPH_TO_MS if self.is_metric else CV.MPH_TO_MS
+    self.ipedal_active = False
 
     if self.CP.flags & (HyundaiFlags.EV | HyundaiFlags.HYBRID):
       ret.gasPressed = cp.vl[self.accelerator_msg_canfd]["ACCELERATOR_PEDAL"] > 1e-5
@@ -386,6 +395,9 @@ class CarState(CarStateBase):
     # TODO: find this message on ICE & HYBRID cars + cruise control signals (if exists)
     if self.CP.flags & HyundaiFlags.EV:
       ret.cruiseState.nonAdaptive = cp.vl["MANUAL_SPEED_LIMIT_ASSIST"]["MSLA_ENABLED"] == 1
+      if self.CP.carFingerprint == CAR.HYUNDAI_IONIQ_6:
+        msla = cp.vl["MANUAL_SPEED_LIMIT_ASSIST"]
+        self.ipedal_active = decode_ioniq_6_ipedal_state(msla["EV_REGEN_STATE"], msla["EV_REGEN_STATE_2"])
 
     prev_cruise_buttons = self.cruise_buttons[-1]
     prev_main_buttons = self.main_buttons[-1]
@@ -396,6 +408,7 @@ class CarState(CarStateBase):
     self.lda_button = cp.vl[self.cruise_btns_msg_canfd]["LDA_BTN"]
     self.left_paddle = 0
     if self.CP.carFingerprint == CAR.HYUNDAI_IONIQ_6:
+      self.cruise_buttons_msg = copy.copy(cp.vl["CRUISE_BUTTONS"])
       self.left_paddle = cp.vl["CRUISE_BUTTONS"]["LEFT_PADDLE"]
     self.buttons_counter = cp.vl[self.cruise_btns_msg_canfd]["COUNTER"]
     ret.accFaulted = cp.vl["TCS"]["ACCEnable"] != 0  # 0 ACC CONTROL ENABLED, 1-3 ACC CONTROL DISABLED
