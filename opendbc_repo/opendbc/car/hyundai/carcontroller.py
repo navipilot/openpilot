@@ -251,6 +251,7 @@ class CarController(CarControllerBase):
     self._ioniq_6_last_ipedal_regen_state_2 = 0
     self._ioniq_6_last_buttons_counter = 0
     self._ioniq_6_last_regen_control_counter = -1
+    self._ioniq_6_regen_request_sent = False
     self._ioniq_6_last_gear = structs.CarState.GearShifter.unknown
     self._genesis_g90_long_tuning = GenesisG90LongitudinalTuningState()
 
@@ -258,11 +259,13 @@ class CarController(CarControllerBase):
     self._ioniq_6_always_ipedal_pending = False
     self._ioniq_6_always_ipedal_press_remaining = 0
     self._ioniq_6_always_ipedal_retry_frame = 0
+    self._ioniq_6_regen_request_sent = False
 
   def _arm_ioniq_6_always_ipedal(self) -> None:
     self._ioniq_6_always_ipedal_pending = True
     self._ioniq_6_always_ipedal_press_remaining = 0
     self._ioniq_6_always_ipedal_retry_frame = self.frame
+    self._ioniq_6_regen_request_sent = False
 
   def _update_ioniq_6_always_ipedal(self, CC, CS, starpilot_toggles):
     can_sends = []
@@ -313,6 +316,7 @@ class CarController(CarControllerBase):
       if self._ioniq_6_always_ipedal_press_remaining == 0 and self.frame >= self._ioniq_6_always_ipedal_retry_frame:
         self._ioniq_6_always_ipedal_press_remaining = IONIQ_6_IPEDAL_LATCH_PRESS_SEND_COUNT if (max_regen_state or ipedal_latch_pending) \
                                                       else IONIQ_6_IPEDAL_PRESS_SEND_COUNT
+        self._ioniq_6_regen_request_sent = False
 
       # Mirror the current stock counter after seeing the real CRUISE_BUTTONS frame land on the bus.
       # Sending the next counter early creates a paddle frame that gets followed by the stock no-paddle
@@ -327,10 +331,12 @@ class CarController(CarControllerBase):
           self._ioniq_6_always_ipedal_retry_frame = self.frame + retry_wait_frames
 
       # The drivetrain latch uses a second HKG CAN-FD request path in addition to the left paddle bit.
-      # Once the cluster-facing regen state reaches max regen, mirror the live stock frame and only
-      # flip the request bytes that the physical paddle toggles for the final i-Pedal latch step.
-      if max_regen_state and has_regen_control_msg and regen_control_counter_changed:
-        can_sends.append(hyundaicanfd.create_ioniq_6_regen_control(self.packer, self.CP, self.CAN, regen_control_msg))
+      # Mirror the next stock 0x25A frame once per retry burst instead of spamming it continuously.
+      if max_regen_state and has_regen_control_msg and regen_control_counter_changed and not self._ioniq_6_regen_request_sent:
+        request_tail = hyundaicanfd.get_ioniq_6_regen_control_request_tail(regen_control_msg)
+        if request_tail is not None:
+          can_sends.append(hyundaicanfd.create_ioniq_6_regen_control(self.packer, self.CP, self.CAN, regen_control_msg))
+          self._ioniq_6_regen_request_sent = True
 
     self._ioniq_6_last_ipedal_regen_state = regen_state
     self._ioniq_6_last_ipedal_regen_state_2 = regen_state_2

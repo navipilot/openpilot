@@ -164,8 +164,12 @@ IONIQ_6_CRUISE_BUTTONS_BASE_CHECKSUMS = (
 )
 IONIQ_6_CRUISE_BUTTONS_LEFT_PADDLE_CHECKSUM_XOR = 0x77
 IONIQ_6_CRUISE_BUTTONS_RIGHT_PADDLE_CHECKSUM_XOR = 0xD4
-IONIQ_6_REGEN_CONTROL_REQ_BYTE24 = 0xC0
-IONIQ_6_REGEN_CONTROL_REQ_BYTE27 = 0x00
+IONIQ_6_REGEN_CONTROL_REQUEST_TAILS = {
+  # Stock manual left-paddle latch request seen on route 0000025e.
+  (0xA8, 0x0C, 0x12, 0x0E): (0xC0, 0x0C, 0x12, 0x00),
+  # Stock manual left-paddle latch request seen on route 00000260.
+  (0xA8, 0x0E, 0x07, 0x0E): (0x85, 0x0E, 0x07, 0x0C),
+}
 
 
 def get_ioniq_6_cruise_buttons_next_counter(counter: int) -> int:
@@ -202,14 +206,20 @@ def create_ioniq_6_paddle_buttons(packer, CP, CAN, cnt, left_paddle=False, right
   return address, bytes(dat), bus
 
 
-def create_ioniq_6_regen_control(packer, CP, CAN, base_values,
-                                  req_byte24=IONIQ_6_REGEN_CONTROL_REQ_BYTE24,
-                                  req_byte27=IONIQ_6_REGEN_CONTROL_REQ_BYTE27):
+def get_ioniq_6_regen_control_request_tail(base_values):
+  base_tail = tuple(int(base_values.get(f"BYTE{i}", 0)) for i in range(24, 28))
+  return IONIQ_6_REGEN_CONTROL_REQUEST_TAILS.get(base_tail)
+
+
+def create_ioniq_6_regen_control(packer, CP, CAN, base_values):
+  request_tail = get_ioniq_6_regen_control_request_tail(base_values)
+  if request_tail is None:
+    raise ValueError(f"Unsupported Ioniq 6 regen control tail: {tuple(int(base_values.get(f'BYTE{i}', 0)) for i in range(24, 28))}")
+
   values = {k: v for k, v in base_values.items() if k != "CHECKSUM"}
   address = packer.dbc.name_to_msg["IONIQ_6_REGEN_CONTROL"].address
   dat = bytearray(packer.pack(address, values))
-  dat[24] = req_byte24
-  dat[27] = req_byte27
+  dat[24:28] = bytes(request_tail)
 
   checksum = hkg_can_fd_checksum(address, None, dat)
   dat[0] = checksum & 0xFF

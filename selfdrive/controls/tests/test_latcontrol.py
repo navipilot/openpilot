@@ -432,13 +432,13 @@ class TestLatControl:
     monkeypatch.setattr(latcontrol_torque, "civic_bosch_modified_a_lateral_testing_ground_active", lambda: True)
     a_variant_controller = LatControlTorque(CP.as_reader(), CI, DT_CTRL)
 
-    assert a_variant_controller.torque_params.latAccelFactor == pytest.approx(3.0 * 1.20 * 0.98)
+    assert a_variant_controller.torque_params.latAccelFactor == pytest.approx(3.0 * 1.20)
 
     monkeypatch.setattr(latcontrol_torque, "civic_bosch_modified_a_lateral_testing_ground_active", lambda: False)
     monkeypatch.setattr(latcontrol_torque, "civic_bosch_modified_lateral_testing_ground_active", lambda: True)
     variant_controller = LatControlTorque(CP.as_reader(), CI, DT_CTRL)
 
-    assert variant_controller.torque_params.latAccelFactor == pytest.approx(3.0 * 1.20 * 1.14)
+    assert variant_controller.torque_params.latAccelFactor == pytest.approx(3.0 * 1.20 * 1.18)
 
   def test_modified_civic_b_torque_ff_scale_curve(self):
     steady_left = get_civic_bosch_modified_b_ff_scale(0.5, 0.0, 12.0)
@@ -490,7 +490,9 @@ class TestLatControl:
     base_steady_right = get_civic_bosch_modified_b_ff_scale(-0.5, 0.0, 12.0)
     base_turn_in_left = get_civic_bosch_modified_b_ff_scale(0.5, 0.8, 12.0)
     base_turn_in_right = get_civic_bosch_modified_b_ff_scale(-0.5, -0.8, 12.0)
-    base_turn_in_left_friction = get_civic_bosch_modified_b_friction_scale(12.0, 0.5, 0.8)
+    base_unwind_left = get_civic_bosch_modified_b_ff_scale(0.5, -0.8, 12.0)
+    base_unwind_right = get_civic_bosch_modified_b_ff_scale(-0.5, 0.8, 12.0)
+    base_unwind_right_friction = get_civic_bosch_modified_b_friction_scale(12.0, -0.5, 0.8)
 
     monkeypatch.setattr(latcontrol_torque, "civic_bosch_modified_a_lateral_testing_ground_active", lambda: True)
 
@@ -498,13 +500,17 @@ class TestLatControl:
     a_variant_steady_right = get_civic_bosch_modified_b_ff_scale(-0.5, 0.0, 12.0)
     a_variant_turn_in_left = get_civic_bosch_modified_b_ff_scale(0.5, 0.8, 12.0)
     a_variant_turn_in_right = get_civic_bosch_modified_b_ff_scale(-0.5, -0.8, 12.0)
-    a_variant_turn_in_left_friction = get_civic_bosch_modified_b_friction_scale(12.0, 0.5, 0.8)
+    a_variant_unwind_left = get_civic_bosch_modified_b_ff_scale(0.5, -0.8, 12.0)
+    a_variant_unwind_right = get_civic_bosch_modified_b_ff_scale(-0.5, 0.8, 12.0)
+    a_variant_unwind_right_friction = get_civic_bosch_modified_b_friction_scale(12.0, -0.5, 0.8)
 
-    assert a_variant_steady_left > base_steady_left
-    assert a_variant_steady_right > base_steady_right
-    assert a_variant_turn_in_left > base_turn_in_left
-    assert a_variant_turn_in_right > base_turn_in_right
-    assert a_variant_turn_in_left_friction > base_turn_in_left_friction
+    assert a_variant_steady_left == pytest.approx(base_steady_left)
+    assert a_variant_steady_right == pytest.approx(base_steady_right)
+    assert a_variant_turn_in_left == pytest.approx(base_turn_in_left)
+    assert a_variant_turn_in_right == pytest.approx(base_turn_in_right)
+    assert a_variant_unwind_left < base_unwind_left
+    assert a_variant_unwind_right < base_unwind_right
+    assert a_variant_unwind_right_friction < base_unwind_right_friction
 
   def test_kia_ev6_testing_ground_update_path(self, monkeypatch):
     controller, VM, CS, params, starpilot_toggles = self._build_torque_controller(HYUNDAI.KIA_EV6)

@@ -82,6 +82,25 @@ static uint32_t hyundai_canfd_get_checksum(const CANPacket_t *msg) {
   return chksum;
 }
 
+static bool hyundai_canfd_ioniq_6_regen_tail_allowed(const CANPacket_t *msg) {
+  const uint8_t stock24 = hyundai_canfd_last_regen_control[24];
+  const uint8_t stock25 = hyundai_canfd_last_regen_control[25];
+  const uint8_t stock26 = hyundai_canfd_last_regen_control[26];
+  const uint8_t stock27 = hyundai_canfd_last_regen_control[27];
+
+  if ((stock24 == 0xA8U) && (stock25 == 0x0CU) && (stock26 == 0x12U) && (stock27 == 0x0EU)) {
+    return (msg->data[24] == 0xC0U) && (msg->data[25] == 0x0CU) &&
+           (msg->data[26] == 0x12U) && (msg->data[27] == 0x00U);
+  }
+
+  if ((stock24 == 0xA8U) && (stock25 == 0x0EU) && (stock26 == 0x07U) && (stock27 == 0x0EU)) {
+    return (msg->data[24] == 0x85U) && (msg->data[25] == 0x0EU) &&
+           (msg->data[26] == 0x07U) && (msg->data[27] == 0x0CU);
+  }
+
+  return false;
+}
+
 static void hyundai_canfd_rx_all_hook(const CANPacket_t *msg) {
   const unsigned pt_bus = hyundai_canfd_lka_steering ? 1U : 0U;
 
@@ -273,14 +292,15 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *msg) {
                    (GET_LEN(msg) == 32U) &&
                    hyundai_canfd_last_regen_control_seen &&
                    (hyundai_canfd_get_checksum(msg) == hyundai_common_canfd_compute_checksum(msg)) &&
-                   (msg->data[24] == 0xC0U) &&
-                   (msg->data[27] == 0x00U);
+                   hyundai_canfd_ioniq_6_regen_tail_allowed(msg);
 
     if (allowed) {
       for (int i = 2; i < 32; i++) {
-        if ((i != 24) && (i != 27) && (msg->data[i] != hyundai_canfd_last_regen_control[i])) {
-          allowed = false;
-          break;
+        if ((i < 24) || (i > 27)) {
+          if (msg->data[i] != hyundai_canfd_last_regen_control[i]) {
+            allowed = false;
+            break;
+          }
         }
       }
     }

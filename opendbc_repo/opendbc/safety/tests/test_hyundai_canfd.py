@@ -440,7 +440,7 @@ class TestHyundaiCanfdLKASteeringEV(TestHyundaiCanfdBase):
     }
     return self.packer.make_can_msg_safety("CRUISE_BUTTONS", bus, values)
 
-  def _regen_control_msg(self, byte24=0xA8, byte27=0x0E, counter=0x14, bus=None):
+  def _regen_control_msg(self, byte24=0xA8, byte25=0x0C, byte26=0x12, byte27=0x0E, counter=0x14, bus=None):
     if bus is None:
       bus = self.PT_BUS
     values = {
@@ -467,8 +467,8 @@ class TestHyundaiCanfdLKASteeringEV(TestHyundaiCanfdBase):
       "BYTE22": 0xC0,
       "BYTE23": 0x71,
       "BYTE24": byte24,
-      "BYTE25": 0x0C,
-      "BYTE26": 0x12,
+      "BYTE25": byte25,
+      "BYTE26": byte26,
       "BYTE27": byte27,
       "BYTE28": 0x00,
       "BYTE29": 0x00,
@@ -522,9 +522,15 @@ class TestHyundaiCanfdLKASteeringEVAlwaysIPedal(TestHyundaiCanfdLKASteeringEV):
 
     self.safety.set_controls_allowed(False)
     self.assertTrue(self._tx(self._regen_control_msg(byte24=0xC0, byte27=0x00, counter=0x14)))
+    self.assertFalse(self._tx(self._regen_control_msg(byte24=0x85, byte25=0x0E, byte26=0x07, byte27=0x0C, counter=0x14)))
     self.assertFalse(self._tx(self._regen_control_msg(byte24=0xA8, byte27=0x00, counter=0x14)))
     self.assertFalse(self._tx(self._regen_control_msg(byte24=0xC0, byte27=0x0E, counter=0x14)))
     self.assertFalse(self._tx(self._regen_control_msg(byte24=0xC0, byte27=0x00, counter=0x15)))
+
+    stock_msg = self._regen_control_msg(byte24=0xA8, byte25=0x0E, byte26=0x07, byte27=0x0E, counter=0x58)
+    self._rx(stock_msg)
+    self.assertTrue(self._tx(self._regen_control_msg(byte24=0x85, byte25=0x0E, byte26=0x07, byte27=0x0C, counter=0x58)))
+    self.assertFalse(self._tx(self._regen_control_msg(byte24=0xC0, byte25=0x0E, byte26=0x07, byte27=0x00, counter=0x58)))
 
     self.safety.set_controls_allowed(True)
     self.assertFalse(self._tx(self._regen_control_msg(byte24=0xC0, byte27=0x00, counter=0x14)))

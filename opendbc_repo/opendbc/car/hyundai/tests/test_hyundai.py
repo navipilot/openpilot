@@ -343,7 +343,11 @@ class TestHyundaiFingerprint:
     assert hyundaicanfd.get_ioniq_6_cruise_buttons_next_counter(13) == 14
     assert hyundaicanfd.get_ioniq_6_cruise_buttons_next_counter(14) == 0
 
-  def test_ioniq_6_regen_control_message_preserves_stock_frame_and_flips_only_ipedal_request_bytes(self):
+  @pytest.mark.parametrize(("stock_hex", "expected_tail"), [
+    ("45421440801f000000000000a865170000a000000080c071a80c120e00000000", bytes.fromhex("c00c1200")),
+    ("47745840801f0000000005006e5e0e0000a000000080c071a80e070e00000000", bytes.fromhex("850e070c")),
+  ])
+  def test_ioniq_6_regen_control_message_preserves_stock_frame_and_flips_only_ipedal_request_bytes(self, stock_hex, expected_tail):
     CP = CarParams.new_message()
     CP.carFingerprint = CAR.HYUNDAI_IONIQ_6
     CP.flags = int(HyundaiFlags.CANFD | HyundaiFlags.CANFD_LKA_STEERING)
@@ -351,14 +355,12 @@ class TestHyundaiFingerprint:
     packer = CANPacker(DBC[CP.carFingerprint][Bus.pt])
     can_bus = CanBus(CP)
     parser = CANParser(DBC[CP.carFingerprint][Bus.pt], [("IONIQ_6_REGEN_CONTROL", 0)], can_bus.ECAN)
-    stock_dat = bytes.fromhex("45421440801f000000000000a865170000a000000080c071a80c120e00000000")
+    stock_dat = bytes.fromhex(stock_hex)
     parser.update([(1, [(0x25A, stock_dat, can_bus.ECAN)])])
 
     msg = hyundaicanfd.create_ioniq_6_regen_control(packer, CP, can_bus, parser.vl["IONIQ_6_REGEN_CONTROL"])
     assert msg[1][2:24] == stock_dat[2:24]
-    assert msg[1][24] == hyundaicanfd.IONIQ_6_REGEN_CONTROL_REQ_BYTE24
-    assert msg[1][25:27] == stock_dat[25:27]
-    assert msg[1][27] == hyundaicanfd.IONIQ_6_REGEN_CONTROL_REQ_BYTE27
+    assert msg[1][24:28] == expected_tail
     assert msg[1][28:] == stock_dat[28:]
     checksum = hyundaicanfd.hkg_can_fd_checksum(msg[0], None, bytearray(msg[1]))
     assert msg[1][0] | (msg[1][1] << 8) == checksum
@@ -525,10 +527,17 @@ class TestHyundaiFingerprint:
 
     assert any(msg[0] == 0x1CF for msg in sends)
     regen_cmd = next(msg for msg in sends if msg[0] == 0x25A)
-    assert regen_cmd[1][24] == hyundaicanfd.IONIQ_6_REGEN_CONTROL_REQ_BYTE24
-    assert regen_cmd[1][27] == hyundaicanfd.IONIQ_6_REGEN_CONTROL_REQ_BYTE27
+    assert regen_cmd[1][24:28] == bytes.fromhex("c00c1200")
     checksum = hyundaicanfd.hkg_can_fd_checksum(regen_cmd[0], None, bytearray(regen_cmd[1]))
     assert regen_cmd[1][0] | (regen_cmd[1][1] << 8) == checksum
+
+    controller.frame = 1
+    cs.buttons_counter = 6
+    cs.ioniq_6_regen_control_msg = dict(cs.ioniq_6_regen_control_msg, COUNTER=0x15)
+    sends = controller._update_ioniq_6_always_ipedal(cc, cs, toggles)
+
+    assert any(msg[0] == 0x1CF for msg in sends)
+    assert not any(msg[0] == 0x25A for msg in sends)
 
   def test_ioniq_6_longitudinal_params_match_canfd_tune(self):
     toggles = get_test_toggles()
