@@ -39,10 +39,9 @@ jobs:
           git fetch carrotpilot c3 --no-tags || echo "⚠️ carrotpilot c3 fetch failed"
 
           # Carrotpilot (c3-wip)
-          # 注意：c3-wip 也来自同一个仓库，但 fetch 单独的分支
           git fetch carrotpilot c3-wip --no-tags || echo "⚠️ carrotpilot c3-wip fetch failed"
 
-          # IQpilot (release-new)
+          # IQpilot (release-mrone)
           add_or_update_remote iqpilot https://gitlvb.teallvbs.xyz/IQ.Lvbs/IQ.Pilot.git
           git fetch iqpilot release-mrone --no-tags || echo "⚠️ iqpilot release-mrone fetch failed"
 
@@ -50,9 +49,13 @@ jobs:
           add_or_update_remote dragonpilot https://github.com/dragonpilot/dragonpilot.git
           git fetch dragonpilot pre-build --no-tags || echo "⚠️ dragonpilot pre-build fetch failed"
 
-          # StarPilot（替换 xnor）
+          # StarPilot
           add_or_update_remote starpilot https://github.com/firestar5683/StarPilot.git
           git fetch starpilot StarPilot --no-tags || echo "⚠️ StarPilot branch fetch failed"
+
+          # Gitop（jihulab）
+          add_or_update_remote gitop https://jihulab.com/fishop/openpilot.git
+          git fetch gitop cp --no-tags || echo "⚠️ gitop cp fetch failed"
 
       - name: Push branches to your repository (force sync)
         run: |
@@ -84,6 +87,7 @@ jobs:
           sync_branch release iqpilot/release-mrone
           sync_branch Dragonpilot dragonpilot/pre-build
           sync_branch StarPilot starpilot/StarPilot
+          sync_branch gitop gitop/cp
 
       - name: Tag sync timestamp
         run: |
