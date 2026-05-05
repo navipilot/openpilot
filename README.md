@@ -8,7 +8,6 @@
 **StarPilot** is a custom fork of [comma.ai's openpilot](https://comma.ai/openpilot),
 an open source driver assistance system.
 
-whoisdomi
 
 Openpilot provides
 * Automated Lane Centering
