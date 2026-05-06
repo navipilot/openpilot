@@ -346,6 +346,8 @@ class TestHyundaiFingerprint:
   @pytest.mark.parametrize(("stock_hex", "expected_tail"), [
     ("45421440801f000000000000a865170000a000000080c071a80c120e00000000", bytes.fromhex("c00c1200")),
     ("47745840801f0000000005006e5e0e0000a000000080c071a80e070e00000000", bytes.fromhex("850e070c")),
+    ("7aea8140801f000000000000b965140000a000000080c0711810070200000000", bytes.fromhex("b5100700")),
+    ("32438340801f000000000000b965140000a000000080c071a810070e00000000", bytes.fromhex("b5100700")),
   ])
   def test_ioniq_6_regen_control_message_preserves_stock_frame_and_flips_only_ipedal_request_bytes(self, stock_hex, expected_tail):
     CP = CarParams.new_message()

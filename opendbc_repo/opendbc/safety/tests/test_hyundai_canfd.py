@@ -532,6 +532,16 @@ class TestHyundaiCanfdLKASteeringEVAlwaysIPedal(TestHyundaiCanfdLKASteeringEV):
     self.assertTrue(self._tx(self._regen_control_msg(byte24=0x85, byte25=0x0E, byte26=0x07, byte27=0x0C, counter=0x58)))
     self.assertFalse(self._tx(self._regen_control_msg(byte24=0xC0, byte25=0x0E, byte26=0x07, byte27=0x00, counter=0x58)))
 
+    stock_msg = self._regen_control_msg(byte24=0x18, byte25=0x10, byte26=0x07, byte27=0x02, counter=0x81)
+    self._rx(stock_msg)
+    self.assertTrue(self._tx(self._regen_control_msg(byte24=0xB5, byte25=0x10, byte26=0x07, byte27=0x00, counter=0x81)))
+    self.assertFalse(self._tx(self._regen_control_msg(byte24=0xA8, byte25=0x10, byte26=0x07, byte27=0x00, counter=0x81)))
+
+    stock_msg = self._regen_control_msg(byte24=0xA8, byte25=0x10, byte26=0x07, byte27=0x0E, counter=0x82)
+    self._rx(stock_msg)
+    self.assertTrue(self._tx(self._regen_control_msg(byte24=0xB5, byte25=0x10, byte26=0x07, byte27=0x00, counter=0x82)))
+    self.assertFalse(self._tx(self._regen_control_msg(byte24=0xA8, byte25=0x02, byte26=0x07, byte27=0x0E, counter=0x82)))
+
     self.safety.set_controls_allowed(True)
     self.assertFalse(self._tx(self._regen_control_msg(byte24=0xC0, byte27=0x00, counter=0x14)))
 

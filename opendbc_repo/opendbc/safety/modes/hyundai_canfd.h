@@ -98,6 +98,16 @@ static bool hyundai_canfd_ioniq_6_regen_tail_allowed(const CANPacket_t *msg) {
            (msg->data[26] == 0x07U) && (msg->data[27] == 0x0CU);
   }
 
+  if ((stock24 == 0x18U) && (stock25 == 0x10U) && (stock26 == 0x07U) && (stock27 == 0x02U)) {
+    return (msg->data[24] == 0xB5U) && (msg->data[25] == 0x10U) &&
+           (msg->data[26] == 0x07U) && (msg->data[27] == 0x00U);
+  }
+
+  if ((stock24 == 0xA8U) && (stock25 == 0x10U) && (stock26 == 0x07U) && (stock27 == 0x0EU)) {
+    return (msg->data[24] == 0xB5U) && (msg->data[25] == 0x10U) &&
+           (msg->data[26] == 0x07U) && (msg->data[27] == 0x00U);
+  }
+
   return false;
 }
 
