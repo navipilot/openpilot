@@ -74,7 +74,7 @@ class NAPConf:
 
   @property
   def double_pull_window_ms(self) -> int:
-    return 400
+    return 500
 
   def get_pedal_profile_values(self) -> list[float]:
     return PEDAL_MAX_VALUES
