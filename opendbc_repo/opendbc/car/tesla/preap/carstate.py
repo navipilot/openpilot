@@ -49,6 +49,10 @@ def update_preap(cs, can_parsers):
   ))
   cs.engagement.handle_steering_disengage(ret.steeringDisengage)
 
+  gtw_epas = cp_chassis.vl["GTW_epasControl"]
+  # Pre-AP steering requires the EPAS firmware patch to advertise angle control and LDW enabled.
+  ret.invalidLkasSetting = (gtw_epas["GTW_epasControlType"] != 1) or (gtw_epas["GTW_epasLDWEnabled"] != 1)
+
   cruise_state = cs.can_define.dv["DI_state"]["DI_cruiseState"].get(int(cp_chassis.vl["DI_state"]["DI_cruiseState"]), None)
   cs.di_cruise_state = cruise_state or "OFF"
   speed_units = cs.can_define.dv["DI_state"]["DI_speedUnits"].get(int(cp_chassis.vl["DI_state"]["DI_speedUnits"]), None)
@@ -116,7 +120,7 @@ def update_preap(cs, can_parsers):
 def get_preap_can_parsers(CP):
   chassis_messages = [
     ("ESP_B", 0), ("BrakeMessage", 0), ("DI_state", 0), ("DI_torque2", 0),
-    ("GTW_carState", 0), ("STW_ANGLHP_STAT", 0), ("EPAS_sysStatus", 0), ("STW_ACTN_RQ", 0),
+    ("GTW_carState", 0), ("GTW_epasControl", 0), ("STW_ANGLHP_STAT", 0), ("EPAS_sysStatus", 0), ("STW_ACTN_RQ", 0),
   ]
   pt_messages = [("DI_torque1", 0)]
   pedal_messages = [("GAS_SENSOR", 50)] if nap_conf.use_pedal else []
@@ -126,4 +130,3 @@ def get_preap_can_parsers(CP):
     Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], pt_messages, CANBUS.party),
     Bus.chassis: CANParser(DBC[CP.carFingerprint][Bus.chassis], chassis_messages, CANBUS.party),
   }
-
