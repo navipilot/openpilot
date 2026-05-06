@@ -55,6 +55,7 @@ IONIQ_6_STOP_RELEASE_JERK_V = [3.6 * IONIQ_6_RESPONSE_MULTIPLIER,
                                4.8 * IONIQ_6_RESPONSE_MULTIPLIER]
 IONIQ_6_IPEDAL_PRESS_SEND_COUNT = 6
 IONIQ_6_IPEDAL_LATCH_PRESS_SEND_COUNT = 10
+IONIQ_6_IPEDAL_PADDLE_BURST_COUNT = 3
 IONIQ_6_MAX_REGEN_STATE = 0x3C
 IONIQ_6_MAX_REGEN_STATE_2 = 0x01
 IONIQ_6_IPEDAL_REGEN_STATE = 0x50
@@ -319,12 +320,13 @@ class CarController(CarControllerBase):
         self._ioniq_6_regen_request_sent = False
 
       # Mirror the current stock counter after seeing the real CRUISE_BUTTONS frame land on the bus.
-      # Sending the next counter early creates a paddle frame that gets followed by the stock no-paddle
-      # frame for that same counter, which matches the "UI changed but drivetrain didn't latch" behavior.
+      # A single duplicate was enough to move the cluster-facing state, but not enough to reliably beat
+      # the stock no-paddle frame for the actual drivetrain latch path.
       if self._ioniq_6_always_ipedal_press_remaining > 0 and buttons_counter_changed and \
          0 <= buttons_counter < hyundaicanfd.IONIQ_6_CRUISE_BUTTONS_COUNTER_MAX:
-        can_sends.append(hyundaicanfd.create_ioniq_6_paddle_buttons(self.packer, self.CP, self.CAN,
-                                                                    buttons_counter, left_paddle=True))
+        paddle_msg = hyundaicanfd.create_ioniq_6_paddle_buttons(self.packer, self.CP, self.CAN,
+                                                                buttons_counter, left_paddle=True)
+        can_sends.extend([paddle_msg] * IONIQ_6_IPEDAL_PADDLE_BURST_COUNT)
         self._ioniq_6_always_ipedal_press_remaining -= 1
         if self._ioniq_6_always_ipedal_press_remaining == 0:
           retry_wait_frames = IONIQ_6_IPEDAL_PROGRESS_RETRY_WAIT_FRAMES if regen_state_changed else IONIQ_6_IPEDAL_RETRY_WAIT_FRAMES

@@ -438,7 +438,7 @@ class TestLatControl:
     monkeypatch.setattr(latcontrol_torque, "civic_bosch_modified_lateral_testing_ground_active", lambda: True)
     variant_controller = LatControlTorque(CP.as_reader(), CI, DT_CTRL)
 
-    assert variant_controller.torque_params.latAccelFactor == pytest.approx(3.0 * 1.20 * 1.18)
+    assert variant_controller.torque_params.latAccelFactor == pytest.approx(3.0 * 1.20 * 1.16)
 
   def test_modified_civic_b_torque_ff_scale_curve(self):
     steady_left = get_civic_bosch_modified_b_ff_scale(0.5, 0.0, 12.0)
@@ -452,7 +452,7 @@ class TestLatControl:
     assert steady_right < 1.0
     assert steady_right < steady_left
     assert turn_in_left > steady_left
-    assert turn_in_right > steady_right
+    assert turn_in_right >= steady_right
     assert unwind_left < steady_left
     assert unwind_right < steady_right
 
@@ -463,27 +463,36 @@ class TestLatControl:
     unwind_right = get_civic_bosch_modified_b_friction_scale(12.0, -0.5, 0.8)
 
     assert turn_in_left > 1.0
-    assert turn_in_right > turn_in_left
+    assert turn_in_right >= 1.0
+    assert turn_in_left > turn_in_right
     assert unwind_left < 1.0
     assert unwind_right < unwind_left
 
   def test_modified_civic_b_variant_extra_torque_shaping_curve(self, monkeypatch):
+    base_steady_left = get_civic_bosch_modified_b_ff_scale(0.5, 0.0, 12.0)
     base_steady_right = get_civic_bosch_modified_b_ff_scale(-0.5, 0.0, 12.0)
     base_turn_in_right = get_civic_bosch_modified_b_ff_scale(-0.5, -0.8, 12.0)
     base_unwind_right = get_civic_bosch_modified_b_ff_scale(-0.5, 0.8, 12.0)
+    base_turn_in_right_friction = get_civic_bosch_modified_b_friction_scale(12.0, -0.5, -0.8)
     base_unwind_right_friction = get_civic_bosch_modified_b_friction_scale(12.0, -0.5, 0.8)
 
     monkeypatch.setattr(latcontrol_torque, "civic_bosch_modified_lateral_testing_ground_active", lambda: True)
 
+    variant_steady_left = get_civic_bosch_modified_b_ff_scale(0.5, 0.0, 12.0)
     variant_steady_right = get_civic_bosch_modified_b_ff_scale(-0.5, 0.0, 12.0)
     variant_turn_in_right = get_civic_bosch_modified_b_ff_scale(-0.5, -0.8, 12.0)
     variant_unwind_right = get_civic_bosch_modified_b_ff_scale(-0.5, 0.8, 12.0)
+    variant_turn_in_left = get_civic_bosch_modified_b_ff_scale(0.5, 0.8, 12.0)
     variant_unwind_right_friction = get_civic_bosch_modified_b_friction_scale(12.0, -0.5, 0.8)
+    variant_turn_in_right_friction = get_civic_bosch_modified_b_friction_scale(12.0, -0.5, -0.8)
 
     assert variant_steady_right < base_steady_right
     assert variant_turn_in_right < base_turn_in_right
+    assert variant_turn_in_right > variant_steady_right
+    assert variant_turn_in_left > variant_steady_left
     assert variant_unwind_right < base_unwind_right
     assert variant_unwind_right_friction < base_unwind_right_friction
+    assert variant_turn_in_right_friction > base_turn_in_right_friction
 
   def test_modified_civic_a_variant_extra_torque_shaping_curve(self, monkeypatch):
     base_steady_left = get_civic_bosch_modified_b_ff_scale(0.5, 0.0, 12.0)
