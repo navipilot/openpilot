@@ -3,7 +3,7 @@ name: Sync Branches
 on:
   schedule:
     - cron: '0 18 * * *'    # 每天 UTC 18 点（北京时间 02:00）
-  workflow_dispatch:        # 支持手动触发运行
+  workflow_dispatch:
 
 jobs:
   sync:
@@ -21,7 +21,6 @@ jobs:
           set -e
           echo "=== Fetching branches from upstream repositories ==="
 
-          # Helper: add or update remote safely
           add_or_update_remote () {
             local name="$1"
             local url="$2"
@@ -32,34 +31,32 @@ jobs:
             fi
           }
 
-          # ========= 上游仓库配置 =========
+          # ========= 上游仓库 =========
 
-          # Carrotpilot (c3)
+          # Carrotpilot
           add_or_update_remote carrotpilot https://github.com/ajouatom/openpilot.git
           git fetch carrotpilot c3 --no-tags || echo "⚠️ carrotpilot c3 fetch failed"
-
-          # Carrotpilot (c3-wip)
           git fetch carrotpilot c3-wip --no-tags || echo "⚠️ carrotpilot c3-wip fetch failed"
 
-          # IQpilot (release-mrone)
+          # IQpilot
           add_or_update_remote iqpilot https://gitlvb.teallvbs.xyz/IQ.Lvbs/IQ.Pilot.git
-          git fetch iqpilot release-mrone --no-tags || echo "⚠️ iqpilot release-mrone fetch failed"
+          git fetch iqpilot release-mrone --no-tags || echo "⚠️ iqpilot fetch failed"
 
-          # Dragonpilot (pre-build)
+          # Dragonpilot (原有)
           add_or_update_remote dragonpilot https://github.com/dragonpilot/dragonpilot.git
           git fetch dragonpilot pre-build --no-tags || echo "⚠️ dragonpilot pre-build fetch failed"
 
           # StarPilot
           add_or_update_remote starpilot https://github.com/firestar5683/StarPilot.git
-          git fetch starpilot StarPilot --no-tags || echo "⚠️ StarPilot branch fetch failed"
+          git fetch starpilot StarPilot --no-tags || echo "⚠️ starpilot fetch failed"
 
-          # Gitop（jihulab）
-          add_or_update_remote gitop https://jihulab.com/fishop/openpilot.git
-          git fetch gitop cp --no-tags || echo "⚠️ gitop cp fetch failed"
+          # ✅ 修改点：gitop → dragonpilot 0.10.3
+          add_or_update_remote dp103 https://github.com/dragonpilot/dragonpilot.git
+          git fetch dp103 0.10.3 --no-tags || echo "⚠️ dragonpilot 0.10.3 fetch failed"
 
-          # Fishop (jihulab) - 新增
+          # Fishop
           add_or_update_remote fishop_remote https://jihulab.com/fishop/openpilot.git
-          git fetch fishop_remote cp --no-tags || echo "⚠️ fishop cp fetch failed"
+          git fetch fishop_remote cp --no-tags || echo "⚠️ fishop fetch failed"
 
       - name: Push branches to your repository (force sync)
         run: |
@@ -91,8 +88,10 @@ jobs:
           sync_branch release iqpilot/release-mrone
           sync_branch Dragonpilot dragonpilot/pre-build
           sync_branch StarPilot starpilot/StarPilot
-          sync_branch gitop gitop/cp
-          # 新增：将 jihulab 的 cp 分支同步到你仓库的 fishop 分支
+
+          # ✅ 新的 0.10.3
+          sync_branch dp-0.10.3 dp103/0.10.3
+
           sync_branch fishop fishop_remote/cp
 
       - name: Tag sync timestamp
