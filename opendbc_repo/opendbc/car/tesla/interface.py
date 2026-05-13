@@ -5,8 +5,6 @@ from opendbc.car.tesla.carstate import CarState
 from opendbc.car.tesla.values import TeslaSafetyFlags, TeslaFlags, CANBUS, CAR, DBC
 from opendbc.car.tesla.radar_interface import RadarInterface, RADAR_START_ADDR
 
-from opendbc.iqpilot.car.tesla.values import TeslaFlagsIQ, TeslaSafetyFlagsIQ
-
 
 class CarInterface(CarInterfaceBase):
   CarState = CarState
@@ -46,20 +44,5 @@ class CarInterface(CarInterfaceBase):
       ret.stoppingDecelRate = 0.3
 
     ret.dashcamOnly = candidate in (CAR.TESLA_MODEL_X,)  # dashcam only, pending find invalidLkasSetting signal
-
-    return ret
-
-  @staticmethod
-  def _get_params_iq(stock_cp: structs.CarParams, ret: structs.IQCarParams, candidate, fingerprint: dict[int, dict[int, int]],
-                     car_fw: list[structs.CarParams.CarFw], alpha_long: bool, is_release_iq: bool, docs: bool) -> structs.IQCarParams:
-
-    stock_cp.enableBsm = True
-
-    if candidate == CAR.TESLA_MODEL_X:
-      stock_cp.dashcamOnly = False
-
-    if 0x3DF in fingerprint[1]:
-      ret.flags |= TeslaFlagsIQ.HAS_VEHICLE_BUS.value
-      ret.safetyParam |= TeslaSafetyFlagsIQ.HAS_VEHICLE_BUS
 
     return ret

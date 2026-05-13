@@ -6,8 +6,6 @@ from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.tesla.teslacan import TeslaCAN
 from opendbc.car.tesla.values import CarControllerParams
 from opendbc.car.vehicle_model import VehicleModel
-from openpilot.iqpilot.selfdrive.car.enhanced_stock_longitudinal_control import get_set_speed_kph_from_params
-from opendbc.iqpilot.car.tesla.coop_steering import CoopSteeringCarController
 
 
 def get_safety_CP():
@@ -18,9 +16,8 @@ def get_safety_CP():
 
 
 class CarController(CarControllerBase):
-  def __init__(self, dbc_names, CP, CP_IQ):
-    CarControllerBase.__init__(self, dbc_names, CP, CP_IQ)
-    self.coop_steer = CoopSteeringCarController()
+  def __init__(self, dbc_names, CP):
+    super().__init__(dbc_names, CP)
     self.apply_angle_last = 0
     self.packer = CANPacker(dbc_names[Bus.party])
     self.tesla_can = TeslaCAN(CP, self.packer)
@@ -28,7 +25,7 @@ class CarController(CarControllerBase):
     # Vehicle model used for lateral limiting
     self.VM = VehicleModel(get_safety_CP())
 
-  def update(self, CC, CC_IQ, CS, now_nanos):
+  def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
     can_sends = []
 
@@ -42,7 +39,9 @@ class CarController(CarControllerBase):
       self.apply_angle_last = apply_steer_angle_limits_vm(actuators.steeringAngleDeg, self.apply_angle_last, CS.out.vEgoRaw, CS.out.steeringAngleDeg,
                                                           lat_active, CarControllerParams, self.VM)
 
-      can_sends.append(self.tesla_can.create_steering_control(*self.coop_steer.update(self.apply_angle_last, lat_active, self.CP_IQ, CS, self.VM)))
+      # control_type: 0 = NONE, 1 = ANGLE, 2 = LANE_KEEP_ASSIST
+      control_type = 1 if lat_active else 0
+      can_sends.append(self.tesla_can.create_steering_control(self.apply_angle_last, lat_active, control_type))
 
     if self.frame % 10 == 0:
       can_sends.append(self.tesla_can.create_steering_allowed())
@@ -53,9 +52,8 @@ class CarController(CarControllerBase):
         state = 13 if CC.cruiseControl.cancel or CS.das_accCancel else 4  # 4=ACC_ON, 13=ACC_CANCEL_GENERIC_SILENT
         accel = float(np.clip(actuators.accel, CarControllerParams.ACCEL_MIN, CarControllerParams.ACCEL_MAX))
         cntr = (self.frame // 4) % 8
-        set_speed_kph = get_set_speed_kph_from_params(CC_IQ.params)
         can_sends.append(self.tesla_can.create_longitudinal_command(state, accel, cntr, CS.out.vEgo, CC.longActive,
-                                                                    CS.cruise_override, set_speed_kph=set_speed_kph))
+                                                                    CS.cruise_override))
 
     else:
       # Increment counter so cancel is prioritized even without openpilot longitudinal
@@ -66,9 +64,6 @@ class CarController(CarControllerBase):
     # TODO: HUD control
     new_actuators = actuators.as_builder()
     new_actuators.steeringAngleDeg = self.apply_angle_last
-    new_actuators.accel = self.coop_steer.coop_apply_angle_last_sat  # debug
-    new_actuators.curvature = float(self.coop_steer.debug_angle_desired_limited)  # debug
-    new_actuators.torque = float(self.coop_steer.override_angle_accu)  # debug
 
     self.frame += 1
     return new_actuators, can_sends
