@@ -39,7 +39,7 @@ class CarState(CarStateBase):
     scale_speed = 1.01
     length = 0.11
 
-  # Vehicle speed
+    # Vehicle speed
     ret.vEgoRaw = cp_party.vl["DI_speed"]["DI_vehicleSpeed"] * CV.KPH_TO_MS
     ret.vEgo, ret.aEgo = self.update_speed_kf(ret.vEgoRaw)
 
