@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from enum import Enum, IntFlag
 from opendbc.car import Bus, CarSpecs, DbcDict, PlatformConfig, Platforms, AngleSteeringLimits
 from opendbc.car.structs import CarParams, CarState
-from opendbc.car.docs_definitions import CarDocs, CarFootnote, CarHarness, CarParts, Column
+from opendbc.car.docs_definitions import CarDocs, CarFootnote, CarHarness, CarParts, Column, SupportType
 from opendbc.car.fw_query_definitions import FwQueryConfig, Request, StdQueries
 
 Ecu = CarParams.Ecu
@@ -15,24 +15,34 @@ class Footnote(Enum):
     "See <a href=\"https://www.notateslaapp.com/news/2173/how-to-check-if-your-tesla-has-hardware-4-ai4-or-hardware-3\">this page</a> for more information.",
     Column.MODEL)
 
+  SETUP = CarFootnote(
+    "See more setup details for <a href=\"https://github.com/commaai/openpilot/wiki/tesla\" target=\"_blank\">Tesla</a>.",
+    Column.MAKE, setup_note=True)
+
 
 @dataclass
 class TeslaCarDocsHW3(CarDocs):
   package: str = "All"
   car_parts: CarParts = field(default_factory=CarParts.common([CarHarness.tesla_a]))
-  footnotes: list[Enum] = field(default_factory=lambda: [Footnote.HW_TYPE])
+  footnotes: list[Enum] = field(default_factory=lambda: [Footnote.HW_TYPE, Footnote.SETUP])
 
 
 @dataclass
 class TeslaCarDocsHW4(CarDocs):
   package: str = "All"
   car_parts: CarParts = field(default_factory=CarParts.common([CarHarness.tesla_b]))
-  footnotes: list[Enum] = field(default_factory=lambda: [Footnote.HW_TYPE])
+  footnotes: list[Enum] = field(default_factory=lambda: [Footnote.HW_TYPE, Footnote.SETUP])
+
+
+@dataclass
+class TeslaCarHW4ModelSXDocs(TeslaCarDocsHW4):
+  support_type: SupportType = SupportType.COMMUNITY
+  support_link: str = "community"
 
 
 @dataclass
 class TeslaPlatformConfig(PlatformConfig):
-  dbc_dict: DbcDict = field(default_factory=lambda: {Bus.party: 'tesla_model3_party'})
+  dbc_dict: DbcDict = field(default_factory=lambda: {Bus.party: 'tesla_model3_party', Bus.adas: 'tesla_model3_vehicle'})
 
 
 class CAR(Platforms):
@@ -43,13 +53,19 @@ class CAR(Platforms):
       TeslaCarDocsHW4("Tesla Model 3 (with HW4) 2024-25"),
     ],
     CarSpecs(mass=1899., wheelbase=2.875, steerRatio=12.0),
+    {Bus.party: 'tesla_model3_party', Bus.radar: 'tesla_radar_continental_generated', Bus.adas: 'tesla_model3_vehicle'},
   )
   TESLA_MODEL_Y = TeslaPlatformConfig(
     [
       TeslaCarDocsHW3("Tesla Model Y (with HW3) 2020-23"),
-      TeslaCarDocsHW4("Tesla Model Y (with HW4) 2024"),
-     ],
+      TeslaCarDocsHW4("Tesla Model Y (with HW4) 2024-25"),
+    ],
     CarSpecs(mass=2072., wheelbase=2.890, steerRatio=12.0),
+    {Bus.party: 'tesla_model3_party', Bus.radar: 'tesla_radar_continental_generated', Bus.adas: 'tesla_model3_vehicle'},
+  )
+  TESLA_MODEL_X = TeslaPlatformConfig(
+    [TeslaCarHW4ModelSXDocs("Tesla Model X (with HW4) 2024")],
+    CarSpecs(mass=2495., wheelbase=2.960, steerRatio=12.0),
   )
 
 
@@ -62,6 +78,21 @@ FW_QUERY_CONFIG = FwQueryConfig(
     )
   ]
 )
+
+
+FSD_14_FW = {
+  CAR.TESLA_MODEL_3: [
+    b'TeMYG4_Main_0.0.0 (77),E4HP015.04.5',
+    b'TeMYG4_Main_0.0.0 (78),E4HP015.05.0',
+    b'TeMYG4_Main_0.0.0 (77),E4H015.04.5',
+    b'TeMYG4_Main_0.0.0 (78),E4H015.05.0',
+  ],
+  CAR.TESLA_MODEL_Y: [
+    b'TeMYG4_Legacy3Y_0.0.0 (6),Y4003.04.0',
+    b'TeMYG4_Main_0.0.0 (77),Y4003.05.4',
+    b'TeMYG4_Main_0.0.0 (78),Y4003.06.0',
+  ],
+}
 
 
 class CANBUS:
@@ -92,6 +123,9 @@ class CarControllerParams:
   )
 
   STEER_STEP = 2  # Angle command is sent at 50 Hz
+  MAX_LATERAL_ACCEL = 3.6  # m/s^2, includes small road-roll tolerance for safety parity
+  MAX_LATERAL_JERK = 3.6   # m/s^3, tuned to stay below EPS fault behavior seen on Tesla
+  MAX_ANGLE_RATE = 5.0     # deg / 20ms frame, EPS faults around 12 deg at standstill
   ACCEL_MAX = 2.0    # m/s^2
   ACCEL_MIN = -3.48  # m/s^2
   JERK_LIMIT_MAX = 4.9  # m/s^3, ACC faults at 5.0
@@ -100,15 +134,18 @@ class CarControllerParams:
 
 class TeslaSafetyFlags(IntFlag):
   LONG_CONTROL = 1
+  FSD_14 = 2
 
 
 class TeslaFlags(IntFlag):
   LONG_CONTROL = 1
+  FSD_14 = 2
+  MISSING_DAS_SETTINGS = 4
 
 
 DBC = CAR.create_dbc_map()
 
-STEER_THRESHOLD = 0.5
+STEER_THRESHOLD = 1
 
 if __name__ == "__main__":
   cars = []

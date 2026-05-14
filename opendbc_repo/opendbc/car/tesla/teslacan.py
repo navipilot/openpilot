@@ -1,9 +1,16 @@
 from opendbc.car.common.conversions import Conversions as CV
-from opendbc.car.tesla.values import CANBUS, CarControllerParams
+from opendbc.car.tesla.values import CANBUS, CarControllerParams, TeslaFlags
+
+
+def get_steer_ctrl_type(flags: int, ctrl_type: int) -> int:
+  if flags & TeslaFlags.FSD_14:
+    return {1: 2, 2: 1}.get(ctrl_type, ctrl_type)
+  return ctrl_type
 
 
 class TeslaCAN:
-  def __init__(self, packer):
+  def __init__(self, CP, packer):
+    self.CP = CP
     self.packer = packer
 
   @staticmethod
@@ -16,7 +23,7 @@ class TeslaCAN:
     values = {
       "DAS_steeringAngleRequest": -angle,
       "DAS_steeringHapticRequest": 0,
-      "DAS_steeringControlType": 1 if enabled else 0,
+      "DAS_steeringControlType": get_steer_ctrl_type(self.CP.flags, 2 if enabled else 0),
       "DAS_steeringControlCounter": counter,
     }
 
@@ -25,11 +32,7 @@ class TeslaCAN:
     return self.packer.make_can_msg("DAS_steeringControl", CANBUS.party, values)
 
   def create_longitudinal_command(self, acc_state, accel, cntr, v_ego, active):
-    from opendbc.car.interfaces import V_CRUISE_MAX
-    set_speed = max(v_ego * CV.MS_TO_KPH, 0)
-    if active:
-      # TODO: this causes jerking after gas override when above set speed
-      set_speed = 0 if accel < 0 else V_CRUISE_MAX
+    set_speed = min(max(v_ego + accel, 0) * CV.MS_TO_KPH, 400)
 
     values = {
       "DAS_setSpeed": set_speed,
