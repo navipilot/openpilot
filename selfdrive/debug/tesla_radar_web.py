@@ -311,7 +311,7 @@ def radar_reader(state: TeslaRadarDebugState, dbc_name: str, addr: str):
     updated = parser.update(can_list)
     now = time.monotonic()
 
-    radar_packets = [can for packet in can_list for can in packet if can.src == RADAR_BUS and RADAR_STATUS_ADDR <= can.address <= RADAR_TRIGGER_ADDR]
+    radar_packets = [can for can in can_list if can.src == RADAR_BUS and RADAR_STATUS_ADDR <= can.address <= RADAR_TRIGGER_ADDR]
     if not radar_packets:
       continue
 

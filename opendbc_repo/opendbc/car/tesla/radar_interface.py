@@ -39,7 +39,7 @@ class RadarInterface(RadarInterfaceBase):
     if self.rcp is None:
       return super().update(None)
 
-    runtime_radar_seen = any(can.src == 1 and can.address == RADAR_START_ADDR for packet in can_strings for can in packet)
+    runtime_radar_seen = any(can.src == 1 and can.address == RADAR_START_ADDR for can in can_strings)
     if runtime_radar_seen and self.radar_off_can:
       self.radar_off_can = False
       carlog.warning("Tesla radar detected at runtime on bus 1 despite CP.radarUnavailable=True")
