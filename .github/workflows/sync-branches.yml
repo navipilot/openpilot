@@ -35,24 +35,15 @@ jobs:
 
           # Carrotpilot
           add_or_update_remote carrotpilot https://github.com/ajouatom/openpilot.git
-          git fetch carrotpilot c3 --no-tags || echo "⚠️ carrotpilot c3 fetch failed"
           git fetch carrotpilot c3-wip --no-tags || echo "⚠️ carrotpilot c3-wip fetch failed"
 
           # IQpilot
           add_or_update_remote iqpilot https://gitlvb.teallvbs.xyz/IQ.Lvbs/IQ.Pilot.git
-          git fetch iqpilot release-mrone --no-tags || echo "⚠️ iqpilot fetch failed"
+          git fetch iqpilot release-new --no-tags || echo "⚠️ iqpilot fetch failed"
 
-          # Dragonpilot (原有)
+          # Dragonpilot
           add_or_update_remote dragonpilot https://github.com/dragonpilot/dragonpilot.git
           git fetch dragonpilot pre-build --no-tags || echo "⚠️ dragonpilot pre-build fetch failed"
-
-          # StarPilot
-          add_or_update_remote starpilot https://github.com/firestar5683/StarPilot.git
-          git fetch starpilot StarPilot --no-tags || echo "⚠️ starpilot fetch failed"
-
-          # ✅ 修改点：gitop → dragonpilot 0.10.3
-          add_or_update_remote dp103 https://github.com/dragonpilot/dragonpilot.git
-          git fetch dp103 0.10.3 --no-tags || echo "⚠️ dragonpilot 0.10.3 fetch failed"
 
           # Fishop
           add_or_update_remote fishop_remote https://jihulab.com/fishop/openpilot.git
@@ -83,15 +74,9 @@ jobs:
 
           # ========= 分支同步 =========
 
-          sync_branch Carrotpilot carrotpilot/c3
-          sync_branch Carrotpilot-c3-wip carrotpilot/c3-wip
-          sync_branch release iqpilot/release-mrone
+          sync_branch Carrotpilot carrotpilot/c3-wip
+          sync_branch release iqpilot/release-new
           sync_branch Dragonpilot dragonpilot/pre-build
-          sync_branch StarPilot starpilot/StarPilot
-
-          # ✅ 新的 0.10.3
-          sync_branch dp-0.10.3 dp103/0.10.3
-
           sync_branch fishop fishop_remote/cp
 
       - name: Tag sync timestamp
