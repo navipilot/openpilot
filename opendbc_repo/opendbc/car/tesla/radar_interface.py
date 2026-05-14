@@ -8,6 +8,33 @@ RADAR_START_ADDR = 0x410
 RADAR_MSG_COUNT = 80  # 40 points * 2 messages each
 
 
+def _iter_can_msgs(can_packets):
+  for item in can_packets:
+    if hasattr(item, "address") and hasattr(item, "src"):
+      yield item
+    elif isinstance(item, tuple):
+      if len(item) >= 3 and isinstance(item[0], int):
+        yield item
+      else:
+        for sub_item in item:
+          if hasattr(sub_item, "address") and hasattr(sub_item, "src"):
+            yield sub_item
+    elif isinstance(item, list):
+      for sub_item in item:
+        if hasattr(sub_item, "address") and hasattr(sub_item, "src"):
+          yield sub_item
+        elif isinstance(sub_item, tuple) and len(sub_item) >= 3 and isinstance(sub_item[0], int):
+          yield sub_item
+
+
+def _can_address(can_msg):
+  return can_msg.address if hasattr(can_msg, "address") else can_msg[0]
+
+
+def _can_src(can_msg):
+  return can_msg.src if hasattr(can_msg, "src") else can_msg[2]
+
+
 def get_radar_can_parser(CP):
   if Bus.radar not in DBC[CP.carFingerprint]:
     return None
@@ -39,7 +66,7 @@ class RadarInterface(RadarInterfaceBase):
     if self.rcp is None:
       return super().update(None)
 
-    runtime_radar_seen = any(can.src == 1 and can.address == RADAR_START_ADDR for can in can_strings)
+    runtime_radar_seen = any(_can_src(can) == 1 and _can_address(can) == RADAR_START_ADDR for can in _iter_can_msgs(can_strings))
     if runtime_radar_seen and self.radar_off_can:
       self.radar_off_can = False
       carlog.warning("Tesla radar detected at runtime on bus 1 despite CP.radarUnavailable=True")

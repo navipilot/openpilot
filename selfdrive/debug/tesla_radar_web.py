@@ -301,6 +301,33 @@ def collect_points(parser):
   return points
 
 
+def iter_can_msgs(can_packets):
+  for item in can_packets:
+    if hasattr(item, "address") and hasattr(item, "src"):
+      yield item
+    elif isinstance(item, tuple):
+      if len(item) >= 3 and isinstance(item[0], int):
+        yield item
+      else:
+        for sub_item in item:
+          if hasattr(sub_item, "address") and hasattr(sub_item, "src"):
+            yield sub_item
+    elif isinstance(item, list):
+      for sub_item in item:
+        if hasattr(sub_item, "address") and hasattr(sub_item, "src"):
+          yield sub_item
+        elif isinstance(sub_item, tuple) and len(sub_item) >= 3 and isinstance(sub_item[0], int):
+          yield sub_item
+
+
+def can_address(can_msg):
+  return can_msg.address if hasattr(can_msg, "address") else can_msg[0]
+
+
+def can_src(can_msg):
+  return can_msg.src if hasattr(can_msg, "src") else can_msg[2]
+
+
 def radar_reader(state: TeslaRadarDebugState, dbc_name: str, addr: str):
   sock = messaging.sub_sock('can', addr=addr, timeout=100)
   parser = CANParser(dbc_name, build_messages(), RADAR_BUS)
@@ -311,11 +338,12 @@ def radar_reader(state: TeslaRadarDebugState, dbc_name: str, addr: str):
     updated = parser.update(can_list)
     now = time.monotonic()
 
-    radar_packets = [can for can in can_list if can.src == RADAR_BUS and RADAR_STATUS_ADDR <= can.address <= RADAR_TRIGGER_ADDR]
+    radar_packets = [can for can in iter_can_msgs(can_list)
+                     if can_src(can) == RADAR_BUS and RADAR_STATUS_ADDR <= can_address(can) <= RADAR_TRIGGER_ADDR]
     if not radar_packets:
       continue
 
-    highest_addr = max(can.address for can in radar_packets)
+    highest_addr = max(can_address(can) for can in radar_packets)
     full_frame = RADAR_TRIGGER_ADDR in updated
     radar_status = parser.vl['RadarStatus']
     points = collect_points(parser)
