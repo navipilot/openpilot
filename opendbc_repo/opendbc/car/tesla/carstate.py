@@ -1,6 +1,6 @@
 import copy
 from opendbc.can import CANDefine, CANParser
-from opendbc.car import Bus, create_button_events, structs
+from opendbc.car import Bus, create_button_events, structs, DT_CTRL
 from opendbc.car.carlog import carlog
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.interfaces import CarStateBase
@@ -26,6 +26,10 @@ class CarState(CarStateBase):
     self.steering_disengage = False
     self.infotainment_touch_points = 0
 
+    # Speed limit distance tracking
+    self.totalDistance = 0.0
+    self.speedLimitDistance = 0
+
   def update_autopark_state(self, autopark_state: str, cruise_enabled: bool):
     autopark_now = autopark_state in ("ACTIVE", "COMPLETE", "SELFPARK_STARTED")
     if autopark_now and not self.autopark_prev and not self.cruise_enabled_prev:
@@ -34,6 +38,18 @@ class CarState(CarStateBase):
       self.autopark = False
     self.autopark_prev = autopark_now
     self.cruise_enabled_prev = cruise_enabled
+
+  def update_speed_limit_distance(self, ret):
+    """Calculate distance to speed limit sign - similar to Hyundai implementation"""
+    self.totalDistance += ret.vEgo * DT_CTRL
+    if ret.speedLimit > 0 and not ret.gasPressed:
+      if self.speedLimitDistance <= self.totalDistance:
+        # Estimate distance ahead based on current speed limit (6 seconds worth)
+        self.speedLimitDistance = self.totalDistance + ret.speedLimit * 6
+      self.speedLimitDistance = max(self.totalDistance + 1, self.speedLimitDistance)
+    else:
+      self.speedLimitDistance = self.totalDistance
+    ret.speedLimitDistance = self.speedLimitDistance - self.totalDistance
 
   def update(self, can_parsers) -> structs.CarState:
     cp_party = can_parsers[Bus.party]
@@ -71,6 +87,9 @@ class CarState(CarStateBase):
     ret.steeringAngleDeg = -epas_status["EPAS3S_internalSAS"]
     ret.steeringRateDeg = -cp_ap_party.vl["SCCM_steeringAngleSensor"]["SCCM_steeringAngleSpeed"]
     ret.steeringTorque = -epas_status["EPAS3S_torsionBarTorque"]
+    # EPS output torque - steering rack force converted to approximate torque
+    # EPAS3S_steeringRackForce is in Newtons, scale: 50, offset: -25575
+    ret.steeringTorqueEps = epas_status["EPAS3S_steeringRackForce"] / 500.0  # Approximate conversion
 
     ret.steeringPressed = self.update_steering_pressed(abs(ret.steeringTorque) > STEER_THRESHOLD, 5)
 
@@ -99,6 +118,11 @@ class CarState(CarStateBase):
       ret.cruiseState.speed = max(cp_party.vl["DI_state"]["DI_digitalSpeed"] * CV.KPH_TO_MS, 1e-3)
     elif speed_units == "MPH":
       ret.cruiseState.speed = max(cp_party.vl["DI_state"]["DI_digitalSpeed"] * CV.MPH_TO_MS, 1e-3)
+
+    # Set vCruise and vCruiseCluster for display
+    ret.vCruise = ret.cruiseState.speed
+    # vCruiseCluster uses the same value but could be adjusted for display purposes
+    ret.vCruiseCluster = ret.cruiseState.speed
 
     cluster_speed = cp_party.vl["DI_speed"]["DI_uiSpeed"]
     if cluster_speed < 255:
@@ -178,6 +202,21 @@ class CarState(CarStateBase):
       soc_ui = cp_adas.vl["ID292BMS_SOC"]["SOCUI292"]
       if 0.0 <= soc_ui <= 102.3:
         ret.fuelGauge = min(100.0, soc_ui) / 100.0
+
+      # Charging detection - Tesla doesn't expose a direct charging signal in standard CAN
+      # We can infer charging state from various conditions:
+      # 1. Vehicle at standstill with ready for drive status
+      # 2. High SOC rate of change (would need historical tracking)
+      # For now, set to False as there's no reliable direct signal
+      # Future enhancement: track SOC changes over time to infer charging
+      ret.charging = False
+
+    # Update speed limit distance calculation
+    self.update_speed_limit_distance(ret)
+
+    # pcmCruiseGap - Tesla doesn't expose following distance setting in CAN
+    # Set to 0 to indicate unavailable
+    ret.pcmCruiseGap = 0
 
     # Messages needed by carcontroller
     self.das_control = copy.copy(cp_ap_party.vl["DAS_control"])
