@@ -1,6 +1,6 @@
 import copy
 from opendbc.can import CANDefine, CANParser
-from opendbc.car import Bus, structs
+from opendbc.car import Bus, create_button_events, structs
 from opendbc.car.carlog import carlog
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.interfaces import CarStateBase
@@ -24,6 +24,7 @@ class CarState(CarStateBase):
     self.hands_on_level = 0
     self.das_control = None
     self.steering_disengage = False
+    self.infotainment_touch_points = 0
 
   def update_autopark_state(self, autopark_state: str, cruise_enabled: bool):
     autopark_now = autopark_state in ("ACTIVE", "COMPLETE", "SELFPARK_STARTED")
@@ -37,6 +38,7 @@ class CarState(CarStateBase):
   def update(self, can_parsers) -> structs.CarState:
     cp_party = can_parsers[Bus.party]
     cp_ap_party = can_parsers[Bus.ap_party]
+    cp_adas = can_parsers.get(Bus.adas)
     ret = structs.CarState()
 
     # Vehicle speed
@@ -55,8 +57,9 @@ class CarState(CarStateBase):
 
     # Gas pedal
     pedal_status = cp_party.vl["DI_systemStatus"]["DI_accelPedalPos"]
-    ret.gas = pedal_status / 100.0
-    ret.gasPressed = pedal_status > 0
+    valid_pedal_status = pedal_status if 0 <= pedal_status <= 100 else 0
+    ret.gas = valid_pedal_status / 100.0
+    ret.gasPressed = valid_pedal_status > 0
 
     # Brake pedal
     ret.brake = 0
@@ -97,10 +100,12 @@ class CarState(CarStateBase):
     elif speed_units == "MPH":
       ret.cruiseState.speed = max(cp_party.vl["DI_state"]["DI_digitalSpeed"] * CV.MPH_TO_MS, 1e-3)
 
-    if ui_speed_units == "DI_SPEED_KPH":
-      ret.vEgoCluster = cp_party.vl["DI_speed"]["DI_uiSpeed"] * CV.KPH_TO_MS
-    elif ui_speed_units == "DI_SPEED_MPH":
-      ret.vEgoCluster = cp_party.vl["DI_speed"]["DI_uiSpeed"] * CV.MPH_TO_MS
+    cluster_speed = cp_party.vl["DI_speed"]["DI_uiSpeed"]
+    if cluster_speed < 255:
+      if ui_speed_units == "DI_SPEED_KPH":
+        ret.vEgoCluster = cluster_speed * CV.KPH_TO_MS
+      elif ui_speed_units == "DI_SPEED_MPH":
+        ret.vEgoCluster = cluster_speed * CV.MPH_TO_MS
     ret.cruiseState.available = cruise_state == "STANDBY" or ret.cruiseState.enabled
     ret.cruiseState.standstill = False  # This needs to be false, since we can resume from stop without sending anything special
     ret.cruiseState.nonAdaptive = False
@@ -134,16 +139,17 @@ class CarState(CarStateBase):
     ret.seatbeltUnlatched = cp_party.vl["UI_warning"]["buckleStatus"] != 1
 
     # Blindspot
-    ret.leftBlindspot = cp_ap_party.vl["DAS_status"]["DAS_blindSpotRearLeft"] != 0
-    ret.rightBlindspot = cp_ap_party.vl["DAS_status"]["DAS_blindSpotRearRight"] != 0
+    ret.leftBlindspot = cp_ap_party.vl["DAS_status"]["DAS_blindSpotRearLeft"] in (1, 2)
+    ret.rightBlindspot = cp_ap_party.vl["DAS_status"]["DAS_blindSpotRearRight"] in (1, 2)
 
     # AEB
     ret.stockAeb = cp_ap_party.vl["DAS_control"]["DAS_aebEvent"] == 1
-    fcw_warning = cp_ap_party.vl["DAS_status"]["DAS_forwardCollisionWarning"] != 0 or cp_ap_party.vl["DAS_status2"]["DAS_longCollisionWarning"] != 0
+    fcw_warning = cp_ap_party.vl["DAS_status"]["DAS_forwardCollisionWarning"] == 1 or cp_ap_party.vl["DAS_status2"]["DAS_longCollisionWarning"] not in (0, 15)
     ret.stockFcw = fcw_warning and not ret.stockAeb
 
     ret.parkingBrake = park_brake_state in ("APPLIED", "PANIC_EPB", "PANIC_SKID")
     ret.brakeHoldActive = vehicle_hold_state == "STANDSTILL"
+    ret.brakeLights = cp_party.vl["ESP_status"]["ESP_brakeLamp"] == 1 or ret.brakePressed
     ret.regenBraking = cp_party.vl["DI_systemStatus"]["DI_regenLight"] == 1
     ret.espDisabled = traction_control_mode in ("TC_DEV_MODE_1", "TC_DEV_MODE_2", "TC_ROLLS_MODE", "TC_DYNO_MODE")
     ret.espActive = cp_party.vl["ESP_status"]["ESP_espLampFlash"] == 1
@@ -163,7 +169,15 @@ class CarState(CarStateBase):
           carlog.error("FSD 14 detected, but FW not in FSD_14_FW set")
           self.fsd14_error_logged = True
 
-    # Buttons # ToDo: add Gap adjust button
+    if cp_adas is not None:
+      prev_touch_points = self.infotainment_touch_points
+      touch_points = cp_adas.vl["UI_status2"]["UI_activeTouchPoints"]
+      self.infotainment_touch_points = int(touch_points) if 0 <= touch_points <= 10 else 0
+      ret.buttonEvents = create_button_events(self.infotainment_touch_points, prev_touch_points, {3: ButtonType.lkas})
+
+      soc_ui = cp_adas.vl["ID292BMS_SOC"]["SOCUI292"]
+      if 0.0 <= soc_ui <= 102.3:
+        ret.fuelGauge = min(100.0, soc_ui) / 100.0
 
     # Messages needed by carcontroller
     self.das_control = copy.copy(cp_ap_party.vl["DAS_control"])
@@ -174,5 +188,6 @@ class CarState(CarStateBase):
   def get_can_parsers(CP):
     return {
       Bus.party: CANParser(DBC[CP.carFingerprint][Bus.party], [], CANBUS.party),
-      Bus.ap_party: CANParser(DBC[CP.carFingerprint][Bus.party], [], CANBUS.autopilot_party)
+      Bus.ap_party: CANParser(DBC[CP.carFingerprint][Bus.party], [], CANBUS.autopilot_party),
+      Bus.adas: CANParser(DBC[CP.carFingerprint][Bus.adas], [], CANBUS.vehicle),
     }
