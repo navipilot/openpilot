@@ -55,12 +55,42 @@ BO_ 905 DAS_status2: 8 PARTY
  SG_ DAS_pmmObstacleSeverity : 10|3@1+ (1,0) [0|7] ""  aps
  SG_ DAS_accSpeedLimit : 0|10@1+ (0.4,0) [0|204.6] "mph"  aps
 
+BO_ 257 ID101RCM_inertial1: 8 PARTY
+ SG_ RCM_inertial1Checksum : 56|8@1+ (1,0) [0|255] ""  Receiver
+ SG_ RCM_inertial1Counter : 52|4@1+ (1,0) [0|15] ""  Receiver
+ SG_ RCM_pitchRate : 16|15@1- (0.00025,0) [-4.096|4.09575] "rad/s"  Receiver
+ SG_ RCM_pitchRateQF : 50|2@1+ (1,0) [0|3] ""  Receiver
+ SG_ RCM_rollRate : 31|15@1- (0.00025,0) [-4.096|4.09575] "rad/s"  Receiver
+ SG_ RCM_rollRateQF : 46|2@1+ (1,0) [0|3] ""  Receiver
+ SG_ RCM_yawRate : 0|16@1- (0.0001,0) [-3.2766|3.2766] "rad/s"  Receiver
+ SG_ RCM_yawRateQF : 48|1@1+ (1,0) [0|1] ""  Receiver
+
 BO_ 264 DI_torque: 8 PARTY
  SG_ DI_axleSpeed : 40|16@1- (0.1,0.0) [-2750|2750] "RPM"  epas3s
  SG_ DI_torqueActual : 27|13@1- (2,0) [-7500|7500] "Nm"  X
  SG_ DI_torqueCommand : 12|13@1- (2,0) [-7500|7500] "Nm"  X
  SG_ DI_torqueCounter : 8|4@1+ (1,0) [0|15] ""  epas3s
  SG_ DI_torqueChecksum : 0|8@1+ (1,0) [0|255] ""  epas3s
+
+BO_ 273 ID111RCM_inertial2: 8 PARTY
+ SG_ RCM_inertial2Checksum : 56|8@1+ (1,0) [0|255] ""  Receiver
+ SG_ RCM_inertial2Counter : 52|4@1+ (1,0) [0|15] ""  Receiver
+ SG_ RCM_lateralAccel : 16|16@1- (0.00125,0) [-40.9575|40.9575] "m/s^2"  Receiver
+ SG_ RCM_lateralAccelQF : 49|1@1+ (1,0) [0|1] ""  Receiver
+ SG_ RCM_longitudinalAccel : 0|16@1- (0.00125,0) [-40.9575|40.9575] "m/s^2"  Receiver
+ SG_ RCM_longitudinalAccelQF : 48|1@1+ (1,0) [0|1] ""  Receiver
+ SG_ RCM_verticalAccel : 32|16@1- (0.00125,0) [-40.9575|40.9575] "m/s^2"  Receiver
+ SG_ RCM_verticalAccelQF : 50|1@1+ (1,0) [0|1] ""  Receiver
+
+BO_ 278 RCM_inertial2New: 8 PARTY
+ SG_ RCM_inertial2Checksum : 56|8@1+ (1,0) [0|255] ""  Receiver
+ SG_ RCM_inertial2Counter : 52|4@1+ (1,0) [0|15] ""  Receiver
+ SG_ RCM_lateralAccel : 16|16@1- (0.00125,0) [-40.9575|40.9575] "m/s^2"  Receiver
+ SG_ RCM_lateralAccelQF : 49|1@1+ (1,0) [0|1] ""  Receiver
+ SG_ RCM_longitudinalAccel : 0|16@1- (0.00125,0) [-40.9575|40.9575] "m/s^2"  Receiver
+ SG_ RCM_longitudinalAccelQF : 48|1@1+ (1,0) [0|1] ""  Receiver
+ SG_ RCM_verticalAccel : 32|16@1- (0.00125,0) [-40.9575|40.9575] "m/s^2"  Receiver
+ SG_ RCM_verticalAccelQF : 50|1@1+ (1,0) [0|1] ""  Receiver
 
 BO_ 585 SCCM_leftStalk: 3 PARTY
  SG_ SCCM_leftStalkReserved1 : 19|5@1+ (1,0) [0|31] ""  X
@@ -234,6 +264,14 @@ BO_ 646 DI_state: 8 ETH
  SG_ DI_cruiseState : 12|3@1+ (1,0) [0|0] ""  X
  SG_ DI_locStatusCounter : 8|4@1+ (1,0) [0|0] ""  X
  SG_ DI_locStatusChecksum : 0|8@1+ (1,0) [0|0] ""  X
+
+BO_ 658 ID292BMS_SOC: 8 PARTY
+ SG_ BattBeginningOfLifeEnergy292 : 40|10@1+ (0.1,0) [0|102.3] "kWh"  Receiver
+ SG_ SOCmax292 : 20|10@1+ (0.1,0) [0|102.3] "%"  Receiver
+ SG_ SOCave292 : 30|10@1+ (0.1,0) [0|102.3] "%"  Receiver
+ SG_ SOCUI292 : 10|10@1+ (0.1,0) [0|102.3] "%"  Receiver
+ SG_ SOCmin292 : 0|10@1+ (0.1,0) [0|102.3] "%"  Receiver
+ SG_ BMS_battTempPct : 50|8@1+ (0.4,0) [0|100] "%"  Receiver
 
 BO_ 659 DAS_settings: 8 XXX
  SG_ DAS_driverSteeringWeight : 1|2@0+ (1,0) [0|255] "" XXX

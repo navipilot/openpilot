@@ -147,6 +147,14 @@ class CarState(CarStateBase):
     # Stock Autosteer should be off (includes FSD)
     ret.invalidLkasSetting = cp_ap_party.vl["DAS_settings"]["DAS_autosteerEnabled"] != 0
 
+    # Battery SOC (State of Charge) from BMS
+    ret.fuelGauge = cp_party.vl["ID292BMS_SOC"]["SOCUI292"] / 100.0  # Convert from % to 0.0-1.0
+
+    # Yaw rate from RCM inertial sensor
+    inertial1 = cp_ap_party.vl["ID101RCM_inertial1"]
+    if inertial1["RCM_yawRateQF"] == 1:  # Quality flag: 1 = valid
+      ret.yawRate = inertial1["RCM_yawRate"]
+
     # Buttons # ToDo: add Gap adjust button
 
     # Messages needed by carcontroller
