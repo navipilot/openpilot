@@ -164,48 +164,7 @@ class CarState(CarStateBase):
 
   @staticmethod
   def get_can_parsers(CP):
-    party_signals = [
-      # Speed
-      ("DI_speed", 10),
-      ("ESP_wheelSpeeds", 50),
-
-      # Pedals and torque
-      ("DI_systemStatus", 10),
-      ("DI_torque", 10),
-
-      # Brakes
-      ("IBST_status", 50),
-      ("ESP_status", 10),
-
-      # Steering
-      ("EPAS3S_sysStatus", 100),
-
-      # Cruise and state
-      ("DI_state", 10),
-
-      # UI
-      ("UI_warning", 10),
-
-      # Battery SOC
-      ("ID292BMS_SOC", 1),
-    ]
-
-    ap_party_signals = [
-      # DAS
-      ("DAS_status", 10),
-      ("DAS_status2", 10),
-      ("DAS_control", 50),
-      ("DAS_settings", 1),
-
-      # Steering sensor
-      ("SCCM_steeringAngleSensor", 100),
-
-      # Inertial sensors (yaw rate, accelerations)
-      ("ID101RCM_inertial1", 100),
-      ("ID111RCM_inertial2", 100),
-    ]
-
     return {
-      Bus.party: CANParser(DBC[CP.carFingerprint][Bus.party], party_signals, CANBUS.party),
-      Bus.ap_party: CANParser(DBC[CP.carFingerprint][Bus.party], ap_party_signals, CANBUS.autopilot_party)
+      Bus.party: CANParser(DBC[CP.carFingerprint][Bus.party], [], CANBUS.party),
+      Bus.ap_party: CANParser(DBC[CP.carFingerprint][Bus.party], [], CANBUS.autopilot_party)
     }
