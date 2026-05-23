@@ -147,6 +147,14 @@ class CarState(CarStateBase):
     # Stock Autosteer should be off (includes FSD)
     ret.invalidLkasSetting = cp_ap_party.vl["DAS_settings"]["DAS_autosteerEnabled"] != 0
 
+    # Battery SOC (State of Charge) from BMS
+    ret.fuelGauge = cp_party.vl["ID292BMS_SOC"]["SOCUI292"] / 100.0  # Convert from % to 0.0-1.0
+
+    # Yaw rate from RCM inertial sensor
+    inertial1 = cp_ap_party.vl["ID101RCM_inertial1"]
+    if inertial1["RCM_yawRateQF"] == 1:  # Quality flag: 1 = valid
+      ret.yawRate = inertial1["RCM_yawRate"]
+
     # Buttons # ToDo: add Gap adjust button
 
     # Messages needed by carcontroller
@@ -156,7 +164,48 @@ class CarState(CarStateBase):
 
   @staticmethod
   def get_can_parsers(CP):
+    party_signals = [
+      # Speed
+      ("DI_speed", 10),
+      ("ESP_wheelSpeeds", 50),
+
+      # Pedals and torque
+      ("DI_systemStatus", 10),
+      ("DI_torque", 10),
+
+      # Brakes
+      ("IBST_status", 50),
+      ("ESP_status", 10),
+
+      # Steering
+      ("EPAS3S_sysStatus", 100),
+
+      # Cruise and state
+      ("DI_state", 10),
+
+      # UI
+      ("UI_warning", 10),
+
+      # Battery SOC
+      ("ID292BMS_SOC", 1),
+    ]
+
+    ap_party_signals = [
+      # DAS
+      ("DAS_status", 10),
+      ("DAS_status2", 10),
+      ("DAS_control", 50),
+      ("DAS_settings", 1),
+
+      # Steering sensor
+      ("SCCM_steeringAngleSensor", 100),
+
+      # Inertial sensors (yaw rate, accelerations)
+      ("ID101RCM_inertial1", 100),
+      ("ID111RCM_inertial2", 100),
+    ]
+
     return {
-      Bus.party: CANParser(DBC[CP.carFingerprint][Bus.party], [], CANBUS.party),
-      Bus.ap_party: CANParser(DBC[CP.carFingerprint][Bus.party], [], CANBUS.autopilot_party)
+      Bus.party: CANParser(DBC[CP.carFingerprint][Bus.party], party_signals, CANBUS.party),
+      Bus.ap_party: CANParser(DBC[CP.carFingerprint][Bus.party], ap_party_signals, CANBUS.autopilot_party)
     }
