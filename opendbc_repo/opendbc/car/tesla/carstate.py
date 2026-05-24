@@ -7,9 +7,6 @@ from opendbc.car.tesla.values import DBC, CANBUS, GEAR_MAP, STEER_THRESHOLD
 
 ButtonType = structs.CarState.ButtonEvent.Type
 
-# DTR_Dist_Rq: 0/33/66/100/133/166/200 = ACC_DIST_1~7, 255=SNA
-DTR_DIST_MAP = {0: 1, 33: 2, 66: 3, 100: 4, 133: 5, 166: 6, 200: 7}
-
 
 class CarState(CarStateBase):
   def __init__(self, CP):
@@ -23,7 +20,6 @@ class CarState(CarStateBase):
   def update(self, can_parsers) -> structs.CarState:
     cp_party = can_parsers[Bus.party]
     cp_ap_party = can_parsers[Bus.ap_party]
-    cp_vehicle = can_parsers[Bus.vehicle]
     ret = structs.CarState()
     length = 0.11
 
@@ -31,50 +27,24 @@ class CarState(CarStateBase):
     ret.vEgoRaw = cp_party.vl["DI_speed"]["DI_vehicleSpeed"] * CV.KPH_TO_MS
     ret.vEgo, ret.aEgo = self.update_speed_kf(ret.vEgoRaw)
 
-    # Wheel speeds (km/h -> m/s)
-    ws = cp_party.vl["ESP_wheelSpeeds"]
-    ret.wheelSpeeds.fl = ws["ESP_wheelSpeedFrL"] * CV.KPH_TO_MS
-    ret.wheelSpeeds.fr = ws["ESP_wheelSpeedFrR"] * CV.KPH_TO_MS
-    ret.wheelSpeeds.rl = ws["ESP_wheelSpeedReL"] * CV.KPH_TO_MS
-    ret.wheelSpeeds.rr = ws["ESP_wheelSpeedReR"] * CV.KPH_TO_MS
-
     # Displayed speed
     ui_speed_units_raw = int(cp_party.vl["DI_speed"]["DI_uiSpeedUnits"])
     ui_speed_units = self.can_define.dv.get("DI_speed", {}).get("DI_uiSpeedUnits", {}).get(ui_speed_units_raw, ui_speed_units_raw)
-    ui_speed = cp_party.vl["DI_speed"]["DI_uiSpeed"]
-
-    # Infer display unit from consistency with wheel speed first, then fall back to CAN enum/raw bit.
-    ui_is_kph = False
-    if ret.vEgoRaw > 2.0 and ui_speed > 2.0:
-      ui_speed_kph_ms = ui_speed * CV.KPH_TO_MS
-      ui_speed_mph_ms = ui_speed * CV.MPH_TO_MS
-      ui_is_kph = abs(ui_speed_kph_ms - ret.vEgoRaw) <= abs(ui_speed_mph_ms - ret.vEgoRaw)
-    elif ui_speed_units in ("DI_SPEED_KPH", "KPH"):
-      ui_is_kph = True
-    elif ui_speed_units in ("DI_SPEED_MPH", "MPH"):
-      ui_is_kph = False
-    else:
-      ui_is_kph = ui_speed_units_raw == 1
-
-    ret.vEgoCluster = ui_speed * (CV.KPH_TO_MS if ui_is_kph else CV.MPH_TO_MS)
+    if ui_speed_units in ("DI_SPEED_KPH", "KPH", 0):
+      ret.vEgoCluster = cp_party.vl["DI_speed"]["DI_uiSpeed"] * CV.KPH_TO_MS
+    elif ui_speed_units in ("DI_SPEED_MPH", "MPH", 1):
+      ret.vEgoCluster = cp_party.vl["DI_speed"]["DI_uiSpeed"] * CV.MPH_TO_MS
 
     # Gas pedal
     pedal_status = cp_party.vl["DI_systemStatus"]["DI_accelPedalPos"]
     ret.gas = pedal_status / 100.0
     ret.gasPressed = pedal_status > 0
 
-    # Motor speed (EV: motor RPM from inverter)
-    ret.engineRpm = cp_party.vl["DI_torque"]["DI_axleSpeed"]
-
     # Brake pedal
-    # Brake pedal position (0.0-1.0) from iBooster push-rod displacement [0,47] mm
-    brake_rod = cp_party.vl["IBST_status"]["IBST_sInputRodDriver"]
-    ret.brake = max(0.0, brake_rod / 47.0) if brake_rod > 0 else 0.0
+    ret.brake = 0
     ret.brakePressed = cp_party.vl["IBST_status"]["IBST_driverBrakeApply"] == 2
-    ret.brakeLights = cp_party.vl["ESP_status"]["ESP_brakeLamp"] == 1
     ret.regenBraking = cp_party.vl["DI_systemStatus"]["DI_regenLight"] != 0
     ret.espDisabled = cp_party.vl["ESP_status"]["ESP_espFaultLamp"] != 0
-    ret.espActive = cp_party.vl["ESP_status"]["ESP_espModeActive"] != 0
 
     # Steering wheel
     epas_status = cp_party.vl["EPAS3S_sysStatus"]
@@ -94,30 +64,19 @@ class CarState(CarStateBase):
 
     # Cruise state
     cruise_state = self.can_define.dv["DI_state"]["DI_cruiseState"].get(int(cp_party.vl["DI_state"]["DI_cruiseState"]), None)
-    speed_units_raw = int(cp_party.vl["DI_state"]["DI_speedUnits"])
-    speed_units = self.can_define.dv["DI_state"]["DI_speedUnits"].get(speed_units_raw, speed_units_raw)
+    speed_units = self.can_define.dv["DI_state"]["DI_speedUnits"].get(int(cp_party.vl["DI_state"]["DI_speedUnits"]), None)
 
     scale_speed = 1.01
     ret.cruiseState.enabled = cruise_state in ("ENABLED", "STANDSTILL", "OVERRIDE", "PRE_FAULT", "PRE_CANCEL")
-    if speed_units in ("KPH", "DI_SPEED_KPH"):
-      cruise_is_kph = True
-    elif speed_units in ("MPH", "DI_SPEED_MPH"):
-      cruise_is_kph = False
-    else:
-      # Keep cruise unit consistent with displayed speed when enum/raw bit are unreliable.
-      cruise_is_kph = ui_is_kph
-
-    ret.cruiseState.speedCluster = cp_party.vl["DI_state"]["DI_digitalSpeed"] * (CV.KPH_TO_MS if cruise_is_kph else CV.MPH_TO_MS)
+    if speed_units in ("KPH", "DI_SPEED_KPH", 0):
+      ret.cruiseState.speedCluster = cp_party.vl["DI_state"]["DI_digitalSpeed"] * CV.KPH_TO_MS
+    elif speed_units in ("MPH", "DI_SPEED_MPH", 1):
+      ret.cruiseState.speedCluster = cp_party.vl["DI_state"]["DI_digitalSpeed"] * CV.MPH_TO_MS
     ret.cruiseState.speed = max(ret.cruiseState.speedCluster / scale_speed, 1e-3)
     ret.cruiseState.available = cruise_state == "STANDBY" or ret.cruiseState.enabled
     ret.cruiseState.standstill = False  # This needs to be false, since we can resume from stop without sending anything special
     ret.standstill = cruise_state == "STANDSTILL"
     ret.accFaulted = cruise_state == "FAULT"
-
-    # DAS_fusedSpeedLimit is DBC-scaled to kph/mph (0=unknown, 31=none).
-    speed_limit = cp_ap_party.vl["DAS_status"]["DAS_fusedSpeedLimit"]
-    if 0 < speed_limit <= 150:
-      ret.speedLimit = speed_limit if ui_is_kph else speed_limit * CV.MPH_TO_KPH
 
     park_brake_state = self.can_define.dv["DI_state"]["DI_parkBrakeState"].get(int(cp_party.vl["DI_state"]["DI_parkBrakeState"]), None)
     vehicle_hold_state = self.can_define.dv["DI_state"]["DI_vehicleHoldState"].get(int(cp_party.vl["DI_state"]["DI_vehicleHoldState"]), None)
@@ -151,18 +110,6 @@ class CarState(CarStateBase):
     # Stock Autosteer should be off (includes FSD)
     ret.invalidLkasSetting = cp_ap_party.vl["DAS_settings"]["DAS_autosteerEnabled"] != 0
 
-    # Battery SOC (State of Charge) from BMS
-    ret.fuelGauge = cp_party.vl["ID292BMS_SOC"]["SOCUI292"] / 100.0  # Convert from % to 0.0-1.0
-
-    # Yaw rate from RCM inertial sensor
-    inertial1 = cp_ap_party.vl["ID101RCM_inertial1"]
-    if inertial1["RCM_yawRateQF"] == 1:  # Quality flag: 1 = valid
-      ret.yawRate = inertial1["RCM_yawRate"]
-
-    # Following distance from scroll wheel (vehicle bus)
-    dtr_dist_rq = int(cp_vehicle.vl["STW_ACTN_RQ"]["DTR_Dist_Rq"])
-    ret.pcmCruiseGap = DTR_DIST_MAP.get(dtr_dist_rq, 0)
-
     # Buttons # ToDo: add Gap adjust button
 
     # Messages needed by carcontroller
@@ -174,15 +121,12 @@ class CarState(CarStateBase):
   def get_can_parsers(CP):
     party_messages = [
       ("DI_speed", 10),
-      ("ESP_wheelSpeeds", 50),
       ("DI_systemStatus", 10),
-      ("DI_torque", 10),
       ("IBST_status", 50),
       ("ESP_status", 50),
       ("EPAS3S_sysStatus", 100),
       ("DI_state", 10),
       ("UI_warning", 10),
-      ("ID292BMS_SOC", 10),
     ]
 
     ap_party_messages = [
@@ -190,15 +134,9 @@ class CarState(CarStateBase):
       ("DAS_status", 10),
       ("DAS_control", 25),
       ("DAS_settings", 1),
-      ("ID101RCM_inertial1", 100),
-    ]
-
-    vehicle_messages = [
-      ("STW_ACTN_RQ", 0),
     ]
 
     return {
       Bus.party: CANParser(DBC[CP.carFingerprint][Bus.party], party_messages, CANBUS.party),
-      Bus.ap_party: CANParser(DBC[CP.carFingerprint][Bus.party], ap_party_messages, CANBUS.autopilot_party),
-      Bus.vehicle: CANParser(DBC[CP.carFingerprint][Bus.vehicle], vehicle_messages, CANBUS.vehicle),
+      Bus.ap_party: CANParser(DBC[CP.carFingerprint][Bus.party], ap_party_messages, CANBUS.autopilot_party)
     }
