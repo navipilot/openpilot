@@ -7,6 +7,9 @@ from opendbc.car.tesla.values import DBC, CANBUS, GEAR_MAP, STEER_THRESHOLD
 
 ButtonType = structs.CarState.ButtonEvent.Type
 
+# DTR_Dist_Rq: 0/33/66/100/133/166/200 = ACC_DIST_1~7, 255=SNA
+DTR_DIST_MAP = {0: 1, 33: 2, 66: 3, 100: 4, 133: 5, 166: 6, 200: 7}
+
 
 class CarState(CarStateBase):
   def __init__(self, CP):
@@ -20,6 +23,7 @@ class CarState(CarStateBase):
   def update(self, can_parsers) -> structs.CarState:
     cp_party = can_parsers[Bus.party]
     cp_ap_party = can_parsers[Bus.ap_party]
+    cp_vehicle = can_parsers[Bus.vehicle]
     ret = structs.CarState()
     length = 0.11
 
@@ -155,6 +159,10 @@ class CarState(CarStateBase):
     if inertial1["RCM_yawRateQF"] == 1:  # Quality flag: 1 = valid
       ret.yawRate = inertial1["RCM_yawRate"]
 
+    # Following distance from scroll wheel (vehicle bus)
+    dtr_dist_rq = int(cp_vehicle.vl["STW_ACTN_RQ"]["DTR_Dist_Rq"])
+    ret.pcmCruiseGap = DTR_DIST_MAP.get(dtr_dist_rq, 0)
+
     # Buttons # ToDo: add Gap adjust button
 
     # Messages needed by carcontroller
@@ -164,7 +172,12 @@ class CarState(CarStateBase):
 
   @staticmethod
   def get_can_parsers(CP):
+    vehicle_messages = [
+      ("STW_ACTN_RQ", 0),
+    ]
+
     return {
       Bus.party: CANParser(DBC[CP.carFingerprint][Bus.party], [], CANBUS.party),
-      Bus.ap_party: CANParser(DBC[CP.carFingerprint][Bus.party], [], CANBUS.autopilot_party)
+      Bus.ap_party: CANParser(DBC[CP.carFingerprint][Bus.party], [], CANBUS.autopilot_party),
+      Bus.vehicle: CANParser(DBC[CP.carFingerprint][Bus.vehicle], vehicle_messages, CANBUS.vehicle),
     }
