@@ -110,10 +110,10 @@ class CarState(CarStateBase):
     ret.standstill = cruise_state == "STANDSTILL"
     ret.accFaulted = cruise_state == "FAULT"
 
-    # DAS_fusedSpeedLimit is DBC-scaled to kph/mph (0=unknown, 31=none).
+    # DAS_fusedSpeedLimit from DBC is always in kph (scale=5). Do NOT apply ui_is_kph conversion.
     speed_limit = cp_ap_party.vl["DAS_status"]["DAS_fusedSpeedLimit"]
     if 0 < speed_limit <= 150:
-      ret.speedLimit = speed_limit if ui_is_kph else speed_limit * CV.MPH_TO_KPH
+      ret.speedLimit = speed_limit
 
     park_brake_state = self.can_define.dv["DI_state"]["DI_parkBrakeState"].get(int(cp_party.vl["DI_state"]["DI_parkBrakeState"]), None)
     vehicle_hold_state = self.can_define.dv["DI_state"]["DI_vehicleHoldState"].get(int(cp_party.vl["DI_state"]["DI_vehicleHoldState"]), None)
