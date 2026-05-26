@@ -1,5 +1,3 @@
-import os
-
 from opendbc.car import Bus, get_safety_config, structs
 from opendbc.car.interfaces import CarInterfaceBase
 from opendbc.car.tesla.carcontroller import CarController
@@ -18,8 +16,6 @@ class CarInterface(CarInterfaceBase):
     ret.brand = "tesla"
 
     ret.safetyConfigs = [get_safety_config(structs.CarParams.SafetyModel.tesla)]
-    if os.path.isfile('/ASIUS'):
-      ret.safetyConfigs[0].safetyParam |= TeslaSafetyFlags.ASIUS_BUS_LAYOUT.value
 
     ret.steerLimitTimer = 0.4
     ret.steerActuatorDelay = 0.1
