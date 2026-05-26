@@ -6,7 +6,6 @@ from opendbc.car.tesla.teslacan import TeslaCAN
 from opendbc.car.tesla.values import CarControllerParams
 from opendbc.car.tesla.coop_steering import CoopSteeringCarController
 from opendbc.car.vehicle_model import VehicleModel
-from openpilot.common.params import Params
 
 
 def get_safety_CP():
@@ -22,8 +21,7 @@ class CarController(CarControllerBase):
     self.apply_angle_last = 0
     self.packer = CANPacker(dbc_names[Bus.party])
     self.tesla_can = TeslaCAN(CP, self.packer)
-    self._params = Params()
-    self.coop_steering = self._params.get_bool("TeslaCoopSteering")
+    self.coop_steering = True
     self.coop_steer = CoopSteeringCarController()
 
     # Vehicle model used for lateral limiting

@@ -4,7 +4,6 @@ from opendbc.car import Bus, structs
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.interfaces import CarStateBase
 from opendbc.car.tesla.values import DBC, CANBUS, GEAR_MAP, STEER_THRESHOLD, TeslaFlags
-from openpilot.common.params import Params
 
 ButtonType = structs.CarState.ButtonEvent.Type
 
@@ -17,7 +16,7 @@ class CarState(CarStateBase):
 
     self.hands_on_level = 0
     self.das_control = None
-    self.coop_steering = Params().get_bool("TeslaCoopSteering")
+    self.coop_steering = True
 
   def update(self, can_parsers) -> structs.CarState:
     cp_party = can_parsers[Bus.party]
