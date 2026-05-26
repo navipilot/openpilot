@@ -3,7 +3,7 @@ from opendbc.can import CANDefine, CANParser
 from opendbc.car import Bus, structs
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.interfaces import CarStateBase
-from opendbc.car.tesla.values import DBC, CANBUS, GEAR_MAP, STEER_THRESHOLD
+from opendbc.car.tesla.values import DBC, CANBUS, GEAR_MAP, STEER_THRESHOLD, TeslaFlags
 
 ButtonType = structs.CarState.ButtonEvent.Type
 
@@ -112,10 +112,10 @@ class CarState(CarStateBase):
     ret.standstill = cruise_state == "STANDSTILL"
     ret.accFaulted = cruise_state == "FAULT"
 
-    # DAS_fusedSpeedLimit from DBC is always in kph (scale=5). Do NOT apply ui_is_kph conversion.
+    # DAS_fusedSpeedLimit is DBC-scaled to kph/mph (0=unknown, 31=none). Convert based on UI units.
     speed_limit = cp_ap_party.vl["DAS_status"]["DAS_fusedSpeedLimit"]
     if 0 < speed_limit <= 150:
-      ret.speedLimit = speed_limit
+      ret.speedLimit = speed_limit if ui_is_kph else speed_limit * CV.MPH_TO_KPH
 
     park_brake_state = self.can_define.dv["DI_state"]["DI_parkBrakeState"].get(int(cp_party.vl["DI_state"]["DI_parkBrakeState"]), None)
     vehicle_hold_state = self.can_define.dv["DI_state"]["DI_vehicleHoldState"].get(int(cp_party.vl["DI_state"]["DI_vehicleHoldState"]), None)
@@ -146,7 +146,9 @@ class CarState(CarStateBase):
     ret.stockAeb = cp_ap_party.vl["DAS_control"]["DAS_aebEvent"] == 1
     ret.stockFcw = cp_ap_party.vl["DAS_status"]["DAS_forwardCollisionWarning"] != 0
 
-    # Model X and HW 2.5 vehicles are missing DAS_settings
+    # Stock Autosteer should be off (includes FSD). Skip when DAS_settings is missing (Model X / HW 2.5).
+    if not (self.CP.flags & TeslaFlags.MISSING_DAS_SETTINGS):
+      ret.invalidLkasSetting = cp_ap_party.vl["DAS_settings"]["DAS_autosteerEnabled"] != 0
 
     # Buttons # ToDo: add Gap adjust button
 

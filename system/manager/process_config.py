@@ -150,8 +150,8 @@ procs = [
   PythonProcess("carrot_server", "selfdrive.carrot.carrot_server", always_run),
   PythonProcess("carrot_cluster", "selfdrive.carrot.cluster_autorun", enable_cluster_hud),
 
-  #Xiaoge data broadcaster (conditional on ShareData param)
-  PythonProcess("xiaoge_data", "selfdrive.carrot.xiaoge_data", only_onroad),
+  #Xiaoge data broadcaster (onroad and ShareData param enabled)
+  PythonProcess("xiaoge_data", "selfdrive.carrot.xiaoge_data", and_(only_onroad, enable_xiaoge_data)),
   # c3x lite
   PythonProcess("beep", "selfdrive.controls.beep", c3x_lite, enabled=TICI),
 ]

@@ -1,4 +1,3 @@
-import os
 from dataclasses import dataclass, field
 from enum import Enum, IntFlag
 from opendbc.car import ACCELERATION_DUE_TO_GRAVITY, Bus, CarSpecs, DbcDict, PlatformConfig, Platforms, AngleSteeringLimits, ISO_LATERAL_ACCEL
@@ -72,9 +71,9 @@ FW_QUERY_CONFIG = FwQueryConfig(
 
 
 class CANBUS:
-  party = 2 if os.path.isfile('/ASIUS') else 0
+  party = 0
   vehicle = 1
-  autopilot_party = 0 if os.path.isfile('/ASIUS') else 2
+  autopilot_party = 2
 
 
 GEAR_MAP = {
@@ -117,7 +116,6 @@ class CarControllerParams:
 
 class TeslaSafetyFlags(IntFlag):
   LONG_CONTROL = 1
-  ASIUS_BUS_LAYOUT = 4
 
 
 class TeslaFlags(IntFlag):
