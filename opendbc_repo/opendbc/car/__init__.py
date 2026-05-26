@@ -198,7 +198,7 @@ def apply_steer_angle_limits_vm(apply_angle: float, apply_angle_last: float, v_e
 
   # also apply speed-based rate limits if defined (backward compat, empty arrays = no-op)
   steer_up = apply_angle_last * apply_angle >= 0. and abs(apply_angle) > abs(apply_angle_last)
-  rate_limits = limits.ANGLE_RATE_LIMIT_UP if steer_up else limits.ANGLE_RATE_LIMIT_DOWN
+  rate_limits = limits.ANGLE_LIMITS.ANGLE_RATE_LIMIT_UP if steer_up else limits.ANGLE_LIMITS.ANGLE_RATE_LIMIT_DOWN
   if len(rate_limits[0]) > 0:
     max_angle_delta = min(max_angle_delta, np.interp(v_ego_raw, rate_limits[0], rate_limits[1]))
 
