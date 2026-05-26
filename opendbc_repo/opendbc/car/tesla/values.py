@@ -95,17 +95,18 @@ class CarControllerParams:
   ANGLE_LIMITS: AngleSteeringLimits = AngleSteeringLimits(
     # EPAS faults above this angle
     360,  # deg
-    # Tesla uses a vehicle model instead, check carcontroller.py for details
-    ([], []),
-    ([], []),
 
-    # Vehicle model angle limits
+    # Speed-based rate limits (primary limiter at low speed, VM handles high speed)
+    ([0., 5., 25.], [2.5, 1.5, 0.2]),
+    ([0., 5., 25.], [5., 2.0, 0.3]),
+
+    # Vehicle model angle limits (secondary limiter — max lateral accel/jerk)
     # Add extra tolerance for average banked road since safety doesn't have the roll
     MAX_LATERAL_ACCEL=ISO_LATERAL_ACCEL + (ACCELERATION_DUE_TO_GRAVITY * AVERAGE_ROAD_ROLL),  # ~3.6 m/s^2
     MAX_LATERAL_JERK=3.0 + (ACCELERATION_DUE_TO_GRAVITY * AVERAGE_ROAD_ROLL),  # ~3.6 m/s^3
 
-    # limit angle rate to both prevent a fault and for low speed comfort (~12 mph rate down to 0 mph)
-    MAX_ANGLE_RATE=5,  # deg/20ms frame, EPS faults at 12 at a standstill
+    # Absolute cap: prevent fault even at standstill (EPS faults at 12)
+    MAX_ANGLE_RATE=5,  # deg/20ms frame
   )
 
   STEER_STEP = 2  # Angle command is sent at 50 Hz
