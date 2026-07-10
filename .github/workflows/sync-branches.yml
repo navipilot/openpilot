@@ -70,7 +70,7 @@ jobs:
 
           # ========= 分支同步 =========
 
-          sync_branch Carrotpilot carrotpilot/carrot-wip
+          sync_branch Carrotpilot carrotwip/carrot-wip
           sync_branch release iqpilot/release
           sync_branch Dragonpilot dragonpilot/pre-build
 
