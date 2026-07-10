@@ -2,81 +2,126 @@ name: Sync Branches
 
 on:
   schedule:
-    - cron: '0 18 * * *'    # 每天 UTC 18 点（北京时间 02:00）
+    - cron: '0 18 * * *' # 每天 UTC 18:00，北京时间次日 02:00
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   sync:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout the target repository
+      - name: Checkout target repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.GH_TOKEN }}
 
-      - name: Add upstream repositories and fetch branches
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Delete all remote branches except master
         run: |
           set -e
-          echo "=== Fetching branches from upstream repositories ==="
 
-          add_or_update_remote () {
-            local name="$1"
-            local url="$2"
-            if git remote get-url "$name" >/dev/null 2>&1; then
-              git remote set-url "$name" "$url"
+          echo "=== Deleting all remote branches except master ==="
+
+          git fetch origin --prune
+
+          git ls-remote --heads origin \
+            | awk '{print $2}' \
+            | sed 's#refs/heads/##' \
+            | while read -r branch; do
+
+                if [ "$branch" = "master" ]; then
+                  echo "Keeping protected branch: master"
+                  continue
+                fi
+
+                echo "Deleting remote branch: $branch"
+
+                git push origin \
+                  --delete "$branch" \
+                  || echo "Failed to delete branch: $branch"
+              done
+
+      - name: Add upstream repositories
+        run: |
+          set -e
+
+          echo "=== Configuring upstream repositories ==="
+
+          add_or_update_remote() {
+            local remote_name="$1"
+            local remote_url="$2"
+
+            if git remote get-url "$remote_name" >/dev/null 2>&1; then
+              git remote set-url "$remote_name" "$remote_url"
             else
-              git remote add "$name" "$url"
+              git remote add "$remote_name" "$remote_url"
             fi
           }
 
-          # ========= 上游仓库 =========
+          add_or_update_remote carrot \
+            https://github.com/ajouatom/openpilot.git
 
-          # Carrot-WIP
-          add_or_update_remote carrotwip https://github.com/ajouatom/openpilot.git
-          git fetch carrotwip carrot-wip --no-tags || echo "⚠️ carrot-wip fetch failed"
+          add_or_update_remote iqpilot \
+            https://gitlvb.teallvbs.xyz/IQ.Lvbs/IQ.Pilot.git
 
-          # IQpilot
-          add_or_update_remote iqpilot https://gitlvb.teallvbs.xyz/IQ.Lvbs/IQ.Pilot.git
-          git fetch iqpilot release --no-tags || echo "⚠️ iqpilot fetch failed"
+          add_or_update_remote dragon \
+            https://github.com/dragonpilot/dragonpilot.git
 
-          # Dragonpilot
-          add_or_update_remote dragonpilot https://github.com/dragonpilot/dragonpilot.git
-          git fetch dragonpilot pre-build --no-tags || echo "⚠️ dragonpilot pre-build fetch failed"
-
-      - name: Push branches to your repository (force sync)
+      - name: Fetch upstream branches
         run: |
-          set +e
-          echo "=== Syncing branches to origin ==="
+          set -e
 
-          sync_branch () {
-            local target_branch="$1"
-            local source_ref="$2"
+          echo "=== Fetching upstream branches ==="
 
-            echo "---- Sync: $source_ref -> $target_branch ----"
+          git fetch carrot \
+            +refs/heads/carrot-wip:refs/remotes/carrot/carrot-wip \
+            --no-tags
 
-            git rev-parse "$source_ref" >/dev/null 2>&1
-            if [ $? -ne 0 ]; then
-              echo "⚠️ Source $source_ref not found, skipping"
-              return
+          git fetch iqpilot \
+            +refs/heads/release:refs/remotes/iqpilot/release \
+            --no-tags
+
+          git fetch dragon \
+            +refs/heads/pre-build:refs/remotes/dragon/pre-build \
+            --no-tags
+
+      - name: Push synchronized branches
+        run: |
+          set -e
+
+          echo "=== Pushing synchronized branches ==="
+
+          sync_branch() {
+            local source_ref="$1"
+            local target_branch="$2"
+
+            echo "Syncing ${source_ref} -> ${target_branch}"
+
+            if ! git rev-parse --verify "$source_ref" >/dev/null 2>&1; then
+              echo "Source branch not found: $source_ref"
+              exit 1
             fi
 
-            git checkout -B "$target_branch" "$source_ref" \
-              && git push origin "$target_branch" --force \
-              && echo "✅ Synced $target_branch" \
-              || echo "⚠️ Failed syncing $target_branch"
+            git push origin \
+              "${source_ref}:refs/heads/${target_branch}" \
+              --force
+
+            echo "Synchronized branch: $target_branch"
           }
 
-          # ========= 分支同步 =========
+          sync_branch refs/remotes/carrot/carrot-wip Carrot
+          sync_branch refs/remotes/iqpilot/release release
+          sync_branch refs/remotes/dragon/pre-build Dragon
 
-          sync_branch Carrotpilot carrotwip/carrot-wip
-          sync_branch release iqpilot/release
-          sync_branch Dragonpilot dragonpilot/pre-build
-
-      - name: Tag sync timestamp
+      - name: Show synchronization result
         run: |
-          set +e
-          TAG_NAME="sync-$(date +%Y%m%d-%H%M)"
-          git tag -f $TAG_NAME
-          git push origin $TAG_NAME --force || echo "⚠️ tag push failed"
+          echo "=== Current remote branches ==="
+          git ls-remote --heads origin
