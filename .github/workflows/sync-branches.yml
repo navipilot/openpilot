@@ -2,7 +2,7 @@ name: Sync Branches
 
 on:
   schedule:
-    - cron: '0 18 * * *' # UTC 18:00，北京时间次日 02:00
+    - cron: '0 18 * * *' # 每天 UTC 18:00，北京时间次日 02:00
   workflow_dispatch:
 
 permissions:
@@ -13,6 +13,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # ============================================================
+      # 1. 检出目标仓库
+      # ============================================================
       - name: Checkout target repository
         uses: actions/checkout@v4
         with:
@@ -20,6 +23,9 @@ jobs:
           lfs: false
           token: ${{ secrets.GH_TOKEN }}
 
+      # ============================================================
+      # 2. 配置 Git 和 Git LFS
+      # ============================================================
       - name: Configure Git and Git LFS
         run: |
           set -e
@@ -29,9 +35,15 @@ jobs:
 
           git lfs install --local
 
+          echo "=== Git version ==="
           git --version
+
+          echo "=== Git LFS version ==="
           git lfs version
 
+      # ============================================================
+      # 3. 配置三个上游仓库
+      # ============================================================
       - name: Configure upstream repositories
         run: |
           set -e
@@ -47,69 +59,98 @@ jobs:
             fi
           }
 
-          add_or_update_remote carrot \
+          # Carrot
+          add_or_update_remote \
+            carrot \
             https://github.com/ajouatom/openpilot.git
 
-          add_or_update_remote iqpilot \
+          # IQ.Pilot
+          add_or_update_remote \
+            iqpilot \
             https://gitlvb.teallvbs.xyz/IQ.Lvbs/IQ.Pilot.git
 
-          add_or_update_remote dragon \
+          # Dragonpilot
+          add_or_update_remote \
+            dragon \
             https://github.com/dragonpilot/dragonpilot.git
 
           echo "=== Configured remotes ==="
           git remote -v
 
+      # ============================================================
+      # 4. 获取指定的上游分支
+      # ============================================================
       - name: Fetch upstream branches
         run: |
           set -e
 
-          echo "=== Fetching upstream Git branches ==="
+          echo "=== Fetching Carrot branch ==="
 
           git fetch carrot \
             +refs/heads/carrot-wip:refs/remotes/carrot/carrot-wip \
             --no-tags
 
+          echo "=== Fetching IQ.Pilot release branch ==="
+
           git fetch iqpilot \
             +refs/heads/release:refs/remotes/iqpilot/release \
             --no-tags
+
+          echo "=== Fetching Dragonpilot branch ==="
 
           git fetch dragon \
             +refs/heads/pre-build:refs/remotes/dragon/pre-build \
             --no-tags
 
+      # ============================================================
+      # 5. 创建本地临时同步分支
+      # ============================================================
       - name: Create local synchronization branches
         run: |
           set -e
 
           echo "=== Creating local synchronization branches ==="
 
-          git branch -f sync-carrot \
+          git branch --no-track -f \
+            sync-carrot \
             refs/remotes/carrot/carrot-wip
 
-          git branch -f sync-release \
+          git branch --no-track -f \
+            sync-release \
             refs/remotes/iqpilot/release
 
-          git branch -f sync-dragon \
+          git branch --no-track -f \
+            sync-dragon \
             refs/remotes/dragon/pre-build
+
+          echo "=== Local synchronization branches ==="
 
           git show-ref \
             refs/heads/sync-carrot \
             refs/heads/sync-release \
             refs/heads/sync-dragon
 
+      # ============================================================
+      # 6. 同步 Carrot 分支及其 LFS 对象
+      # ============================================================
       - name: Fetch Carrot Git LFS objects
         run: |
           set -e
 
           echo "=== Fetching Carrot LFS objects ==="
 
-          git lfs fetch carrot carrot-wip
+          git lfs fetch carrot sync-carrot
+
+          echo "=== Verifying Carrot LFS objects ==="
+
+          git lfs fsck sync-carrot
 
           echo "=== Carrot LFS files ==="
-          git lfs ls-files --all --long | head -100 || true
 
-          echo "=== Checking local Carrot LFS objects ==="
-          git lfs fsck sync-carrot
+          git lfs ls-files \
+            --all \
+            --long \
+            | head -100 || true
 
       - name: Push Carrot Git LFS objects
         run: |
@@ -117,7 +158,10 @@ jobs:
 
           echo "=== Uploading Carrot LFS objects to origin ==="
 
-          git lfs push --all origin sync-carrot
+          git lfs push \
+            --all \
+            origin \
+            sync-carrot
 
           echo "=== Carrot LFS upload completed ==="
 
@@ -131,15 +175,21 @@ jobs:
             refs/heads/sync-carrot:refs/heads/Carrot \
             --force
 
+          echo "=== Carrot branch synchronized ==="
+
+      # ============================================================
+      # 7. 同步 release 分支及其 LFS 对象
+      # ============================================================
       - name: Fetch release Git LFS objects
         run: |
           set -e
 
           echo "=== Fetching release LFS objects ==="
 
-          git lfs fetch iqpilot release
+          git lfs fetch iqpilot sync-release
 
-          echo "=== Checking local release LFS objects ==="
+          echo "=== Verifying release LFS objects ==="
+
           git lfs fsck sync-release
 
       - name: Push release Git LFS objects
@@ -148,7 +198,12 @@ jobs:
 
           echo "=== Uploading release LFS objects to origin ==="
 
-          git lfs push --all origin sync-release
+          git lfs push \
+            --all \
+            origin \
+            sync-release
+
+          echo "=== release LFS upload completed ==="
 
       - name: Push release branch
         run: |
@@ -160,15 +215,21 @@ jobs:
             refs/heads/sync-release:refs/heads/release \
             --force
 
+          echo "=== release branch synchronized ==="
+
+      # ============================================================
+      # 8. 同步 Dragon 分支及其 LFS 对象
+      # ============================================================
       - name: Fetch Dragon Git LFS objects
         run: |
           set -e
 
           echo "=== Fetching Dragon LFS objects ==="
 
-          git lfs fetch dragon pre-build
+          git lfs fetch dragon sync-dragon
 
-          echo "=== Checking local Dragon LFS objects ==="
+          echo "=== Verifying Dragon LFS objects ==="
+
           git lfs fsck sync-dragon
 
       - name: Push Dragon Git LFS objects
@@ -177,7 +238,12 @@ jobs:
 
           echo "=== Uploading Dragon LFS objects to origin ==="
 
-          git lfs push --all origin sync-dragon
+          git lfs push \
+            --all \
+            origin \
+            sync-dragon
+
+          echo "=== Dragon LFS upload completed ==="
 
       - name: Push Dragon branch
         run: |
@@ -189,13 +255,21 @@ jobs:
             refs/heads/sync-dragon:refs/heads/Dragon \
             --force
 
-      - name: Delete other remote branches
+          echo "=== Dragon branch synchronized ==="
+
+      # ============================================================
+      # 9. 删除目标仓库中不需要的其他分支
+      # 保留 master、Carrot、release、Dragon
+      # ============================================================
+      - name: Delete unwanted remote branches
         run: |
           set -e
 
-          echo "=== Deleting unwanted remote branches ==="
+          echo "=== Fetching latest origin branches ==="
 
           git fetch origin --prune
+
+          echo "=== Deleting unwanted remote branches ==="
 
           git ls-remote --heads origin \
             | awk '{print $2}' \
@@ -210,17 +284,25 @@ jobs:
                   *)
                     echo "Deleting branch: $branch"
 
-                    git push origin --delete "$branch" \
-                      || echo "Failed to delete branch: $branch"
+                    if git push origin --delete "$branch"; then
+                      echo "Deleted branch: $branch"
+                    else
+                      echo "Failed to delete branch: $branch"
+                    fi
                     ;;
                 esac
               done
 
+      # ============================================================
+      # 10. 显示最终同步结果
+      # ============================================================
       - name: Show synchronization result
         if: always()
         run: |
           echo "=== Current remote branches ==="
-          git ls-remote --heads origin
 
-          echo "=== Git LFS environment ==="
-          git lfs env
+          git ls-remote --heads origin || true
+
+          echo "=== Local LFS environment ==="
+
+          git lfs env || true
