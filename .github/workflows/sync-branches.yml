@@ -17,12 +17,23 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          lfs: false
           token: ${{ secrets.GH_TOKEN }}
 
-      - name: Configure Git
+      - name: Configure Git and Git LFS
         run: |
+          set -e
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git lfs install --local
+
+          echo "Git version:"
+          git --version
+
+          echo "Git LFS version:"
+          git lfs version
 
       - name: Delete all remote branches except master
         run: |
@@ -38,18 +49,17 @@ jobs:
             | while read -r branch; do
 
                 if [ "$branch" = "master" ]; then
-                  echo "Keeping protected branch: master"
+                  echo "Keeping branch: master"
                   continue
                 fi
 
-                echo "Deleting remote branch: $branch"
+                echo "Deleting branch: $branch"
 
-                git push origin \
-                  --delete "$branch" \
+                git push origin --delete "$branch" \
                   || echo "Failed to delete branch: $branch"
               done
 
-      - name: Add upstream repositories
+      - name: Configure upstream repositories
         run: |
           set -e
 
@@ -75,11 +85,13 @@ jobs:
           add_or_update_remote dragon \
             https://github.com/dragonpilot/dragonpilot.git
 
-      - name: Fetch upstream branches
+          git remote -v
+
+      - name: Fetch upstream Git branches
         run: |
           set -e
 
-          echo "=== Fetching upstream branches ==="
+          echo "=== Fetching upstream Git branches ==="
 
           git fetch carrot \
             +refs/heads/carrot-wip:refs/remotes/carrot/carrot-wip \
@@ -92,6 +104,49 @@ jobs:
           git fetch dragon \
             +refs/heads/pre-build:refs/remotes/dragon/pre-build \
             --no-tags
+
+      - name: Fetch upstream Git LFS objects
+        run: |
+          set -e
+
+          echo "=== Fetching Git LFS objects ==="
+
+          fetch_lfs_objects() {
+            local remote_name="$1"
+            local source_ref="$2"
+
+            echo "Fetching LFS objects:"
+            echo "Remote: ${remote_name}"
+            echo "Ref: ${source_ref}"
+
+            git lfs fetch --all "$remote_name" "$source_ref"
+          }
+
+          fetch_lfs_objects carrot refs/remotes/carrot/carrot-wip
+          fetch_lfs_objects iqpilot refs/remotes/iqpilot/release
+          fetch_lfs_objects dragon refs/remotes/dragon/pre-build
+
+          echo "=== Local LFS objects ==="
+          git lfs fsck
+          git lfs ls-files --all | head -100 || true
+
+      - name: Push Git LFS objects to target repository
+        run: |
+          set -e
+
+          echo "=== Pushing Git LFS objects to origin ==="
+
+          push_lfs_objects() {
+            local source_ref="$1"
+
+            echo "Pushing LFS objects for ${source_ref}"
+
+            git lfs push origin "$source_ref" --all
+          }
+
+          push_lfs_objects refs/remotes/carrot/carrot-wip
+          push_lfs_objects refs/remotes/iqpilot/release
+          push_lfs_objects refs/remotes/dragon/pre-build
 
       - name: Push synchronized branches
         run: |
@@ -125,3 +180,6 @@ jobs:
         run: |
           echo "=== Current remote branches ==="
           git ls-remote --heads origin
+
+          echo "=== Git LFS environment ==="
+          git lfs env
