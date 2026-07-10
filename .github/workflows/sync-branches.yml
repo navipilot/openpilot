@@ -2,7 +2,7 @@ name: Sync Branches
 
 on:
   schedule:
-    - cron: '0 18 * * *' # 每天 UTC 18:00，北京时间次日 02:00
+    - cron: '0 18 * * *' # UTC 18:00，北京时间次日 02:00
   workflow_dispatch:
 
 permissions:
@@ -29,41 +29,12 @@ jobs:
 
           git lfs install --local
 
-          echo "Git version:"
           git --version
-
-          echo "Git LFS version:"
           git lfs version
-
-      - name: Delete all remote branches except master
-        run: |
-          set -e
-
-          echo "=== Deleting all remote branches except master ==="
-
-          git fetch origin --prune
-
-          git ls-remote --heads origin \
-            | awk '{print $2}' \
-            | sed 's#refs/heads/##' \
-            | while read -r branch; do
-
-                if [ "$branch" = "master" ]; then
-                  echo "Keeping branch: master"
-                  continue
-                fi
-
-                echo "Deleting branch: $branch"
-
-                git push origin --delete "$branch" \
-                  || echo "Failed to delete branch: $branch"
-              done
 
       - name: Configure upstream repositories
         run: |
           set -e
-
-          echo "=== Configuring upstream repositories ==="
 
           add_or_update_remote() {
             local remote_name="$1"
@@ -85,9 +56,10 @@ jobs:
           add_or_update_remote dragon \
             https://github.com/dragonpilot/dragonpilot.git
 
+          echo "=== Configured remotes ==="
           git remote -v
 
-      - name: Fetch upstream Git branches
+      - name: Fetch upstream branches
         run: |
           set -e
 
@@ -105,78 +77,147 @@ jobs:
             +refs/heads/pre-build:refs/remotes/dragon/pre-build \
             --no-tags
 
-      - name: Fetch upstream Git LFS objects
+      - name: Create local synchronization branches
         run: |
           set -e
 
-          echo "=== Fetching Git LFS objects ==="
+          echo "=== Creating local synchronization branches ==="
 
-          fetch_lfs_objects() {
-            local remote_name="$1"
-            local source_ref="$2"
+          git branch -f sync-carrot \
+            refs/remotes/carrot/carrot-wip
 
-            echo "Fetching LFS objects:"
-            echo "Remote: ${remote_name}"
-            echo "Ref: ${source_ref}"
+          git branch -f sync-release \
+            refs/remotes/iqpilot/release
 
-            git lfs fetch --all "$remote_name" "$source_ref"
-          }
+          git branch -f sync-dragon \
+            refs/remotes/dragon/pre-build
 
-          fetch_lfs_objects carrot refs/remotes/carrot/carrot-wip
-          fetch_lfs_objects iqpilot refs/remotes/iqpilot/release
-          fetch_lfs_objects dragon refs/remotes/dragon/pre-build
+          git show-ref \
+            refs/heads/sync-carrot \
+            refs/heads/sync-release \
+            refs/heads/sync-dragon
 
-          echo "=== Local LFS objects ==="
-          git lfs fsck
-          git lfs ls-files --all | head -100 || true
-
-      - name: Push Git LFS objects to target repository
+      - name: Fetch Carrot Git LFS objects
         run: |
           set -e
 
-          echo "=== Pushing Git LFS objects to origin ==="
+          echo "=== Fetching Carrot LFS objects ==="
 
-          push_lfs_objects() {
-            local source_ref="$1"
+          git lfs fetch carrot carrot-wip
 
-            echo "Pushing LFS objects for ${source_ref}"
+          echo "=== Carrot LFS files ==="
+          git lfs ls-files --all --long | head -100 || true
 
-            git lfs push origin "$source_ref" --all
-          }
+          echo "=== Checking local Carrot LFS objects ==="
+          git lfs fsck sync-carrot
 
-          push_lfs_objects refs/remotes/carrot/carrot-wip
-          push_lfs_objects refs/remotes/iqpilot/release
-          push_lfs_objects refs/remotes/dragon/pre-build
-
-      - name: Push synchronized branches
+      - name: Push Carrot Git LFS objects
         run: |
           set -e
 
-          echo "=== Pushing synchronized branches ==="
+          echo "=== Uploading Carrot LFS objects to origin ==="
 
-          sync_branch() {
-            local source_ref="$1"
-            local target_branch="$2"
+          git lfs push --all origin sync-carrot
 
-            echo "Syncing ${source_ref} -> ${target_branch}"
+          echo "=== Carrot LFS upload completed ==="
 
-            if ! git rev-parse --verify "$source_ref" >/dev/null 2>&1; then
-              echo "Source branch not found: $source_ref"
-              exit 1
-            fi
+      - name: Push Carrot branch
+        run: |
+          set -e
 
-            git push origin \
-              "${source_ref}:refs/heads/${target_branch}" \
-              --force
+          echo "=== Pushing Carrot branch ==="
 
-            echo "Synchronized branch: $target_branch"
-          }
+          git push origin \
+            refs/heads/sync-carrot:refs/heads/Carrot \
+            --force
 
-          sync_branch refs/remotes/carrot/carrot-wip Carrot
-          sync_branch refs/remotes/iqpilot/release release
-          sync_branch refs/remotes/dragon/pre-build Dragon
+      - name: Fetch release Git LFS objects
+        run: |
+          set -e
+
+          echo "=== Fetching release LFS objects ==="
+
+          git lfs fetch iqpilot release
+
+          echo "=== Checking local release LFS objects ==="
+          git lfs fsck sync-release
+
+      - name: Push release Git LFS objects
+        run: |
+          set -e
+
+          echo "=== Uploading release LFS objects to origin ==="
+
+          git lfs push --all origin sync-release
+
+      - name: Push release branch
+        run: |
+          set -e
+
+          echo "=== Pushing release branch ==="
+
+          git push origin \
+            refs/heads/sync-release:refs/heads/release \
+            --force
+
+      - name: Fetch Dragon Git LFS objects
+        run: |
+          set -e
+
+          echo "=== Fetching Dragon LFS objects ==="
+
+          git lfs fetch dragon pre-build
+
+          echo "=== Checking local Dragon LFS objects ==="
+          git lfs fsck sync-dragon
+
+      - name: Push Dragon Git LFS objects
+        run: |
+          set -e
+
+          echo "=== Uploading Dragon LFS objects to origin ==="
+
+          git lfs push --all origin sync-dragon
+
+      - name: Push Dragon branch
+        run: |
+          set -e
+
+          echo "=== Pushing Dragon branch ==="
+
+          git push origin \
+            refs/heads/sync-dragon:refs/heads/Dragon \
+            --force
+
+      - name: Delete other remote branches
+        run: |
+          set -e
+
+          echo "=== Deleting unwanted remote branches ==="
+
+          git fetch origin --prune
+
+          git ls-remote --heads origin \
+            | awk '{print $2}' \
+            | sed 's#refs/heads/##' \
+            | while read -r branch; do
+
+                case "$branch" in
+                  master|Carrot|release|Dragon)
+                    echo "Keeping branch: $branch"
+                    ;;
+
+                  *)
+                    echo "Deleting branch: $branch"
+
+                    git push origin --delete "$branch" \
+                      || echo "Failed to delete branch: $branch"
+                    ;;
+                esac
+              done
 
       - name: Show synchronization result
+        if: always()
         run: |
           echo "=== Current remote branches ==="
           git ls-remote --heads origin
