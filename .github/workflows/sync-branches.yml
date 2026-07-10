@@ -2,7 +2,7 @@ name: Sync Branches
 
 on:
   schedule:
-    - cron: '0 18 * * *' # 每天 UTC 18:00，北京时间次日 02:00
+    - cron: '0 18 * * *' # UTC 18:00，北京时间次日 02:00
   workflow_dispatch:
 
 permissions:
@@ -42,7 +42,7 @@ jobs:
           git lfs version
 
       # ============================================================
-      # 3. 配置三个上游仓库
+      # 3. 配置上游仓库
       # ============================================================
       - name: Configure upstream repositories
         run: |
@@ -59,17 +59,14 @@ jobs:
             fi
           }
 
-          # Carrot
           add_or_update_remote \
             carrot \
             https://github.com/ajouatom/openpilot.git
 
-          # IQ.Pilot
           add_or_update_remote \
             iqpilot \
             https://gitlvb.teallvbs.xyz/IQ.Lvbs/IQ.Pilot.git
 
-          # Dragonpilot
           add_or_update_remote \
             dragon \
             https://github.com/dragonpilot/dragonpilot.git
@@ -78,7 +75,7 @@ jobs:
           git remote -v
 
       # ============================================================
-      # 4. 获取指定的上游分支
+      # 4. 获取上游 Git 分支
       # ============================================================
       - name: Fetch upstream branches
         run: |
@@ -96,20 +93,18 @@ jobs:
             +refs/heads/release:refs/remotes/iqpilot/release \
             --no-tags
 
-          echo "=== Fetching Dragonpilot branch ==="
+          echo "=== Fetching Dragonpilot pre-build branch ==="
 
           git fetch dragon \
             +refs/heads/pre-build:refs/remotes/dragon/pre-build \
             --no-tags
 
       # ============================================================
-      # 5. 创建本地临时同步分支
+      # 5. 创建本地临时分支
       # ============================================================
       - name: Create local synchronization branches
         run: |
           set -e
-
-          echo "=== Creating local synchronization branches ==="
 
           git branch --no-track -f \
             sync-carrot \
@@ -131,39 +126,45 @@ jobs:
             refs/heads/sync-dragon
 
       # ============================================================
-      # 6. 同步 Carrot 分支及其 LFS 对象
+      # 6. 下载 Carrot 全部历史 LFS 对象
       # ============================================================
-      - name: Fetch Carrot Git LFS objects
+      - name: Fetch all Carrot Git LFS objects
         run: |
           set -e
 
-          echo "=== Fetching Carrot LFS objects ==="
+          echo "=== Fetching all Carrot historical LFS objects ==="
 
-          git lfs fetch carrot sync-carrot
+          git lfs fetch \
+            --all \
+            carrot \
+            sync-carrot
 
-          echo "=== Verifying Carrot LFS objects ==="
-
-          git lfs fsck sync-carrot
-
-          echo "=== Carrot LFS files ==="
+          echo "=== Showing Carrot LFS objects ==="
 
           git lfs ls-files \
             --all \
             --long \
-            | head -100 || true
+            | head -200 || true
 
+          echo "=== Counting local LFS objects ==="
+
+          find .git/lfs/objects \
+            -type f \
+            | wc -l
+
+      # ============================================================
+      # 7. 上传 Carrot LFS 对象和分支
+      # ============================================================
       - name: Push Carrot Git LFS objects
         run: |
           set -e
 
-          echo "=== Uploading Carrot LFS objects to origin ==="
+          echo "=== Uploading all Carrot LFS objects ==="
 
           git lfs push \
             --all \
             origin \
             sync-carrot
-
-          echo "=== Carrot LFS upload completed ==="
 
       - name: Push Carrot branch
         run: |
@@ -175,35 +176,33 @@ jobs:
             refs/heads/sync-carrot:refs/heads/Carrot \
             --force
 
-          echo "=== Carrot branch synchronized ==="
-
       # ============================================================
-      # 7. 同步 release 分支及其 LFS 对象
+      # 8. 下载 release 全部历史 LFS 对象
       # ============================================================
-      - name: Fetch release Git LFS objects
+      - name: Fetch all release Git LFS objects
         run: |
           set -e
 
-          echo "=== Fetching release LFS objects ==="
+          echo "=== Fetching all release historical LFS objects ==="
 
-          git lfs fetch iqpilot sync-release
+          git lfs fetch \
+            --all \
+            iqpilot \
+            sync-release
 
-          echo "=== Verifying release LFS objects ==="
-
-          git lfs fsck sync-release
-
+      # ============================================================
+      # 9. 上传 release LFS 对象和分支
+      # ============================================================
       - name: Push release Git LFS objects
         run: |
           set -e
 
-          echo "=== Uploading release LFS objects to origin ==="
+          echo "=== Uploading all release LFS objects ==="
 
           git lfs push \
             --all \
             origin \
             sync-release
-
-          echo "=== release LFS upload completed ==="
 
       - name: Push release branch
         run: |
@@ -215,35 +214,33 @@ jobs:
             refs/heads/sync-release:refs/heads/release \
             --force
 
-          echo "=== release branch synchronized ==="
-
       # ============================================================
-      # 8. 同步 Dragon 分支及其 LFS 对象
+      # 10. 下载 Dragon 全部历史 LFS 对象
       # ============================================================
-      - name: Fetch Dragon Git LFS objects
+      - name: Fetch all Dragon Git LFS objects
         run: |
           set -e
 
-          echo "=== Fetching Dragon LFS objects ==="
+          echo "=== Fetching all Dragon historical LFS objects ==="
 
-          git lfs fetch dragon sync-dragon
+          git lfs fetch \
+            --all \
+            dragon \
+            sync-dragon
 
-          echo "=== Verifying Dragon LFS objects ==="
-
-          git lfs fsck sync-dragon
-
+      # ============================================================
+      # 11. 上传 Dragon LFS 对象和分支
+      # ============================================================
       - name: Push Dragon Git LFS objects
         run: |
           set -e
 
-          echo "=== Uploading Dragon LFS objects to origin ==="
+          echo "=== Uploading all Dragon LFS objects ==="
 
           git lfs push \
             --all \
             origin \
             sync-dragon
-
-          echo "=== Dragon LFS upload completed ==="
 
       - name: Push Dragon branch
         run: |
@@ -255,21 +252,17 @@ jobs:
             refs/heads/sync-dragon:refs/heads/Dragon \
             --force
 
-          echo "=== Dragon branch synchronized ==="
-
       # ============================================================
-      # 9. 删除目标仓库中不需要的其他分支
-      # 保留 master、Carrot、release、Dragon
+      # 12. 删除其他远程分支
+      # 仅保留 master、Carrot、release、Dragon
       # ============================================================
       - name: Delete unwanted remote branches
         run: |
           set -e
 
-          echo "=== Fetching latest origin branches ==="
+          echo "=== Reading remote branches ==="
 
           git fetch origin --prune
-
-          echo "=== Deleting unwanted remote branches ==="
 
           git ls-remote --heads origin \
             | awk '{print $2}' \
@@ -294,7 +287,7 @@ jobs:
               done
 
       # ============================================================
-      # 10. 显示最终同步结果
+      # 13. 输出最终结果
       # ============================================================
       - name: Show synchronization result
         if: always()
@@ -303,6 +296,6 @@ jobs:
 
           git ls-remote --heads origin || true
 
-          echo "=== Local LFS environment ==="
+          echo "=== Git LFS environment ==="
 
           git lfs env || true
