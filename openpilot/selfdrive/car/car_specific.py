@@ -249,7 +249,7 @@ class CarSpecificEvents:
       # TODO: only check the cancel button with openpilot longitudinal on all brands to match panda safety
       if b.type == ButtonType.cancel and (allow_button_cancel or not self.CP.pcmCruise):
         events.add(EventName.buttonCancel)
-        if CS.gearShifter == GearShifter.park and not self.do_shutdown:
+        if CS.gearShifter == GearShifter.park and not self.do_shutdown and self.CP.brand != 'tesla':
           self.do_shutdown = True
           self.params.put_bool("DoShutdown", True)
 
