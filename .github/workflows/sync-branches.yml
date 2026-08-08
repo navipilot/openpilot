@@ -71,6 +71,14 @@ jobs:
             dragon \
             https://github.com/dragonpilot/dragonpilot.git
 
+          add_or_update_remote \
+            starpilot \
+            https://github.com/firestar5683/StarPilot.git
+
+          add_or_update_remote \
+            zoompilot \
+            https://github.com/zoompilot/zoompilot.git
+
           echo "=== Configured remotes ==="
           git remote -v
 
@@ -82,25 +90,32 @@ jobs:
           set -e
 
           echo "=== Fetching Carrot branch ==="
-
           git fetch carrot \
             +refs/heads/carrot-wip:refs/remotes/carrot/carrot-wip \
             --no-tags
 
           echo "=== Fetching IQ.Pilot release branch ==="
-
           git fetch iqpilot \
             +refs/heads/release:refs/remotes/iqpilot/release \
             --no-tags
 
           echo "=== Fetching Dragonpilot pre-build branch ==="
-
           git fetch dragon \
             +refs/heads/pre-build:refs/remotes/dragon/pre-build \
             --no-tags
 
+          echo "=== Fetching StarPilot branch ==="
+          git fetch starpilot \
+            +refs/heads/StarPilot:refs/remotes/starpilot/StarPilot \
+            --no-tags
+
+          echo "=== Fetching zoompilot develop branch ==="
+          git fetch zoompilot \
+            +refs/heads/develop:refs/remotes/zoompilot/develop \
+            --no-tags
+
       # ============================================================
-      # 5. 创建本地临时分支
+      # 5. 创建本地临时同步分支
       # ============================================================
       - name: Create local synchronization branches
         run: |
@@ -118,15 +133,25 @@ jobs:
             sync-dragon \
             refs/remotes/dragon/pre-build
 
+          git branch --no-track -f \
+            sync-starpilot \
+            refs/remotes/starpilot/StarPilot
+
+          git branch --no-track -f \
+            sync-zoompilot \
+            refs/remotes/zoompilot/develop
+
           echo "=== Local synchronization branches ==="
 
           git show-ref \
             refs/heads/sync-carrot \
             refs/heads/sync-release \
-            refs/heads/sync-dragon
+            refs/heads/sync-dragon \
+            refs/heads/sync-starpilot \
+            refs/heads/sync-zoompilot
 
       # ============================================================
-      # 6. 下载 Carrot 全部历史 LFS 对象
+      # 6. 同步 Carrot
       # ============================================================
       - name: Fetch all Carrot Git LFS objects
         run: |
@@ -139,22 +164,6 @@ jobs:
             carrot \
             sync-carrot
 
-          echo "=== Showing Carrot LFS objects ==="
-
-          git lfs ls-files \
-            --all \
-            --long \
-            | head -200 || true
-
-          echo "=== Counting local LFS objects ==="
-
-          find .git/lfs/objects \
-            -type f \
-            | wc -l
-
-      # ============================================================
-      # 7. 上传 Carrot LFS 对象和分支
-      # ============================================================
       - name: Push Carrot Git LFS objects
         run: |
           set -e
@@ -170,34 +179,25 @@ jobs:
         run: |
           set -e
 
-          echo "=== Pushing Carrot branch ==="
-
           git push origin \
             refs/heads/sync-carrot:refs/heads/Carrot \
             --force
 
       # ============================================================
-      # 8. 下载 release 全部历史 LFS 对象
+      # 7. 同步 IQ.Pilot release
       # ============================================================
       - name: Fetch all release Git LFS objects
         run: |
           set -e
-
-          echo "=== Fetching all release historical LFS objects ==="
 
           git lfs fetch \
             --all \
             iqpilot \
             sync-release
 
-      # ============================================================
-      # 9. 上传 release LFS 对象和分支
-      # ============================================================
       - name: Push release Git LFS objects
         run: |
           set -e
-
-          echo "=== Uploading all release LFS objects ==="
 
           git lfs push \
             --all \
@@ -208,34 +208,25 @@ jobs:
         run: |
           set -e
 
-          echo "=== Pushing release branch ==="
-
           git push origin \
             refs/heads/sync-release:refs/heads/release \
             --force
 
       # ============================================================
-      # 10. 下载 Dragon 全部历史 LFS 对象
+      # 8. 同步 Dragonpilot
       # ============================================================
       - name: Fetch all Dragon Git LFS objects
         run: |
           set -e
-
-          echo "=== Fetching all Dragon historical LFS objects ==="
 
           git lfs fetch \
             --all \
             dragon \
             sync-dragon
 
-      # ============================================================
-      # 11. 上传 Dragon LFS 对象和分支
-      # ============================================================
       - name: Push Dragon Git LFS objects
         run: |
           set -e
-
-          echo "=== Uploading all Dragon LFS objects ==="
 
           git lfs push \
             --all \
@@ -246,15 +237,94 @@ jobs:
         run: |
           set -e
 
-          echo "=== Pushing Dragon branch ==="
-
           git push origin \
             refs/heads/sync-dragon:refs/heads/Dragon \
             --force
 
       # ============================================================
-      # 12. 删除其他远程分支
-      # 仅保留 master、Carrot、release、Dragon
+      # 9. 同步 StarPilot
+      # firestar5683/StarPilot:StarPilot
+      # -> 当前仓库 StarPilot
+      # ============================================================
+      - name: Fetch all StarPilot Git LFS objects
+        run: |
+          set -e
+
+          echo "=== Fetching all StarPilot historical LFS objects ==="
+
+          git lfs fetch \
+            --all \
+            starpilot \
+            sync-starpilot
+
+      - name: Push StarPilot Git LFS objects
+        run: |
+          set -e
+
+          echo "=== Uploading all StarPilot LFS objects ==="
+
+          git lfs push \
+            --all \
+            origin \
+            sync-starpilot
+
+      - name: Push StarPilot branch
+        run: |
+          set -e
+
+          echo "=== Pushing StarPilot branch ==="
+
+          git push origin \
+            refs/heads/sync-starpilot:refs/heads/StarPilot \
+            --force
+
+      # ============================================================
+      # 10. 同步 zoompilot
+      # zoompilot/zoompilot:develop
+      # -> 当前仓库 zoompilot
+      # ============================================================
+      - name: Fetch all zoompilot Git LFS objects
+        run: |
+          set -e
+
+          echo "=== Fetching all zoompilot historical LFS objects ==="
+
+          git lfs fetch \
+            --all \
+            zoompilot \
+            sync-zoompilot
+
+      - name: Push zoompilot Git LFS objects
+        run: |
+          set -e
+
+          echo "=== Uploading all zoompilot LFS objects ==="
+
+          git lfs push \
+            --all \
+            origin \
+            sync-zoompilot
+
+      - name: Push zoompilot branch
+        run: |
+          set -e
+
+          echo "=== Pushing zoompilot branch ==="
+
+          git push origin \
+            refs/heads/sync-zoompilot:refs/heads/zoompilot \
+            --force
+
+      # ============================================================
+      # 11. 删除其他远程分支
+      #
+      # 仅保留：
+      # master
+      # Carrot
+      # release
+      # Dragon
+      # StarPilot
+      # zoompilot
       # ============================================================
       - name: Delete unwanted remote branches
         run: |
@@ -270,7 +340,7 @@ jobs:
             | while read -r branch; do
 
                 case "$branch" in
-                  master|Carrot|release|Dragon)
+                  master|Carrot|release|Dragon|StarPilot|zoompilot)
                     echo "Keeping branch: $branch"
                     ;;
 
@@ -287,7 +357,7 @@ jobs:
               done
 
       # ============================================================
-      # 13. 输出最终结果
+      # 12. 输出最终结果
       # ============================================================
       - name: Show synchronization result
         if: always()
