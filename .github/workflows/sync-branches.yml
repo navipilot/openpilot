@@ -75,10 +75,6 @@ jobs:
             starpilot \
             https://github.com/firestar5683/StarPilot.git
 
-          add_or_update_remote \
-            zoompilot \
-            https://github.com/zoompilot/zoompilot.git
-
           echo "=== Configured remotes ==="
           git remote -v
 
@@ -109,11 +105,6 @@ jobs:
             +refs/heads/StarPilot:refs/remotes/starpilot/StarPilot \
             --no-tags
 
-          echo "=== Fetching zoompilot develop branch ==="
-          git fetch zoompilot \
-            +refs/heads/develop:refs/remotes/zoompilot/develop \
-            --no-tags
-
       # ============================================================
       # 5. 创建本地临时同步分支
       # ============================================================
@@ -137,18 +128,13 @@ jobs:
             sync-starpilot \
             refs/remotes/starpilot/StarPilot
 
-          git branch --no-track -f \
-            sync-zoompilot \
-            refs/remotes/zoompilot/develop
-
           echo "=== Local synchronization branches ==="
 
           git show-ref \
             refs/heads/sync-carrot \
             refs/heads/sync-release \
             refs/heads/sync-dragon \
-            refs/heads/sync-starpilot \
-            refs/heads/sync-zoompilot
+            refs/heads/sync-starpilot
 
       # ============================================================
       # 6. 同步 Carrot
@@ -258,8 +244,8 @@ jobs:
       # ============================================================
       # 9. 同步 StarPilot
       #
-      # 上游：
-      # firestar5683/StarPilot
+      # 来源：
+      # https://github.com/firestar5683/StarPilot
       # branch: StarPilot
       #
       # 目标：
@@ -298,90 +284,7 @@ jobs:
             --force
 
       # ============================================================
-      # 10. 同步 zoompilot
-      #
-      # 上游：
-      # zoompilot/zoompilot
-      # branch: develop
-      #
-      # 目标：
-      # zoompilot
-      #
-      # 注意：
-      # 该仓库历史中存在缺失的 LFS 对象。
-      # 因此不要使用：
-      #
-      # git lfs fetch --all
-      # git lfs push --all
-      #
-      # 仅处理当前分支需要的 LFS 对象。
-      # ============================================================
-      - name: Fetch zoompilot Git LFS objects
-        run: |
-          set -e
-
-          echo "=== Fetching zoompilot current branch LFS objects ==="
-
-          # Some LFS objects referenced in the zoompilot repo do not exist
-          # on the upstream LFS server (404). Treat fetch errors as non-fatal
-          # so the branch push can still proceed with whatever is available.
-          git lfs fetch \
-            zoompilot \
-            sync-zoompilot || true
-
-          echo "=== zoompilot LFS files ==="
-
-          git lfs ls-files \
-            --long \
-            sync-zoompilot \
-            | head -200 || true
-
-      # ============================================================
-      # 11. 检查 zoompilot 当前版本 LFS 完整性
-      # ============================================================
-      - name: Verify zoompilot current LFS objects
-        continue-on-error: true
-        run: |
-          set -e
-
-          echo "=== Verifying zoompilot current HEAD LFS integrity ==="
-
-          git checkout --detach sync-zoompilot
-
-          git lfs checkout
-
-          git lfs fsck
-
-          echo "=== zoompilot current HEAD LFS objects are OK ==="
-
-      # ============================================================
-      # 12. 上传 zoompilot 当前版本 LFS
-      # ============================================================
-      - name: Push zoompilot Git LFS objects
-        run: |
-          set -e
-
-          echo "=== Uploading zoompilot current branch LFS objects ==="
-
-          git lfs push \
-            origin \
-            sync-zoompilot
-
-      # ============================================================
-      # 13. 上传 zoompilot 分支
-      # ============================================================
-      - name: Push zoompilot branch
-        run: |
-          set -e
-
-          echo "=== Pushing zoompilot branch ==="
-
-          git push origin \
-            refs/heads/sync-zoompilot:refs/heads/zoompilot \
-            --force
-
-      # ============================================================
-      # 14. 删除其他远程分支
+      # 10. 删除其他远程分支
       #
       # 最终仅保留：
       # master
@@ -389,7 +292,8 @@ jobs:
       # release
       # Dragon
       # StarPilot
-      # zoompilot
+      #
+      # zoompilot 如果之前已经创建，也会在这里自动删除
       # ============================================================
       - name: Delete unwanted remote branches
         run: |
@@ -405,7 +309,7 @@ jobs:
             | while read -r branch; do
 
                 case "$branch" in
-                  master|Carrot|release|Dragon|StarPilot|zoompilot)
+                  master|Carrot|release|Dragon|StarPilot)
                     echo "Keeping branch: $branch"
                     ;;
 
@@ -422,7 +326,7 @@ jobs:
               done
 
       # ============================================================
-      # 15. 输出最终同步结果
+      # 11. 输出最终同步结果
       # ============================================================
       - name: Show synchronization result
         if: always()
