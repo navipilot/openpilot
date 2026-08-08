@@ -11,6 +11,31 @@
 
 ---
 
+## 🌿 分支说明
+
+| 分支 | 说明 |
+|------|------|
+| **Carrot** | 兼容 C3 / C3X / C4，保持每天更新代码。**本人推荐使用**，并持续提交代码更新 PR。 |
+| **Dragon** | 同步 Dragonpilot 官方代码。社区：[Facebook 群组](https://www.facebook.com/groups/930190251238639) |
+| **Release** | 基于 Sunnypilot 增强的特调版，含 App 导航等功能。 |
+| **Starpilot** | 基于 Frogpilot 的特制版，功能丰富。官网：[wiki.firestar.link](https://wiki.firestar.link/) |
+
+---
+
+> [!WARNING]
+> **关于马自达用户**
+>
+> 请使用 [**Zoompilot**](https://zoompilot.ai/) — 具备更好的转向角度支持、雷达融合、实验模式，高频率更新。
+>
+> 官网：https://zoompilot.ai/
+
+> [!NOTE]
+> **关于长安欧尚用户**
+>
+> 旧版本 CP 代码已免费分发并开放给 MP 用户。若需体验最新功能与模型，请使用 **binge VIP 版本**。
+
+---
+
 ## 简介
 
 **CP搭子** 是专为 Comma3 + CarrotPilot 打造的 Android 导航数据桥接应用，由 [JixieXiaoGe](https://github.com/jixiexiaoge) 开发。
@@ -92,19 +117,6 @@ binge.fit/cp
 </div>
 
 加入用户社群：微信号 `carrotpilot-JX` 或 `wbk18820232680`
-
----
-
-## 分支说明
-
-| 分支 | 说明 |
-|------|------|
-| master | 主分支 |
-| fishop | 现代、起亚国内特调版（飞扬开发） |
-| Dragonpilot (DP) | 支持 C3 + C4，稳定版 |
-| release | IQ Pilot 最新分支，特斯拉/大众/本田特调 |
-| Carrotpilot (CP) | CP 最新分支，供 C3 使用 |
-| carrotZ6 | 长安 Z6 专用 |
 
 ---
 
