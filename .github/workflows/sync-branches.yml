@@ -9,8 +9,41 @@ permissions:
   contents: write
 
 jobs:
+  # ================================================================
+  # 主同步 job：每个上游源作为矩阵的一个分支，互相独立运行。
+  # fail-fast: false 保证某一个源失败（例如 LFS 配额超限）不会
+  # 取消/跳过其他源的同步。
+  # ================================================================
   sync:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Carrot
+            remote_url: https://github.com/ajouatom/openpilot.git
+            upstream_branch: carrot-wip
+            target_branch: Carrot
+          - name: release
+            remote_url: https://gitlvb.teallvbs.xyz/IQ.Lvbs/IQ.Pilot.git
+            upstream_branch: release
+            target_branch: release
+          - name: Dragon
+            remote_url: https://github.com/dragonpilot/dragonpilot.git
+            upstream_branch: pre-build
+            target_branch: Dragon
+          - name: StarPilot
+            remote_url: https://github.com/firestar5683/StarPilot.git
+            upstream_branch: StarPilot
+            target_branch: StarPilot
+          - name: Amy
+            remote_url: https://github.com/AmyJeanes/sunnypilot.git
+            upstream_branch: dev
+            target_branch: Amy
+          - name: dzid
+            remote_url: https://github.com/dzid26/sunnypilot.git
+            upstream_branch: dev
+            target_branch: dzid
 
     steps:
       # ============================================================
@@ -29,407 +62,125 @@ jobs:
       - name: Configure Git and Git LFS
         run: |
           set -e
-
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
           git lfs install --local
-
           echo "=== Git version ==="
           git --version
-
           echo "=== Git LFS version ==="
           git lfs version
 
       # ============================================================
-      # 3. 配置上游仓库
+      # 3. 添加当前矩阵对应的上游仓库
       # ============================================================
-      - name: Configure upstream repositories
+      - name: Add upstream remote (${{ matrix.name }})
         run: |
           set -e
-
-          add_or_update_remote() {
-            local remote_name="$1"
-            local remote_url="$2"
-
-            if git remote get-url "$remote_name" >/dev/null 2>&1; then
-              git remote set-url "$remote_name" "$remote_url"
-            else
-              git remote add "$remote_name" "$remote_url"
-            fi
-          }
-
-          add_or_update_remote \
-            carrot \
-            https://github.com/ajouatom/openpilot.git
-
-          add_or_update_remote \
-            iqpilot \
-            https://gitlvb.teallvbs.xyz/IQ.Lvbs/IQ.Pilot.git
-
-          add_or_update_remote \
-            dragon \
-            https://github.com/dragonpilot/dragonpilot.git
-
-          add_or_update_remote \
-            starpilot \
-            https://github.com/firestar5683/StarPilot.git
-
-          add_or_update_remote \
-            amy \
-            https://github.com/AmyJeanes/sunnypilot.git
-
-          add_or_update_remote \
-            dzid \
-            https://github.com/dzid26/sunnypilot.git
-
-          echo "=== Configured remotes ==="
+          git remote add upstream "${{ matrix.remote_url }}"
           git remote -v
 
       # ============================================================
-      # 4. 获取上游 Git 分支
+      # 4. 拉取上游分支
       # ============================================================
-      - name: Fetch upstream branches
+      - name: Fetch upstream branch (${{ matrix.name }})
         run: |
           set -e
-
-          echo "=== Fetching Carrot branch ==="
-          git fetch carrot \
-            +refs/heads/carrot-wip:refs/remotes/carrot/carrot-wip \
-            --no-tags
-
-          echo "=== Fetching IQ.Pilot release branch ==="
-          git fetch iqpilot \
-            +refs/heads/release:refs/remotes/iqpilot/release \
-            --no-tags
-
-          echo "=== Fetching Dragonpilot pre-build branch ==="
-          git fetch dragon \
-            +refs/heads/pre-build:refs/remotes/dragon/pre-build \
-            --no-tags
-
-          echo "=== Fetching StarPilot branch ==="
-          git fetch starpilot \
-            +refs/heads/StarPilot:refs/remotes/starpilot/StarPilot \
-            --no-tags
-
-          echo "=== Fetching Amy dev branch ==="
-          git fetch amy \
-            +refs/heads/dev:refs/remotes/amy/dev \
-            --no-tags
-
-          echo "=== Fetching dzid dev branch ==="
-          git fetch dzid \
-            +refs/heads/dev:refs/remotes/dzid/dev \
+          git fetch upstream \
+            +refs/heads/${{ matrix.upstream_branch }}:refs/remotes/upstream/${{ matrix.upstream_branch }} \
             --no-tags
 
       # ============================================================
       # 5. 创建本地临时同步分支
       # ============================================================
-      - name: Create local synchronization branches
+      - name: Create local sync branch (${{ matrix.name }})
         run: |
           set -e
-
           git branch --no-track -f \
-            sync-carrot \
-            refs/remotes/carrot/carrot-wip
-
-          git branch --no-track -f \
-            sync-release \
-            refs/remotes/iqpilot/release
-
-          git branch --no-track -f \
-            sync-dragon \
-            refs/remotes/dragon/pre-build
-
-          git branch --no-track -f \
-            sync-starpilot \
-            refs/remotes/starpilot/StarPilot
-
-          git branch --no-track -f \
-            sync-amy \
-            refs/remotes/amy/dev
-
-          git branch --no-track -f \
-            sync-dzid \
-            refs/remotes/dzid/dev
-
-          echo "=== Local synchronization branches ==="
-
-          git show-ref \
-            refs/heads/sync-carrot \
-            refs/heads/sync-release \
-            refs/heads/sync-dragon \
-            refs/heads/sync-starpilot \
-            refs/heads/sync-amy \
-            refs/heads/sync-dzid
+            sync-branch \
+            refs/remotes/upstream/${{ matrix.upstream_branch }}
+          git show-ref refs/heads/sync-branch
 
       # ============================================================
-      # 6. 同步 Carrot
+      # 6. 同步 LFS 对象
+      #
+      # 注意：
+      # - 去掉了 --all，只拉当前分支 tip 需要的对象，而不是整个
+      #   历史记录里的全部 LFS 对象，减少对上游 LFS 配额的消耗。
+      # - continue-on-error: true —— 如果上游仓库自身的 LFS 配额
+      #   已经用完（GitHub 返回 "exceeded its LFS budget"），这属于
+      #   上游账号自己的限额问题，我们这边无法绕过。加上这个开关后，
+      #   该源的 LFS 同步会被跳过，但不会连带影响其他源、也不会跳过
+      #   后面清理分支等收尾步骤。
       # ============================================================
-      - name: Fetch all Carrot Git LFS objects
+      - name: Fetch upstream LFS objects (${{ matrix.name }})
+        id: lfs_fetch
+        continue-on-error: true
         run: |
           set -e
+          git lfs fetch upstream sync-branch
 
-          echo "=== Fetching all Carrot historical LFS objects ==="
-
-          git lfs fetch \
-            --all \
-            carrot \
-            sync-carrot
-
-      - name: Push Carrot Git LFS objects
+      - name: Push LFS objects to origin (${{ matrix.name }})
+        if: steps.lfs_fetch.outcome == 'success'
+        continue-on-error: true
         run: |
           set -e
+          git lfs push origin sync-branch
 
-          echo "=== Uploading all Carrot LFS objects ==="
+      - name: Warn if LFS sync was skipped (${{ matrix.name }})
+        if: steps.lfs_fetch.outcome != 'success'
+        run: |
+          echo "::warning::${{ matrix.name }} 的 LFS 对象同步失败或被跳过（很可能是上游仓库自身 LFS 配额超限），本次将只同步 Git 分支本身，不更新 LFS 内容。"
 
-          git lfs push \
-            --all \
-            origin \
-            sync-carrot
-
-      - name: Push Carrot branch
+      # ============================================================
+      # 7. 推送分支（无论 LFS 是否同步成功都执行，保证 Git 引用本身
+      #    始终跟上游保持最新）
+      # ============================================================
+      - name: Push target branch (${{ matrix.name }})
         run: |
           set -e
-
-          echo "=== Pushing Carrot branch ==="
-
           git push origin \
-            refs/heads/sync-carrot:refs/heads/Carrot \
+            refs/heads/sync-branch:refs/heads/${{ matrix.target_branch }} \
             --force
 
-      # ============================================================
-      # 7. 同步 IQ.Pilot release
-      # ============================================================
-      - name: Fetch all release Git LFS objects
-        run: |
-          set -e
-
-          echo "=== Fetching all release historical LFS objects ==="
-
-          git lfs fetch \
-            --all \
-            iqpilot \
-            sync-release
-
-      - name: Push release Git LFS objects
-        run: |
-          set -e
-
-          echo "=== Uploading all release LFS objects ==="
-
-          git lfs push \
-            --all \
-            origin \
-            sync-release
-
-      - name: Push release branch
-        run: |
-          set -e
-
-          echo "=== Pushing release branch ==="
-
-          git push origin \
-            refs/heads/sync-release:refs/heads/release \
-            --force
+  # ================================================================
+  # 收尾 job：删除多余远程分支 + 输出同步结果
+  # needs: sync + if: always() —— 保证即使 matrix 中某个源
+  # 彻底失败，这一步依然会执行，不会像之前那样被跳过。
+  # ================================================================
+  finalize:
+    runs-on: ubuntu-latest
+    needs: sync
+    if: always()
+    steps:
+      - name: Checkout target repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: false
+          token: ${{ secrets.GH_TOKEN }}
 
       # ============================================================
-      # 8. 同步 Dragonpilot
-      # ============================================================
-      - name: Fetch all Dragon Git LFS objects
-        run: |
-          set -e
-
-          echo "=== Fetching all Dragon historical LFS objects ==="
-
-          git lfs fetch \
-            --all \
-            dragon \
-            sync-dragon
-
-      - name: Push Dragon Git LFS objects
-        run: |
-          set -e
-
-          echo "=== Uploading all Dragon LFS objects ==="
-
-          git lfs push \
-            --all \
-            origin \
-            sync-dragon
-
-      - name: Push Dragon branch
-        run: |
-          set -e
-
-          echo "=== Pushing Dragon branch ==="
-
-          git push origin \
-            refs/heads/sync-dragon:refs/heads/Dragon \
-            --force
-
-      # ============================================================
-      # 9. 同步 StarPilot
-      #
-      # 来源：
-      # https://github.com/firestar5683/StarPilot
-      # branch: StarPilot
-      #
-      # 目标：
-      # StarPilot
-      # ============================================================
-      - name: Fetch all StarPilot Git LFS objects
-        run: |
-          set -e
-
-          echo "=== Fetching all StarPilot historical LFS objects ==="
-
-          git lfs fetch \
-            --all \
-            starpilot \
-            sync-starpilot
-
-      - name: Push StarPilot Git LFS objects
-        run: |
-          set -e
-
-          echo "=== Uploading all StarPilot LFS objects ==="
-
-          git lfs push \
-            --all \
-            origin \
-            sync-starpilot
-
-      - name: Push StarPilot branch
-        run: |
-          set -e
-
-          echo "=== Pushing StarPilot branch ==="
-
-          git push origin \
-            refs/heads/sync-starpilot:refs/heads/StarPilot \
-            --force
-
-      # ============================================================
-      # 10. 同步 Amy
-      #
-      # 来源：
-      # https://github.com/AmyJeanes/sunnypilot
-      # branch: dev
-      #
-      # 目标：
-      # Amy
-      # ============================================================
-      - name: Fetch all Amy Git LFS objects
-        run: |
-          set -e
-
-          echo "=== Fetching all Amy historical LFS objects ==="
-
-          git lfs fetch \
-            --all \
-            amy \
-            sync-amy
-
-      - name: Push Amy Git LFS objects
-        run: |
-          set -e
-
-          echo "=== Uploading all Amy LFS objects ==="
-
-          git lfs push \
-            --all \
-            origin \
-            sync-amy
-
-      - name: Push Amy branch
-        run: |
-          set -e
-
-          echo "=== Pushing Amy branch ==="
-
-          git push origin \
-            refs/heads/sync-amy:refs/heads/Amy \
-            --force
-
-      # ============================================================
-      # 11. 同步 dzid
-      #
-      # 来源：
-      # https://github.com/dzid26/sunnypilot
-      # branch: dev
-      #
-      # 目标：
-      # dzid
-      # ============================================================
-      - name: Fetch all dzid Git LFS objects
-        run: |
-          set -e
-
-          echo "=== Fetching all dzid historical LFS objects ==="
-
-          git lfs fetch \
-            --all \
-            dzid \
-            sync-dzid
-
-      - name: Push dzid Git LFS objects
-        run: |
-          set -e
-
-          echo "=== Uploading all dzid LFS objects ==="
-
-          git lfs push \
-            --all \
-            origin \
-            sync-dzid
-
-      - name: Push dzid branch
-        run: |
-          set -e
-
-          echo "=== Pushing dzid branch ==="
-
-          git push origin \
-            refs/heads/sync-dzid:refs/heads/dzid \
-            --force
-
-      # ============================================================
-      # 12. 删除其他远程分支
+      # 删除其他远程分支
       #
       # 最终仅保留：
-      # master
-      # Carrot
-      # release
-      # Dragon
-      # StarPilot
-      # Amy
-      # dzid
-      #
-      # zoompilot 如果之前已经创建，也会在这里自动删除
+      # master / Carrot / release / Dragon / StarPilot / Amy / dzid
       # ============================================================
       - name: Delete unwanted remote branches
         run: |
           set -e
-
           echo "=== Reading remote branches ==="
-
           git fetch origin --prune
 
           git ls-remote --heads origin \
             | awk '{print $2}' \
             | sed 's#refs/heads/##' \
             | while read -r branch; do
-
                 case "$branch" in
                   master|Carrot|release|Dragon|StarPilot|Amy|dzid)
                     echo "Keeping branch: $branch"
                     ;;
-
                   *)
                     echo "Deleting branch: $branch"
-
                     if git push origin --delete "$branch"; then
                       echo "Deleted branch: $branch"
                     else
@@ -440,7 +191,7 @@ jobs:
               done
 
       # ============================================================
-      # 13. 输出最终同步结果
+      # 输出最终同步结果
       # ============================================================
       - name: Show synchronization result
         if: always()
@@ -448,21 +199,18 @@ jobs:
           echo "=============================================="
           echo "=== Current remote branches ==="
           echo "=============================================="
-
           git ls-remote --heads origin || true
 
           echo ""
           echo "=============================================="
           echo "=== Git LFS environment ==="
           echo "=============================================="
-
           git lfs env || true
 
           echo ""
           echo "=============================================="
           echo "=== Local LFS object count ==="
           echo "=============================================="
-
           if [ -d ".git/lfs/objects" ]; then
             find .git/lfs/objects -type f | wc -l
           else
