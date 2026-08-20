@@ -1,8 +1,8 @@
-name: Sync Carrot Branch
+name: Sync Carrot
 
 on:
   schedule:
-    - cron: '0 18 * * *' # UTC 18:00，北京时间次日 02:00
+    - cron: '0 18 * * *'
   workflow_dispatch:
 
 permissions:
@@ -13,193 +13,35 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # ============================================================
-      # 1. 检出目标仓库
-      # ============================================================
-      - name: Checkout target repository
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           lfs: false
           token: ${{ secrets.GH_TOKEN }}
 
-      # ============================================================
-      # 2. 配置 Git 和 Git LFS
-      # ============================================================
-      - name: Configure Git and Git LFS
+      - name: Sync Carrot
         run: |
           set -e
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git lfs install --local
 
-          echo "=== Git version ==="
-          git --version
-
-          echo "=== Git LFS version ==="
-          git lfs version
-
-      # ============================================================
-      # 3. 配置 Carrot 上游仓库
-      # ============================================================
-      - name: Configure Carrot upstream
-        run: |
-          set -e
-
-          if git remote get-url carrot >/dev/null 2>&1; then
-            git remote set-url \
-              carrot \
-              https://github.com/ajouatom/openpilot.git
-          else
-            git remote add \
-              carrot \
-              https://github.com/ajouatom/openpilot.git
-          fi
-
-          echo "=== Configured remotes ==="
-          git remote -v
-
-      # ============================================================
-      # 4. 获取上游 carrot-wip 分支
-      # ============================================================
-      - name: Fetch Carrot branch
-        run: |
-          set -e
-
-          echo "=== Fetching carrot-wip branch ==="
+          git remote add carrot https://github.com/ajouatom/openpilot.git
 
           git fetch carrot \
             +refs/heads/carrot-wip:refs/remotes/carrot/carrot-wip \
             --no-tags
 
-      # ============================================================
-      # 5. 创建本地临时同步分支
-      # ============================================================
-      - name: Create local Carrot synchronization branch
-        run: |
-          set -e
+          git branch -f sync-carrot refs/remotes/carrot/carrot-wip
 
-          git branch --no-track -f \
-            sync-carrot \
-            refs/remotes/carrot/carrot-wip
-
-          echo "=== Local synchronization branch ==="
-
-          git show-ref \
-            refs/heads/sync-carrot
-
-      # ============================================================
-      # 6. 下载 Carrot 全部历史 LFS 对象
-      # ============================================================
-      - name: Fetch all Carrot Git LFS objects
-        run: |
-          set -e
-
-          echo "=== Fetching all Carrot historical LFS objects ==="
-
-          git lfs fetch \
-            --all \
-            carrot \
-            sync-carrot
-
-          echo "=== Carrot LFS files ==="
-
-          git lfs ls-files \
-            --all \
-            --long \
-            | head -200 || true
-
-          echo "=== Local LFS object count ==="
-
-          if [ -d ".git/lfs/objects" ]; then
-            find .git/lfs/objects \
-              -type f \
-              | wc -l
-          else
-            echo "No local LFS objects found."
-          fi
-
-      # ============================================================
-      # 7. 上传 Carrot 全部 LFS 对象
-      # ============================================================
-      - name: Push Carrot Git LFS objects
-        run: |
-          set -e
-
-          echo "=== Uploading all Carrot LFS objects ==="
-
-          git lfs push \
-            --all \
-            origin \
-            sync-carrot
-
-      # ============================================================
-      # 8. 将 carrot-wip 镜像为 Carrot
-      # ============================================================
-      - name: Push Carrot branch
-        run: |
-          set -e
-
-          echo "=== Pushing Carrot branch ==="
+          git lfs fetch --all carrot sync-carrot
+          git lfs push --all origin sync-carrot
 
           git push origin \
             refs/heads/sync-carrot:refs/heads/Carrot \
             --force
 
-      # ============================================================
-      # 9. 删除其他远程分支
-      #
-      # 最终仅保留：
-      # master
-      # Carrot
-      # ============================================================
-      - name: Delete unwanted remote branches
-        run: |
-          set -e
-
-          echo "=== Reading remote branches ==="
-
-          git fetch origin --prune
-
-          git ls-remote --heads origin \
-            | awk '{print $2}' \
-            | sed 's#refs/heads/##' \
-            | while read -r branch; do
-
-                case "$branch" in
-                  master|Carrot)
-                    echo "Keeping branch: $branch"
-                    ;;
-
-                  *)
-                    echo "Deleting branch: $branch"
-
-                    if git push origin --delete "$branch"; then
-                      echo "Deleted branch: $branch"
-                    else
-                      echo "Failed to delete branch: $branch"
-                    fi
-                    ;;
-                esac
-              done
-
-      # ============================================================
-      # 10. 输出最终同步结果
-      # ============================================================
-      - name: Show synchronization result
+      - name: Show Result
         if: always()
         run: |
-          echo "=============================================="
-          echo "=== Current remote branches ==="
-          echo "=============================================="
-
-          git ls-remote --heads origin || true
-
-          echo ""
-          echo "=============================================="
-          echo "=== Git LFS environment ==="
-          echo "=============================================="
-
-          git lfs env || true
+          git ls-remote --heads origin refs/heads/Carrot
