@@ -20,13 +20,14 @@ jobs:
           lfs: false
           token: ${{ secrets.GH_TOKEN }}
 
+      - name: Configure
+        run: |
+          git lfs install --local
+          git remote add carrot https://github.com/ajouatom/openpilot.git
+
       - name: Sync Carrot
         run: |
           set -e
-
-          git lfs install --local
-
-          git remote add carrot https://github.com/ajouatom/openpilot.git
 
           git fetch carrot \
             +refs/heads/carrot-wip:refs/remotes/carrot/carrot-wip \
@@ -41,30 +42,43 @@ jobs:
             refs/heads/sync-carrot:refs/heads/Carrot \
             --force
 
-      - name: Sync StarPilot
+      - name: Sync Model
         run: |
           set -e
 
-          git remote add starpilot https://github.com/firestar5683/StarPilot.git
-
-          git fetch starpilot \
-            +refs/heads/StarPilot:refs/remotes/starpilot/StarPilot \
+          git fetch carrot \
+            +refs/heads/happymaj11r/carrot-wip-model_selector:refs/remotes/carrot/model \
             --no-tags
 
-          git branch -f sync-starpilot refs/remotes/starpilot/StarPilot
+          git branch -f sync-model refs/remotes/carrot/model
 
-          git lfs fetch --all starpilot sync-starpilot
-          git lfs push --all origin sync-starpilot
+          git lfs fetch --all carrot sync-model
+          git lfs push --all origin sync-model
 
           git push origin \
-            refs/heads/sync-starpilot:refs/heads/StarPilot \
+            refs/heads/sync-model:refs/heads/model \
+            --force
+
+      - name: Sync eGPU
+        run: |
+          set -e
+
+          git fetch carrot \
+            +refs/heads/carrot-egpu:refs/remotes/carrot/egpu \
+            --no-tags
+
+          git branch -f sync-egpu refs/remotes/carrot/egpu
+
+          git lfs fetch --all carrot sync-egpu
+          git lfs push --all origin sync-egpu
+
+          git push origin \
+            refs/heads/sync-egpu:refs/heads/egpu \
             --force
 
       - name: Show Result
         if: always()
         run: |
-          echo "=== Carrot ==="
           git ls-remote --heads origin refs/heads/Carrot
-
-          echo "=== StarPilot ==="
-          git ls-remote --heads origin refs/heads/StarPilot
+          git ls-remote --heads origin refs/heads/model
+          git ls-remote --heads origin refs/heads/egpu
