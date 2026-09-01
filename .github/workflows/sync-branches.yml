@@ -59,26 +59,9 @@ jobs:
             refs/heads/sync-model:refs/heads/model \
             --force
 
-      - name: Sync eGPU
-        run: |
-          set -e
-
-          git fetch carrot \
-            +refs/heads/carrot-egpu:refs/remotes/carrot/egpu \
-            --no-tags
-
-          git branch -f sync-egpu refs/remotes/carrot/egpu
-
-          git lfs fetch --all carrot sync-egpu
-          git lfs push --all origin sync-egpu
-
-          git push origin \
-            refs/heads/sync-egpu:refs/heads/egpu \
-            --force
 
       - name: Show Result
         if: always()
         run: |
           git ls-remote --heads origin refs/heads/Carrot
           git ls-remote --heads origin refs/heads/model
-          git ls-remote --heads origin refs/heads/egpu
