@@ -1,10 +1,9 @@
 #include "tools/cabana/dbc/dbcmanager.h"
 
 #include <algorithm>
-#include <cassert>
 #include <set>
 
-bool DBCManager::open(const SourceSet &sources, const std::string &dbc_file_name, std::string *error) {
+bool DBCManager::open(const SourceSet &sources, const std::string &dbc_file_name, QString *error) {
   try {
     auto it = std::find_if(dbc_files.begin(), dbc_files.end(),
                            [&](auto &f) { return f.second && f.second->filename == dbc_file_name; });
@@ -17,11 +16,11 @@ bool DBCManager::open(const SourceSet &sources, const std::string &dbc_file_name
     return false;
   }
 
-  fileChanged();
+  emit DBCFileChanged();
   return true;
 }
 
-bool DBCManager::open(const SourceSet &sources, const std::string &name, const std::string &content, std::string *error) {
+bool DBCManager::open(const SourceSet &sources, const std::string &name, const std::string &content, QString *error) {
   try {
     auto file = std::make_shared<DBCFile>(name, content);
     for (auto s : sources) {
@@ -32,7 +31,7 @@ bool DBCManager::open(const SourceSet &sources, const std::string &name, const s
     return false;
   }
 
-  fileChanged();
+  emit DBCFileChanged();
   return true;
 }
 
@@ -40,26 +39,26 @@ void DBCManager::close(const SourceSet &sources) {
   for (auto s : sources) {
     dbc_files[s] = nullptr;
   }
-  fileChanged();
+  emit DBCFileChanged();
 }
 
 void DBCManager::close(DBCFile *dbc_file) {
   for (auto &[_, f] : dbc_files) {
     if (f.get() == dbc_file) f = nullptr;
   }
-  fileChanged();
+  emit DBCFileChanged();
 }
 
 void DBCManager::closeAll() {
   dbc_files.clear();
-  fileChanged();
+  emit DBCFileChanged();
 }
 
 void DBCManager::addSignal(const MessageId &id, const cabana::Signal &sig) {
   if (auto m = msg(id)) {
     if (auto s = m->addSignal(sig)) {
-      signalAdded(id, s);
-      maskUpdated();
+      emit signalAdded(id, s);
+      emit maskUpdated();
     }
   }
 }
@@ -67,8 +66,8 @@ void DBCManager::addSignal(const MessageId &id, const cabana::Signal &sig) {
 void DBCManager::updateSignal(const MessageId &id, const std::string &sig_name, const cabana::Signal &sig) {
   if (auto m = msg(id)) {
     if (auto s = m->updateSignal(sig_name, sig)) {
-      signalUpdated(s);
-      maskUpdated();
+      emit signalUpdated(s);
+      emit maskUpdated();
     }
   }
 }
@@ -76,9 +75,9 @@ void DBCManager::updateSignal(const MessageId &id, const std::string &sig_name, 
 void DBCManager::removeSignal(const MessageId &id, const std::string &sig_name) {
   if (auto m = msg(id)) {
     if (auto s = m->sig(sig_name)) {
-      signalRemoved(s);
+      emit signalRemoved(s);
       m->removeSignal(sig_name);
-      maskUpdated();
+      emit maskUpdated();
     }
   }
 }
@@ -87,15 +86,15 @@ void DBCManager::updateMsg(const MessageId &id, const std::string &name, uint32_
   auto dbc_file = findDBCFile(id);
   assert(dbc_file);  // This should be impossible
   dbc_file->updateMsg(id, name, size, node, comment);
-  msgUpdated(id);
+  emit msgUpdated(id);
 }
 
 void DBCManager::removeMsg(const MessageId &id) {
   auto dbc_file = findDBCFile(id);
   assert(dbc_file);  // This should be impossible
   dbc_file->removeMsg(id);
-  msgRemoved(id);
-  maskUpdated();
+  emit msgRemoved(id);
+  emit maskUpdated();
 }
 
 std::string DBCManager::newMsgName(const MessageId &id) {
@@ -141,15 +140,8 @@ std::vector<std::string> DBCManager::signalNames() {
 }
 
 int DBCManager::nonEmptyDBCCount() {
-  return nonEmptyDBCFiles().size();
-}
-
-std::vector<DBCFile *> DBCManager::nonEmptyDBCFiles() {
-  std::vector<DBCFile *> files;
-  for (auto f : allDBCFiles()) {
-    if (!f->isEmpty()) files.push_back(f);
-  }
-  return files;
+  auto files = allDBCFiles();
+  return std::count_if(files.cbegin(), files.cend(), [](auto &f) { return !f->isEmpty(); });
 }
 
 DBCFile *DBCManager::findDBCFile(const uint8_t source) {
@@ -184,6 +176,6 @@ std::string toString(const SourceSet &ss) {
 }
 
 DBCManager *dbc() {
-  static DBCManager dbc_manager;
+  static DBCManager dbc_manager(nullptr);
   return &dbc_manager;
 }

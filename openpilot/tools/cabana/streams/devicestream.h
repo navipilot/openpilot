@@ -2,21 +2,32 @@
 
 #include "tools/cabana/streams/livestream.h"
 
-#include <string>
-#include <sys/types.h>
+#include <QProcess>
 
 class DeviceStream : public LiveStream {
+  Q_OBJECT
 public:
-  DeviceStream(std::string address = {});
+  DeviceStream(QObject *parent, QString address = {});
   ~DeviceStream();
   inline std::string routeName() const override {
-    return "Live Streaming From " + (zmq_address.empty() ? std::string("127.0.0.1") : zmq_address);
+    return "Live Streaming From " + (zmq_address.isEmpty() ? std::string("127.0.0.1") : zmq_address.toStdString());
   }
 
 protected:
   void start() override;
   void streamThread() override;
-  void stopBridge();
-  pid_t bridge_pid = -1;
-  const std::string zmq_address;
+  QProcess *bridge_process = nullptr;
+  const QString zmq_address;
+};
+
+class OpenDeviceWidget : public AbstractOpenStreamWidget {
+  Q_OBJECT
+
+public:
+  OpenDeviceWidget(QWidget *parent = nullptr);
+  AbstractStream *open() override;
+
+private:
+  QLineEdit *ip_address;
+  QButtonGroup *group;
 };

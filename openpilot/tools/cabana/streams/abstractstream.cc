@@ -1,9 +1,9 @@
 #include "tools/cabana/streams/abstractstream.h"
 
-#include <cassert>
 #include <limits>
 #include <utility>
 
+#include <QApplication>
 #include "common/timing.h"
 #include "tools/cabana/settings.h"
 
@@ -11,41 +11,15 @@ static const int EVENT_NEXT_BUFFER_SIZE = 6 * 1024 * 1024;  // 6MB
 
 AbstractStream *can = nullptr;
 
-AbstractStream::AbstractStream() {
+AbstractStream::AbstractStream(QObject *parent) : QObject(parent) {
+  assert(parent != nullptr);
   event_buffer_ = std::make_unique<MonotonicBuffer>(EVENT_NEXT_BUFFER_SIZE);
 
-  // connected first so the stream state is updated before any widget handlers run
-  connections_.push_back(seekedTo.connect([this](double sec) { updateLastMsgsTo(sec); }));
-  connections_.push_back(seeking.connect([this](double sec) { current_sec_ = sec; }));
-  connections_.push_back(dbc()->fileChanged.connect([this]() { updateMasks(); }));
-  connections_.push_back(dbc()->maskUpdated.connect([this]() { updateMasks(); }));
-}
-
-void AbstractStream::postToMainThread(std::function<void()> fn) {
-  utils::runOnMainThread([alive = std::weak_ptr<bool>(alive_), fn = std::move(fn)]() {
-    if (!alive.expired()) fn();
-  });
-}
-
-void AbstractStream::postToMainThreadAndWait(std::function<void()> fn) {
-  assert(!utils::isMainThread());
-  std::unique_lock lock(mutex_);
-  if (exiting_) return;
-  auto done = std::make_shared<bool>(false);
-  postToMainThread([this, alive = std::weak_ptr<bool>(alive_), done, fn = std::move(fn)]() {
-    fn();
-    if (alive.expired()) return;  // fn deleted the stream, the waiter was released by cancelWaits()
-    std::lock_guard lk(mutex_);
-    *done = true;
-    wait_cv_.notify_all();
-  });
-  wait_cv_.wait(lock, [&]() { return *done || exiting_; });
-}
-
-void AbstractStream::cancelWaits() {
-  std::lock_guard lk(mutex_);
-  exiting_ = true;
-  wait_cv_.notify_all();
+  QObject::connect(this, &AbstractStream::privateUpdateLastMsgsSignal, this, &AbstractStream::updateLastMessages, Qt::QueuedConnection);
+  QObject::connect(this, &AbstractStream::seekedTo, this, &AbstractStream::updateLastMsgsTo);
+  QObject::connect(this, &AbstractStream::seeking, this, [this](double sec) { current_sec_ = sec; });
+  QObject::connect(dbc(), &DBCManager::DBCFileChanged, this, &AbstractStream::updateMasks);
+  QObject::connect(dbc(), &DBCManager::maskUpdated, this, &AbstractStream::updateMasks);
 }
 
 void AbstractStream::updateMasks() {
@@ -122,8 +96,9 @@ void AbstractStream::updateLastMessages() {
 
   if (sources.size() != prev_src_size) {
     updateMasks();
+    emit sourcesUpdated(sources);
   }
-  msgsReceived(&msgs, prev_msg_size != last_msgs.size());
+  emit msgsReceived(&msgs, prev_msg_size != last_msgs.size());
 }
 
 void AbstractStream::setTimeRange(const std::optional<std::pair<double, double>> &range) {
@@ -131,7 +106,7 @@ void AbstractStream::setTimeRange(const std::optional<std::pair<double, double>>
   if (time_range_ && (current_sec_ < time_range_->first || current_sec_ >= time_range_->second)) {
     seekTo(time_range_->first);
   }
-  timeRangeChanged(time_range_);
+  emit timeRangeChanged(time_range_);
 }
 
 void AbstractStream::updateEvent(const MessageId &id, double sec, const uint8_t *data, uint8_t size) {
@@ -164,7 +139,7 @@ bool AbstractStream::isMessageActive(const MessageId &id) const {
     return delta < 1.5;
   }
 
-  return delta < (5.0 / m.freq) + (1.0 / STREAM_UPDATE_FPS);
+  return delta < (5.0 / m.freq) + (1.0 / settings.fps);
 }
 
 void AbstractStream::updateLastMsgsTo(double sec) {
@@ -199,16 +174,16 @@ void AbstractStream::updateLastMsgsTo(double sec) {
                     std::any_of(messages_.cbegin(), messages_.cend(),
                                 [this](const auto &m) { return !last_msgs.count(m.first); });
   last_msgs = messages_;
-  msgsReceived(nullptr, id_changed);
+  emit msgsReceived(nullptr, id_changed);
 
   std::lock_guard lk(mutex_);
   seek_finished_ = true;
-  wait_cv_.notify_all();
+  seek_finished_cv_.notify_one();
 }
 
 void AbstractStream::waitForSeekFinshed() {
   std::unique_lock lock(mutex_);
-  wait_cv_.wait(lock, [this]() { return seek_finished_ || exiting_; });
+  seek_finished_cv_.wait(lock, [this]() { return seek_finished_; });
   seek_finished_ = false;
 }
 
@@ -232,10 +207,6 @@ void AbstractStream::mergeEvents(const std::vector<const CanEvent *> &events) {
     msg_events[{.source = e->src, .address = e->address}].push_back(e);
   }
 
-  insertEvents(events, msg_events);
-}
-
-void AbstractStream::insertEvents(const std::vector<const CanEvent *> &events, const MessageEventsMap &msg_events) {
   if (!events.empty()) {
     for (const auto &[id, new_e] : msg_events) {
       if (!new_e.empty()) {
@@ -246,34 +217,34 @@ void AbstractStream::insertEvents(const std::vector<const CanEvent *> &events, c
     }
     auto pos = std::upper_bound(all_events_.cbegin(), all_events_.cend(), events.front()->mono_time, CompareCanEvent());
     all_events_.insert(pos, events.cbegin(), events.cend());
-    eventsMerged(msg_events);
+    emit eventsMerged(msg_events);
   }
 }
 
 std::pair<CanEventIter, CanEventIter> AbstractStream::eventsInRange(const MessageId &id, std::optional<std::pair<double, double>> time_range) const {
-  const auto &events = this->events(id);
+  const auto &events = can->events(id);
   if (!time_range) return {events.begin(), events.end()};
 
-  auto first = std::lower_bound(events.begin(), events.end(), toMonoTime(time_range->first), CompareCanEvent());
-  auto last = std::upper_bound(first, events.end(), toMonoTime(time_range->second), CompareCanEvent());
+  auto first = std::lower_bound(events.begin(), events.end(), can->toMonoTime(time_range->first), CompareCanEvent());
+  auto last = std::upper_bound(first, events.end(), can->toMonoTime(time_range->second), CompareCanEvent());
   return {first, last};
 }
 
 namespace {
 
 enum Color { GREYISH_BLUE, CYAN, RED};
-CabanaColor getColor(int c) {
+QColor getColor(int c) {
   constexpr int start_alpha = 128;
-  static const CabanaColor colors[] = {
-      [GREYISH_BLUE] = CabanaColor(102, 86, 169, start_alpha / 2),
-      [CYAN] = CabanaColor(0, 187, 255, start_alpha),
-      [RED] = CabanaColor(255, 0, 0, start_alpha),
+  static const QColor colors[] = {
+      [GREYISH_BLUE] = QColor(102, 86, 169, start_alpha / 2),
+      [CYAN] = QColor(0, 187, 255, start_alpha),
+      [RED] = QColor(255, 0, 0, start_alpha),
   };
   return settings.theme == LIGHT_THEME ? colors[c] : colors[c].lighter(135);
 }
 
-inline CabanaColor blend(const CabanaColor &a, const CabanaColor &b) {
-  return CabanaColor((a.red() + b.red()) / 2, (a.green() + b.green()) / 2, (a.blue() + b.blue()) / 2, (a.alpha() + b.alpha()) / 2);
+inline QColor blend(const QColor &a, const QColor &b) {
+  return QColor((a.red() + b.red()) / 2, (a.green() + b.green()) / 2, (a.blue() + b.blue()) / 2, (a.alpha() + b.alpha()) / 2);
 }
 
 // Calculate the frequency from the past one minute data
@@ -300,7 +271,7 @@ void CanData::compute(const MessageId &msg_id, const uint8_t *can_data, const in
 
   if (dat.size() != size) {
     dat.assign(can_data, can_data + size);
-    colors.assign(size, CabanaColor(0, 0, 0, 0));
+    colors.assign(size, QColor(0, 0, 0, 0));
     last_changes.resize(size);
     bit_flip_counts.resize(size);
     std::for_each(last_changes.begin(), last_changes.end(), [current_sec](auto &c) { c.ts = current_sec; });
@@ -346,7 +317,7 @@ void CanData::compute(const MessageId &msg_id, const uint8_t *can_data, const in
         last_change.delta = delta;
       } else {
         // Fade out
-        colors[i].setAlphaF(std::max(0.0f, colors[i].alphaF() - alpha_delta));
+        colors[i].setAlphaF(std::max(0.0, colors[i].alphaF() - alpha_delta));
       }
     }
   }

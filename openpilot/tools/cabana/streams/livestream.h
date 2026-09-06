@@ -1,20 +1,22 @@
 #pragma once
 
 #include <algorithm>
-#include <atomic>
 #include <memory>
-#include <thread>
 #include <vector>
+
+#include <QBasicTimer>
 
 #include "tools/cabana/streams/abstractstream.h"
 
 class LiveStream : public AbstractStream {
+  Q_OBJECT
+
 public:
-  LiveStream();
+  LiveStream(QObject *parent);
   virtual ~LiveStream();
   void start() override;
   void stop();
-  inline std::chrono::system_clock::time_point beginDateTime() const override { return begin_date_time; }
+  inline QDateTime beginDateTime() const { return begin_date_time; }
   inline uint64_t beginMonoTime() const override { return begin_event_ts; }
   double maxSeconds() const override { return std::max(1.0, (lastest_event_ts - begin_event_ts) / 1e9); }
   void setSpeed(float speed) override { speed_ = speed; }
@@ -27,19 +29,19 @@ protected:
   virtual void streamThread() = 0;
   void handleEvent(kj::ArrayPtr<capnp::word> event);
 
-  std::atomic<bool> exit_ = false;
-
 private:
-  void updateThread();
-  void updateLastMessages() override;
+  void startUpdateTimer();
+  void timerEvent(QTimerEvent *event) override;
   void updateEvents();
 
   std::mutex lock;
-  std::thread stream_thread, update_thread;
-  std::atomic<bool> update_pending_ = false;
+  QThread *stream_thread;
   std::vector<const CanEvent *> received_events_;
 
-  std::chrono::system_clock::time_point begin_date_time;
+  int timer_id;
+  QBasicTimer update_timer;
+
+  QDateTime begin_date_time;
   uint64_t begin_event_ts = 0;
   uint64_t lastest_event_ts = 0;
   uint64_t current_event_ts = 0;
