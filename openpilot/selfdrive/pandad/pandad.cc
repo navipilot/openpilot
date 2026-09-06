@@ -586,11 +586,10 @@ void pandad_run(std::vector<Panda *> &pandas) {
       is_onroad = params.getBool("IsOnroad");
       pandad_is_onroad.store(is_onroad, std::memory_order_relaxed);
       const auto ignition_opt = process_panda_state(pandas, &pm, engaged, is_onroad, spoofing_started);
-      if (ignition_opt) {
-        // A vehicle sleep can drop ignition without ending the onroad session.
-        // Reset safety configuration so its vehicle mode is restored after wake.
-        panda_safety.configureSafetyMode(is_onroad && *ignition_opt);
-      }
+      // A vehicle sleep can drop ignition without ending the onroad session.
+      // Reset on a known ignition drop, and always preserve offroad cleanup even
+      // when a Panda state read fails.
+      panda_safety.configureSafetyMode(is_onroad && ignition_opt.value_or(true));
     }
 
     // Send out peripheralState at 2Hz

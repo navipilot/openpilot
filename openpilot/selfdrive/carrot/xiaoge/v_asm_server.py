@@ -20,7 +20,7 @@ if __package__ in (None, ""):
 
 import openpilot.cereal.messaging as messaging
 from openpilot.cereal import log
-from openpilot.selfdrive.carrot.xiaoge.lane_inference import DEFAULT_LANE_MODEL_PATH, LaneInference
+from openpilot.selfdrive.carrot.xiaoge.lane_inference import DEFAULT_LANE_MODEL_PATH, LaneInference, prepare_lane_image
 from openpilot.selfdrive.carrot.xiaoge.v_asm_inference import DEFAULT_MODEL_PATH, VASMInference
 
 try:
@@ -63,8 +63,8 @@ DEFAULT_POLYGONS = {
   ],
   "poly_right": [
     [1378, 480],
-    [1928, 550],
-    [1928, 1200],
+    [1927, 550],
+    [1927, 1200],
     [1278, 950],
   ],
 }
@@ -294,7 +294,7 @@ class VASMService:
 
   def _update_vasm_gate(self) -> tuple[bool, str]:
     self.sm.update(0)
-    if not self.sm.valid["carState"] or not self.sm.valid["modelV2"]:
+    if not self.sm.all_alive_and_valid(["carState", "modelV2"]):
       gate = {"active": False, "side": "", "reason": "carState or modelV2 is unavailable", "laneWidth": 0.0}
     else:
       speed = float(self.sm["carState"].vEgo)
@@ -354,12 +354,7 @@ class VASMService:
   def _lane_jpeg_from_nv12(data: bytes, width: int, height: int, stride: int) -> bytes:
     """Build the grayscale road-camera input expected by the lane model."""
     frame = np.frombuffer(data, dtype=np.uint8).reshape((-1, stride))
-    y_plane = frame[:height, :width]
-    crop_size = min(width, height)
-    start_x = (width - crop_size) // 2
-    start_y = (height - crop_size) // 2
-    gray = np.ascontiguousarray(y_plane[start_y:start_y + crop_size, start_x:start_x + crop_size])
-    gray = cv2.resize(gray, (416, 416), interpolation=cv2.INTER_LINEAR)
+    gray = prepare_lane_image(frame, width, height)
     output = BytesIO()
     Image.fromarray(gray).save(output, "JPEG", quality=50)
     return output.getvalue()

@@ -8,8 +8,9 @@ Xiaoge Vision 是 CarrotPilot 的本地视觉扩展。它使用 comma3 的 Visio
 模型，并通过一个版本化的 `xiaogeVision` JSON 消息写入 `customReservedRawData0`。`card.py` 接收该
 消息后，将车道线类型和视觉盲区结果安全地合并到 `carState`，供现有 UI 与变道逻辑使用。
 
-受管理入口是 `openpilot.selfdrive.carrot.xiaoge_data`。进程在 onroad 时自动运行；保留
-`ShareData` 时也会继续提供原有 TCP 7711 数据服务。请不要同时手动启动 `v_asm_server.py`，否则会
+受管理入口是 `openpilot.selfdrive.carrot.xiaoge_data`。只有启用现有的 `ShareData` 参数时，管理器才会
+启动此进程，同时提供本地视觉识别和原有 TCP 7711 数据服务。相机推理需要 `camerad` 运行。
+请不要同时手动启动 `v_asm_server.py`，否则会
 与入口进程争用 8082 端口并产生重复的视觉推理进程。
 
 ### 功能和原理
@@ -65,8 +66,9 @@ frames and publishes one versioned `xiaogeVision` JSON payload through `customRe
 `card.py` safely merges the resulting lane-marking types and visual blindspot state into `carState`,
 where the existing UI and lane-change logic consume them.
 
-The managed entry point is `openpilot.selfdrive.carrot.xiaoge_data`. It runs onroad and preserves
-the existing TCP 7711 data service when `ShareData` is enabled. Do not also launch
+The managed entry point is `openpilot.selfdrive.carrot.xiaoge_data`. The manager starts it only when
+the existing `ShareData` parameter is enabled, providing both local vision and the existing TCP 7711
+data service. Camera inference requires `camerad` to be running. Do not also launch
 `v_asm_server.py` manually: it would conflict on port 8082 and create a second vision process.
 
 ### Features and operation
@@ -129,8 +131,9 @@ ONNX 모델을 실행하고, 하나의 버전 관리된 `xiaogeVision` JSON 메�
 `customReservedRawData0`으로 발행합니다. `card.py`는 차선 종류와 비전 사각지대 상태를 `carState`에
 안전하게 병합하며, 기존 UI와 차선 변경 로직이 이를 사용합니다.
 
-관리형 시작점은 `openpilot.selfdrive.carrot.xiaoge_data`입니다. onroad에서 실행되며,
-`ShareData`가 활성화된 경우 기존 TCP 7711 데이터 서비스도 유지합니다. `v_asm_server.py`를 별도로
+관리형 시작점은 `openpilot.selfdrive.carrot.xiaoge_data`입니다. 기존 `ShareData` 파라미터가 켜져 있을
+때만 관리자가 실행하며, 로컬 비전 인식과 기존 TCP 7711 데이터 서비스를 함께 제공합니다.
+카메라 추론에는 `camerad` 실행이 필요합니다. `v_asm_server.py`를 별도로
 실행하지 마십시오. 8082 포트가 충돌하고 두 번째 비전 프로세스가 실행됩니다.
 
 ### 기능 및 동작 원리

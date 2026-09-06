@@ -36,6 +36,26 @@ def class_to_type(class_id: int) -> int:
   return -1  # Unavailable / Unknown
 
 
+def prepare_lane_image(image: np.ndarray, width: int, height: int) -> np.ndarray:
+  """Crop the visible Y plane, ignoring NV12 chroma and allocation/stride padding."""
+  if width <= 0 or height <= 0:
+    raise ValueError("lane image dimensions must be positive")
+  if image.ndim not in (2, 3) or (image.ndim == 3 and image.shape[2] != 3):
+    raise ValueError(f"unsupported lane image shape: {image.shape}")
+  if image.shape[0] < height or image.shape[1] < width:
+    raise ValueError("short lane image plane")
+  gray = image[:height, :width]
+  if image.ndim == 3:
+    gray = cv2.cvtColor(gray, cv2.COLOR_BGR2GRAY)
+  crop_size = min(width, height)
+  start_x = (width - crop_size) // 2
+  start_y = (height - crop_size) // 2
+  gray = np.ascontiguousarray(gray[start_y:start_y + crop_size, start_x:start_x + crop_size])
+  if gray.shape != (INPUT_SIZE, INPUT_SIZE):
+    gray = cv2.resize(gray, (INPUT_SIZE, INPUT_SIZE), interpolation=cv2.INTER_LINEAR)
+  return gray
+
+
 class LaneCandidate:
   def __init__(self, class_id: int, score: float, bottom: int, center_at_bottom: float, mask: np.ndarray | None = None):
     self.class_id = class_id
@@ -124,27 +144,8 @@ class LaneInference:
       return False
 
   def preprocess_image(self, image: np.ndarray, width: int, height: int) -> np.ndarray:
-    """
-    Reproduces the image contract from xiaoge_data.py and the Android client:
-    centered square crop of the NV12 Y plane, resized to 416x416 grayscale JPEG
-    semantics, expanded into equal RGB channels and normalized to NCHW float32.
-    """
-    if image.shape[0] == height + height // 2 and image.shape[1] == width:
-      y_plane = image[:height, :width]
-      crop_size = min(width, height)
-      start_x = (width - crop_size) // 2
-      start_y = (height - crop_size) // 2
-      gray = np.ascontiguousarray(y_plane[start_y:start_y + crop_size, start_x:start_x + crop_size])
-    elif image.ndim == 2:
-      gray = image[:height, :width]
-    elif image.ndim == 3 and image.shape[2] == 3:
-      gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    else:
-      raise ValueError(f"unsupported lane image shape: {image.shape}")
-
-    if gray.shape != (INPUT_SIZE, INPUT_SIZE):
-      gray = cv2.resize(gray, (INPUT_SIZE, INPUT_SIZE), interpolation=cv2.INTER_LINEAR)
-
+    """Expand the centered grayscale input into normalized NCHW float32 channels."""
+    gray = prepare_lane_image(image, width, height)
     normalized = gray.astype(np.float32) / 255.0
     return np.broadcast_to(normalized, (3, INPUT_SIZE, INPUT_SIZE)).copy()[np.newaxis, ...]
 
