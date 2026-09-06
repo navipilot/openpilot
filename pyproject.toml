@@ -76,7 +76,7 @@ dependencies = [
   "zstandard",
 
   # ui
-  "raylib @ git+https://github.com/commaai/dependencies.git@release-raylib#subdirectory=raylib",
+  "comma-deps-raylib",
   "qrcode",
   "jeepney",
   "pillow",

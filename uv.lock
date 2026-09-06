@@ -251,6 +251,19 @@ wheels = [
 ]
 
 [[package]]
+name = "comma-deps-raylib"
+version = "6.0.0.1.post101"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cffi" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ff/90/e289acd1725d71c792c33399422f1052c4b0c38aeb4222a866d30c4a2cad/comma_deps_raylib-6.0.0.1.post101-py3-none-macosx_11_0_arm64.whl", hash = "sha256:fa69d5093a92d7d2bfd2714a1afccca63b94d4c55fae88e61b80e8841de6a6cd", size = 1885392, upload-time = "2026-08-27T18:24:37.25Z" },
+    { url = "https://files.pythonhosted.org/packages/a1/17/12977631f6d86d1daa4f67a310cfdf2783ba288f42d444d6a89b2297a0a4/comma_deps_raylib-6.0.0.1.post101-py3-none-manylinux_2_28_aarch64.whl", hash = "sha256:c93ff9b45df414620b3011280da77151764c027e2f95d384fe255615d78872cc", size = 21707644, upload-time = "2026-08-27T18:24:41.282Z" },
+    { url = "https://files.pythonhosted.org/packages/c0/ca/ef33aff790b37dfc925f94fbb3a86da19f67929c15b3725ddb18afb91e96/comma_deps_raylib-6.0.0.1.post101-py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:8f2a1ffe5f60cac06170b144d6ce84925c91657e7ada3ae35bc5df6ccbe0b461", size = 20722616, upload-time = "2026-08-27T18:24:45.803Z" },
+]
+
+[[package]]
 name = "contourpy"
 version = "1.3.3"
 source = { registry = "https://pypi.org/simple" }
@@ -845,6 +858,7 @@ dependencies = [
     { name = "capnproto" },
     { name = "casadi" },
     { name = "cffi" },
+    { name = "comma-deps-raylib" },
     { name = "crcmod-plus" },
     { name = "cython" },
     { name = "eigen" },
@@ -870,7 +884,6 @@ dependencies = [
     { name = "pyusb" },
     { name = "pyzmq" },
     { name = "qrcode" },
-    { name = "raylib" },
     { name = "requests" },
     { name = "scons" },
     { name = "sentry-sdk" },
@@ -928,6 +941,7 @@ requires-dist = [
     { name = "casadi", specifier = ">=3.6.6" },
     { name = "cffi" },
     { name = "codespell", marker = "extra == 'testing'" },
+    { name = "comma-deps-raylib" },
     { name = "coverage", marker = "extra == 'testing'" },
     { name = "crcmod-plus" },
     { name = "cython" },
@@ -968,7 +982,6 @@ requires-dist = [
     { name = "pyusb" },
     { name = "pyzmq" },
     { name = "qrcode" },
-    { name = "raylib", git = "https://github.com/commaai/dependencies.git?subdirectory=raylib&rev=release-raylib" },
     { name = "requests" },
     { name = "ruff", marker = "extra == 'testing'" },
     { name = "scons" },
@@ -1422,14 +1435,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/8f/b2/7fc2931bfae0af02d5f53b174e9cf701adbb35f39d69c2af63d4a39f81a9/qrcode-8.2.tar.gz", hash = "sha256:35c3f2a4172b33136ab9f6b3ef1c00260dd2f66f858f24d88418a015f446506c", size = 43317, upload-time = "2025-05-01T15:44:24.726Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/dd/b8/d2d6d731733f51684bbf76bf34dab3b70a9148e8f2cef2bb544fccec681a/qrcode-8.2-py3-none-any.whl", hash = "sha256:16e64e0716c14960108e85d853062c9e8bba5ca8252c0b4d0231b9df4060ff4f", size = 45986, upload-time = "2025-05-01T15:44:22.781Z" },
-]
-
-[[package]]
-name = "raylib"
-version = "6.0.0.0"
-source = { git = "https://github.com/commaai/dependencies.git?subdirectory=raylib&rev=release-raylib#c5ba350ea0b9f6454a71cfc1f7250811db98dbff" }
-dependencies = [
-    { name = "cffi" },
 ]
 
 [[package]]
