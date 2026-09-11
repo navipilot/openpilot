@@ -35,6 +35,12 @@ class TestParams:
     assert self.params.get("DongleId") is not None
     assert not os.path.isfile(undefined_param)
 
+  def test_last_manager_exit_reason_survives_manager_start(self):
+    self.params.put("LastManagerExitReason", "DoShutdown test")
+    self.params.clear_all(ParamKeyFlag.CLEAR_ON_MANAGER_START)
+    assert self.params.get("LastManagerExitReason") == "DoShutdown test"
+    self.params.remove("LastManagerExitReason")
+
   def test_params_two_things(self):
     self.params.put("DongleId", "bob")
     self.params.put("AthenadPid", 123)
