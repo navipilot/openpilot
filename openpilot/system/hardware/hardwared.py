@@ -403,8 +403,14 @@ def hardware_thread(end_event, hw_queue) -> None:
     msg.deviceState.somPowerDrawW = som_power_draw
 
     # Check if we need to shut down
-    if (not tesla_no_sleep) and power_monitor.should_shutdown(onroad_conditions["ignition"], in_car, off_ts, started_seen):
-      cloudlog.warning(f"shutting device down, offroad since {off_ts}")
+    shutdown_reason = None if tesla_no_sleep else power_monitor.get_shutdown_reason(
+      onroad_conditions["ignition"], in_car, off_ts, started_seen
+    )
+    if shutdown_reason is not None:
+      offroad_time_s = time.monotonic() - off_ts if off_ts is not None else 0
+      cloudlog.warning("shutting device down: reason=%s offroad_time_s=%.0f configured_time_min=%d voltage_v=%.2f estimated_capacity_uwh=%d",
+                       shutdown_reason, offroad_time_s, params.get_int("MaxTimeOffroadMin"),
+                       power_monitor.car_voltage_mV / 1e3, power_monitor.get_car_battery_capacity())
       params.put_bool("DoShutdown", True)
 
     msg.deviceState.started = started_ts is not None
