@@ -1,17 +1,24 @@
 import json
+from types import SimpleNamespace
 
 import pytest
 
-from openpilot.selfdrive.ui.vision_status import parse_vision_display_packet, vision_display_state
+from openpilot.selfdrive.ui.vision_status import (
+  blindspot_source_packet, blindspot_sources, parse_blindspot_source_packet,
+  parse_vision_display_packet, vision_display_state,
+)
 
 NOW = 10_000_000_000
 
 
-def packet(*, lane_time=NOW, blindspot_time=NOW, side="left", valid=True, detected=False, latency=485.0):
+def packet(*, lane_time=NOW, blindspot_time=NOW, side="left", valid=True, detected=False, latency=485.0, side_time=None):
+  blindspot = {"left": detected, "right": False, "valid": valid, "receivedMonoTimeNanos": blindspot_time, "side": side}
+  if side_time is not None:
+    blindspot["receivedMonoTimeNanosBySide"] = {"left": side_time, "right": blindspot_time}
   return parse_vision_display_packet(json.dumps({
     "type": "xiaogeVision", "version": 1,
     "lane": {"leftLine": 0, "rightLine": 1, "valid": True, "receivedMonoTimeNanos": lane_time, "latencyMs": latency},
-    "blindspot": {"left": detected, "right": False, "valid": valid, "receivedMonoTimeNanos": blindspot_time, "side": side},
+    "blindspot": blindspot,
   }).encode())
 
 
@@ -44,3 +51,38 @@ def test_legacy_payload_cannot_claim_both_sides_were_checked():
   state = vision_display_state(packet(side="", latency=None), NOW)
   assert state.state == "running"
   assert state.clear_side == ""
+
+
+def test_display_uses_selected_side_timestamp():
+  state = vision_display_state(packet(side_time=NOW - 1_500_000_001), NOW)
+  assert state.clear_side == ""
+
+
+def test_blindspot_sources_use_fresh_raw_packet_without_carstate_schema_fields():
+  payload = json.dumps({
+    "type": "xiaogeBlindspotSources",
+    "version": 1,
+    "receivedMonoTimeNanos": NOW,
+    "left": {"oem": False, "vision": True},
+    "right": {"oem": True, "vision": True},
+  }).encode()
+  parsed = parse_blindspot_source_packet(payload)
+  car_state = SimpleNamespace(leftBlindspot=True, rightBlindspot=True)
+
+  assert blindspot_sources(car_state, "left", parsed) == (False, True)
+  assert blindspot_sources(car_state, "right", parsed) == (True, True)
+
+
+def test_blindspot_source_packet_rejects_stale_and_invalid_payloads():
+  class SM(dict):
+    valid = {"customReservedRawData1": True}
+
+  stale = json.dumps({
+    "type": "xiaogeBlindspotSources",
+    "version": 1,
+    "receivedMonoTimeNanos": NOW - 1_500_000_001,
+    "left": {"oem": False, "vision": True},
+    "right": {"oem": False, "vision": False},
+  }).encode()
+  assert blindspot_source_packet(SM(customReservedRawData1=stale), NOW) is None
+  assert blindspot_source_packet(SM(customReservedRawData1=b"{}"), NOW) is None
