@@ -455,7 +455,7 @@ class ModelRenderer(Widget):
     ):
       if active:
         oem, vision = blindspot_sources(car_state, side, source_packet)
-        color = rl.Color(255, 128, 128, 175) if oem and vision else \
+        color = rl.Color(255, 0, 0, 190) if oem and vision else \
                 rl.Color(64, 156, 255, 165) if vision else rl.Color(255, 215, 0, 150)
         polygon = project_blindspot_barrier(self._path.raw_points[:max_idx + 1], shift, self._car_space_transform, self._clip_region)
         for quad in blindspot_barrier_quads(polygon):

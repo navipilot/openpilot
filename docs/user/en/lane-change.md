@@ -74,9 +74,9 @@ The detail screen exposes these persistent device settings:
 
 | Setting | Range · default | Effect |
 |---|---:|---|
-| Lane confidence `OnnxLaneThreshold` | 5–100% · 25% | Accept lane classifications at or above this confidence |
+| Lane confidence `OnnxLaneThreshold` | 0–100% · 25% | Accept lane classifications at or above this confidence |
 | Lane interval `OnnxLaneIntervalMs` | 50–2000ms · 400ms | Shorter intervals update more often but may increase device load |
-| BSD confidence `OnnxBsdThreshold` | 80–100% · 94% | Activate camera BSD when the near-vehicle class reaches this confidence |
+| BSD confidence `OnnxBsdThreshold` | 0–100% · 94% | Activate camera BSD when the near-vehicle class reaches this confidence |
 | BSD hold time `OnnxBsdSmoothingMs` | 100–500ms · 200ms | Smooth confidence; once active, BSD clears 15 percentage points below the activation threshold |
 | BSD interval `OnnxBsdIntervalMs` | 50–1000ms · 250ms | Shorter intervals check more often but may increase device load |
 

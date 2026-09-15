@@ -38,7 +38,7 @@ except ModuleNotFoundError as error:
 HOST = "127.0.0.1"
 PORT = 8082
 CONFIG_PATH = Path(__file__).resolve().parent / "v_asm_config.json"
-MIN_THRESHOLD = 0.80
+MIN_THRESHOLD = 0.0
 MAX_THRESHOLD = 1.0
 MIN_SMOOTHING_SECONDS = 0.1
 MAX_SMOOTHING_SECONDS = 0.5
@@ -227,10 +227,10 @@ class VASMService:
       for name, default in PARAM_SETTING_DEFAULTS.items()
     }
     with self.lock:
-      self.threshold = min(max(values["OnnxBsdThreshold"], 80), 100) / 100.0
+      self.threshold = min(max(values["OnnxBsdThreshold"], 0), 100) / 100.0
       self.smoothing_seconds = min(max(values["OnnxBsdSmoothingMs"], 100), 500) / 1000.0
       self.base_interval_seconds = min(max(values["OnnxBsdIntervalMs"], 50), 1000) / 1000.0
-      self.lane_threshold = min(max(values["OnnxLaneThreshold"], 5), 100) / 100.0
+      self.lane_threshold = min(max(values["OnnxLaneThreshold"], 0), 100) / 100.0
       self.lane_interval_seconds = min(max(values["OnnxLaneIntervalMs"], 50), 2000) / 1000.0
 
   def _persist_settings(self, values: dict[str, int]) -> None:
@@ -289,8 +289,8 @@ class VASMService:
       raise ValueError(f"smoothingSeconds must be {MIN_SMOOTHING_SECONDS:.1f} to {MAX_SMOOTHING_SECONDS:.1f}")
     if not MIN_BASE_INTERVAL_SECONDS <= base_interval_seconds <= MAX_BASE_INTERVAL_SECONDS:
       raise ValueError(f"baseIntervalSeconds must be {MIN_BASE_INTERVAL_SECONDS:.2f} to {MAX_BASE_INTERVAL_SECONDS:.2f}")
-    if not 0.05 <= lane_threshold <= 1.0:
-      raise ValueError("laneThreshold must be 0.05 to 1.0")
+    if not 0.0 <= lane_threshold <= 1.0:
+      raise ValueError("laneThreshold must be 0.0 to 1.0")
     if not 0.05 <= lane_interval_seconds <= 2.0:
       raise ValueError("laneIntervalSeconds must be 0.05 to 2.0")
 

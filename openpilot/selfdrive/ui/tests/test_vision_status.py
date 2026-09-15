@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from cereal import car
 from openpilot.selfdrive.ui.vision_status import (
   blindspot_source_packet, blindspot_sources, parse_blindspot_source_packet,
   parse_vision_display_packet, vision_display_state,
@@ -86,3 +87,33 @@ def test_blindspot_source_packet_rejects_stale_and_invalid_payloads():
   }).encode()
   assert blindspot_source_packet(SM(customReservedRawData1=stale), NOW) is None
   assert blindspot_source_packet(SM(customReservedRawData1=b"{}"), NOW) is None
+
+
+def test_blindspot_sources_prefer_carstate_split_fields():
+  car_state = SimpleNamespace(
+    leftBlindspot=True, rightBlindspot=True,
+    blindspotSplitSourcesValid=True,
+    leftBlindspotOem=False, rightBlindspotOem=True,
+    leftBlindspotOnnx=True, rightBlindspotOnnx=False,
+  )
+
+  assert blindspot_sources(car_state, "left", None) == (False, True)
+  assert blindspot_sources(car_state, "right", None) == (True, False)
+
+
+def test_blindspot_sources_ignore_default_split_fields_without_marker():
+  payload = json.dumps({
+    "type": "xiaogeBlindspotSources",
+    "version": 1,
+    "receivedMonoTimeNanos": NOW,
+    "left": {"oem": False, "vision": True},
+    "right": {"oem": True, "vision": True},
+  }).encode()
+  parsed = parse_blindspot_source_packet(payload)
+
+  state_msg = car.CarState.new_message()
+  state_msg.leftBlindspot = True
+  state_msg.rightBlindspot = True
+  with car.CarState.from_bytes(state_msg.to_bytes()) as decoded:
+    assert blindspot_sources(decoded, "left", parsed) == (False, True)
+    assert blindspot_sources(decoded, "right", parsed) == (True, True)

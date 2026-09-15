@@ -234,6 +234,11 @@ class Car:
     left_oem, right_oem = bool(CS.leftBlindspot), bool(CS.rightBlindspot)
     left_vision, right_vision = xiaoge_blindspot_vision(self.xiaoge_vision_result, sm_done_ns)
     self.xiaoge_blindspot_sources = (left_oem, right_oem, left_vision, right_vision)
+    CS.leftBlindspotOem = left_oem
+    CS.rightBlindspotOem = right_oem
+    CS.leftBlindspotOnnx = left_vision
+    CS.rightBlindspotOnnx = right_vision
+    CS.blindspotSplitSourcesValid = True
     apply_xiaoge_vision_result(CS, self.xiaoge_vision_result, sm_done_ns)
     #self.t1 = time.monotonic()
 

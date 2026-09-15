@@ -74,9 +74,9 @@ Carrot Web의 **설정 → 주행 제어 → 차량 조향 → ONNX 차선·BSD 
 
 | 설정 | 범위 · 기본값 | 영향 |
 |---|---:|---|
-| 차선 신뢰도 `OnnxLaneThreshold` | 5~100% · 25% | 이 값 이상인 차선 분류만 채택 |
+| 차선 신뢰도 `OnnxLaneThreshold` | 0~100% · 25% | 이 값 이상인 차선 분류만 채택 |
 | 차선 계산 간격 `OnnxLaneIntervalMs` | 50~2000ms · 400ms | 짧을수록 더 자주 계산하지만 장치 부하가 증가할 수 있음 |
-| BSD 신뢰도 `OnnxBsdThreshold` | 80~100% · 94% | 근접 차량 클래스가 이 신뢰도에 도달하면 카메라 BSD를 활성화 |
+| BSD 신뢰도 `OnnxBsdThreshold` | 0~100% · 94% | 근접 차량 클래스가 이 신뢰도에 도달하면 카메라 BSD를 활성화 |
 | BSD 유지 시간 `OnnxBsdSmoothingMs` | 100~500ms · 200ms | 신뢰도를 평활화하고, 활성화 후에는 시작 기준보다 15%p 낮아질 때 해제 |
 | BSD 계산 간격 `OnnxBsdIntervalMs` | 50~1000ms · 250ms | 짧을수록 더 자주 검사하지만 장치 부하가 증가할 수 있음 |
 

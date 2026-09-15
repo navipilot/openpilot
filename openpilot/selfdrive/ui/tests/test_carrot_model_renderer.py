@@ -145,7 +145,7 @@ def test_blind_spot_updates_only_active_side():
   [
     (blind_spot_messages(left_blindspot=True), source_payload(left_oem=True), (255, 215, 0)),
     (blind_spot_messages(left_blindspot=True), source_payload(left_vision=True), (64, 156, 255)),
-    (blind_spot_messages(left_blindspot=True), source_payload(left_oem=True, left_vision=True), (255, 128, 128)),
+    (blind_spot_messages(left_blindspot=True), source_payload(left_oem=True, left_vision=True), (255, 0, 0)),
   ],
 )
 def test_blind_spot_wall_color_reflects_detection_source(monkeypatch, messages, sources, expected_rgb):
@@ -185,8 +185,28 @@ def test_blind_spot_wall_colors_are_independent_by_side(monkeypatch):
 
   assert draws == [
     (renderer._carrot_lane_barrier_vertices[0], (64, 156, 255)),
-    (renderer._carrot_lane_barrier_vertices[1], (255, 128, 128)),
+    (renderer._carrot_lane_barrier_vertices[1], (255, 0, 0)),
   ]
+
+
+def test_blind_spot_wall_color_prefers_carstate_source_fields_over_stale_packet(monkeypatch):
+  monkeypatch.setattr(model_renderer.time, "monotonic_ns", lambda: SOURCE_NOW)
+  renderer = object.__new__(model_renderer.ModelRenderer)
+  renderer._carrot_lane_barrier_vertices = [np.ones((4, 2), dtype=np.float32), np.ones((4, 2), dtype=np.float32)]
+  car_state, radar_state, meta = blind_spot_messages(left_blindspot=True)
+  car_state.leftBlindspotOem = True
+  car_state.leftBlindspotOnnx = True
+  stale_sources = source_payload(left_oem=False, left_vision=False)
+  sm = FakeSubMaster(modelV2=SimpleNamespace(meta=meta), carState=car_state, radarState=radar_state,
+                     customReservedRawData1=stale_sources)
+  sm.valid["customReservedRawData1"] = False
+  draws = []
+  renderer._update_blind_spot_barriers_carrot = lambda *_args, **_kwargs: None
+  renderer._draw_blind_spot_segments_carrot = lambda _points, color: draws.append((color.r, color.g, color.b))
+
+  renderer._draw_blind_spot_carrot(sm)
+
+  assert draws == [(255, 0, 0)]
 
 
 class FakeParams:
