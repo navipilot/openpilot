@@ -233,6 +233,7 @@ struct CarState {
   rightBlindspotOem @94 :Bool; # vehicle BSD-only right source before ONNX merge
   leftBlindspotOnnx @95 :Bool; # ONNX BSD-only left source
   rightBlindspotOnnx @96 :Bool; # ONNX BSD-only right source
+  blindspotSplitSourcesValid @97 :Bool; # split blindspot source fields are valid and should be trusted
 
   fuelGauge @41 :Float32; # battery or fuel tank level from 0.0 to 1.0
   charging @43 :Bool;
