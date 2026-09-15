@@ -78,9 +78,9 @@ def test_mici_blindspot_is_independent_of_radar(mici_modules, monkeypatch, left,
   [
     ("left", True, False, (255, 215, 0)),
     ("left", False, True, (64, 156, 255)),
-    ("left", True, True, (255, 128, 128)),
+    ("left", True, True, (255, 0, 0)),
     ("right", False, True, (64, 156, 255)),
-    ("right", True, True, (255, 128, 128)),
+    ("right", True, True, (255, 0, 0)),
   ],
 )
 def test_mici_blindspot_wall_color_reflects_source(mici_modules, monkeypatch, side, oem, vision, expected_rgb):

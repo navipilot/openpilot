@@ -62,6 +62,10 @@ def blindspot_source_packet(sm, now_nanos: int) -> BlindspotSourcePacket | None:
 
 
 def blindspot_sources(car_state, side: str, packet: BlindspotSourcePacket | None = None) -> tuple[bool, bool]:
+  oem_state = getattr(car_state, f"{side}BlindspotOem", None)
+  vision_state = getattr(car_state, f"{side}BlindspotOnnx", None)
+  if isinstance(oem_state, bool) and isinstance(vision_state, bool):
+    return oem_state, vision_state
   if packet is not None:
     return bool(getattr(packet, f"{side}_oem")), bool(getattr(packet, f"{side}_vision"))
   merged = bool(getattr(car_state, f"{side}Blindspot"))

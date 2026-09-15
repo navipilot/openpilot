@@ -1094,7 +1094,7 @@ class ModelRenderer(Widget):
 
     oem_color = rl.Color(255, 215, 0, 150)
     vision_color = rl.Color(64, 156, 255, 165)
-    combined_color = rl.Color(255, 128, 128, 175)
+    combined_color = rl.Color(255, 0, 0, 190)
     assist_color = rl.Color(0, 204, 0, 150)
     source_packet = blindspot_source_packet(sm, time.monotonic_ns())
     self._update_blind_spot_barriers_carrot(

@@ -86,3 +86,14 @@ def test_blindspot_source_packet_rejects_stale_and_invalid_payloads():
   }).encode()
   assert blindspot_source_packet(SM(customReservedRawData1=stale), NOW) is None
   assert blindspot_source_packet(SM(customReservedRawData1=b"{}"), NOW) is None
+
+
+def test_blindspot_sources_prefer_carstate_split_fields():
+  car_state = SimpleNamespace(
+    leftBlindspot=True, rightBlindspot=True,
+    leftBlindspotOem=False, rightBlindspotOem=True,
+    leftBlindspotOnnx=True, rightBlindspotOnnx=False,
+  )
+
+  assert blindspot_sources(car_state, "left", None) == (False, True)
+  assert blindspot_sources(car_state, "right", None) == (True, False)

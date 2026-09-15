@@ -352,7 +352,7 @@ def test_runtime_settings_load_from_and_persist_to_params(vision_service):
   }
 
 
-def test_legacy_bsd_threshold_is_clamped_for_classifier(vision_service):
+def test_legacy_bsd_threshold_accepts_zero_to_hundred_percent(vision_service):
   class FakeParams:
     def get(self, name):
       return b"45" if name == "OnnxBsdThreshold" else None
@@ -360,7 +360,7 @@ def test_legacy_bsd_threshold_is_clamped_for_classifier(vision_service):
   vision_service.params = FakeParams()
   vision_service._refresh_settings_from_params(force=True)
 
-  assert vision_service.threshold == 0.80
+  assert vision_service.threshold == 0.45
 
 
 @pytest.mark.parametrize("stream", ["road", "wide"])

@@ -229,6 +229,10 @@ struct CarState {
   # blindspot sensors
   leftBlindspot @33 :Bool; # Is there something blocking the left lane change
   rightBlindspot @34 :Bool; # Is there something blocking the right lane change
+  leftBlindspotOem @93 :Bool; # vehicle BSD-only left source before ONNX merge
+  rightBlindspotOem @94 :Bool; # vehicle BSD-only right source before ONNX merge
+  leftBlindspotOnnx @95 :Bool; # ONNX BSD-only left source
+  rightBlindspotOnnx @96 :Bool; # ONNX BSD-only right source
 
   fuelGauge @41 :Float32; # battery or fuel tank level from 0.0 to 1.0
   charging @43 :Bool;
