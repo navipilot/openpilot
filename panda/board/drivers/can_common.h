@@ -12,6 +12,8 @@ bool ignition_can = false;
 uint32_t ignition_can_cnt = 0U;
 bool wake_on_can = false;
 uint32_t wake_on_can_cnt = 0U;
+bool tesla_power_on_can = false;
+uint32_t tesla_power_on_can_cnt = 0U;
 
 int can_live = 0;
 int pending_can_live = 0;
@@ -188,7 +190,7 @@ void ignition_can_hook(CANPacket_t *to_push) {
     int len = GET_LEN(to_push);
     static bool tesla_seatbelt_latched = false;
     static bool tesla_door_open = false;
-    if (!wake_on_can || (wake_on_can_cnt > 2U)) {
+    if (!tesla_power_on_can || (tesla_power_on_can_cnt > 2U)) {
       tesla_seatbelt_latched = false;
       tesla_door_open = false;
     }
@@ -218,30 +220,32 @@ void ignition_can_hook(CANPacket_t *to_push) {
     // VCFRONT_LVPowerState: checksum byte 7, counter (data[6] >> 4), power state (data[0] >> 5).
     // Only standard frames with a valid checksum count; any invalid frame breaks the
     // counter sequence so two consecutive valid frames are required.
-#ifdef PANDA_TESLA_WAKE_ON_CAN
     if ((addr == 0x221) && (len == 8)) {
       int counter = GET_BYTE(to_push, 6) >> 4;
 
-      static int prev_wake_counter = -1;
+      static int prev_power_counter = -1;
       if (tesla_frame_valid(to_push, 8U, 7U)) {
-        if ((prev_wake_counter != -1) && (counter == ((prev_wake_counter + 1) % 16))) {
+        if ((prev_power_counter != -1) && (counter == ((prev_power_counter + 1) % 16))) {
           // VCFRONT_LVPowerState->VCFRONT_vehiclePowerState
           int power_state = (GET_BYTE(to_push, 0) >> 5U) & 0x3U;
+          tesla_power_on_can = power_state != 0x0;  // Not VEHICLE_POWER_STATE_OFF
+          tesla_power_on_can_cnt = 0U;
+#ifdef PANDA_TESLA_WAKE_ON_CAN
           wake_on_can = power_state != 0x0;  // Not VEHICLE_POWER_STATE_OFF
           wake_on_can_cnt = 0U;
+#endif
         }
-        prev_wake_counter = counter;
+        prev_power_counter = counter;
       } else {
         // invalid checksum or extended frame: break the counter sequence so
-        // a later valid frame alone cannot wake the device
-        prev_wake_counter = -1;
+        // a later valid frame alone cannot authorize Tesla state changes
+        prev_power_counter = -1;
       }
     }
-#endif
 
     // 0x118 also carries Subaru steering torque with the same counter layout.
     // Only interpret Tesla gear/cabin messages while its power evidence is fresh.
-    const bool tesla_awake = wake_on_can && (wake_on_can_cnt <= 2U);
+    const bool tesla_awake = tesla_power_on_can && (tesla_power_on_can_cnt <= 2U);
     if (tesla_awake && (addr == 0x118) && (len == 8)) {
       // DI_systemStatus: checksum byte 0, counter (data[1] & 0xF), gear (data[2] >> 5).
       int counter = GET_BYTE(to_push, 1) & 0xFU;
@@ -304,8 +308,12 @@ void ignition_can_tick(void) {
   if (wake_on_can_cnt > 2U) {
     wake_on_can = false;
   }
+  if (tesla_power_on_can_cnt > 2U) {
+    tesla_power_on_can = false;
+  }
   ignition_can_cnt += 1U;
   wake_on_can_cnt += 1U;
+  tesla_power_on_can_cnt += 1U;
 }
 
 bool can_tx_check_min_slots_free(uint32_t min) {

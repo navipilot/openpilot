@@ -30,6 +30,8 @@ def test_tesla_wake_requires_enabled_supported_persistent_vehicle():
   assert not pandad.tesla_wake_on_can_enabled(FakeParams({"TeslaWakeOnCAN": False, "CarParamsPersistent": supported}))
   assert not pandad.tesla_wake_on_can_enabled(FakeParams({"TeslaWakeOnCAN": True, "CarParamsPersistent": unsupported}))
   assert not pandad.tesla_wake_on_can_enabled(FakeParams({"TeslaWakeOnCAN": True, "CarParamsPersistent": b"invalid"}))
+  assert pandad.tesla_wake_on_can_enabled(FakeParams({"TeslaWakeOnCAN": True, "CarSelected3": b"TESLA_MODEL_3"}))
+  assert not pandad.tesla_wake_on_can_enabled(FakeParams({"TeslaWakeOnCAN": True, "CarSelected3": b"MOCK"}))
 
 
 def test_tesla_wake_firmware_name_matches_panda_mcu(tmp_path, monkeypatch):

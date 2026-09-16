@@ -55,6 +55,8 @@ def reset_ignition():
   libpanda.ignition_can_cnt = 0
   libpanda.wake_on_can = False
   libpanda.wake_on_can_cnt = 0
+  libpanda.tesla_power_on_can = False
+  libpanda.tesla_power_on_can_cnt = 0
 
 
 @pytest.mark.parametrize("state", [1, 2, 3])
@@ -103,9 +105,9 @@ def test_shared_118_address_does_not_change_other_brands_ignition(prior_ignition
   assert libpanda.ignition_can_cnt == 2
 
 
-def test_stale_tesla_wake_cannot_authorize_gear_updates():
+def test_stale_tesla_power_evidence_cannot_authorize_gear_updates():
   power(3)
-  libpanda.wake_on_can_cnt = 3
+  libpanda.tesla_power_on_can_cnt = 3
   gear(4)
   assert not libpanda.ignition_can
 

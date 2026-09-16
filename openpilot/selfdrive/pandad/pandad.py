@@ -21,12 +21,16 @@ def tesla_wake_on_can_enabled(params: Params) -> bool:
     return False
 
   try:
+    selected_car = params.get("CarSelected3")
+    if isinstance(selected_car, bytes):
+      selected_car = selected_car.decode("utf-8", errors="strict")
+
     car_params = params.get("CarParamsPersistent") or params.get("CarParams")
     if car_params is None:
-      return False
+      return selected_car in TESLA_WAKE_CAR_FINGERPRINTS
     with car.CarParams.from_bytes(car_params) as CP:
       return CP.brand == "tesla" and CP.carFingerprint in TESLA_WAKE_CAR_FINGERPRINTS
-  except (ValueError, TypeError):
+  except (UnicodeDecodeError, ValueError, TypeError):
     cloudlog.exception("Invalid CarParams while selecting Tesla wake firmware")
     return False
 
