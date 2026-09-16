@@ -53,6 +53,9 @@ extern bool ignition_can;
 extern uint32_t ignition_can_cnt;
 extern bool wake_on_can;
 extern uint32_t wake_on_can_cnt;
+void bootkick_test_reset(void);
+void bootkick_test_tick(bool ignition, bool recent_heartbeat, bool wake);
+uint8_t bootkick_test_get_state(void);
 """)
 
 class CANPacket:

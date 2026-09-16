@@ -173,8 +173,8 @@ class CarState(CarStateBase):
     eac_status = self.can_define.dv["EPAS3S_sysStatus"]["EPAS3S_eacStatus"].get(int(epas_status["EPAS3S_eacStatus"]), None)
     eac_error_code = self.can_define.dv["EPAS3S_sysStatus"]["EPAS3S_eacErrorCode"].get(int(epas_status["EPAS3S_eacErrorCode"]), None)
     ret.steerFaultPermanent = eac_status == "EAC_FAULT"
-    # Tesla reports INHIBITED + IDLE while EPS is switching states, including
-    # startup and standstill. Only a non-idle inhibit represents a fault.
+    # Tesla reports INHIBITED + IDLE/MIN_SPEED during normal EPS transitions,
+    # including startup, standstill, and low-speed operation.
     ret.steerFaultTemporary = eac_status == "EAC_INHIBITED" and eac_error_code not in TESLA_EAC_NON_FAULT_INHIBITS
 
     # Do not set vehicleSensorsInvalid from SCCM_steeringAngleValidity: refreshed

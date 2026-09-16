@@ -42,7 +42,8 @@ if GetOption('ubsan'):
   env['LINKFLAGS'] += flags
 
 panda = env.SharedObject("panda.os", "panda.c")
-libpanda = env.SharedLibrary("libpanda.so", [panda])
+bootkick = env.SharedObject("bootkick.os", "bootkick.c")
+libpanda = env.SharedLibrary("libpanda.so", [panda, bootkick])
 
 if GetOption('coverage'):
   env.Append(
