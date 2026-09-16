@@ -15,6 +15,7 @@ TESLA_TPMS_BAR_TO_PSI = 14.5037738
 SPEED_AUTO_RESUME_GESTURE_NS = 1_000_000_000
 STOCK_ACC_CANCEL_STATES = (0, 1, 2, 12, 13, 14, 15)
 STOCK_ACC_CANCEL_PULSE_FRAMES = 4
+TESLA_EAC_NON_FAULT_INHIBITS = ("EAC_ERROR_IDLE", "EAC_ERROR_MIN_SPEED")
 
 
 def update_tesla_gas_pressed(previous: bool, pedal_position: float) -> bool:
@@ -174,7 +175,7 @@ class CarState(CarStateBase):
     ret.steerFaultPermanent = eac_status == "EAC_FAULT"
     # Tesla reports INHIBITED + IDLE while EPS is switching states, including
     # startup and standstill. Only a non-idle inhibit represents a fault.
-    ret.steerFaultTemporary = eac_status == "EAC_INHIBITED" and eac_error_code != "EAC_ERROR_IDLE"
+    ret.steerFaultTemporary = eac_status == "EAC_INHIBITED" and eac_error_code not in TESLA_EAC_NON_FAULT_INHIBITS
 
     # Do not set vehicleSensorsInvalid from SCCM_steeringAngleValidity: refreshed
     # Model Y vehicles report 0 while angle/rate remain valid. EPS faults are covered above.
