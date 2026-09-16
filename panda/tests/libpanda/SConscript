@@ -15,6 +15,7 @@ env = Environment(
     '-std=gnu11',
     '-Wfatal-errors',
     '-Wno-pointer-to-int-cast',
+    '-DPANDA_TESLA_WAKE_ON_CAN',
   ],
   CPPPATH=[".", "../../board/", "../../../opendbc/safety/"],
 )

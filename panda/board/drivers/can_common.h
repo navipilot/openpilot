@@ -218,6 +218,7 @@ void ignition_can_hook(CANPacket_t *to_push) {
     // VCFRONT_LVPowerState: checksum byte 7, counter (data[6] >> 4), power state (data[0] >> 5).
     // Only standard frames with a valid checksum count; any invalid frame breaks the
     // counter sequence so two consecutive valid frames are required.
+#ifdef PANDA_TESLA_WAKE_ON_CAN
     if ((addr == 0x221) && (len == 8)) {
       int counter = GET_BYTE(to_push, 6) >> 4;
 
@@ -236,6 +237,7 @@ void ignition_can_hook(CANPacket_t *to_push) {
         prev_wake_counter = -1;
       }
     }
+#endif
 
     // 0x118 also carries Subaru steering torque with the same counter layout.
     // Only interpret Tesla gear/cabin messages while its power evidence is fresh.

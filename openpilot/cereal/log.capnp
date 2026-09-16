@@ -592,6 +592,7 @@ struct PandaState @0xa7649e2575e4591e {
   # reserved for forks building alternate experiences.
   controlsAllowedRESERVED1 @38 :Bool;
   controlsAllowedRESERVED2 @39 :Bool;
+  wakeOnCan @40 :Bool;
 
   enum FaultStatus {
     none @0;
