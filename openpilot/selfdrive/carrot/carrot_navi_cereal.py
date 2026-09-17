@@ -229,6 +229,7 @@ def _noa_intent(record: dict[str, Any]) -> dict[str, Any]:
     "meta": _meta(record),
     "valid": intent.valid,
     "routeGeneration": intent.route_generation,
+    "routeChangeReason": intent.route_change_reason,
     "controlledAccess": intent.controlled_access,
     "maneuverType": intent.maneuver_type,
     "distanceToManeuverM": intent.distance_to_maneuver_m,
