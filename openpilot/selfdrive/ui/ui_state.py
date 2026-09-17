@@ -65,6 +65,7 @@ class UIState:
         "liveTorqueParameters",
         "lateralPlan",
         "customReservedRawData0",
+        "customReservedRawData1",
       ]
     )
 
