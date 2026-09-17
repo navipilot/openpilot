@@ -6,6 +6,8 @@ import threading
 import time
 from typing import Any, TYPE_CHECKING
 
+from openpilot.selfdrive.carrot.route_lane_intent import parse_route_lane_intent
+
 if TYPE_CHECKING:
   from openpilot.selfdrive.carrot.carrot_navi import CarrotNaviReceiver
 
@@ -212,6 +214,34 @@ def _signal_light(value: Any) -> tuple[bool, bool, int]:
   return True, bool(light.get("on", False)), _integer(light.get("remain_sec"), minimum=0, maximum=999)
 
 
+def _noa_intent(record: dict[str, Any]) -> dict[str, Any]:
+  value = record.get("value") if record.get("present") else None
+  intent = parse_route_lane_intent(value, int(time.time() * 1000)) if value is not None else None
+  if intent is None:
+    return {
+      "meta": _meta(record),
+      "valid": False,
+      "maneuverType": "none",
+      "nextLaneChangeDirection": "none",
+      "rejectReason": "missing",
+    }
+  return {
+    "meta": _meta(record),
+    "valid": intent.valid,
+    "routeGeneration": intent.route_generation,
+    "controlledAccess": intent.controlled_access,
+    "maneuverType": intent.maneuver_type,
+    "distanceToManeuverM": intent.distance_to_maneuver_m,
+    "laneCount": intent.lane_count,
+    "preferredLaneMask": intent.preferred_lane_mask,
+    "currentLaneHint": intent.current_lane_hint,
+    "requiredLaneChangesHint": intent.required_lane_changes_hint,
+    "nextLaneChangeDirection": intent.next_lane_change_direction,
+    "confidence": intent.confidence,
+    "rejectReason": intent.reject_reason,
+  }
+
+
 def build_carrot_navi_payload(snapshot: dict[str, Any], publish_mono_ns: int | None = None) -> dict[str, Any]:
   vehicle_record = _record(snapshot, "vehicle")
   vehicle = _dict(vehicle_record.get("value")) if vehicle_record.get("present") else {}
@@ -256,6 +286,7 @@ def build_carrot_navi_payload(snapshot: dict[str, Any], publish_mono_ns: int | N
 
   status_record = _record(snapshot, "navigation_status")
   status = _dict(status_record.get("value")) if status_record.get("present") else {}
+  noa_intent_record = _record(snapshot, "noa_intent")
 
   return {
     "schemaVersion": SCHEMA_VERSION,
@@ -357,6 +388,7 @@ def build_carrot_navi_payload(snapshot: dict[str, Any], publish_mono_ns: int | N
       "offRoute": bool(status.get("off_route", False)),
       "routePresent": bool(status.get("route_present", False)),
     },
+    "noaIntent": _noa_intent(noa_intent_record),
   }
 
 

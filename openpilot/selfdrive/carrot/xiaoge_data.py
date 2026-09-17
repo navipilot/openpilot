@@ -12,9 +12,12 @@ from typing import Any
 import openpilot.cereal.messaging as messaging
 from opendbc.can import CANParser
 
-from openpilot.cereal import car
+from openpilot.cereal import car, log
 from openpilot.common.params import Params
 from openpilot.common.realtime import Ratekeeper
+from openpilot.selfdrive.carrot.route_lane_intent import RouteLaneIntent
+from openpilot.selfdrive.controls.lib.lane_localizer import LaneLocalization, LaneLocalizer
+from openpilot.selfdrive.controls.lib.noa_behavior_planner import NoaBehaviorPlanner
 
 
 TESLA_DAS_ROAD_ADDRESS = 605
@@ -40,7 +43,9 @@ class XiaogeDataBroadcaster:
     self.tesla_can_sock = None
     self.tesla_can_parser = None
     self.tesla_das_road_updated_at = 0.0
-    self.sm = messaging.SubMaster(["carState", "modelV2", "selfdriveState"])
+    self.lane_localizer = LaneLocalizer()
+    self.noa_behavior_planner = NoaBehaviorPlanner()
+    self.sm = messaging.SubMaster(["carState", "modelV2", "selfdriveState", "controlsState", "carrotNavi"])
 
   @staticmethod
   def get_ip_address() -> str:
@@ -143,10 +148,19 @@ class XiaogeDataBroadcaster:
   def collect_car_state(self, car_state) -> dict[str, Any]:
     return {
       "vEgo": max(float(car_state.vEgo), 0.0),
+      "vEgoKph": max(float(car_state.vEgo) * 3.6, 0.0),
       "steeringAngleDeg": float(car_state.steeringAngleDeg),
       "leftLatDist": float(car_state.leftLatDist),
       "leftBlindspot": bool(car_state.leftBlindspot),
       "rightBlindspot": bool(car_state.rightBlindspot),
+      "leftBlinker": bool(car_state.leftBlinker),
+      "rightBlinker": bool(car_state.rightBlinker),
+      "steeringPressed": bool(car_state.steeringPressed),
+      "standstill": bool(car_state.standstill),
+      "steerFaultTemporary": bool(car_state.steerFaultTemporary),
+      "steerFaultPermanent": bool(car_state.steerFaultPermanent),
+      "brakePressed": bool(car_state.brakePressed),
+      "gasPressed": bool(car_state.gasPressed),
     }
 
   def initialize_tesla_can(self) -> None:
@@ -193,9 +207,26 @@ class XiaogeDataBroadcaster:
       }
     else:
       data["lead0"] = {"x": 0.0, "y": 0.0, "v": 0.0, "prob": 0.0}
-    data["laneLineProbs"] = [
-      float(model_v2.laneLineProbs[1]) if len(model_v2.laneLineProbs) >= 3 else 0.0,
-      float(model_v2.laneLineProbs[2]) if len(model_v2.laneLineProbs) >= 3 else 0.0,
+    data["laneLineProbs"] = [float(prob) for prob in model_v2.laneLineProbs[:4]]
+    lane_line_stds = getattr(model_v2, "laneLineStds", [])
+    data["laneLineStds"] = [float(std) for std in lane_line_stds[:4]]
+    data["laneLines"] = [
+      {
+        "x": [float(x) for x in lane_line.x[:33]],
+        "y": [float(y) for y in lane_line.y[:33]],
+        "z": [float(z) for z in lane_line.z[:33]],
+      }
+      for lane_line in model_v2.laneLines[:4]
+    ]
+    road_edge_stds = getattr(model_v2, "roadEdgeStds", [])
+    data["roadEdgeStds"] = [float(std) for std in road_edge_stds[:2]]
+    data["roadEdges"] = [
+      {
+        "x": [float(x) for x in road_edge.x[:33]],
+        "y": [float(y) for y in road_edge.y[:33]],
+        "z": [float(z) for z in road_edge.z[:33]],
+      }
+      for road_edge in model_v2.roadEdges[:2]
     ]
     meta = model_v2.meta
     data["meta"] = {
@@ -210,7 +241,93 @@ class XiaogeDataBroadcaster:
 
   @staticmethod
   def collect_system_state(selfdrive_state) -> dict[str, bool]:
-    return {"enabled": bool(selfdrive_state.enabled), "active": bool(selfdrive_state.active)}
+    return {
+      "enabled": bool(selfdrive_state.enabled),
+      "active": bool(selfdrive_state.active),
+      "engageable": bool(getattr(selfdrive_state, "engageable", False)),
+    }
+
+  @staticmethod
+  def collect_controls_state(controls_state) -> dict[str, Any]:
+    return {
+      "enabled": bool(controls_state.enabled),
+      "active": bool(controls_state.active),
+      "vCruise": float(controls_state.vCruise),
+      "curvature": float(getattr(controls_state, "curvature", 0.0)),
+      "state": str(getattr(controls_state, "state", "")),
+      "experimentalMode": bool(getattr(controls_state, "experimentalMode", False)),
+    }
+
+  def collect_noa_lane_localization(self, model_v2, carrot_navi) -> dict[str, Any]:
+    noa_intent = carrot_navi.noaIntent
+    if not noa_intent.valid:
+      return {"valid": False, "reason": "no_navigation_intent"}
+    direction = "left" if model_v2.meta.laneChangeDirection == log.LaneChangeDirection.left else \
+      "right" if model_v2.meta.laneChangeDirection == log.LaneChangeDirection.right else "none"
+    localization = self.lane_localizer.update(
+      route_generation=int(noa_intent.routeGeneration),
+      lane_count=int(noa_intent.laneCount),
+      current_lane_hint=int(noa_intent.currentLaneHint),
+      lane_line_probs=[float(value) for value in model_v2.laneLineProbs],
+      road_edge_distances=[
+        float(model_v2.meta.distanceToRoadEdgeLeft),
+        float(model_v2.meta.distanceToRoadEdgeRight),
+      ],
+      lane_change_active=model_v2.meta.laneChangeState != log.LaneChangeState.off,
+      lane_change_direction=direction,
+    )
+    return {
+      "valid": localization.valid,
+      "estimatedLane": localization.estimated_lane,
+      "laneProbabilities": list(localization.lane_probabilities),
+      "confidence": localization.confidence,
+      "laneCount": localization.lane_count,
+      "reason": localization.reason,
+    }
+
+  def collect_noa_shadow_plan(self, car_state, selfdrive_state, carrot_navi,
+                              lane_localization: dict[str, Any]) -> dict[str, Any]:
+    noa = carrot_navi.noaIntent
+    intent = RouteLaneIntent(
+      valid=bool(noa.valid),
+      route_generation=int(noa.routeGeneration),
+      controlled_access=bool(noa.controlledAccess),
+      maneuver_type=str(noa.maneuverType),
+      distance_to_maneuver_m=int(noa.distanceToManeuverM),
+      lane_count=int(noa.laneCount),
+      preferred_lane_mask=int(noa.preferredLaneMask),
+      current_lane_hint=int(noa.currentLaneHint),
+      confidence=float(noa.confidence),
+      reject_reason=str(noa.rejectReason),
+    )
+    localization = LaneLocalization(
+      valid=bool(lane_localization["valid"]),
+      estimated_lane=int(lane_localization.get("estimatedLane", -1)),
+      confidence=float(lane_localization.get("confidence", 0.0)),
+      lane_count=int(lane_localization.get("laneCount", 0)),
+      reason=str(lane_localization.get("reason", "")),
+    )
+    safety_blocked = (
+      bool(car_state.leftBlindspot) or bool(car_state.rightBlindspot)
+      or bool(car_state.steerFaultTemporary) or bool(car_state.steerFaultPermanent)
+      or bool(car_state.steeringPressed) or bool(car_state.brakePressed)
+    )
+    plan = self.noa_behavior_planner.update(
+      intent,
+      localization,
+      ego_speed_mps=max(float(car_state.vEgo), 0.0),
+      safety_blocked=safety_blocked,
+      control_active=bool(selfdrive_state.active),
+    )
+    return {
+      "state": plan.state,
+      "requestActive": plan.request_active,
+      "direction": plan.direction,
+      "requiredDistanceM": plan.required_distance_m,
+      "remainingLaneChanges": plan.remaining_lane_changes,
+      "confidence": plan.confidence,
+      "rejectReason": plan.reject_reason,
+    }
 
   def create_packet(self, data: dict[str, Any]) -> bytes:
     return json.dumps({
@@ -237,8 +354,19 @@ class XiaogeDataBroadcaster:
             data["carState"].update(tesla_das_road)
         if self.sm.alive["modelV2"]:
           data["modelV2"] = self.collect_model_data(self.sm["modelV2"])
+          if self.sm.alive["carrotNavi"]:
+            lane_localization = self.collect_noa_lane_localization(
+              self.sm["modelV2"], self.sm["carrotNavi"]
+            )
+            data["noaLaneLocalization"] = lane_localization
+            if self.sm.alive["carState"] and self.sm.alive["selfdriveState"]:
+              data["noaBehaviorPlan"] = self.collect_noa_shadow_plan(
+                self.sm["carState"], self.sm["selfdriveState"], self.sm["carrotNavi"], lane_localization
+              )
         if self.sm.alive["selfdriveState"]:
           data["systemState"] = self.collect_system_state(self.sm["selfdriveState"])
+        if self.sm.alive["controlsState"]:
+          data["controlsState"] = self.collect_controls_state(self.sm["controlsState"])
         self.broadcast_to_clients(self.create_packet(data))
         self.sequence += 1
         rk.keep_time()

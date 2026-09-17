@@ -750,6 +750,50 @@ def test_receiver_snapshot_builds_bounded_typed_payload():
   assert payload["route"]["polyline"] == []
 
 
+def test_receiver_projects_noa_intent_as_advisory_diagnostic_state():
+  receiver = CarrotNaviReceiver()
+  manifest = receiver.negotiate(requirements_query(), "test-app")
+  noa_intent = next(
+    stream for stream in manifest["streams"]
+    if stream["kind"] == "json" and stream["name"] == "noa_intent"
+  )
+  now_ms = int(__import__("time").time() * 1000)
+  receiver.record_json(manifest["session_id"], "noa_intent", {
+    "type": "item_update",
+    "protocol_version": 2,
+    "session_id": manifest["session_id"],
+    "manifest_revision": manifest["revision"],
+    "schema_version": 1,
+    "kind": "json",
+    "name": "noa_intent",
+    "stream_handle": noa_intent["stream_handle"],
+    "sequence": 7,
+    "source_timestamp_ms": now_ms,
+    "sent_at_ms": now_ms,
+    "present": True,
+    "value": {
+      "schema_version": 1,
+      "route_generation": 2,
+      "road": {"controlled_access": True, "confidence": 0.9},
+      "maneuver": {"type": "exit_right", "distance_m": 1000},
+      "lanes": {
+        "lane_count": 3,
+        "index_order": "left_to_right",
+        "current_lane_hint": 1,
+        "preferred_lane_mask": 4,
+        "lanes": [{}, {}, {}],
+      },
+      "freshness": {"sequence": 7, "source_timestamp_ms": now_ms},
+    },
+  }, "127.0.0.1")
+
+  payload = build_carrot_navi_payload(receiver.cereal_snapshot())
+
+  assert payload["noaIntent"]["valid"] is True
+  assert payload["noaIntent"]["nextLaneChangeDirection"] == "right"
+  assert payload["noaIntent"]["requiredLaneChangesHint"] == 1
+
+
 def test_payload_normalizes_app_lane_json_for_cereal_consumers():
   lane_items = [
     {"index": 0, "direction": "0", "is_recommended": False, "is_available": True},

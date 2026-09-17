@@ -63,6 +63,7 @@ struct CarrotNaviState @0xaedffd8f31e7b55d {
 	crossroad @12 :Crossroad;
 	route @13 :Route;
 	navigationStatus @14 :NavigationStatus;
+	noaIntent @15 :NoaIntent;
 
 	struct ItemMeta {
 		present @0 :Bool;
@@ -198,6 +199,22 @@ struct CarrotNaviState @0xaedffd8f31e7b55d {
 		guidanceActive @2 :Bool;
 		offRoute @3 :Bool;
 		routePresent @4 :Bool;
+	}
+
+	struct NoaIntent {
+		meta @0 :ItemMeta;
+		valid @1 :Bool;
+		routeGeneration @2 :UInt64;
+		controlledAccess @3 :Bool;
+		maneuverType @4 :Text;
+		distanceToManeuverM @5 :Int32;
+		laneCount @6 :Int16;
+		preferredLaneMask @7 :UInt32;
+		currentLaneHint @8 :Int16;
+		requiredLaneChangesHint @9 :Int16;
+		nextLaneChangeDirection @10 :Text;
+		confidence @11 :Float32;
+		rejectReason @12 :Text;
 	}
 }
 

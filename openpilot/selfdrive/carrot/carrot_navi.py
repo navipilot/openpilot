@@ -70,7 +70,7 @@ JSON_NAMES = (
 CLUSTER_JSON_NAMES = frozenset({
   "vehicle", "guidance_current", "guidance_next", "lane_current",
   "lane_ahead", "speed", "traffic_signal", "crossroad", "route",
-  "navigation_status",
+  "navigation_status", "noa_intent",
 })
 IMAGE_NAMES = (
   "tbt_current_compact", "tbt_current_full", "tbt_next",
