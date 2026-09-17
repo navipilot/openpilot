@@ -120,7 +120,7 @@ def test_manifest_disables_only_cluster_unused_images():
 
   assert manifest["type"] == "subscription_manifest"
   assert manifest["protocol_version"] == 2
-  assert len(manifest["streams"]) == 28
+  assert len(manifest["streams"]) == 29
   enabled = {
     (stream["kind"], stream["name"])
     for stream in manifest["streams"]
@@ -134,7 +134,7 @@ def test_manifest_disables_only_cluster_unused_images():
     "crossroad_minimized", "crossroad_expanded",
     "center_tbt_icon", "center_tbt_text", "center_tbt_fee",
   }
-  assert [stream["stream_handle"] for stream in manifest["streams"]] == list(range(1, 29))
+  assert [stream["stream_handle"] for stream in manifest["streams"]] == list(range(1, 30))
   map_stream = next(stream for stream in manifest["streams"] if stream["kind"] == "render")
   assert map_stream["params"]["map_theme"] == "auto"
   assert map_stream["params"]["screen_center_y_ratio"] == 0.8
@@ -143,6 +143,23 @@ def test_manifest_disables_only_cluster_unused_images():
   invalid_requirements["catalog_revision"] = 2
   with pytest.raises(ValueError, match="catalog revision"):
     CarrotNaviReceiver().negotiate(invalid_requirements, "test-app")
+
+
+def test_receiver_accepts_old_app_catalog_without_optional_noa_intent():
+  query = requirements_query()
+  query["streams"] = [
+    stream for stream in query["streams"]
+    if not (stream["kind"] == "json" and stream["name"] == "noa_intent")
+  ]
+
+  manifest = CarrotNaviReceiver().negotiate(query, "old-test-app")
+
+  assert len(query["streams"]) == 28
+  assert ("json", "noa_intent") in CATALOG
+  assert next(
+    stream for stream in manifest["streams"]
+    if stream["kind"] == "json" and stream["name"] == "noa_intent"
+  )["enabled"] is True
 
 
 def test_manifest_requests_configured_map_appearance():
@@ -392,7 +409,7 @@ def test_safe_websocket_error_send_ignores_closing_transport():
 
 
 def test_map_param_change_reconnects_websocket_with_new_manifest():
-  map_config = ["dark", "normal", 10, 3000]
+  map_config = ["dark", "normal", 10, 3000, 0.8]
 
   async def scenario():
     receiver = CarrotNaviReceiver(
@@ -410,7 +427,7 @@ def test_map_param_change_reconnects_websocket_with_new_manifest():
       first_map = next(stream for stream in first_manifest["streams"] if stream["kind"] == "render")
       assert first_map["params"]["map_type"] == "normal"
 
-      map_config[:] = ["light", "satellite", 60, 12000]
+      map_config[:] = ["light", "satellite", 60, 12000, 0.68]
       message = await first_control.receive(timeout=2.0)
       assert message.type in (WSMsgType.CLOSE, WSMsgType.CLOSED)
 
@@ -553,7 +570,7 @@ async def test_websocket_negotiation_and_json_receive():
     manifest = await control.receive_json()
 
     assert manifest["type"] == "subscription_manifest"
-    assert len(manifest["streams"]) == 28
+    assert len(manifest["streams"]) == 29
     vehicle = next(
       stream for stream in manifest["streams"]
       if stream["kind"] == "json" and stream["name"] == "vehicle"
@@ -731,6 +748,47 @@ def test_receiver_snapshot_builds_bounded_typed_payload():
   assert payload["guidanceCurrent"]["distanceM"] == 320
   assert payload["guidanceCurrent"]["mainText"] == "Turn left"
   assert payload["route"]["polyline"] == []
+
+
+def test_payload_normalizes_app_lane_json_for_cereal_consumers():
+  lane_items = [
+    {"index": 0, "direction": "0", "is_recommended": False, "is_available": True},
+    {"index": 1, "direction": "1", "is_recommended": True, "is_available": True},
+    {"index": 2, "direction": "2", "is_recommended": False, "is_available": True},
+  ]
+  payload = build_carrot_navi_payload({
+    "generation": 1,
+    "session_id": "session",
+    "connected": True,
+    "items": {
+      "lane_current": {
+        "present": True,
+        "sequence": 9,
+        "source_timestamp_ms": 1234,
+        "received_mono_ns": 5678,
+        "value": {
+          "lane_count": 3,
+          "recommended_lane": 1,
+          "lanes": lane_items,
+        },
+      },
+      "lane_ahead": {
+        "present": True,
+        "sequence": 10,
+        "source_timestamp_ms": 1235,
+        "received_mono_ns": 5679,
+        "value": lane_items,
+      },
+    },
+  }, publish_mono_ns=999)
+
+  assert payload["laneCurrent"]["count"] == 3
+  assert payload["laneCurrent"]["currentLane"] == -1
+  assert payload["laneCurrent"]["available"] == [0, 1, 0]
+  assert payload["laneCurrent"]["turnInfo"] == [0, 1, 2]
+  assert len(payload["laneAhead"]) == 1
+  assert payload["laneAhead"][0]["count"] == 3
+  assert payload["laneAhead"][0]["available"] == [0, 1, 0]
 
 
 def test_payload_bounds_route_and_publisher_sends_dedicated_service():

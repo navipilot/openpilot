@@ -81,6 +81,70 @@ def _int16_list(value: Any) -> list[int]:
   ]
 
 
+def _snake_or_camel(lane: dict[str, Any], snake: str, camel: str, default: Any = None) -> Any:
+  if snake in lane:
+    return lane.get(snake)
+  return lane.get(camel, default)
+
+
+def _app_lane_items(value: Any) -> list[dict[str, Any]]:
+  if isinstance(value, dict):
+    lanes = value.get("lanes")
+  else:
+    lanes = value
+  return [
+    item for item in _list(lanes)[:MAX_LANE_VALUES]
+    if isinstance(item, dict)
+  ]
+
+
+def _app_lane_available(value: Any) -> list[int]:
+  lane_items = _app_lane_items(value)
+  if not lane_items:
+    return []
+
+  has_recommended_flags = any(
+    "is_recommended" in item or "recommended" in item
+    for item in lane_items
+  )
+  if has_recommended_flags:
+    return [
+      1 if bool(_snake_or_camel(item, "is_recommended", "recommended", False)) else 0
+      for item in lane_items
+    ]
+
+  lane = _dict(value)
+  recommended_lane = lane.get("recommended_lane")
+  if recommended_lane is None:
+    recommended_lane = lane.get("recommendedLane")
+  try:
+    recommended_index = int(recommended_lane)
+  except (TypeError, ValueError):
+    return [1 if bool(_snake_or_camel(item, "is_available", "available", True)) else 0 for item in lane_items]
+  return [1 if index == recommended_index else 0 for index, _ in enumerate(lane_items)]
+
+
+def _app_lane_turn_info(value: Any) -> list[int]:
+  result: list[int] = []
+  for item in _app_lane_items(value):
+    direction = _snake_or_camel(item, "direction", "direction", 0)
+    result.append(_integer(direction, minimum=-32768, maximum=32767))
+  return result
+
+
+def _normal_lane_ahead_values(value: Any) -> list[Any]:
+  values = _list(value)
+  if values and all(
+    isinstance(item, dict)
+    and "count" not in item
+    and "lane_count" not in item
+    and ("index" in item or "direction" in item or "is_recommended" in item)
+    for item in values
+  ):
+    return [{"lane_count": len(values), "lanes": values}]
+  return values
+
+
 def _record(snapshot: dict[str, Any], name: str) -> dict[str, Any]:
   return _dict(_dict(snapshot.get("items")).get(name))
 
@@ -117,17 +181,24 @@ def _guidance(snapshot: dict[str, Any], name: str) -> dict[str, Any]:
 
 def _lane(record: dict[str, Any], value: Any) -> dict[str, Any]:
   lane = _dict(value)
+  app_available = _app_lane_available(value)
+  app_turn_info = _app_lane_turn_info(value)
+  count = lane.get("count")
+  if count is None:
+    count = lane.get("lane_count")
+  if count is None:
+    count = len(_app_lane_items(value))
   return {
     "meta": _meta(record),
-    "count": _integer(lane.get("count"), minimum=0, maximum=16),
+    "count": _integer(count, minimum=0, maximum=16),
     "distanceM": _integer(lane.get("distance_m"), minimum=0, maximum=2_000_000),
     "visible": bool(lane.get("visible", True)),
     "lanePlay": bool(lane.get("lane_play", False)),
     "currentLane": _integer(lane.get("current_lane"), default=-1, minimum=-1, maximum=16),
     "turnCode": _integer(lane.get("turn_code"), default=-1, minimum=-1, maximum=100_000),
-    "turnInfo": _int16_list(lane.get("turn_info")),
+    "turnInfo": _int16_list(lane.get("turn_info")) or app_turn_info,
     "etcInfo": _int16_list(lane.get("etc_info")),
-    "available": _int16_list(lane.get("available")),
+    "available": _int16_list(lane.get("available")) or app_available,
     "guideLineColor": _integer(lane.get("guide_line_color"), minimum=-32768, maximum=32767),
     "roadCategory": _integer(lane.get("road_category"), minimum=-32768, maximum=32767),
     "voiceCode": _integer(lane.get("voice_code"), minimum=-32768, maximum=32767),
@@ -148,7 +219,7 @@ def build_carrot_navi_payload(snapshot: dict[str, Any], publish_mono_ns: int | N
   lane_record = _record(snapshot, "lane_current")
   lane_value = lane_record.get("value") if lane_record.get("present") else None
   ahead_record = _record(snapshot, "lane_ahead")
-  ahead_values = _list(ahead_record.get("value")) if ahead_record.get("present") else []
+  ahead_values = _normal_lane_ahead_values(ahead_record.get("value")) if ahead_record.get("present") else []
 
   speed_record = _record(snapshot, "speed")
   speed = _dict(speed_record.get("value")) if speed_record.get("present") else {}

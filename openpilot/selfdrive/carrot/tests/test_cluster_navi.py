@@ -1257,7 +1257,7 @@ def test_embedded_navi_source_projects_json_and_png(unused_tcp_port):
     assert state.navi_dashboard is not None
     assert state.navi_dashboard.connected is True
     assert any(frame.key == "image:tbt_next" for frame in state.navi_dashboard.media)
-    assert len(state.navi_dashboard.items) == 28
+    assert len(state.navi_dashboard.items) == len(CATALOG)
 
     replay_state = replace(
       state,

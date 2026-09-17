@@ -65,6 +65,7 @@ JSON_NAMES = (
   "vehicle", "guidance_current", "guidance_next", "lane_current",
   "lane_ahead", "speed", "traffic_signal", "crossroad", "route",
   "navigation_status", "app_status", "camera_state", "composition_state",
+  "noa_intent",
 )
 CLUSTER_JSON_NAMES = frozenset({
   "vehicle", "guidance_current", "guidance_next", "lane_current",
@@ -87,6 +88,7 @@ CATALOG = tuple(
 )
 CATALOG_SET = frozenset(CATALOG)
 JSON_ARRAY_NAMES = frozenset(("lane_ahead",))
+OPTIONAL_CATALOG_ITEMS = frozenset({("json", "noa_intent")})
 CLEAR_REASONS = {
   1: "source_absent",
   2: "cleared",
@@ -491,15 +493,18 @@ class CarrotNaviReceiver:
       raise ValueError("unsupported v2 catalog revision")
 
     offered_streams = requirements.get("streams")
-    if not isinstance(offered_streams, list) or len(offered_streams) != len(CATALOG):
-      raise ValueError("app v2 catalog does not contain exactly 28 items")
+    if not isinstance(offered_streams, list):
+      raise ValueError("app v2 catalog must contain a stream list")
 
     offered: list[tuple[str, str]] = []
     for stream in offered_streams:
       if not isinstance(stream, dict) or stream.get("schema_version") != 1:
         raise ValueError("invalid v2 catalog entry")
       offered.append((str(stream.get("kind")), str(stream.get("name"))))
-    if len(set(offered)) != len(offered) or set(offered) != CATALOG_SET:
+    offered_set = set(offered)
+    missing_required = CATALOG_SET - OPTIONAL_CATALOG_ITEMS - offered_set
+    unknown = offered_set - CATALOG_SET
+    if len(offered_set) != len(offered) or missing_required or unknown:
       raise ValueError("app v2 catalog does not match receiver catalog")
 
     session_id = secrets.token_hex(8)
