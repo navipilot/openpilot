@@ -15,7 +15,8 @@ ButtonType = structs.CarState.ButtonEvent.Type
 GearShifter = structs.CarState.GearShifter
 EventName = log.OnroadEvent.EventName
 NetworkLocation = structs.CarParams.NetworkLocation
-TESLA_STANDSTILL_STEER_FAULT_DEBOUNCE_FRAMES = int(0.5 / DT_CTRL)
+TESLA_STANDSTILL_STEER_FAULT_DEBOUNCE_FRAMES = int(2.0 / DT_CTRL)
+TESLA_STANDSTILL_STEER_FAULT_SPEED = 0.5
 
 
 # TODO: the goal is to abstract this file into the CarState struct and make events generic
@@ -259,9 +260,12 @@ class CarSpecificEvents:
     # Handle permanent and temporary steering faults
     self.steering_unpressed = 0 if CS.steeringPressed else self.steering_unpressed + 1
     if CS.steerFaultTemporary:
-      # Tesla EPS can briefly report an inhibited state while settling at a
-      # true standstill. Require it to persist before starting soft-disable.
-      tesla_standstill_transient = self.CP.brand == 'tesla' and CS.standstill
+      # Tesla EPS can briefly report an inhibited state while settling into a
+      # stop before standstill has latched. Require it to persist before alerting.
+      tesla_standstill_transient = (
+        self.CP.brand == 'tesla' and
+        (CS.standstill or CS.cruiseState.standstill or abs(CS.vEgo) < TESLA_STANDSTILL_STEER_FAULT_SPEED)
+      )
       if tesla_standstill_transient:
         self.tesla_standstill_steer_fault_frames += 1
       else:
