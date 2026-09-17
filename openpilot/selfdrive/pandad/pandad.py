@@ -47,6 +47,15 @@ def get_firmware_path(panda: Panda, params: Params) -> str:
   return fn
 
 
+def configure_boardd_firmware_check(params: Params) -> None:
+  # Python has already verified the exact selected image. The C++ check only
+  # knows the stock filenames, so it must not reject the Tesla variant.
+  if tesla_wake_on_can_enabled(params):
+    os.environ["BOARDD_SKIP_FW_CHECK"] = "1"
+  else:
+    os.environ.pop("BOARDD_SKIP_FW_CHECK", None)
+
+
 def get_expected_signature(panda: Panda, params: Params) -> bytes:
   try:
     fn = get_firmware_path(panda, params)
@@ -202,6 +211,7 @@ def main() -> None:
     first_run = False
 
     # run pandad with all connected serials as arguments
+    configure_boardd_firmware_check(params)
     os.environ['MANAGER_DAEMON'] = 'pandad'
     process = subprocess.Popen(["./pandad", *panda_serials], cwd=os.path.join(BASEDIR, "openpilot/selfdrive/pandad"))
     process.wait()

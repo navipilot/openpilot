@@ -1,3 +1,4 @@
+import os
 from types import SimpleNamespace
 
 from openpilot.cereal import car
@@ -50,3 +51,15 @@ def test_tesla_wake_firmware_name_matches_panda_mcu(tmp_path, monkeypatch):
     assert "Tesla wake firmware is missing" in str(exc)
   else:
     raise AssertionError("missing Tesla wake firmware must fail explicitly")
+
+
+def test_tesla_wake_skips_stock_only_boardd_firmware_check(monkeypatch):
+  monkeypatch.delenv("BOARDD_SKIP_FW_CHECK", raising=False)
+  params = FakeParams({"TeslaWakeOnCAN": True, "CarParamsPersistent": car_params()})
+
+  pandad.configure_boardd_firmware_check(params)
+  assert os.environ["BOARDD_SKIP_FW_CHECK"] == "1"
+
+  params.values["TeslaWakeOnCAN"] = False
+  pandad.configure_boardd_firmware_check(params)
+  assert "BOARDD_SKIP_FW_CHECK" not in os.environ
