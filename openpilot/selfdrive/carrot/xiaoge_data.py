@@ -25,6 +25,11 @@ TESLA_AUTOPILOT_PARTY_BUS = 2
 TESLA_DAS_ROAD_TIMEOUT_S = 1.0
 
 
+def capnp_items(values, limit: int) -> list[Any]:
+  """Read a bounded prefix without slicing Cap'n Proto dynamic lists."""
+  return [values[index] for index in range(min(len(values), limit))]
+
+
 class XiaogeDataBroadcaster:
   def __init__(self):
     self.tcp_port = 7711
@@ -207,26 +212,26 @@ class XiaogeDataBroadcaster:
       }
     else:
       data["lead0"] = {"x": 0.0, "y": 0.0, "v": 0.0, "prob": 0.0}
-    data["laneLineProbs"] = [float(prob) for prob in model_v2.laneLineProbs[:4]]
+    data["laneLineProbs"] = [float(prob) for prob in capnp_items(model_v2.laneLineProbs, 4)]
     lane_line_stds = getattr(model_v2, "laneLineStds", [])
-    data["laneLineStds"] = [float(std) for std in lane_line_stds[:4]]
+    data["laneLineStds"] = [float(std) for std in capnp_items(lane_line_stds, 4)]
     data["laneLines"] = [
       {
-        "x": [float(x) for x in lane_line.x[:33]],
-        "y": [float(y) for y in lane_line.y[:33]],
-        "z": [float(z) for z in lane_line.z[:33]],
+        "x": [float(x) for x in capnp_items(lane_line.x, 33)],
+        "y": [float(y) for y in capnp_items(lane_line.y, 33)],
+        "z": [float(z) for z in capnp_items(lane_line.z, 33)],
       }
-      for lane_line in model_v2.laneLines[:4]
+      for lane_line in capnp_items(model_v2.laneLines, 4)
     ]
     road_edge_stds = getattr(model_v2, "roadEdgeStds", [])
-    data["roadEdgeStds"] = [float(std) for std in road_edge_stds[:2]]
+    data["roadEdgeStds"] = [float(std) for std in capnp_items(road_edge_stds, 2)]
     data["roadEdges"] = [
       {
-        "x": [float(x) for x in road_edge.x[:33]],
-        "y": [float(y) for y in road_edge.y[:33]],
-        "z": [float(z) for z in road_edge.z[:33]],
+        "x": [float(x) for x in capnp_items(road_edge.x, 33)],
+        "y": [float(y) for y in capnp_items(road_edge.y, 33)],
+        "z": [float(z) for z in capnp_items(road_edge.z, 33)],
       }
-      for road_edge in model_v2.roadEdges[:2]
+      for road_edge in capnp_items(model_v2.roadEdges, 2)
     ]
     meta = model_v2.meta
     data["meta"] = {
@@ -248,14 +253,14 @@ class XiaogeDataBroadcaster:
     }
 
   @staticmethod
-  def collect_controls_state(controls_state) -> dict[str, Any]:
+  def collect_controls_state(controls_state, selfdrive_state=None) -> dict[str, Any]:
     return {
-      "enabled": bool(controls_state.enabled),
-      "active": bool(controls_state.active),
-      "vCruise": float(controls_state.vCruise),
-      "curvature": float(getattr(controls_state, "curvature", 0.0)),
-      "state": str(getattr(controls_state, "state", "")),
-      "experimentalMode": bool(getattr(controls_state, "experimentalMode", False)),
+      "enabled": bool(getattr(selfdrive_state, "enabled", False)),
+      "active": bool(getattr(selfdrive_state, "active", False)),
+      "vCruise": float(getattr(selfdrive_state, "vCruise", 0.0)),
+      "curvature": float(controls_state.curvature),
+      "state": str(getattr(selfdrive_state, "state", "")),
+      "experimentalMode": bool(getattr(selfdrive_state, "experimentalMode", False)),
     }
 
   def collect_noa_lane_localization(self, model_v2, carrot_navi) -> dict[str, Any]:
@@ -366,7 +371,8 @@ class XiaogeDataBroadcaster:
         if self.sm.alive["selfdriveState"]:
           data["systemState"] = self.collect_system_state(self.sm["selfdriveState"])
         if self.sm.alive["controlsState"]:
-          data["controlsState"] = self.collect_controls_state(self.sm["controlsState"])
+          selfdrive_state = self.sm["selfdriveState"] if self.sm.alive["selfdriveState"] else None
+          data["controlsState"] = self.collect_controls_state(self.sm["controlsState"], selfdrive_state)
         self.broadcast_to_clients(self.create_packet(data))
         self.sequence += 1
         rk.keep_time()

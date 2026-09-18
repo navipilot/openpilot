@@ -17,6 +17,7 @@ SUPPORTED_MANEUVER_TYPES = frozenset({
 class RouteLaneIntent:
   valid: bool = False
   route_generation: int = 0
+  route_change_reason: str = ""
   controlled_access: bool = False
   maneuver_type: str = "none"
   distance_to_maneuver_m: int = 0
@@ -72,6 +73,7 @@ def parse_route_lane_intent(value: Any, now_ms: int) -> RouteLaneIntent:
   route_generation = _integer(intent.get("route_generation"), -1)
   if route_generation < 0:
     return _reject("invalid_route_generation")
+  route_change_reason = str(_dict(intent.get("route")).get("generation_reason") or "")[:64]
 
   road = _dict(intent.get("road"))
   if not bool(road.get("controlled_access", False)):
@@ -112,6 +114,7 @@ def parse_route_lane_intent(value: Any, now_ms: int) -> RouteLaneIntent:
   return RouteLaneIntent(
     valid=True,
     route_generation=route_generation,
+    route_change_reason=route_change_reason,
     controlled_access=True,
     maneuver_type=maneuver_type,
     distance_to_maneuver_m=distance_m,

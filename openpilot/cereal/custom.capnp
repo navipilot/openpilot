@@ -215,6 +215,7 @@ struct CarrotNaviState @0xaedffd8f31e7b55d {
 		nextLaneChangeDirection @10 :Text;
 		confidence @11 :Float32;
 		rejectReason @12 :Text;
+		routeChangeReason @13 :Text;
 	}
 }
 
