@@ -42,3 +42,25 @@ def test_collect_model_data_accepts_non_sliceable_capnp_lists():
   assert data["laneLines"][0]["x"] == [1.0, 2.0]
   assert len(data["roadEdges"]) == 2
   assert data["roadEdgeStds"] == [0.5, 0.7]
+
+
+def test_collect_controls_state_uses_selfdrive_state_for_engagement_fields():
+  controls_state = SimpleNamespace(curvature=0.0123)
+  selfdrive_state = SimpleNamespace(
+    enabled=True,
+    active=True,
+    vCruise=100.0,
+    state="enabled",
+    experimentalMode=True,
+  )
+
+  data = XiaogeDataBroadcaster.collect_controls_state(controls_state, selfdrive_state)
+
+  assert data == {
+    "enabled": True,
+    "active": True,
+    "vCruise": 100.0,
+    "curvature": 0.0123,
+    "state": "enabled",
+    "experimentalMode": True,
+  }

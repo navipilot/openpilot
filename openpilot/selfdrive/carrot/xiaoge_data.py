@@ -253,14 +253,14 @@ class XiaogeDataBroadcaster:
     }
 
   @staticmethod
-  def collect_controls_state(controls_state) -> dict[str, Any]:
+  def collect_controls_state(controls_state, selfdrive_state=None) -> dict[str, Any]:
     return {
-      "enabled": bool(controls_state.enabled),
-      "active": bool(controls_state.active),
-      "vCruise": float(controls_state.vCruise),
-      "curvature": float(getattr(controls_state, "curvature", 0.0)),
-      "state": str(getattr(controls_state, "state", "")),
-      "experimentalMode": bool(getattr(controls_state, "experimentalMode", False)),
+      "enabled": bool(getattr(selfdrive_state, "enabled", False)),
+      "active": bool(getattr(selfdrive_state, "active", False)),
+      "vCruise": float(getattr(selfdrive_state, "vCruise", 0.0)),
+      "curvature": float(controls_state.curvature),
+      "state": str(getattr(selfdrive_state, "state", "")),
+      "experimentalMode": bool(getattr(selfdrive_state, "experimentalMode", False)),
     }
 
   def collect_noa_lane_localization(self, model_v2, carrot_navi) -> dict[str, Any]:
@@ -371,7 +371,8 @@ class XiaogeDataBroadcaster:
         if self.sm.alive["selfdriveState"]:
           data["systemState"] = self.collect_system_state(self.sm["selfdriveState"])
         if self.sm.alive["controlsState"]:
-          data["controlsState"] = self.collect_controls_state(self.sm["controlsState"])
+          selfdrive_state = self.sm["selfdriveState"] if self.sm.alive["selfdriveState"] else None
+          data["controlsState"] = self.collect_controls_state(self.sm["controlsState"], selfdrive_state)
         self.broadcast_to_clients(self.create_packet(data))
         self.sequence += 1
         rk.keep_time()
