@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: sync-branches
+  cancel-in-progress: false
+
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -22,7 +26,9 @@ jobs:
 
       - name: Configure
         run: |
+          set -e
           git lfs install --local
+          git remote remove carrot 2>/dev/null || true
           git remote add carrot https://github.com/ajouatom/openpilot.git
 
       - name: Sync Carrot
@@ -59,9 +65,26 @@ jobs:
             refs/heads/sync-model:refs/heads/model \
             --force
 
+      - name: Sync Jetlink
+        run: |
+          set -e
+
+          git fetch carrot \
+            +refs/heads/carrot-jetlink:refs/remotes/carrot/carrot-jetlink \
+            --no-tags
+
+          git branch -f jetlink refs/remotes/carrot/carrot-jetlink
+
+          git lfs fetch --all carrot jetlink
+          git lfs push --all origin jetlink
+
+          git push origin \
+            refs/heads/jetlink:refs/heads/jetlink \
+            --force
 
       - name: Show Result
         if: always()
         run: |
           git ls-remote --heads origin refs/heads/Carrot
           git ls-remote --heads origin refs/heads/model
+          git ls-remote --heads origin refs/heads/jetlink
