@@ -4,6 +4,7 @@ import pytest
 
 from opendbc.car.tesla.coop_steering import (
   CoopSteeringCarController,
+  STEERING_DEG_PHASE_LEAD_COEFF,
   STEER_OVERRIDE_MIN_TORQUE,
 )
 
@@ -60,4 +61,24 @@ def test_update_resets_override_when_lateral_control_disables(monkeypatch):
   result = controller.update(5.0, False, fake_state(), LinearVehicleModel())
 
   assert result.steeringAngleDeg == 0.0
+  assert controller.angle_override == 0.0
+
+
+@pytest.mark.parametrize("angle,rate", [(12.3, 80.0), (-15.6, -120.0), (420.0, 32.0), (-420.0, -32.0)])
+def test_inactive_request_tracks_measurement_but_preserves_resume_state(angle, rate):
+  controller = CoopSteeringCarController()
+  state = fake_state()
+  state.out.steeringAngleDeg = angle
+  state.out.steeringRateDeg = rate
+  controller.angle_override = 3.0
+
+  result = controller.update(20.0, False, state, LinearVehicleModel())
+
+  assert not result.lat_active
+  assert result.steeringAngleDeg == pytest.approx(max(-360.0, min(360.0, angle)))
+  phase_lead = angle + rate / STEERING_DEG_PHASE_LEAD_COEFF
+  assert controller.apply_angle_last == phase_lead
+  assert controller.coop_apply_angle_sat_last == phase_lead
+  assert controller.resume_rate_limiter._last == phase_lead
+  assert controller.resume_rate_limiter_delta._last == 0.0
   assert controller.angle_override == 0.0

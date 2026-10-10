@@ -134,7 +134,9 @@ class CoopSteeringCarController:
 
     if not lat_active:
       self.reset_override_state(apply_angle)
-      return CoopSteeringData(apply_angle, lat_active, 1)
+      # Inactive CAN must follow the EPS measurement, not the phase-lead estimate.
+      inactive_angle = apply_bounds(CS.out.steeringAngleDeg, CarControllerParams.ANGLE_LIMITS.STEER_ANGLE_MAX)
+      return CoopSteeringData(inactive_angle, lat_active, 1)
 
     apply_angle_step = apply_angle - self.apply_angle_last
     self.apply_angle_last = apply_angle
