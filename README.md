@@ -49,7 +49,10 @@ git lfs fsck
 This is a **source branch, not a prebuilt device release**. The existing device
 launcher builds it on first boot, expects the dependencies for the pinned
 `AGNOS_VERSION` in `launch_env.sh`, and creates the import links to the vendored
-packages. Jetlink acceleration additionally requires a compatible external
+packages. **The upstream [2026-10-10 release notes](CHANGELOG.md) explicitly
+restrict this version to C3XL and describe Tesla-specific experimental features.
+Do not assume compatibility with other comma hardware or vehicles.**
+Jetlink acceleration additionally requires a compatible external
 server; see [`jetlink_repo/README.md`](jetlink_repo/README.md).
 Source integrity checks and desktop tests do not establish device compatibility
 or driving safety. Validate installation, compilation, cameras, Panda, model
