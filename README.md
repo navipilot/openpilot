@@ -34,7 +34,9 @@ licenses and original executable permissions are preserved.
 
 Models and other LFS assets are hosted in **this repository's GitHub LFS
 storage**. Do not skip LFS downloads when installing; a pointer file is not a
-usable model. For a development checkout:
+usable model. The only fetch exclusion is Jetlink's
+`tests/fixtures/pointer_f877d7a0.txt`: it is intentional pointer text used by
+offline registry tests, not a model asset. For a development checkout:
 
 ```sh
 git lfs install

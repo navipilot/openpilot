@@ -1,4 +1,5 @@
 [lfs]
 	url = https://github.com/navipilot/openpilot.git/info/lfs
 	pushurl = https://github.com/navipilot/openpilot.git/info/lfs
+	fetchexclude = jetlink_repo/tests/fixtures/pointer_f877d7a0.txt
 	locksverify = false
