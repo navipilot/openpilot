@@ -1,0 +1,15 @@
+# Actions only.
+#
+# The Python and Swift pins are measured versions, not "latest": the wheel
+# hashes are what the bundle is built from, the fixture releases are what the
+# conformance files were made with, and Xcode is what the app is tested against. Adding
+# those ecosystems here would open a pull request every week that nobody can
+# merge without re-running the bench.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "ci:"

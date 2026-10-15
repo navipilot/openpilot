@@ -1,0 +1,350 @@
+# Lint and test on every push and pull request.
+#
+# The cheap jobs (ruff, shellcheck, the installer scenarios, pytest on Linux)
+# run every time and report in about a minute. The Swift, Android and app jobs
+# run only when something they are built from changed: `changes` sorts the
+# push, and a change confined to the comma's side (see its filter) skips them.
+# A skipped job still reports, so a required check is satisfied.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    name: What changed
+    runs-on: ubuntu-24.04
+    outputs:
+      apps: ${{ steps.filter.outputs.apps }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Sort the changed files
+        id: filter
+        uses: dorny/paths-filter@v4
+        with:
+          # every: a file counts only if it matches every line below, so the
+          # '!' lines exclude. With the default, some, each line matches on
+          # its own and '!docs/**' alone would match README.md.
+          predicate-quantifier: every
+          # Everything rebuilds the apps and the servers except the comma's
+          # side, which the comma takes as a git pin and nothing builds: the
+          # comma and openpilot packages, their tests, the root script and
+          # the bench tools, the installer and the host CLI, and the docs.
+          # jetlink/transport and protocol.py are the wire and stay in.
+          filters: |
+            apps:
+              - '**'
+              - '!jetlink/comma/**'
+              - '!jetlink/openpilot/**'
+              - '!scripts/comma/**'
+              - '!scripts/deploy_to_comma.sh'
+              - '!scripts/jetlink'
+              - '!install.sh'
+              - '!tests/comma_fakes.py'
+              - '!tests/test_comma_*.py'
+              - '!tests/openpilot/**'
+              - '!tests/installer/**'
+              - '!docs/**'
+              - '!**/*.md'
+        # On a pull request the base is the target branch; on a push to a
+        # branch, main; on a push to main, the previous push.
+
+  python-lint:
+    name: Python lint
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: pip install ruff==0.16.6
+
+      - name: Run ruff
+        run: ruff check .
+        # No `ruff format --check`: the tree is not formatted by ruff and
+        # reformatting it would rewrite every file for no gain.
+
+  installer:
+    name: Installer and host scripts
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Run shellcheck
+        run: |
+          # what the installer runs or installs, and what the comma runs as
+          # root; the bench scripts are not held to it yet
+          shellcheck install.sh scripts/jetlink scripts/comma/jetlink-root.sh tests/installer/*.sh
+
+      - name: Run the installer scenarios
+        run: tests/installer/run.sh
+        # The installer end to end in Ubuntu 24.04 and 22.04 containers, with
+        # apt, systemd, the server and the Jetson tools replaced by stand-ins:
+        # JetPack 7.2 and 6.2 Jetsons, PCs, updates, the moves from the Docker
+        # releases and back, an uninstall.
+
+  python-test-linux:
+    name: Python tests on Linux (${{ matrix.python }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - python: "3.10"
+          # The releases the fixtures were made with, so tests/test_conformance.py
+          # compares the staging fixtures here instead of skipping them.
+          - python: "3.12"
+            constraints: -c JetlinkKit/Scripts/fixture-pins.txt
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install the package
+        run: pip install -e ".[dev]" ${{ matrix.constraints }}
+
+      - name: Run the tests
+        run: python -m pytest -q
+        # The comma's package, and the conformance generators run into a
+        # temporary directory and compared byte for byte with the committed
+        # fixtures: a Python change that moves what the Swift must match fails
+        # here. Regenerate, commit, and make the Swift pass against the new
+        # files (docs/conformance.md). tests/test_swift_server.py skips here;
+        # the Swift jobs run it against their builds.
+
+  swift:
+    name: Swift build and tests
+    needs: changes
+    if: needs.changes.outputs.apps == 'true'
+    runs-on: macos-26
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        uses: ./.github/actions/select-xcode
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Regenerate the Xcode project
+        run: make -C macos project
+
+      - name: Check the committed project is fresh
+        run: git diff --exit-code macos/Jetlink.xcodeproj
+        # project.yml is the source of truth; the generated project is
+        # committed so `open` works without xcodegen. Run `make -C macos
+        # project` and commit the result when this fails.
+
+      - name: Run the Swift tests
+        run: make -C macos test
+
+      - name: Run the JetlinkKit tests
+        run: swift test --package-path JetlinkKit
+        # The Swift server the iPhone runs, on onnxruntime's CPU provider:
+        # wire bytes against protocol.py, the preparation byte for byte
+        # against Python's, and whole-server runs against golden frames.
+
+      - name: Check the committed iPhone project is fresh
+        run: |
+          make -C ios project
+          git diff --exit-code ios/Jetlink.xcodeproj
+
+      - name: Compile the iPhone app for iOS
+        run: make -C ios typecheck
+        # SwiftPM against the iPhone SDK, so it needs no iOS simulator runtime.
+
+  swift-linux:
+    name: Swift on Linux (${{ matrix.arch }})
+    needs: changes
+    if: needs.changes.outputs.apps == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {arch: aarch64, runner: ubuntu-22.04-arm}
+          - {arch: x86_64, runner: ubuntu-22.04}
+    runs-on: ${{ matrix.runner }}
+    # The Mac's Swift, and the one build-linux.sh builds the release tarballs
+    # with; jammy's glibc is JetPack 6's, the oldest a Jetson runs.
+    container: swift:6.3.3-jammy
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Cache the onnxruntime tarball and the build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/jetlink-build
+            JetlinkKit/.build
+          key: swift-linux-${{ matrix.arch }}-${{ hashFiles('scripts/build-linux.sh', 'JetlinkKit/Package.resolved') }}
+
+      - name: Install curl
+        run: apt-get update && apt-get install -y --no-install-recommends ca-certificates curl
+        # The swift image has no curl, which build-linux.sh fetches with.
+
+      - name: Fetch onnxruntime
+        run: |
+          ort=$(scripts/build-linux.sh "linux-${{ matrix.arch }}" ort)
+          echo "ORT=$ort" >> "$GITHUB_ENV"
+        # The official CPU tarball of the release Pinned names, at the sha256
+        # build-linux.sh pins: headers for COrt, and the library the server
+        # opens at run time (JL_ORT_DLOPEN).
+
+      - name: Build the package
+        run: swift build --package-path JetlinkKit -Xcc -I"$ORT/include"
+        # Every target, the server and jetlink-server included, with CTrt as
+        # the fake over host memory: linux-trt compiles the real shim.
+
+      - name: Run the Swift tests
+        run: LD_LIBRARY_PATH="$ORT/lib" swift test --package-path JetlinkKit -Xcc -I"$ORT/include"
+        # The conformance suites read the same Python-written fixtures as on
+        # macOS. The golden frames are held to a 0.999 correlation here, as on
+        # Android: onnxruntime's Linux build computes fp16 MatMul in fp16.
+
+      - name: Install numpy and pytest
+        run: |
+          apt-get install -y --no-install-recommends python3-pip
+          python3 -m pip install numpy==2.2.6 pytest==8.4.2
+
+      - name: Run the comma's client against jetlink-server
+        run: LD_LIBRARY_PATH="$ORT/lib" JETLINK_SERVER_BIN=JetlinkKit/.build/debug/jetlink-server python3 -m pytest -q tests/test_swift_server.py
+        # jetlink.client over TCP, as a comma drives the server. Naming the
+        # binary makes a missing one fail rather than skip.
+
+  linux-trt:
+    name: TensorRT shim (${{ matrix.flavor }})
+    needs: changes
+    if: needs.changes.outputs.apps == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {flavor: linux-aarch64, runner: ubuntu-22.04-arm}
+          - {flavor: linux-x86_64, runner: ubuntu-22.04}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/jetlink-build
+          key: jetlink-build-${{ matrix.flavor }}-${{ hashFiles('scripts/build-linux.sh', 'JetlinkKit/Scripts/fixture-pins.txt') }}
+      - name: Build the shim against the real headers; check it links nothing of NVIDIA's
+        run: scripts/build-linux.sh ${{ matrix.flavor }} headers shim
+
+  swift-android:
+    name: Swift server for Android
+    needs: changes
+    if: needs.changes.outputs.apps == 'true'
+    uses: ./.github/workflows/android-swift.yml
+
+  android:
+    name: Android app
+    needs: [changes, swift-android]
+    if: needs.changes.outputs.apps == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # Gradle and the app's dependencies, saved from main for every run
+      - uses: gradle/actions/setup-gradle@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: libjetlink-arm64-v8a
+          path: swift-out
+
+      - name: Unit tests and the release APK
+        working-directory: android
+        run: ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleRelease -Pjetlink.prebuiltSwift="$GITHUB_WORKSPACE/swift-out"
+        # The Kotlin tests parse the snapshot fixture the Swift suites write,
+        # and check the gadget's IDs, the port and the onnxruntime release
+        # against Pinned.swift.
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Jetlink-android
+          path: android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 14
+
+  app:
+    name: App bundle and smoke test
+    runs-on: macos-26
+    needs: [changes, python-lint]
+    if: needs.changes.outputs.apps == 'true'
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        uses: ./.github/actions/select-xcode
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Build the app
+        run: make -C macos app
+        # `app` depends on `project`, so this is the whole thing, ad hoc signed.
+
+      - name: Check the app serves
+        run: make -C macos smoke
+        # The bundle's Swift server over TCP on a scratch cache: hello and ping
+        # over the wire protocol, then SIGTERM ends it. No Python in
+        # the app; the client is jetlink/protocol.py from this checkout.
+
+      - name: Pack the app
+        run: ditto -c -k --keepParent macos/build/Jetlink.app macos/build/Jetlink-unsigned.zip
+
+      - name: Upload the app
+        uses: actions/upload-artifact@v4
+        with:
+          name: Jetlink-unsigned
+          path: macos/build/Jetlink-unsigned.zip
+          retention-days: 7
+
+  swift-format:
+    name: Swift formatting
+    needs: changes
+    if: needs.changes.outputs.apps == 'true'
+    runs-on: macos-26
+    continue-on-error: true
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        uses: ./.github/actions/select-xcode
+
+      - name: Lint the Swift sources
+        run: xcrun swift-format lint --strict --configuration macos/.swift-format --recursive macos/Jetlink macos/JetlinkTests JetlinkKit/Sources JetlinkKit/Tests ios/Jetlink
+        # macos/.swift-format is the repo style: 2 spaces, 160 columns, and no
+        # UseSynthesizedInitializer, because the event structs keep their
+        # memberwise initializers on purpose (01-contracts.md section 7).

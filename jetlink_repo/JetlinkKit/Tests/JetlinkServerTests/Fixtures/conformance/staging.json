@@ -1,0 +1,183 @@
+{
+  "cases": [
+    {
+      "frame_skip": 1,
+      "frames": "staging.fs1.frames.bin",
+      "inputs": [
+        {
+          "name": "img",
+          "shape": [
+            1,
+            12,
+            8,
+            16
+          ]
+        },
+        {
+          "name": "big_img",
+          "shape": [
+            1,
+            12,
+            8,
+            16
+          ]
+        },
+        {
+          "name": "features_buffer",
+          "shape": [
+            1,
+            32,
+            4,
+            8
+          ]
+        },
+        {
+          "name": "desire_pulse",
+          "shape": [
+            1,
+            33,
+            8
+          ]
+        },
+        {
+          "name": "traffic_convention",
+          "shape": [
+            1,
+            2
+          ]
+        },
+        {
+          "name": "action_t",
+          "shape": [
+            1,
+            2
+          ]
+        }
+      ],
+      "spec": "staging.fs1.spec.json",
+      "staged": "staging.fs1.staged.bin"
+    },
+    {
+      "frame_skip": 2,
+      "frames": "staging.fs2.frames.bin",
+      "inputs": [
+        {
+          "name": "img",
+          "shape": [
+            1,
+            12,
+            8,
+            16
+          ]
+        },
+        {
+          "name": "big_img",
+          "shape": [
+            1,
+            12,
+            8,
+            16
+          ]
+        },
+        {
+          "name": "features_buffer",
+          "shape": [
+            1,
+            32,
+            4,
+            8
+          ]
+        },
+        {
+          "name": "desire_pulse",
+          "shape": [
+            1,
+            33,
+            8
+          ]
+        },
+        {
+          "name": "traffic_convention",
+          "shape": [
+            1,
+            2
+          ]
+        },
+        {
+          "name": "action_t",
+          "shape": [
+            1,
+            2
+          ]
+        }
+      ],
+      "spec": "staging.fs2.spec.json",
+      "staged": "staging.fs2.staged.bin"
+    },
+    {
+      "frame_skip": 4,
+      "frames": "staging.fs4.frames.bin",
+      "inputs": [
+        {
+          "name": "img",
+          "shape": [
+            1,
+            12,
+            8,
+            16
+          ]
+        },
+        {
+          "name": "big_img",
+          "shape": [
+            1,
+            12,
+            8,
+            16
+          ]
+        },
+        {
+          "name": "features_buffer",
+          "shape": [
+            1,
+            32,
+            4,
+            8
+          ]
+        },
+        {
+          "name": "desire_pulse",
+          "shape": [
+            1,
+            33,
+            8
+          ]
+        },
+        {
+          "name": "traffic_convention",
+          "shape": [
+            1,
+            2
+          ]
+        },
+        {
+          "name": "action_t",
+          "shape": [
+            1,
+            2
+          ]
+        }
+      ],
+      "spec": "staging.fs4.spec.json",
+      "staged": "staging.fs4.staged.bin"
+    }
+  ],
+  "desire_edges": "frames 0 to 3 and 8 to 11 carry desires with NaNs, signed zeros and infinities",
+  "dtype": "float16",
+  "feedback": "the output's hidden_state is fed back after the frame when every value is finite",
+  "frame_layout": "warped uint8, packed float32, then the driving output float32 the frame returned, per frame",
+  "frames": 12,
+  "hello_before": 5,
+  "reset_before": 8,
+  "staged_layout": "each input in `inputs` order, float16, per frame"
+}

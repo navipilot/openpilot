@@ -1,0 +1,79 @@
+{
+  "sha256": "b0669bc51ec95a6a8bccf3ddf614098148ee1447025d99f4dd5e5d501ca41868",
+  "nbytes": 39160,
+  "frame_skip": 4,
+  "checkpoint": "tiny-stateful-test",
+  "input_shapes": {
+    "new_img": [
+      2,
+      6,
+      8,
+      16
+    ],
+    "desire": [
+      8
+    ],
+    "traffic_convention": [
+      1,
+      2
+    ],
+    "action_t": [
+      1,
+      2
+    ],
+    "state_img_q": [
+      2,
+      5,
+      6,
+      8,
+      16
+    ],
+    "state_desire_q": [
+      6,
+      1,
+      8
+    ],
+    "state_feat_q": [
+      4,
+      1,
+      16
+    ]
+  },
+  "output_shapes": {
+    "outputs": [
+      1,
+      64
+    ],
+    "next_state_img_q": [
+      2,
+      5,
+      6,
+      8,
+      16
+    ],
+    "next_state_desire_q": [
+      6,
+      1,
+      8
+    ],
+    "next_state_feat_q": [
+      4,
+      1,
+      16
+    ]
+  },
+  "output_slices": {
+    "plan": [
+      0,
+      16
+    ],
+    "lead_prob": [
+      16,
+      19
+    ],
+    "hidden_state": [
+      32,
+      48
+    ]
+  }
+}

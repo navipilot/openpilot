@@ -1,0 +1,4 @@
+.build/
+.swiftpm/
+# Small generated graphs the tests read; the repo ignores *.onnx everywhere else
+!Tests/**/Fixtures/*.onnx

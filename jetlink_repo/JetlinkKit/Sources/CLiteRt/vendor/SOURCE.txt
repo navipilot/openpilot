@@ -1,0 +1,12 @@
+LiteRT's C API headers, as the shim beside this directory includes them.
+
+From https://github.com/google-ai-edge/LiteRT at tag v2.2.0 (commit
+145c7523ff08d5e57ab5c582141775eea47da9c7), the release of the binaries jetlink
+opens: the ai-edge-litert 2.2.0 wheel's libLiteRt.dylib on a Mac, and the
+com.google.ai.edge.litert:litert:2.2.0 AAR's libLiteRt.so on Android.
+
+Only the headers the shim needs and the ones they include, unmodified, except
+litert/build_common/build_config.h, which LiteRT's build generates: it is a
+copy of litert/build_common/config/build_config_gpu_npu.h, Bazel's default.
+
+Licensed under the Apache License, Version 2.0 (LICENSE here).

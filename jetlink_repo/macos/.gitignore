@@ -1,0 +1,9 @@
+# Everything the build produces, including the download cache (build/downloads)
+# and the extracted Python prefix (build/python).
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+# Xcode's record of the resolved packages, like /JetlinkKit/Package.resolved:
+# project.yml pins Sparkle exactly, and JetlinkKit/Package.swift its own.
+Jetlink.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/

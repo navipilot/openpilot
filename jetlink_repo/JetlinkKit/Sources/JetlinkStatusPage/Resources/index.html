@@ -1,0 +1,1517 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#0c0e11" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f3f4f6" media="(prefers-color-scheme: light)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Jetlink">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230c0e11'/%3E%3Ccircle cx='9' cy='16' r='4' fill='%233d9bff'/%3E%3Ccircle cx='23' cy='16' r='4' fill='%2332d25a'/%3E%3Cpath d='M13 16h6' stroke='%23e9ebee' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' fill='%230c0e11'/%3E%3Ccircle cx='52' cy='90' r='22' fill='%233d9bff'/%3E%3Ccircle cx='128' cy='90' r='22' fill='%2332d25a'/%3E%3Cpath d='M78 90h24' stroke='%23e9ebee' stroke-width='12' stroke-linecap='round'/%3E%3C/svg%3E">
+<title>Jetlink</title>
+<style>
+:root {
+  --bg: #0c0e11; --panel: #15181d; --raise: #1f242b; --line: #2a3038; --text: #e9ebee; --dim: #9ba3ad; --faint: #6f7883;
+  --good: #32d25a; --warn: #ff9f0a; --bad: #ff453a; --info: #3d9bff; --meter: #3987e5; --band: rgba(233, 235, 238, .13);
+  --s-queue: #d95926; --s-gpu: #3987e5; --s-other: #199e70; --s-send: #c98500;
+  --shade: rgba(0, 0, 0, .55); --glass: rgba(12, 14, 17, .84); --pick: #39414c;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  --round: ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --tabbar: 58px;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f3f4f6; --panel: #ffffff; --raise: #eceef1; --line: #dde1e6; --text: #14171b; --dim: #59616c; --faint: #858d97;
+    --good: #18923a; --warn: #b86200; --bad: #d70015; --info: #0a6fd6; --meter: #2f7bd8; --band: rgba(20, 23, 27, .1);
+    --shade: rgba(20, 23, 27, .35); --glass: rgba(243, 244, 246, .86); --pick: #ffffff;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); }
+body {
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-variant-numeric: tabular-nums; -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent;
+}
+[hidden] { display: none !important; }
+button, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; }
+a { color: var(--info); }
+.vh { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+
+/* A phone: a top bar, the content and a tab bar in thumb reach. A desktop: a
+   sidebar. The tab bar is not inside the top bar, whose backdrop filter
+   would pin a fixed child to it rather than to the screen. */
+.top {
+  position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: max(10px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 10px max(16px, env(safe-area-inset-left));
+  background: var(--glass); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.brand svg { flex: none; }
+.brand div { min-width: 0; }
+.brand b { display: block; font-size: 17px; letter-spacing: -0.01em; }
+.brand span { display: block; color: var(--dim); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.live { display: flex; align-items: center; gap: 7px; color: var(--dim); font-size: 13px; flex: none; }
+.live i { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+.live.on i { background: var(--good); } .live.lost i { background: var(--warn); }
+main {
+  padding: 16px max(16px, env(safe-area-inset-right)) calc(var(--tabbar) + 28px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  max-width: 1080px; margin: 0 auto;
+}
+.tab { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); align-content: start; }
+nav.tabs {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; display: grid; grid-template-columns: repeat(4, 1fr);
+  padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  background: var(--glass); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border-top: 1px solid var(--line);
+}
+nav.tabs button {
+  height: var(--tabbar); background: none; border: 0; color: var(--faint); font-size: 11px; font-weight: 500; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 3px; cursor: pointer;
+}
+nav.tabs svg { width: 24px; height: 24px; }
+nav.tabs button[aria-current="page"] { color: var(--info); }
+
+@media (min-width: 900px) {
+  .app { display: grid; grid-template-columns: 236px minmax(0, 1fr); grid-template-rows: auto 1fr; min-height: 100vh; }
+  .top { grid-column: 1; grid-row: 1; flex-direction: column; align-items: flex-start; gap: 10px; padding: 24px 18px 18px;
+    background: var(--panel); border: 0; border-right: 1px solid var(--line); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  nav.tabs { grid-column: 1; grid-row: 2; position: sticky; top: 0; align-self: stretch; display: flex; flex-direction: column; gap: 2px;
+    padding: 4px 12px; background: var(--panel); border: 0; border-right: 1px solid var(--line); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  nav.tabs button { height: 40px; flex-direction: row; justify-content: flex-start; gap: 12px; padding: 0 10px; border-radius: 9px;
+    font-size: 15px; color: var(--dim); }
+  nav.tabs svg { width: 20px; height: 20px; }
+  nav.tabs button:hover { background: var(--raise); color: var(--text); }
+  nav.tabs button[aria-current="page"] { background: var(--raise); color: var(--text); }
+  main { grid-column: 2; grid-row: 1 / span 2; padding: 28px 32px 48px; margin: 0; max-width: 1120px; width: 100%; }
+  .tab { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+  .wide { grid-column: 1 / -1; }
+}
+
+/* panels */
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 16px; min-width: 0; }
+h2 { margin: 0 0 12px; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+h2 small { min-width: 0; font-size: 13px; font-weight: 400; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 11px 0; border-top: 1px solid var(--line); min-height: 48px; }
+.row:first-of-type { border-top: 0; padding-top: 2px; }
+.k { min-width: 0; }
+.k b { display: block; font-weight: 500; }
+.v { text-align: right; min-width: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex: none; max-width: 62%; }
+.sub { color: var(--dim); font-size: 13px; overflow-wrap: anywhere; }
+.mono { font-family: var(--mono); font-size: 12.5px; overflow-wrap: anywhere; }
+.note { color: var(--dim); font-size: 14px; margin: 10px 0 0; }
+.note.first { margin-top: 0; }
+.empty { color: var(--dim); font-size: 14px; padding: 4px 0; }
+.badge { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 99px; font-size: 13px; font-weight: 600; white-space: nowrap;
+  --tone: var(--dim); color: var(--tone); background: color-mix(in srgb, var(--tone) 15%, transparent); }
+.badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--tone); }
+.t-good { --tone: var(--good); } .t-warn { --tone: var(--warn); } .t-bad { --tone: var(--bad); } .t-info { --tone: var(--info); }
+.progress { width: 100%; height: 5px; border-radius: 3px; background: var(--raise); overflow: hidden; }
+.progress i { display: block; height: 100%; width: 0; background: var(--info); transition: width .25s; }
+
+/* buttons */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 16px; border-radius: 11px;
+  border: 1px solid var(--line); background: var(--raise); color: var(--text); font-size: 15px; font-weight: 500; cursor: pointer; text-decoration: none; }
+.btn.primary { background: var(--info); border-color: transparent; color: #fff; }
+.btn.danger { color: var(--bad); }
+.btn.danger.primary { background: var(--bad); color: #fff; }
+.btn.small { min-height: 34px; padding: 0 12px; font-size: 14px; border-radius: 9px; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.linkrow { width: 100%; background: none; border: 0; border-top: 1px solid var(--line); text-align: left; cursor: pointer; color: var(--text); }
+.linkrow:first-of-type { border-top: 0; }
+.linkrow:disabled { cursor: default; opacity: 1; }
+.linkrow:disabled .chev { display: none; }
+.chev { color: var(--faint); font-size: 20px; line-height: 1; }
+.linkrow .v { margin-left: auto; }
+.linkrow .chev { flex: none; margin-left: -4px; }
+.linkrow.danger b { color: var(--bad); }
+.why { color: var(--warn); font-size: 13px; margin-top: 8px; }
+
+/* The headline, and the chain from the comma to the model: down the screen
+   on a phone, across it on anything wider. */
+.hero { padding: 18px 16px; }
+.hero h1 { margin: 0; font: 600 26px/1.15 var(--round); letter-spacing: -0.015em; color: var(--tone, var(--text)); }
+.hero > p { margin: 6px 0 0; color: var(--dim); font-size: 15px; }
+.hero .progress { margin-top: 12px; }
+.chain { list-style: none; margin: 18px 0 0; padding: 0; display: grid; gap: 14px; }
+.step { position: relative; padding-left: 26px; min-width: 0; --dot: var(--faint); --wire: var(--line); }
+.step::before { content: ""; position: absolute; left: 0; top: 5px; width: 12px; height: 12px; border-radius: 50%; background: var(--dot);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--dot) 18%, transparent); }
+.step:not(:last-child)::after { content: ""; position: absolute; left: 5px; top: 23px; bottom: -12px; width: 0; border-left: 2px dashed var(--wire); }
+.step b { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.step span { display: block; color: var(--dim); font-size: 13px; }
+.step.on { --dot: var(--good); } .step.warn { --dot: var(--warn); } .step.bad { --dot: var(--bad); } .step.busy { --dot: var(--info); }
+.step.w-on { --wire: var(--good); } .step.w-warn { --wire: var(--warn); } .step.w-busy { --wire: var(--info); }
+.step.w-on::after, .step.w-warn::after, .step.w-busy::after { border-left-style: solid; }
+/* frames flowing from the comma: a light running down the wire */
+.step.flow::after { border-left-color: transparent; background: linear-gradient(180deg, var(--good) 0 30%, color-mix(in srgb, var(--good) 35%, transparent) 50%, var(--good) 70% 100%) 0 0 / 2px 200%;
+  width: 2px; animation: down 1.1s linear infinite; }
+@keyframes down { from { background-position: 0 100%; } to { background-position: 0 -100%; } }
+@media (min-width: 640px) {
+  .chain { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 22px; }
+  .step { padding: 24px 14px 0 0; }
+  .step::before { top: 0; }
+  .step:not(:last-child)::after { left: 22px; right: 10px; top: 5px; bottom: auto; width: auto; height: 0; border-left: 0; border-top: 2px dashed var(--wire); }
+  .step.w-on::after, .step.w-warn::after, .step.w-busy::after { border-top-style: solid; }
+  .step.flow::after { border-top-color: transparent; height: 2px; width: auto; background-image: linear-gradient(90deg, var(--good) 0 30%, color-mix(in srgb, var(--good) 35%, transparent) 50%, var(--good) 70% 100%);
+    background-size: 200% 2px; animation-name: across; }
+  @keyframes across { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+}
+@media (prefers-reduced-motion: reduce) { .step.flow::after { animation: none; } .progress i, .bar i { transition: none; } }
+
+/* frame budget */
+.headline { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 8px 12px; margin-bottom: 14px; }
+.headline b { display: block; font: 600 24px/1.2 var(--round); letter-spacing: -0.01em; white-space: nowrap; }
+.headline .right { margin-left: auto; text-align: right; font-size: 13px; }
+.stagebar { position: relative; height: 52px; margin: 0 2px; }
+.stagebar div { position: absolute; }
+.stagebar .track, .stagebar .seg { top: 16px; height: 16px; }
+.stagebar .track { left: 0; background: var(--raise); border-radius: 4px; }
+.stagebar .mark { top: 12px; height: 24px; width: 1px; background: var(--dim); }
+.stagebar .mark.p99 { width: 2px; background: var(--text); }
+.stagebar .lbl, .stagebar .tick { font-size: 11px; transform: translateX(-50%); white-space: nowrap; }
+.stagebar .lbl { top: -1px; color: var(--dim); }
+.stagebar .tick { top: 36px; color: var(--faint); }
+.stagebar .tick.budget { color: var(--text); font-weight: 600; }
+.legend, .facts { display: flex; flex-wrap: wrap; font-size: 13px; color: var(--dim); }
+.legend { gap: 6px 16px; margin: 4px 0 14px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 10px; height: 10px; border-radius: 2px; }
+.legend b, .facts b { color: var(--text); font-weight: 500; }
+.facts { gap: 4px 18px; margin-top: 10px; }
+.facts b.bad { color: var(--bad); }
+canvas { display: block; width: 100%; height: 150px; }
+
+/* hardware */
+.summary { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; }
+.stat { background: var(--raise); border-radius: 11px; padding: 9px 11px; min-width: 0; }
+.stat span { display: block; color: var(--dim); font-size: 12px; }
+.stat b { display: block; font: 600 17px/1.3 var(--round); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat.warn b { color: var(--warn); } .stat.bad b { color: var(--bad); }
+.meter { margin: 8px 0 12px; }
+.meter .top2 { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; margin-bottom: 5px; }
+.meter .top2 span:first-child { color: var(--dim); }
+.bar { height: 6px; border-radius: 3px; background: var(--raise); overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; background: var(--meter); transition: width .4s; }
+.bar i.warn { background: var(--warn); } .bar i.bad { background: var(--bad); }
+.label { color: var(--dim); font-size: 13px; margin-top: 4px; }
+.cores { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px 12px; margin: 6px 0 14px; }
+.core { font-size: 12px; }
+.core .top2 { display: flex; justify-content: space-between; color: var(--dim); margin-bottom: 4px; }
+.core .top2 b { color: var(--text); font-weight: 500; }
+.core.off { opacity: .45; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 12px; }
+.chip { background: var(--raise); border-radius: 8px; padding: 5px 10px; font-size: 13px; }
+.chip span { color: var(--dim); margin-right: 5px; }
+.chip b { font-weight: 500; }
+.chip.warn b { color: var(--warn); } .chip.bad b { color: var(--bad); }
+details > summary { cursor: pointer; list-style: none; color: var(--info); font-size: 14px; margin-top: 12px; min-height: 32px; display: flex; align-items: center; }
+details > summary::-webkit-details-marker { display: none; }
+details.more > summary::after { content: "Show details"; }
+details.more[open] > summary::after { content: "Hide details"; }
+details.log > summary { color: var(--text); margin: 0; font-size: 17px; font-weight: 600; justify-content: space-between; }
+details.log > summary::after { content: "Show"; color: var(--info); font-size: 14px; font-weight: 400; }
+details.log[open] > summary::after { content: "Hide"; }
+pre { margin: 10px 0 0; max-height: 60vh; overflow: auto; font: 11.5px/1.5 var(--mono); color: var(--dim); white-space: pre-wrap; overflow-wrap: anywhere;
+  background: var(--raise); border-radius: 10px; padding: 10px 12px; }
+.tools { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 12px; color: var(--faint); font-size: 12px; }
+
+/* settings */
+.segmented { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: var(--raise); border-radius: 11px; padding: 3px; gap: 3px; margin-top: 10px; }
+.segmented button { min-height: 38px; border: 0; border-radius: 9px; background: none; color: var(--dim); font-size: 14px; font-weight: 500; cursor: pointer; }
+.segmented button[aria-pressed="true"] { background: var(--pick); color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, .25); }
+.segmented button:disabled { cursor: not-allowed; }
+.setting { padding: 12px 0; border-top: 1px solid var(--line); }
+.setting:first-of-type { border-top: 0; padding-top: 0; }
+.setting .line { display: flex; justify-content: space-between; align-items: center; gap: 14px; }
+.setting .desc { color: var(--dim); font-size: 13px; margin-top: 6px; }
+.switch { position: relative; width: 51px; height: 31px; flex: none; }
+.switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.switch i { position: absolute; inset: 0; border-radius: 99px; background: var(--raise); border: 1px solid var(--line); transition: background .2s; pointer-events: none; }
+.switch i::after { content: ""; position: absolute; top: 2px; left: 2px; width: 25px; height: 25px; border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .35); transition: transform .2s; }
+.switch input:checked + i { background: var(--good); border-color: transparent; }
+.switch input:checked + i::after { transform: translateX(20px); }
+.switch input:focus-visible + i { outline: 2px solid var(--info); outline-offset: 2px; }
+.switch input:disabled { cursor: not-allowed; } .switch input:disabled + i { opacity: .5; }
+.applybar { position: fixed; z-index: 4; left: 12px; right: 12px; bottom: calc(var(--tabbar) + 10px + env(safe-area-inset-bottom));
+  display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 14px; border-radius: 14px;
+  background: var(--panel); border: 1px solid var(--line); box-shadow: 0 8px 30px var(--shade); max-width: 640px; margin: 0 auto; }
+.applybar .sub { flex: 1; }
+body.applying main { padding-bottom: calc(var(--tabbar) + 110px + env(safe-area-inset-bottom)); }
+@media (min-width: 900px) { .applybar { left: 268px; right: 32px; bottom: 24px; } }
+
+/* a settings or update run */
+.task { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 10px; }
+.task pre { max-height: 220px; }
+
+/* sign-in */
+.login { min-height: 100vh; display: grid; place-items: center; padding: 24px max(16px, env(safe-area-inset-right)) 24px max(16px, env(safe-area-inset-left)); }
+.login form { width: 100%; max-width: 380px; }
+.login .card { padding: 26px 20px 22px; }
+.login h1 { font: 600 24px/1.2 var(--round); margin: 16px 0 4px; letter-spacing: -0.015em; }
+.login .host { color: var(--dim); margin: 0 0 22px; font-size: 14px; }
+.field { display: block; margin-bottom: 14px; }
+.field span { display: block; font-size: 13px; color: var(--dim); margin-bottom: 6px; }
+.field input { width: 100%; min-height: 48px; padding: 0 14px; border-radius: 11px; border: 1px solid var(--line); background: var(--raise); font-size: 17px; }
+.field input:focus { outline: 2px solid var(--info); outline-offset: 0; border-color: transparent; }
+.error { color: var(--bad); font-size: 14px; margin: 0 0 10px; }
+.error:empty { display: none; }
+.login .btn { width: 100%; }
+.login .help { margin: 18px 0 0; text-align: center; font-size: 13px; color: var(--dim); }
+code { font-family: var(--mono); font-size: .92em; background: var(--raise); padding: 1px 5px; border-radius: 5px; overflow-wrap: anywhere; }
+
+/* sheets: up from the bottom on a phone, a dialog on anything wider */
+dialog { border: 0; padding: 0; background: transparent; color: var(--text); max-width: none; max-height: none; width: 100%; margin: 0; }
+dialog::backdrop { background: var(--shade); }
+dialog[open] { position: fixed; inset: auto 0 0 0; }
+.sheet { background: var(--panel); border-radius: 20px 20px 0 0; padding: 10px 16px calc(18px + env(safe-area-inset-bottom)); max-height: 88vh; overflow: auto;
+  border: 1px solid var(--line); border-bottom: 0; animation: rise .22s ease-out; }
+.sheet::before { content: ""; display: block; width: 38px; height: 5px; border-radius: 3px; background: var(--line); margin: 0 auto 14px; }
+.sheet h3 { margin: 0 0 8px; font-size: 19px; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.sheet .body { color: var(--dim); font-size: 15px; }
+.sheet .body p { margin: 0 0 10px; }
+.sheet .error { margin-top: 6px; }
+.sheet .actions { display: grid; gap: 8px; margin-top: 16px; }
+.sheet .actions .btn { width: 100%; min-height: 48px; }
+@keyframes rise { from { transform: translateY(30px); opacity: 0; } }
+@media (min-width: 640px) {
+  dialog[open] { inset: 0; display: grid; place-items: center; height: 100%; }
+  .sheet { width: min(460px, calc(100vw - 32px)); border-radius: 18px; border: 1px solid var(--line); padding: 20px; animation: none; }
+  .sheet::before { display: none; }
+  .sheet .actions { display: flex; flex-wrap: wrap; justify-content: flex-end; }
+  .sheet .actions .btn { width: auto; min-height: 42px; }
+}
+@media (prefers-reduced-motion: reduce) { .sheet { animation: none; } }
+.toast { position: fixed; z-index: 20; left: 50%; bottom: calc(var(--tabbar) + 18px + env(safe-area-inset-bottom)); transform: translate(-50%, 20px);
+  background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 12px; font-size: 14px; font-weight: 500; opacity: 0;
+  pointer-events: none; transition: opacity .2s, transform .2s; max-width: calc(100vw - 32px); width: max-content; }
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+@media (min-width: 900px) { .toast { left: calc(50% + 118px); bottom: 28px; } }
+</style>
+</head>
+<body>
+
+<div class="login" id="login" hidden>
+  <form id="login-form">
+    <div class="card">
+      <svg width="44" height="44" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="var(--raise)"/><circle cx="9" cy="16" r="4" fill="var(--info)"/><circle cx="23" cy="16" r="4" fill="var(--good)"/><path d="M13 16h6" stroke="var(--text)" stroke-width="2.5" stroke-linecap="round"/></svg>
+      <h1>Sign in to Jetlink</h1>
+      <p class="host" id="login-host"></p>
+      <input class="vh" type="text" name="username" autocomplete="username" value="jetlink" tabindex="-1" aria-hidden="true">
+      <label class="field"><span>Password</span>
+        <input id="login-pw" type="password" name="password" autocomplete="current-password" required autocapitalize="off" spellcheck="false" enterkeyhint="go"></label>
+      <div class="error" id="login-err" role="alert"></div>
+      <button class="btn primary" id="login-go" type="submit">Sign in</button>
+      <p class="help">Forgot it? On the Jetson, <code>sudo jetlink password</code> sets a new one.</p>
+    </div>
+  </form>
+</div>
+
+<div class="app" id="app" hidden>
+  <header class="top">
+    <div class="brand">
+      <svg width="34" height="34" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="var(--raise)"/><circle cx="9" cy="16" r="4" fill="var(--info)"/><circle cx="23" cy="16" r="4" fill="var(--good)"/><path d="M13 16h6" stroke="var(--text)" stroke-width="2.5" stroke-linecap="round"/></svg>
+      <div><b>Jetlink</b><span id="host">&nbsp;</span></div>
+    </div>
+    <div class="live" id="live"><i></i><span>Connecting</span></div>
+  </header>
+  <nav class="tabs" id="tabs" aria-label="Sections">
+    <button type="button" data-tab="status"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l2.5-6 5 12 2.5-6h4"/></svg>Status</button>
+    <button type="button" data-tab="models"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>Models</button>
+    <button type="button" data-tab="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>Settings</button>
+    <button type="button" data-tab="system"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg>System</button>
+  </nav>
+
+  <main>
+    <!-- Status -->
+    <section class="tab" id="tab-status" aria-label="Status">
+      <div class="card hero wide" id="hero">
+        <h1 id="hero-t">Connecting</h1>
+        <p id="hero-s"></p>
+        <div class="progress" id="hero-p" hidden><i></i></div>
+        <ol class="chain" id="chain"></ol>
+      </div>
+
+      <section class="card wide" id="budget" hidden>
+        <h2>Frame budget <small>50 ms a frame at 20 Hz</small></h2>
+        <div class="headline">
+          <div><b id="headroom"></b><span class="sub" id="room"></span></div>
+          <div class="right"><div id="avg"></div><div class="sub" id="p99max"></div></div>
+        </div>
+        <div class="stagebar" id="stagebar"></div>
+        <div class="legend" id="legend"></div>
+        <canvas id="chart" aria-label="Frame time over the last two minutes"></canvas>
+        <div class="facts">
+          <span>Frames <b id="frames">0</b></span><span>Rate <b id="fps">0</b> per second</span>
+          <span>Slow <b id="slow">0</b> <span class="sub">over 60 ms in the last second</span></span>
+        </div>
+      </section>
+
+      <section class="card wide" id="hw" hidden>
+        <h2><span id="hw-title">Jetson</span> <small id="hw-sub"></small></h2>
+        <div class="summary" id="hw-summary"></div>
+        <details class="more" id="hw-more">
+          <summary></summary>
+          <div id="gpu"></div>
+          <div class="label">CPU <span id="cpu-sum"></span></div>
+          <div class="cores" id="cores"></div>
+          <div id="mem"></div>
+          <div class="label" id="temps-l">Temperatures</div>
+          <div class="chips" id="temps"></div>
+          <div class="label" id="power-l">Power</div>
+          <div class="chips" id="power"></div>
+          <div id="disk"></div>
+          <div class="facts" id="sys"></div>
+        </details>
+      </section>
+    </section>
+
+    <!-- Models -->
+    <section class="tab" id="tab-models" aria-label="Models" hidden>
+      <section class="card">
+        <h2>On this computer <small id="models-disk"></small></h2>
+        <div class="bar" id="disk-bar" hidden><i></i></div>
+        <div id="models" style="margin-top:6px"><div class="empty">Loading</div></div>
+      </section>
+      <section class="card">
+        <h2>Model library <small id="lib-at"></small></h2>
+        <div id="library"></div>
+      </section>
+      <section class="card wide">
+        <h2>Speed test</h2>
+        <div id="bench"></div>
+      </section>
+    </section>
+
+    <!-- Settings -->
+    <section class="tab" id="tab-settings" aria-label="Settings" hidden>
+      <div class="card wide" id="settings-off" hidden></div>
+      <section class="card" id="set-power" hidden>
+        <h2>Power</h2>
+        <div class="setting">
+          <div class="line"><b>When the car is off</b></div>
+          <div class="segmented" id="seg-power" role="group" aria-label="When the car is off">
+            <button type="button" data-v="always" aria-pressed="false">Always on</button>
+            <button type="button" data-v="switched" aria-pressed="false">Switched</button>
+          </div>
+          <div class="desc" id="power-desc"></div>
+        </div>
+        <div class="setting" id="set-poweroff">
+          <div class="line"><b>The comma can turn it off</b>
+            <label class="switch"><input type="checkbox" id="sw-poweroff" aria-label="The comma can turn the Jetson off"><i></i></label></div>
+          <div class="desc">When the comma shuts down to protect the car battery (low battery, or parked 30 hours), the Jetson turns off too and stays off until its power is reconnected.</div>
+        </div>
+      </section>
+      <section class="card" id="set-desktop" hidden>
+        <h2>Desktop</h2>
+        <div class="setting">
+          <div class="line"><b>Start the desktop</b>
+            <label class="switch"><input type="checkbox" id="sw-desktop" aria-label="Start the desktop"><i></i></label></div>
+          <div class="desc">Jetlink does not need it. Off leaves more memory for the models and starts faster, from the next restart.</div>
+        </div>
+      </section>
+      <section class="card" id="set-autostart" hidden>
+        <h2>Start-up</h2>
+        <div class="setting">
+          <div class="line"><b>Start Jetlink with this computer</b>
+            <label class="switch"><input type="checkbox" id="sw-autostart" aria-label="Start Jetlink with this computer"><i></i></label></div>
+          <div class="desc">Off: start it yourself with <code>jetlink start</code>.</div>
+        </div>
+      </section>
+      <section class="card" id="set-web">
+        <h2>Web page</h2>
+        <div class="row"><span class="k">Address</span><span class="v"><span class="mono" id="web-addr"></span></span></div>
+        <div class="row"><span class="k">Port</span><span class="v"><span id="web-port"></span></span></div>
+        <p class="note">The page uses plain HTTP, so use it on networks you trust, like the comma's hotspot or your home Wi-Fi. <code>sudo jetlink setup</code> changes the port.</p>
+      </section>
+      <section class="card" id="set-signin" hidden>
+        <h2>Sign-in</h2>
+        <button type="button" class="row linkrow" id="pw-change"><span class="k"><b>Change password</b><span class="sub">Signs out your other devices</span></span><span class="chev" aria-hidden="true">›</span></button>
+        <button type="button" class="row linkrow" id="pw-others"><span class="k"><b>Sign out other devices</b><span class="sub">Every phone and computer but this one</span></span><span class="chev" aria-hidden="true">›</span></button>
+        <button type="button" class="row linkrow" id="pw-out"><span class="k"><b>Sign out</b><span class="sub">On this device</span></span><span class="chev" aria-hidden="true">›</span></button>
+      </section>
+    </section>
+
+    <!-- System -->
+    <section class="tab" id="tab-system" aria-label="System" hidden>
+      <section class="card">
+        <h2>Jetlink <small id="ver-follows"></small></h2>
+        <div class="row"><span class="k">Version</span><span class="v"><span id="ver-run">–</span><span class="sub mono" id="ver-commit"></span></span></div>
+        <div id="ver-check"></div>
+        <div class="task" id="task" hidden>
+          <div class="row"><span class="k"><b id="task-t"></b><span class="sub" id="task-s"></span></span><span class="v"><span class="badge" id="task-b"></span></span></div>
+          <pre id="task-log"></pre>
+        </div>
+      </section>
+      <section class="card" id="sys-awake" hidden>
+        <h2>Keep awake</h2>
+        <div id="awake"></div>
+      </section>
+      <section class="card">
+        <h2>Restart and power</h2>
+        <div id="sys-power">
+          <button type="button" class="row linkrow" data-act="restart"><span class="k"><b>Restart the server</b><span class="sub">About 10 seconds</span></span><span class="chev" aria-hidden="true">›</span></button>
+          <button type="button" class="row linkrow" data-act="reboot"><span class="k"><b id="act-reboot">Restart the Jetson</b><span class="sub">About half a minute</span></span><span class="chev" aria-hidden="true">›</span></button>
+          <button type="button" class="row linkrow danger" data-act="poweroff"><span class="k"><b id="act-poweroff">Turn off the Jetson</b><span class="sub" id="act-poweroff-s">It stays off until its power is reconnected</span></span><span class="chev" aria-hidden="true">›</span></button>
+        </div>
+        <div class="why" id="power-why" hidden></div>
+      </section>
+      <section class="card">
+        <h2>This computer</h2>
+        <div id="about"></div>
+      </section>
+      <details class="card wide log" id="logs">
+        <summary>Server log</summary>
+        <div class="tools"><span id="log-at"></span><span><a class="btn small" href="logs" download="jetlink-server.log">Download</a> <button class="btn small" id="log-r" type="button">Refresh</button></span></div>
+        <pre id="log"></pre>
+      </details>
+    </section>
+  </main>
+
+  <div class="applybar" id="applybar" hidden>
+    <span class="sub" id="apply-s"></span>
+    <button type="button" class="btn small" id="apply-x">Discard</button>
+    <button type="button" class="btn small primary" id="apply-go">Apply</button>
+  </div>
+</div>
+
+<dialog id="sheet" aria-labelledby="sheet-t"><div class="sheet"><h3 id="sheet-t"></h3><div class="body" id="sheet-b"></div><div class="error" id="sheet-e" role="alert"></div><div class="actions" id="sheet-a"></div></div></dialog>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+'use strict';
+const BUDGET = 50, TIGHT = 10, WINDOW = 120, STALE = 5, DRIVING = 10;
+const STAGES = [['queue', 'Input'], ['gpu', 'Model'], ['other', 'Other'], ['send', 'Send']];
+const STEP = { upload: 'Receiving the model', patch: 'Preparing the model', parse: 'Reading the model',
+  build: 'Building the engine', save: 'Saving', load: 'Loading' };
+const MEDIUM = { usb3: 'USB 3', usb2: 'USB 2', usb1: 'USB 1', usb: 'USB', tcp: 'TCP' };
+const RUNTIME = { trt: 'TensorRT', ort: 'onnxruntime' };
+const ZONE = { cpu: 'CPU', gpu: 'GPU', tj: 'Tj', soc0: 'SoC 0', soc1: 'SoC 1', soc2: 'SoC 2' };
+const RAIL = { VDD_IN: 'Board', VDD_CPU_GPU_CV: 'CPU+GPU+CV', VDD_SOC: 'SoC' };
+const TABS = ['status', 'models', 'settings', 'system'];
+const PARKED_ONLY = 'Parked only: the car is driving on the big model.';
+
+const $ = id => document.getElementById(id);
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const ms = v => (v == null ? '–' : v.toFixed(1) + ' ms');
+const gb = b => (b / 1e9).toFixed(b >= 1e11 ? 0 : 1);
+const size = b => !b ? '' : b >= 1e9 ? gb(b) + ' GB' : Math.max(1, Math.round(b / 1e6)) + ' MB';
+const clock = t => new Date(t * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+const S = { history: [], statsAt: 0, down: false, downloads: {}, tab: 'status', draft: {}, auth: 'none', signedIn: false };
+
+function badge(el, text, tone) { el.textContent = text; el.className = 'badge' + (tone ? ' t-' + tone : ''); }
+
+// Many events can land at once (a page opening mid-drive gets two minutes of
+// stats); each panel draws once per animation frame at most.
+const dirty = new Set();
+function mark(...panels) {
+  if (!dirty.size) requestAnimationFrame(() => {
+    const now = [...dirty];
+    dirty.clear();
+    for (const p of now) DRAW[p]();
+  });
+  panels.forEach(p => dirty.add(p));
+}
+
+// -- the server ----------------------------------------------------------------
+
+// Controls need a password file and a sign-in; without a file the page is
+// the read-only one it always was.
+const controls = () => S.auth === 'required' && S.signedIn;
+
+async function api(method, path, body) {
+  const options = { method, cache: 'no-store', credentials: 'same-origin', headers: {} };
+  if (method !== 'GET') {
+    options.headers['Content-Type'] = 'application/json';
+    options.headers['X-Jetlink'] = '1';
+    options.body = JSON.stringify(body || {});
+  }
+  const r = await fetch(path, options);
+  let data = {};
+  try { data = await r.json(); } catch (_) { /* not JSON */ }
+  if (r.status === 401 && path !== 'api/login' && path !== 'api/password') signedOut();
+  if (!r.ok) {
+    const e = new Error(data.error || r.status + ' ' + r.statusText);
+    e.status = r.status; e.data = data;
+    throw e;
+  }
+  return data;
+}
+
+const command = object => api('POST', 'api/command', object);
+
+// -- status --------------------------------------------------------------------
+
+function nameFor(sha) {
+  if (!sha) return null;
+  const m = S.inventory && S.inventory.models.find(x => x.sha256 === sha);
+  if (m && m.name) return m.name;
+  const c = S.catalog && S.catalog.models.find(x => x.sha256 === sha);
+  return c ? c.name : null;
+}
+const label = sha => nameFor(sha) || (sha ? sha.slice(0, 12) : 'No model');
+const linked = () => !!S.link && S.link.state === 'connected';
+// Fresh while stats keep coming. The hardware sample, a second old at most,
+// tells a page that just opened whether the last stats it was given are old.
+function statsFresh(limit = STALE) {
+  const s = S.stats;
+  return !!s && Date.now() - S.statsAt < limit * 1000 && !(S.hw && S.hw.t - s.t > limit);
+}
+// What the server calls driving, and refuses heavy work in.
+const driving = () => !S.down && linked() && statsFresh(DRIVING);
+const machine = () => S.host && S.host.jetson === false ? 'computer' : 'Jetson';
+const preparing = e => !!e && (e.state === 'building' || e.state === 'loading');
+const runtimeName = srv => srv && srv.backend ? [RUNTIME[srv.backend] || srv.backend, (srv.runtime_version || '').split('+')[0]].filter(Boolean).join(' ') : '';
+const memTone = frac => frac > 0.92 ? 'bad' : frac > 0.8 ? 'warn' : '';
+
+// The headline: one sentence that says whether the big model is working.
+function situation() {
+  const srv = S.server, e = S.engine || {}, l = S.link;
+  if (S.down) return srv ? { tone: 'bad', t: 'Not answering', s: 'This page reconnects when the server is back.' } : { t: 'Connecting' };
+  if (!srv) return { t: 'Connecting' };
+  if (srv.state === 'stopping') return { tone: 'warn', t: 'Restarting', s: 'The server is stopping. This page reconnects when it is back.' };
+  const name = label(e.sha256);
+  if (linked() && statsFresh()) {
+    const s = S.stats, room = BUDGET - s.served_ms.p99;
+    return room < 0
+      ? { tone: 'warn', t: 'Driving, over budget', s: `Frames took up to ${s.served_ms.p99.toFixed(1)} ms, ${(-room).toFixed(1)} ms over the 50 ms budget.` }
+      : { tone: 'good', t: 'Driving on the big model', s: `${s.served_ms.mean.toFixed(1)} ms a frame on average, ${room.toFixed(1)} ms to spare at the slowest.` };
+  }
+  if (preparing(e)) {
+    return { tone: 'info', t: (e.state === 'loading' ? 'Loading ' : 'Preparing ') + name, s: STEP[e.stage] || e.msg || '', p: e.frac || 0 };
+  }
+  if (e.state === 'failed') return { tone: 'bad', t: 'The model failed to prepare', s: e.detail || '' };
+  if (l && l.state === 'connected') {
+    if (e.state === 'ready') return { tone: 'good', t: 'Ready, comma connected', s: 'The big model takes over when the car drives.' };
+    return { tone: 'info', t: 'Comma connected', s: 'It sends its model, and this ' + machine() + ' prepares it.' };
+  }
+  if (e.state === 'ready') return { tone: 'good', t: 'Ready for the comma', s: 'Until the comma connects, it drives on its small model.' };
+  return { t: 'Waiting for the comma', s: 'Until it connects, the comma drives on its small model.' };
+}
+
+function drawStatus() {
+  drawLive();
+  if (S.tab !== 'status') return;
+  const now = situation();
+  $('hero').className = 'card hero wide' + (now.tone ? ' t-' + now.tone : '');
+  $('hero-t').textContent = now.t;
+  $('hero-s').textContent = now.s || '';
+  $('hero-p').hidden = now.p == null;
+  if (now.p != null) $('hero-p').firstChild.style.width = (now.p * 100).toFixed(1) + '%';
+  drawChain();
+}
+
+// comma, this computer, the model: lit as far as it works, the wire from the
+// comma running while frames come
+function drawChain() {
+  const l = S.link, e = S.engine || {}, srv = S.server || {};
+  const up = !S.down && S.server && srv.state !== 'stopping';
+  const conn = up && linked();
+  const m = conn ? (l.medium || (l.peer === 'usb' ? 'usb' : 'tcp')) : null;
+  const slow = m === 'usb2' || m === 'usb1';
+  const busy = preparing(e);
+  const step = (cls, title, text) => `<li class="step ${cls}"><b>${esc(title)}</b><span>${esc(text)}</span></li>`;
+  const comma = !up ? '' : conn ? (slow ? 'warn w-warn' : 'on w-on') + (driving() ? ' flow' : '') : '';
+  const commaText = conn ? 'Connected over ' + (MEDIUM[m] || m) + (slow ? ', about 10 ms slower a frame than USB 3' : '')
+    : l && l.state === 'disconnected' ? 'Disconnected' + (l.detail ? ': ' + l.detail : '') : 'Not connected';
+  const runtime = runtimeName(srv);
+  const host = up ? 'on' + (e.state === 'ready' ? ' w-on' : busy ? ' w-busy' : '') : S.down && S.server ? 'bad' : '';
+  const hostText = up ? 'Serving' + (runtime ? ' with ' + runtime : '') : S.down && S.server ? 'Not answering' : 'Connecting';
+  const model = !up ? '' : e.state === 'ready' ? 'on' : busy ? 'busy' : e.state === 'failed' ? 'bad' : '';
+  const modelText = e.state === 'ready' ? (S.inventory && S.inventory.loaded === e.sha256 ? 'Loaded' : 'Ready')
+    : busy ? (e.state === 'loading' ? 'Loading, ' : 'Preparing, ') + Math.round((e.frac || 0) * 100) + '%'
+    : e.state === 'failed' ? 'Failed' : e.sha256 ? 'Not loaded' : 'The comma sends one when it connects';
+  const html = step(comma, 'comma', commaText) +
+    step(host, S.host && S.host.hostname ? S.host.hostname : machine(), hostText) +
+    step(model, e.sha256 ? label(e.sha256) : 'No model yet', modelText);
+  // rebuilt only when it changed: a new element restarts the wire's light
+  if (html !== S.chain) { $('chain').innerHTML = html; S.chain = html; }
+}
+
+function drawLive() {
+  const el = $('live'), open = source && source.readyState === 1;
+  el.className = 'live ' + (open ? 'on' : S.down ? 'lost' : '');
+  el.lastChild.textContent = open ? 'Live' : S.down ? 'Reconnecting' : 'Connecting';
+}
+
+// -- frame budget --------------------------------------------------------------
+
+function addStats(s) {
+  const h = S.history;
+  if (h.length && s.t <= h[h.length - 1].t) return;
+  h.push(s);
+  while (h.length && s.t - h[0].t > WINDOW) h.shift();
+}
+
+function drawBudget() {
+  const s = S.stats;
+  const show = !S.down && linked() && statsFresh();
+  $('budget').hidden = !show;
+  if (!show || document.hidden || S.tab !== 'status') return;
+  const sv = s.served_ms, room = BUDGET - sv.p99;
+  $('headroom').textContent = room >= 0 ? room.toFixed(1) + ' ms headroom' : (-room).toFixed(1) + ' ms over';
+  const [text, tone] = room < 0 ? ['Over budget', 'bad'] : room < TIGHT ? ['Tight', 'warn'] : ['Good', 'good'];
+  $('room').innerHTML = `<span class="badge t-${tone}">${text}</span> P99 of ${BUDGET} ms`;
+  $('avg').textContent = 'Average ' + ms(sv.mean);
+  $('p99max').textContent = 'P99 ' + sv.p99.toFixed(1) + ', max ' + ms(sv.max);
+  $('frames').textContent = s.frames.toLocaleString();
+  $('fps').textContent = s.fps.toFixed(1);
+  $('slow').textContent = s.slow;
+  $('slow').className = s.slow > 0 ? 'bad' : '';
+  drawStages(s);
+  drawChart();
+}
+
+function drawStages(s) {
+  const top = Math.max(BUDGET * 1.1, s.served_ms.p99 * 1.08, s.served_ms.mean * 1.08);
+  const x = v => (v / top * 100).toFixed(2) + '%';
+  const parts = [`<div class="track" style="width:${x(BUDGET)}"></div>`];
+  let at = 0;
+  for (const [k] of STAGES) {
+    const v = s.stages_ms[k] || 0;
+    if (v <= 0) continue;
+    parts.push(`<div class="seg" style="left:${x(at)};width:calc(${x(v)} - 2px);min-width:2px;background:var(--s-${k})"></div>`);
+    at += v;
+  }
+  const p99 = x(s.served_ms.p99);
+  parts.push(`<div class="mark" style="left:${x(BUDGET)}"></div><div class="mark p99" style="left:${p99}"></div><div class="lbl" style="left:${p99}">P99</div>`);
+  for (let v = 0; v <= top; v += 10) parts.push(`<div class="tick${v === BUDGET ? ' budget' : ''}" style="left:${x(v)}">${v === BUDGET ? v + ' ms' : v}</div>`);
+  $('stagebar').innerHTML = parts.join('');
+  $('legend').innerHTML = STAGES.map(([k, name]) => `<span><i style="background:var(--s-${k})"></i>${name} <b>${ms(s.stages_ms[k] || 0)}</b></span>`).join('');
+}
+
+function drawChart() {
+  const c = $('chart'), h = S.history;
+  const dpr = window.devicePixelRatio || 1, w = c.clientWidth, ht = c.clientHeight;
+  if (!w) return;
+  if (c.width !== Math.round(w * dpr) || c.height !== Math.round(ht * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(ht * dpr); }
+  const g = c.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, ht);
+  const L = 26, R = 6, T = 14, B = 18, pw = w - L - R, ph = ht - T - B;
+  const peak = h.reduce((m, s) => Math.max(m, s.served_ms.p99), 0);
+  const yMax = Math.max(BUDGET * 1.2, Math.ceil(peak * 1.1 / 10) * 10);
+  const now = h.length ? h[h.length - 1].t : 0;
+  const X = t => L + pw * (1 - (now - t) / WINDOW);
+  const Y = v => T + ph * (1 - Math.min(v, yMax) / yMax);
+  const line = y => { g.beginPath(); g.moveTo(L, Math.round(y) + .5); g.lineTo(L + pw, Math.round(y) + .5); g.stroke(); };
+  g.font = '11px system-ui, sans-serif';
+  g.lineWidth = 1;
+  g.fillStyle = css('--faint');
+  g.strokeStyle = css('--line');
+  g.textAlign = 'right';
+  g.textBaseline = 'middle';
+  for (let v = 0; v <= yMax; v += 10) {
+    line(Y(v));
+    if (v % 20 === 0) g.fillText(v, L - 5, Y(v));
+  }
+  g.textBaseline = 'top';
+  for (let a = WINDOW; a >= 0; a -= 30) {
+    g.textAlign = a === WINDOW ? 'left' : a === 0 ? 'right' : 'center';
+    g.fillText(a === 0 ? 'now' : a === WINDOW ? '2 min' : a + ' s', L + pw * (1 - a / WINDOW), T + ph + 5);
+  }
+  if (h.length > 1) {
+    // the band from mean to p99, then the mean over it
+    g.beginPath();
+    h.forEach((s, i) => (i ? g.lineTo : g.moveTo).call(g, X(s.t), Y(s.served_ms.p99)));
+    for (let i = h.length - 1; i >= 0; i--) g.lineTo(X(h[i].t), Y(h[i].served_ms.mean));
+    g.closePath();
+    g.fillStyle = css('--band');
+    g.fill();
+    g.beginPath();
+    h.forEach((s, i) => (i ? g.lineTo : g.moveTo).call(g, X(s.t), Y(s.served_ms.mean)));
+    g.strokeStyle = css('--text');
+    g.lineWidth = 2;
+    g.lineJoin = g.lineCap = 'round';
+    g.stroke();
+  }
+  g.strokeStyle = css('--bad');
+  g.lineWidth = 1;
+  g.globalAlpha = .8;
+  line(Y(BUDGET));
+  g.globalAlpha = 1;
+  g.fillStyle = css('--dim');
+  g.textAlign = 'left';
+  g.textBaseline = 'bottom';
+  g.fillText(BUDGET + ' ms budget', L + 4, Y(BUDGET) - 2);
+  g.fillStyle = css('--bad');
+  for (const s of h) if (s.served_ms.max > BUDGET) { g.beginPath(); g.arc(X(s.t), Y(s.served_ms.max), 3.5, 0, 7); g.fill(); }
+}
+
+// -- hardware ------------------------------------------------------------------
+
+function meter(name, value, frac, tone) {
+  const pct = Math.max(0, Math.min(1, frac || 0)) * 100;
+  return `<div class="meter"><div class="top2"><span>${esc(name)}</span><span>${esc(value)}</span></div>` +
+    `<div class="bar"><i class="${tone || ''}" style="width:${pct.toFixed(1)}%"></i></div></div>`;
+}
+const chip = (name, value, tone) => `<span class="chip ${tone || ''}"><span>${esc(name)}</span><b>${esc(value)}</b></span>`;
+const stat = (name, value, tone) => `<div class="stat ${tone || ''}"><span>${esc(name)}</span><b>${esc(value)}</b></div>`;
+function duration(s) {
+  const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+  return d ? `${d} d ${h} h` : h ? `${h} h ${m} min` : `${m} min`;
+}
+const tempTone = c => c >= 95 ? 'bad' : c >= 85 ? 'warn' : '';
+
+function drawHost() {
+  const h = S.host || {};
+  $('host').textContent = h.hostname ? h.hostname + '.local' : location.hostname;
+  document.title = h.hostname ? 'Jetlink on ' + h.hostname : 'Jetlink';
+  $('hw-title').textContent = h.jetson === false ? 'This computer' : 'Jetson';
+  $('act-reboot').textContent = 'Restart the ' + machine();
+  $('act-poweroff').textContent = 'Turn off the ' + machine();
+  $('act-poweroff-s').textContent = h.jetson === false ? 'Start it again with its power button' : 'It stays off until its power is reconnected';
+}
+
+function drawHw() {
+  const hw = S.hw, host = S.host || {};
+  $('hw').hidden = !hw;
+  if (!hw || document.hidden || S.tab !== 'status') return;
+  $('hw-sub').textContent = [host.board, hw.mode].filter(Boolean).join(', ');
+  const gpu = hw.gpu, cpu = hw.cpu || [];
+  let sum = 0, on = 0;
+  for (const c of cpu) if (c.online && c.load != null) { sum += c.load; on++; }
+  const temps = (hw.temps || []).map(t => t.c);
+  if (gpu && gpu.temp) temps.push(gpu.temp);
+  const hottest = temps.length ? Math.max(...temps) : null;
+  const board = hw.power && hw.power.rails.find(r => r.name === 'VDD_IN');
+  const watts = board ? board.w : gpu && gpu.power_w;
+  const m = hw.mem;
+  const tiles = [];
+  if (gpu) tiles.push(stat('GPU', gpu.load != null ? gpu.load + '%' : '–'));
+  if (on) tiles.push(stat('CPU', Math.round(sum / on) + '%'));
+  if (m && m.total) tiles.push(stat('Memory', Math.round(m.used / m.total * 100) + '%', memTone(m.used / m.total)));
+  if (hottest != null) tiles.push(stat('Hottest', hottest.toFixed(0) + '°C', tempTone(hottest)));
+  if (watts != null) tiles.push(stat(board ? 'Board power' : 'GPU power', watts.toFixed(1) + ' W'));
+  $('hw-summary').innerHTML = tiles.join('');
+  if (!$('hw-more').open) return;
+
+  $('gpu').innerHTML = gpu ? meter(host.gpu ? 'GPU (' + host.gpu + ')' : 'GPU',
+    [gpu.load != null ? gpu.load + '%' : null, gpu.mhz ? gpu.mhz + ' MHz' : null].filter(Boolean).join(', ') || '–', (gpu.load || 0) / 100) : '';
+  const cores = $('cores');
+  if (cores.children.length !== cpu.length) {
+    cores.innerHTML = cpu.map((_, i) => `<div class="core"><div class="top2"><span>${i}</span><b></b></div><div class="bar"><i></i></div><div class="sub"></div></div>`).join('');
+  }
+  cpu.forEach((c, i) => {
+    const el = cores.children[i];
+    el.classList.toggle('off', !c.online);
+    el.querySelector('b').textContent = !c.online ? 'off' : c.load == null ? '–' : Math.round(c.load) + '%';
+    el.querySelector('i').style.width = (c.online ? c.load || 0 : 0) + '%';
+    el.querySelector('.sub').textContent = c.online && c.mhz ? c.mhz + ' MHz' : '';
+  });
+  $('cpu-sum').textContent = on ? Math.round(sum / on) + '% on average' : '';
+  let mem = '';
+  if (m && m.total) {
+    const used = m.used / m.total;
+    mem = meter('Memory' + (host.jetson ? ' (shared with the GPU)' : ''), gb(m.used) + ' of ' + gb(m.total) + ' GB', used, memTone(used));
+    if (m.swap_total) mem += meter('Swap', gb(m.swap_used) + ' of ' + gb(m.swap_total) + ' GB', m.swap_used / m.swap_total);
+  }
+  $('mem').innerHTML = mem;
+  const chips = (hw.temps || []).map(t => {
+    const key = t.name.replace(/[-_]thermal$/, '');
+    return chip(ZONE[key] || key, t.c.toFixed(1) + '°', tempTone(t.c));
+  });
+  if (gpu && gpu.temp) chips.push(chip('GPU', gpu.temp + '°', gpu.temp >= 90 ? 'bad' : gpu.temp >= 83 ? 'warn' : ''));
+  $('temps').innerHTML = chips.join('');
+  $('temps-l').hidden = !chips.length;
+  const power = [];
+  if (hw.power) for (const r of hw.power.rails) power.push(chip(RAIL[r.name] || r.name, r.w.toFixed(1) + ' W'));
+  if (gpu && gpu.power_w) power.push(chip('GPU', gpu.power_w + (gpu.power_limit_w ? ' of ' + gpu.power_limit_w : '') + ' W'));
+  const fan = hw.fan;
+  if (fan) power.push(chip('Fan', [fan.rpm != null ? fan.rpm + ' rpm' : null, fan.pct != null ? fan.pct + '%' : null].filter(Boolean).join(', ')));
+  else if (gpu && gpu.fan_pct != null) power.push(chip('Fan', gpu.fan_pct + '%'));
+  $('power').innerHTML = power.join('');
+  $('power-l').hidden = !power.length;
+  const d = hw.disk;
+  $('disk').innerHTML = d && d.total ? meter('Models folder', gb(d.total - d.used) + ' GB free of ' + gb(d.total) + ' GB', d.used / d.total, d.used / d.total > 0.95 ? 'bad' : '') : '';
+  const sys = [];
+  if (hw.uptime != null) sys.push(`<span>Up <b>${duration(hw.uptime)}</b></span>`);
+  if (hw.load) sys.push(`<span>Load <b>${hw.load.map(v => v.toFixed(2)).join(' ')}</b></span>`);
+  if (host.kernel) sys.push(`<span>Kernel <b>${esc(host.kernel)}</b></span>`);
+  $('sys').innerHTML = sys.join('');
+}
+
+// -- models --------------------------------------------------------------------
+
+// Why heavy work cannot start now, or ''. The server refuses the same while
+// driving; waiting for a build is the page's own courtesy.
+function blocked({ comma = false, idle = false } = {}) {
+  if (!controls()) return S.auth === 'none' ? 'This page is read-only until it has a password: sudo jetlink password' : 'Sign in to use this.';
+  if (S.down) return 'The server is not answering.';
+  if (driving()) return PARKED_ONLY;
+  if (comma && linked()) return 'Disconnect the comma first: the test runs the model without it.';
+  const e = S.engine || {};
+  if (idle && preparing(e)) return 'Wait for the model being prepared.';
+  return '';
+}
+
+function drawModels() {
+  if (S.tab !== 'models') return;
+  const inv = S.inventory, list = $('models');
+  if (!inv) { list.innerHTML = '<div class="empty">Loading</div>'; return; }
+  const d = inv.disk || {}, total = S.hw && S.hw.disk && S.hw.disk.total;
+  $('models-disk').textContent = d.free_bytes != null ? gb(d.free_bytes) + ' GB free' : '';
+  $('disk-bar').hidden = !total || d.free_bytes == null;
+  if (total) {
+    const used = 1 - d.free_bytes / total, i = $('disk-bar').firstChild;
+    i.style.width = (used * 100).toFixed(1) + '%';
+    i.className = used > 0.95 ? 'bad' : used > 0.85 ? 'warn' : '';
+  }
+  const shas = [...new Set([...inv.models.map(m => m.sha256), ...inv.artifacts.map(a => a.sha256)])];
+  if (!shas.length) {
+    list.innerHTML = '<div class="empty">No models yet. The comma sends its model when it connects, or get one from the library.</div>';
+    return;
+  }
+  const e = S.engine || {};
+  list.innerHTML = shas.map(sha => {
+    const model = inv.models.find(m => m.sha256 === sha);
+    const arts = inv.artifacts.filter(a => a.sha256 === sha);
+    const current = arts.find(a => a.current);
+    const bytes = (model ? model.bytes : 0) + arts.reduce((n, a) => n + a.bytes, 0);
+    const busy = e.sha256 === sha && preparing(e);
+    const [tag, tone] = inv.loaded === sha ? ['In use', 'good'] : busy ? ['Preparing', 'info'] : current ? ['Ready', ''] : [arts.length ? 'Other runtime' : 'Not prepared', ''];
+    const built = current && current.build_seconds ? ', built in ' + Math.round(current.build_seconds) + ' s' : '';
+    return `<button type="button" class="row linkrow" data-model="${esc(sha)}"${controls() ? '' : ' disabled'}><span class="k"><b>${esc(label(sha))}</b>` +
+      `<span class="sub">${size(bytes)}${built}</span></span>` +
+      `<span class="v"><span class="badge${tone ? ' t-' + tone : ''}">${tag}</span></span><span class="chev" aria-hidden="true">›</span></button>`;
+  }).join('');
+}
+
+function drawLibrary() {
+  if (S.tab !== 'models') return;
+  const box = $('library'), cat = S.catalog, why = controls() ? '' : blocked();
+  if (!cat) {
+    $('lib-at').textContent = '';
+    box.innerHTML = `<p class="note first">The models the comma can run. Loading the list needs the internet on this ${machine()}.</p>` +
+      `<div class="btns"><button type="button" class="btn" id="lib-load"${why || S.libLoading ? ' disabled' : ''}>${S.libLoading ? 'Loading' : 'Load the library'}</button></div>` +
+      (why ? `<div class="why">${esc(why)}</div>` : '');
+    return;
+  }
+  $('lib-at').textContent = cat.fetched_at ? 'Checked ' + clock(cat.fetched_at) : '';
+  const have = new Set(S.inventory ? S.inventory.models.map(m => m.sha256) : []);
+  const rows = cat.models.map(m => {
+    const dl = m.sha256 && S.downloads[m.sha256];
+    let right;
+    if (dl && (dl.state === 'started' || dl.state === 'progress')) right = `<span class="badge t-info">${Math.round(dl.frac * 100)}%</span>`;
+    else if (m.sha256 && have.has(m.sha256)) right = '<span class="badge t-good">Downloaded</span>';
+    else right = `<span class="sub">${size(m.bytes)}</span>`;
+    const date = m.build_time ? new Date(m.build_time).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' }) : '';
+    return `<button type="button" class="row linkrow" data-ref="${esc(m.ref)}"${controls() ? '' : ' disabled'}><span class="k"><b>${esc(m.name)}</b><span class="sub">${esc(date)}</span></span><span class="v">${right}</span><span class="chev" aria-hidden="true">›</span></button>`;
+  });
+  box.innerHTML = (cat.error ? `<div class="why">The list could not be refreshed: ${esc(cat.error)}</div>` : '') +
+    (rows.join('') || '<div class="empty">The library is empty.</div>') +
+    `<div class="btns"><button type="button" class="btn small" id="lib-load"${why || S.libLoading ? ' disabled' : ''}>${S.libLoading ? 'Checking' : 'Check again'}</button></div>`;
+}
+
+function drawBench() {
+  if (S.tab !== 'models') return;
+  const b = S.bench, box = $('bench');
+  if (b && b.state === 'running') {
+    const f = b.frame;
+    box.innerHTML = `<div class="progress"><i style="width:${(b.elapsed / b.total * 100).toFixed(1)}%"></i></div>` +
+      `<p class="note">${Math.round(b.elapsed)} of ${Math.round(b.total)} s, ${b.frames} frames${f ? ', P99 ' + ms(f.p99) : ''}</p>` +
+      `<div class="btns"><button type="button" class="btn" id="bench-stop">Stop</button></div>`;
+    return;
+  }
+  const why = blocked({ comma: true, idle: true }) || (S.engine && S.engine.state === 'ready' ? '' : 'Prepare a model first: the test runs the loaded one.');
+  let result = '';
+  if (b && b.report) {
+    const r = b.report, f = r.frame;
+    result = `<div class="summary">${stat('Average', ms(f.mean))}${stat('P99', ms(f.p99), f.p99 > BUDGET ? 'bad' : f.p99 > BUDGET - TIGHT ? 'warn' : '')}${stat('Slowest', ms(f.max), f.max > BUDGET ? 'bad' : '')}${stat('Over 50 ms', String(r.over50), r.over50 ? 'bad' : '')}</div>` +
+      `<p class="note">${esc(label(r.sha256))}: ${r.frames} frames in ${Math.round(r.seconds)} s${r.cancelled ? ', stopped early' : ''}.</p>`;
+  } else if (b && b.state === 'failed') {
+    result = `<div class="why">The test failed: ${esc(b.detail)}</div>`;
+  }
+  box.innerHTML = result +
+    `<p class="note${result ? '' : ' first'}">Runs the loaded model at the comma's pace without the comma, to see how fast this ${machine()} is.</p>` +
+    `<div class="btns">${[[30, '30 s'], [60, '1 min'], [300, '5 min']].map(([s, t]) => `<button type="button" class="btn${s === 60 ? ' primary' : ''}" data-bench="${s}"${why ? ' disabled' : ''}>Run ${t}</button>`).join('')}</div>` +
+    (why ? `<div class="why">${esc(why)}</div>` : '');
+}
+
+function openModel(sha) {
+  const inv = S.inventory || { models: [], artifacts: [] };
+  const model = inv.models.find(m => m.sha256 === sha);
+  const arts = inv.artifacts.filter(a => a.sha256 === sha);
+  const current = arts.find(a => a.current);
+  const artBytes = arts.reduce((n, a) => n + a.bytes, 0);
+  const inUse = inv.loaded === sha;
+  const why = blocked({ idle: true });
+  const facts = [
+    model ? `The model is ${size(model.bytes)}.` : 'Only its engine is here, not the model.',
+    arts.length ? `${arts.length === 1 ? 'Its engine takes' : 'Its ' + arts.length + ' engines take'} ${size(artBytes)}.` : 'It has no engine yet.',
+    current && current.built_at ? `Built ${new Date(current.built_at).toLocaleDateString()}.` : '',
+  ].filter(Boolean).join(' ');
+  const actions = [];
+  if (!inUse && (model || current)) actions.push({ text: current ? 'Load it' : 'Prepare it', tone: 'primary', disabled: why, run: async () => {
+    await command({ cmd: 'prepare', sha256: sha });
+    toast((current ? 'Loading ' : 'Preparing ') + label(sha));
+    go('status');
+  } });
+  if (arts.length) actions.push({ text: 'Delete its engine' + (arts.length > 1 ? 's' : ''), tone: 'danger', disabled: why,
+    confirm: inUse ? 'It is in use: this unloads it, and the comma prepares it again next time.' : '', run: async () => {
+      await command({ cmd: 'forget', sha256: sha, artifacts: true, model: false });
+      toast('Deleted');
+    } });
+  if (model) actions.push({ text: 'Delete it all', tone: 'danger', disabled: why,
+    confirm: inUse ? 'It is in use: this unloads it, and the comma sends it again next time.' : '', run: async () => {
+      await command({ cmd: 'forget', sha256: sha, artifacts: true, model: true });
+      toast('Deleted ' + label(sha));
+    } });
+  sheet({
+    title: label(sha),
+    body: `<p>${esc(facts)}</p>` +
+      (inUse ? '<p>It is loaded now.</p>' : current ? '<p>Loading takes a few seconds.</p>'
+        : '<p>Preparing builds its engine now, so the car does not wait for it later. It takes several minutes and the whole GPU.</p>') +
+      `<p class="sub mono">${esc(sha)}</p>` + (why ? `<div class="why">${esc(why)}</div>` : ''),
+    actions,
+  });
+}
+
+function openLibrary(ref) {
+  const m = S.catalog && S.catalog.models.find(x => x.ref === ref);
+  if (!m) return;
+  const dl = m.sha256 && S.downloads[m.sha256];
+  const going = dl && (dl.state === 'started' || dl.state === 'progress');
+  const have = m.sha256 && S.inventory && S.inventory.models.some(x => x.sha256 === m.sha256);
+  const why = blocked({ idle: true });
+  const actions = [];
+  if (going) {
+    actions.push({ text: 'Stop the download', tone: 'danger', run: async () => { await command({ cmd: 'cancel_download', sha256: m.sha256 }); toast('Stopped the download'); } });
+  } else if (have) {
+    actions.push({ text: 'Open it', tone: 'primary', run: async () => { openModel(m.sha256); return 'keep'; } });
+  } else {
+    if (m.sha256) actions.push({ text: 'Download and prepare', tone: 'primary', disabled: why, run: async () => {
+      await command({ cmd: 'prepare', sha256: m.sha256 });
+      toast('Downloading ' + m.name);
+    } });
+    actions.push({ text: 'Download', tone: m.sha256 ? '' : 'primary', disabled: why, run: async () => {
+      await command({ cmd: 'download', ref: m.ref });
+      toast('Downloading ' + m.name);
+    } });
+  }
+  sheet({
+    title: m.name,
+    body: (have ? '<p>It is on this ' + machine() + '.</p>' : `<p>${m.bytes ? size(m.bytes) + ' to download. ' : ''}Preparing it afterwards builds its engine, so the first drive with it does not wait.</p>`) +
+      (going ? `<div class="progress"><i style="width:${(dl.frac * 100).toFixed(1)}%"></i></div><p class="note">${size(dl.bytes)} of ${size(dl.total)}${dl.rate_bps ? ', ' + (dl.rate_bps / 1e6).toFixed(1) + ' MB/s' : ''}</p>` : '') +
+      (why && !going && !have ? `<div class="why">${esc(why)}</div>` : ''),
+    actions,
+  });
+}
+
+// -- settings ------------------------------------------------------------------
+
+// The installer's answers in its own words (power: always), the ones that
+// apply here and nothing else, as install.sh --set takes them.
+const draftValue = k => k in S.draft ? S.draft[k] : S.system.settings[k];
+function changes() {
+  if (!S.system || !S.system.settings) return [];
+  return Object.keys(S.system.settings).filter(k => k in S.draft && S.draft[k] !== S.system.settings[k]);
+}
+
+function drawSettings() {
+  const sys = S.system, off = $('settings-off');
+  const ready = controls() && !!sys && sys.installed;
+  off.hidden = ready;
+  const say = text => `<h2>Settings</h2><p class="note first">${text}</p>`;
+  if (!controls()) off.innerHTML = say(S.auth === 'none' ? `This page is read-only until it has a password. On the ${machine()}, <code>sudo jetlink password</code> sets one; then reload this page.` : 'Sign in to change the settings.');
+  else if (sys && !sys.installed) off.innerHTML = say('Jetlink was not installed here with its installer, so this page has no settings to change.');
+  else if (!sys) off.innerHTML = say('Loading');
+  const applies = new Set(ready ? Object.keys(sys.settings) : []);
+  $('set-power').hidden = !applies.has('power');
+  $('set-desktop').hidden = !applies.has('desktop');
+  $('set-autostart').hidden = !applies.has('autostart');
+  $('set-signin').hidden = !controls();
+  const port = (sys && sys.page_port) || location.port || 80;
+  $('web-addr').textContent = `http://${S.host && S.host.hostname ? S.host.hostname + '.local' : location.hostname}${String(port) === '80' ? '' : ':' + port}`;
+  $('web-port').textContent = port;
+  if (!ready) { $('applybar').hidden = true; document.body.classList.remove('applying'); return; }
+  const lock = driving() || !!busyTask();
+  if (applies.has('power')) {
+    const power = draftValue('power');
+    for (const b of $('seg-power').children) { b.setAttribute('aria-pressed', String(b.dataset.v === power)); b.disabled = lock; }
+    $('power-desc').textContent = power === 'always'
+      ? (sys.deep_sleep ? 'The Jetson sleeps while parked and wakes when the car starts.' : 'The Jetson stays awake while parked, at about 7 W: it cannot sleep.')
+      : 'The Jetson loses power with the car and boots at every start.';
+    $('set-poweroff').hidden = power !== 'always';
+    $('sw-poweroff').checked = draftValue('comma_poweroff') === 'yes';
+    $('sw-poweroff').disabled = lock;
+  }
+  if (applies.has('desktop')) { $('sw-desktop').checked = draftValue('desktop') === 'on'; $('sw-desktop').disabled = lock; }
+  if (applies.has('autostart')) { $('sw-autostart').checked = draftValue('autostart') === 'yes'; $('sw-autostart').disabled = lock; }
+  const n = changes().length;
+  $('applybar').hidden = !n || S.tab !== 'settings';
+  document.body.classList.toggle('applying', !$('applybar').hidden);
+  $('apply-s').textContent = driving() ? PARKED_ONLY : busyTask() ? 'Wait for the run going now.' : 'The server restarts to apply ' + (n === 1 ? 'this change.' : 'these changes.');
+  $('apply-go').disabled = lock;
+}
+
+function setDraft(key, value) {
+  S.draft[key] = value;
+  // switched takes the comma's power-off with it, as the installer does
+  if (key === 'power' && value === 'switched') S.draft.comma_poweroff = 'no';
+  mark('settings');
+}
+
+function applySettings() {
+  const keys = changes();
+  if (!keys.length) return;
+  // every answer that applies, so the run leaves what the page shows
+  const body = {};
+  for (const k of Object.keys(S.system.settings)) body[k] = draftValue(k);
+  const what = keys.map(k => ({
+    power: draftValue('power') === 'always' ? 'Always on' : 'Switched power',
+    comma_poweroff: draftValue('comma_poweroff') === 'yes' ? 'The comma can turn it off' : 'The comma does not turn it off',
+    desktop: draftValue('desktop') === 'on' ? 'Start the desktop' : 'No desktop',
+    autostart: draftValue('autostart') === 'yes' ? 'Start with the computer' : 'Start it yourself',
+  })[k]);
+  sheet({
+    title: 'Apply the changes?',
+    body: `<p>${what.map(esc).join('. ')}.</p><p>The installer applies them and restarts the server, which takes about half a minute. Until it is back, the comma drives on its small model.</p>`,
+    actions: [{ text: 'Apply changes', tone: 'primary', run: async () => {
+      const r = await api('POST', 'api/settings', body);
+      S.draft = {};
+      S.task = r.task;
+      watchTask(true);
+      toast('Applying the changes');
+      go('system');
+    } }],
+  });
+}
+
+// -- system --------------------------------------------------------------------
+
+const busyTask = () => S.task && S.task.state === 'running' ? S.task : null;
+
+function drawSystem() {
+  const sys = S.system || {}, hello = S.hello || {};
+  $('ver-run').textContent = hello.version || sys.server_version || '–';
+  $('ver-commit').textContent = sys.commit && sys.commit !== 'local' ? sys.commit : '';
+  const ref = sys.ref;
+  $('ver-follows').textContent = !sys.installed ? '' : sys.version === 'local' ? 'From a checkout' : ref === 'latest' ? 'Follows releases' : ref === 'main' ? 'Follows main' : ref ? 'Stays on ' + ref : '';
+  const check = $('ver-check');
+  if (!controls() || !sys.installed) {
+    check.innerHTML = controls() ? '' : `<div class="why">${esc(blocked())}</div>`;
+  } else {
+    const why = driving() ? PARKED_ONLY : '', u = S.update;
+    let line = '';
+    if (u && u.error) line = `<div class="why">${esc(u.error)}</div>`;
+    else if (u && u.newer) line = `<p class="note">${esc(u.latest)} is out. This ${machine()} has ${esc(u.current)}.${u.url ? ` <a href="${esc(u.url)}" target="_blank" rel="noopener noreferrer">What changed</a>` : ''}</p>`;
+    else if (u) line = `<p class="note">${esc(u.current || 'This')} is the newest release.</p>`;
+    const offer = u && u.newer || ref && ref !== 'latest';
+    check.innerHTML = line + '<div class="btns">' +
+      `<button type="button" class="btn${offer ? '' : ' primary'}" id="upd-check"${S.checking ? ' disabled' : ''}>${S.checking ? 'Checking' : 'Check for updates'}</button>` +
+      (offer ? `<button type="button" class="btn primary" id="upd-go"${why || busyTask() ? ' disabled' : ''}>${u && u.newer ? 'Update to ' + esc(u.latest) : 'Update'}</button>` : '') +
+      '</div>' + (why ? `<div class="why">${esc(why)}</div>` : '');
+  }
+  drawTask();
+  drawAwake();
+  const powerWhy = !controls() ? blocked() : sys.installed === false ? 'Jetlink was not installed here with its installer.' : driving() ? PARKED_ONLY : '';
+  for (const b of $('sys-power').children) b.disabled = !!powerWhy || !sys.installed;
+  $('power-why').hidden = !powerWhy;
+  $('power-why').textContent = powerWhy;
+  drawAbout();
+}
+
+function drawTask() {
+  const t = S.task, box = $('task');
+  box.hidden = !t || t.state === 'none';
+  if (box.hidden) return;
+  const [text, tone] = { running: ['Running', 'info'], done: ['Done', 'good'], failed: ['Failed', 'bad'], lost: ['Stopped', 'warn'] }[t.state] || [t.state, ''];
+  $('task-t').textContent = t.kind === 'update' ? (t.state === 'running' ? 'Updating' : 'Update') : (t.state === 'running' ? 'Applying the settings' : 'Settings');
+  $('task-s').textContent = t.started_at ? 'Started ' + clock(t.started_at) + (t.finished_at ? ', finished ' + clock(t.finished_at) : '') : '';
+  badge($('task-b'), text, tone);
+  const pre = $('task-log');
+  pre.textContent = (t.lines || []).join('\n') || (t.state === 'running' ? 'Starting' : '');
+  pre.scrollTop = pre.scrollHeight;
+}
+
+function drawAwake() {
+  const sys = S.system || {}, a = sys.awake || {};
+  $('sys-awake').hidden = !controls() || !a.available;
+  if ($('sys-awake').hidden) return;
+  const until = a.until && a.until * 1000 > Date.now() ? a.until : null;
+  const after = sys.sleep_after ? Math.max(1, Math.round(sys.sleep_after / 60)) : 2;
+  $('awake').innerHTML = until
+    ? `<p class="note first">Awake until ${clock(until)}, with or without the comma.</p><div class="btns"><button type="button" class="btn" data-awake="0">Let it sleep</button><button type="button" class="btn" data-awake="3600">1 hour from now</button></div>`
+    : `<p class="note first">The Jetson sleeps ${after} min after the comma goes. Keep it awake to work on it while parked.</p><div class="btns">${[[900, '15 min'], [3600, '1 hour'], [14400, '4 hours']].map(([s, t]) => `<button type="button" class="btn" data-awake="${s}">${t}</button>`).join('')}</div>`;
+}
+
+function drawAbout() {
+  const h = S.host || {}, sys = S.system || {};
+  const rows = [
+    ['Name', h.hostname], ['Board', h.board || sys.platform], ['System', h.os], ['Kernel', h.kernel], ['GPU', h.gpu],
+    ['Runtime', runtimeName(S.server) || null],
+    ['Models folder', sys.cache_dir],
+  ].filter(r => r[1]);
+  $('about').innerHTML = rows.map(([k, v]) => `<div class="row"><span class="k">${esc(k)}</span><span class="v"><span class="${k === 'Models folder' ? 'mono' : ''}">${esc(v)}</span></span></div>`).join('') || '<div class="empty">–</div>';
+}
+
+async function loadSystem() {
+  if (!controls()) { mark('settings', 'system'); return; }
+  try {
+    S.system = await api('GET', 'api/system');
+    if (S.system.task) S.task = S.system.task;
+    if (busyTask()) watchTask();
+  } catch (_) { /* shown as loading */ }
+  mark('settings', 'system');
+}
+
+// A settings or update run restarts the server: follow its output until it
+// is done, through the restart, only while someone is looking.
+let taskTimer = 0;
+function watchTask(now) {
+  clearTimeout(taskTimer);
+  const tick = async () => {
+    if (!document.hidden) {
+      try {
+        const was = S.task && S.task.state;
+        S.task = await api('GET', 'api/task');
+        mark('system', 'settings');
+        if (S.task.state !== 'running') {
+          if (was === 'running') {
+            const ok = S.task.state === 'done';
+            toast(S.task.kind === 'update' ? (ok ? 'Updated' : 'The update failed') : (ok ? 'Changes applied' : 'The changes failed'));
+            loadSystem();
+          }
+          return;
+        }
+      } catch (_) { /* the server is restarting */ }
+    }
+    taskTimer = setTimeout(tick, 2000);
+  };
+  taskTimer = setTimeout(tick, now ? 0 : 2000);
+}
+
+function powerAction(act) {
+  const pc = S.host && S.host.jetson === false;
+  const [title, text, verb] = {
+    restart: ['Restart the server?', 'The comma drives on its small model for the few seconds it takes.', 'Restart'],
+    reboot: [`Restart the ${machine()}?`, 'It takes about half a minute. The comma drives on its small model until it is back.', 'Restart'],
+    poweroff: [`Turn off the ${machine()}?`, pc ? 'Start it again with its power button.' : 'It stays off until its power is reconnected, so it does not come back when the car starts.', 'Turn off'],
+  }[act];
+  sheet({
+    title, body: `<p>${esc(text)}</p>`,
+    actions: [{ text: verb, tone: act === 'poweroff' ? 'danger primary' : 'primary', run: async () => {
+      await api('POST', 'api/action', { action: act });
+      toast(act === 'restart' ? 'Restarting the server' : act === 'reboot' ? 'Restarting' : 'Turning off');
+    } }],
+  });
+}
+
+// -- sign-in -------------------------------------------------------------------
+
+function signedOut() {
+  if (S.auth !== 'required') return;
+  S.signedIn = false;
+  if (source) { source.close(); source = null; }
+  clearTimeout(retry);
+  clearTimeout(taskTimer);
+  if ($('sheet').open) $('sheet').close();
+  $('app').hidden = true;
+  $('login').hidden = false;
+  $('login-host').textContent = location.host;
+  setTimeout(() => $('login-pw').focus(), 50);
+}
+
+$('login-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const go = $('login-go'), pw = $('login-pw').value;
+  if (!pw || go.disabled) return;
+  go.disabled = true;
+  $('login-err').textContent = '';
+  try {
+    await api('POST', 'api/login', { password: pw });
+    $('login-pw').value = '';
+    go.disabled = false;
+    start();
+  } catch (err) {
+    $('login-err').textContent = err.message;
+    const wait = err.data && err.data.retry_after;
+    setTimeout(() => { go.disabled = false; }, (wait || 0) * 1000);
+  }
+});
+
+function changePassword() {
+  sheet({
+    title: 'Change password',
+    body: '<label class="field"><span>Current password</span><input type="password" id="pw-cur" autocomplete="current-password"></label>' +
+      '<label class="field"><span>New password, 8 characters or more</span><input type="password" id="pw-new" autocomplete="new-password"></label>' +
+      '<label class="field"><span>New password again</span><input type="password" id="pw-new2" autocomplete="new-password"></label>' +
+      '<p>Your other devices are signed out.</p>',
+    actions: [{ text: 'Change password', tone: 'primary', run: async () => {
+      const cur = $('pw-cur').value, a = $('pw-new').value, b = $('pw-new2').value;
+      if (a !== b) throw new Error('The new passwords are not the same.');
+      await api('POST', 'api/password', { current: cur, new: a });
+      toast('Password changed');
+    } }],
+  });
+}
+
+// -- sheets and toasts -----------------------------------------------------------
+
+// actions: {text, tone, disabled (a reason), confirm (a warning that a second
+// tap accepts), run (closes the sheet unless it returns 'keep')}
+function sheet({ title, body, actions }) {
+  const d = $('sheet'), box = $('sheet-a');
+  $('sheet-t').textContent = title;
+  $('sheet-b').innerHTML = body || '';
+  $('sheet-e').textContent = '';
+  box.innerHTML = '';
+  const cancel = document.createElement('button');
+  cancel.type = 'button';
+  cancel.className = 'btn';
+  cancel.textContent = actions.length ? 'Cancel' : 'Close';
+  cancel.onclick = () => d.close();
+  const buttons = actions.map(a => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'btn ' + (a.tone || '');
+    b.textContent = a.text;
+    b.disabled = !!a.disabled;
+    let armed = !a.confirm;
+    b.onclick = async () => {
+      if (!armed) { armed = true; $('sheet-e').textContent = a.confirm; b.textContent = a.text + ' anyway'; return; }
+      for (const x of box.children) x.disabled = true;
+      $('sheet-e').textContent = '';
+      let keep = false;
+      try {
+        keep = await a.run() === 'keep';
+        if (!keep) d.close();
+      } catch (err) {
+        $('sheet-e').textContent = err.message;
+      }
+      // a run that opened another sheet in this one leaves that one's buttons be
+      if (b.isConnected) { cancel.disabled = false; buttons.forEach((x, i) => { x.disabled = !!actions[i].disabled; }); }
+    };
+    return b;
+  });
+  // the main action nearest the thumb on a phone, last in the row on anything wider
+  const wide = matchMedia('(min-width: 640px)').matches;
+  for (const b of wide ? [cancel, ...buttons] : [...buttons, cancel]) box.appendChild(b);
+  if (!d.open) d.showModal();
+  const field = d.querySelector('input');
+  if (field) field.focus();
+}
+$('sheet').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+
+let toastTimer = 0;
+function toast(text) {
+  const t = $('toast');
+  t.textContent = text;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3200);
+}
+
+// -- tabs ----------------------------------------------------------------------
+
+function go(tab) {
+  if (!TABS.includes(tab)) tab = 'status';
+  const changed = S.tab !== tab;
+  S.tab = tab;
+  for (const t of TABS) $('tab-' + t).hidden = t !== tab;
+  for (const b of $('tabs').children) b.setAttribute('aria-current', b.dataset.tab === tab ? 'page' : 'false');
+  if (location.hash.slice(1) !== tab) history.replaceState(null, '', '#' + tab);
+  if (tab === 'settings' || tab === 'system') loadSystem();
+  mark(...Object.keys(DRAW));
+  if (changed) window.scrollTo(0, 0);
+}
+$('tabs').addEventListener('click', e => { const b = e.target.closest('button[data-tab]'); if (b) go(b.dataset.tab); });
+window.addEventListener('hashchange', () => go(location.hash.slice(1)));
+
+const DRAW = {
+  status: drawStatus, budget: drawBudget, host: drawHost, hw: drawHw,
+  models: drawModels, library: drawLibrary, bench: drawBench,
+  settings: drawSettings, system: drawSystem,
+};
+
+// -- taps ------------------------------------------------------------------------
+
+async function tapped(t) {
+  if (t.dataset.model) return openModel(t.dataset.model);
+  if (t.dataset.ref) return openLibrary(t.dataset.ref);
+  if (t.dataset.act) return powerAction(t.dataset.act);
+  if (t.dataset.bench) {
+    try { await command({ cmd: 'benchmark', seconds: Number(t.dataset.bench) }); toast('Speed test started'); } catch (err) { toast(err.message); }
+    return;
+  }
+  if (t.dataset.awake) {
+    const seconds = Number(t.dataset.awake);
+    try {
+      const r = await api('POST', 'api/action', { action: 'keep_awake', seconds });
+      S.system.awake = r.awake;
+      mark('system');
+      toast(seconds ? 'Keeping it awake' : 'It can sleep again');
+    } catch (err) { toast(err.message); }
+    return;
+  }
+  if (t.dataset.v && t.closest('#seg-power')) return setDraft('power', t.dataset.v);
+  switch (t.id) {
+    case 'lib-load':
+      S.libLoading = true; mark('library');
+      try { await command({ cmd: 'catalog', refresh: !!S.catalog }); } catch (err) { toast(err.message); S.libLoading = false; mark('library'); }
+      return;
+    case 'bench-stop':
+      try { await command({ cmd: 'cancel_benchmark' }); } catch (err) { toast(err.message); }
+      return;
+    case 'upd-check':
+      S.checking = true; mark('system');
+      try { S.update = await api('POST', 'api/action', { action: 'check_update' }); } catch (err) { S.update = { error: err.message }; }
+      S.checking = false; mark('system');
+      return;
+    case 'upd-go': {
+      const u = S.update || {};
+      return sheet({
+        title: u.newer ? 'Update to ' + u.latest + '?' : 'Update Jetlink?',
+        body: '<p>The installer downloads it and restarts the server, which takes a few minutes. Your settings, models and engines stay. Until the server is back, the comma drives on its small model.</p>',
+        actions: [{ text: 'Update', tone: 'primary', run: async () => {
+          await api('POST', 'api/action', { action: 'update' });
+          S.task = { state: 'running', kind: 'update', started_at: Date.now() / 1000, lines: [] };
+          watchTask(true);
+          mark('system', 'settings');
+          toast('Updating');
+        } }],
+      });
+    }
+    case 'apply-go': return applySettings();
+    case 'apply-x': S.draft = {}; mark('settings'); return;
+    case 'pw-change': return changePassword();
+    case 'pw-others':
+      return sheet({ title: 'Sign out other devices?', body: '<p>Every phone and computer signed in to this page signs in again. This one stays signed in.</p>',
+        actions: [{ text: 'Sign out the others', tone: 'primary', run: async () => { await api('POST', 'api/logout-all'); toast('Signed out the other devices'); } }] });
+    case 'pw-out':
+      try { await api('POST', 'api/logout'); } catch (_) { /* signed out either way */ }
+      return signedOut();
+    case 'log-r': return loadLog();
+  }
+}
+document.addEventListener('click', e => {
+  const t = e.target.closest('button');
+  if (t && !t.closest('#tabs') && !t.closest('#sheet')) tapped(t);
+});
+$('sw-poweroff').addEventListener('change', e => setDraft('comma_poweroff', e.target.checked ? 'yes' : 'no'));
+$('sw-desktop').addEventListener('change', e => setDraft('desktop', e.target.checked ? 'on' : 'off'));
+$('sw-autostart').addEventListener('change', e => setDraft('autostart', e.target.checked ? 'yes' : 'no'));
+$('hw-more').addEventListener('toggle', () => mark('hw'));
+
+// -- the event stream ------------------------------------------------------------
+
+function handle(m) {
+  switch (m.event) {
+    case 'host': S.host = m; mark('host', 'hw', 'status', 'models', 'settings', 'system'); break;
+    case 'hello':
+      if (S.hello && S.hello.version !== m.version) toast('Now running ' + m.version);
+      S.hello = m; mark('system'); break;
+    case 'server': S.server = m; mark('status', 'system'); break;
+    case 'link': S.link = m; mark('status', 'budget', 'models', 'library', 'bench', 'settings', 'system'); break;
+    case 'engine': S.engine = m; mark('status', 'models', 'bench'); break;
+    case 'inventory': S.inventory = m; mark('status', 'models', 'library'); break;
+    case 'catalog': S.catalog = m; S.libLoading = false; mark('library', 'status'); break;
+    case 'download':
+      S.downloads[m.sha256] = m;
+      if (m.state === 'failed') toast('The download failed: ' + m.detail);
+      mark('library');
+      break;
+    case 'benchmark': S.bench = m; mark('bench'); break;
+    case 'stats': addStats(m); S.stats = m; S.statsAt = Date.now(); mark('budget', 'status'); break;
+    case 'hw': {
+      const first = !S.hw;
+      S.hw = m;
+      mark('hw', 'budget');
+      if (first) mark('models');  // the disk's size for its bar
+      break;
+    }
+  }
+}
+
+let source = null, backoff = 1000, retry = 0;
+
+// EventSource gives up for good on a refusal (a server stopping, too many
+// pages open, a sign-in that ended), so every failure closes it and the page
+// tries again itself, waiting longer each time up to half a minute.
+function connect() {
+  clearTimeout(retry);
+  if (source) source.close();
+  source = new EventSource('events');
+  source.onopen = () => { backoff = 1000; drawLive(); };
+  source.onmessage = e => {
+    if (S.down) { S.down = false; mark('status', 'budget', 'models', 'library', 'bench', 'system'); drawLive(); }
+    let m;
+    try { m = JSON.parse(e.data); } catch (_) { return; }
+    handle(m);
+  };
+  source.onerror = () => {
+    source.close();
+    S.down = true;
+    drawLive();
+    mark('status', 'budget', 'models', 'library', 'bench', 'system');
+    retry = setTimeout(async () => {
+      // a stream refused for want of a sign-in looks like any other failure
+      try {
+        const s = await api('GET', 'api/session');
+        S.auth = s.auth;
+        if (s.auth === 'required' && !s.signed_in) return signedOut();
+      } catch (_) { /* still down */ }
+      connect();
+    }, backoff);
+    backoff = Math.min(backoff * 2, 30000);
+  };
+  drawLive();
+}
+
+// Frames stopping without the link dropping still hides the budget and ends
+// the drive.
+setInterval(() => {
+  const now = driving();
+  if (!$('budget').hidden && !statsFresh()) mark('budget', 'status');
+  if (S.wasDriving !== now) { S.wasDriving = now; mark('status', 'models', 'library', 'bench', 'settings', 'system'); }
+}, 1000);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden || !S.signedIn) return;
+  if (S.down) { backoff = 1000; connect(); }
+  mark('budget', 'hw', 'status');
+  if (busyTask()) watchTask(true);
+});
+window.addEventListener('resize', () => { if (!$('budget').hidden) drawChart(); });
+
+async function loadLog() {
+  $('log-at').textContent = 'Loading';
+  try {
+    const r = await fetch('logs', { cache: 'no-store', credentials: 'same-origin' });
+    if (r.status === 401) return signedOut();
+    const pre = $('log');
+    pre.textContent = (await r.text()) || 'Nothing logged yet.';
+    pre.scrollTop = pre.scrollHeight;
+    $('log-at').textContent = 'Read at ' + new Date().toLocaleTimeString();
+  } catch (err) {
+    $('log-at').textContent = 'Could not read the log: ' + err.message;
+  }
+}
+$('logs').addEventListener('toggle', e => { if (e.target.open) loadLog(); });
+
+// -- start -----------------------------------------------------------------------
+
+function start() {
+  S.signedIn = true;
+  $('login').hidden = true;
+  $('app').hidden = false;
+  $('host').textContent = location.hostname;
+  go(location.hash.slice(1) || 'status');
+  connect();
+}
+
+(async function boot() {
+  let s = { auth: 'none', signed_in: false };
+  try { s = await api('GET', 'api/session'); } catch (_) { /* an older server: read-only */ }
+  S.auth = s.auth;
+  if (s.auth === 'required' && !s.signed_in) return signedOut();
+  start();
+})();
+</script>
+</body>
+</html>

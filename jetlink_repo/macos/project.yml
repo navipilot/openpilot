@@ -1,0 +1,105 @@
+# xcodegen spec for the Jetlink macOS app.
+#
+# Regenerate with `make project`, which exports JETLINK_VERSION and
+# JETLINK_BUILD; xcodegen substitutes them below and warns only when they are
+# unset. The generated Jetlink.xcodeproj is committed so `open
+# Jetlink.xcodeproj` works without installing xcodegen.
+name: Jetlink
+options:
+  bundleIdPrefix: io.zoompilot
+  deploymentTarget: { macOS: "15.0" }
+  xcodeVersion: "26.6"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+packages:
+  JetlinkKit:
+    path: ../JetlinkKit
+  # Updates from GitHub releases. Pinned: the release workflow writes the feed
+  # with the generate_appcast this version ships.
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    exactVersion: 2.10.0
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    MARKETING_VERSION: ${JETLINK_VERSION}
+    CURRENT_PROJECT_VERSION: ${JETLINK_BUILD}
+    ENABLE_HARDENED_RUNTIME: YES
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    DEVELOPMENT_TEAM: ""
+    DEAD_CODE_STRIPPING: YES
+    ARCHS: arm64
+    ONLY_ACTIVE_ARCH: NO
+targets:
+  Jetlink:
+    type: application
+    platform: macOS
+    sources:
+      - path: Jetlink
+      - path: Resources/Assets.xcassets
+    # The control protocol's types, the model store and the views the iPhone
+    # app shares, and the Swift server it runs, in process, on onnxruntime.
+    dependencies:
+      - package: JetlinkKit
+        products: [JetlinkKit, JetlinkUI, JetlinkServer, JetlinkORT]
+      - package: Sparkle
+    info:
+      path: Resources/Info.plist
+      properties:
+        CFBundleName: Jetlink
+        CFBundleDisplayName: Jetlink
+        CFBundleIdentifier: io.zoompilot.jetlink
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSMinimumSystemVersion: "15.0"
+        LSApplicationCategoryType: public.app-category.developer-tools
+        LSArchitecturePriority: [arm64]
+        NSHumanReadableCopyright: "MIT License. Copyright 2026 Zeph Leggett."
+        NSSupportsAutomaticTermination: false
+        NSSupportsSuddenTermination: false
+        NSPrincipalClass: NSApplication
+        CFBundleIconName: AppIcon
+        # Sparkle: the feed and its key are build settings (below). Checks run
+        # daily without the second-launch prompt; nothing installs unless the
+        # user says so.
+        SUFeedURL: $(JETLINK_UPDATE_FEED_URL)
+        SUPublicEDKey: $(JETLINK_UPDATE_PUBLIC_KEY)
+        SUEnableAutomaticChecks: true
+        SUVerifyUpdateBeforeExtraction: true
+        SURequireSignedFeed: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.zoompilot.jetlink
+        CODE_SIGN_ENTITLEMENTS: Resources/Jetlink.entitlements
+        ENABLE_APP_SANDBOX: NO
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+        # No feed, no updates: the release workflow sets it when it signs with
+        # the update key, so no other build offers to replace itself. The key's
+        # private half is the SPARKLE_ED_PRIVATE_KEY secret (docs/publishing.md).
+        JETLINK_UPDATE_FEED_URL: ""
+        JETLINK_UPDATE_PUBLIC_KEY: Fy8Q4q7tZqdU91t94/uVb6M5aeHp9z3oOLsfO4/NNY4=
+      configs:
+        # Xcode signs a Debug build (Run, `make test`) ad hoc, so it needs the
+        # ad hoc entitlements to load Sparkle (Jetlink-AdHoc.entitlements).
+        Debug:
+          CODE_SIGN_ENTITLEMENTS: Resources/Jetlink-AdHoc.entitlements
+  JetlinkTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources: [JetlinkTests]
+    dependencies: [{ target: Jetlink }]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.zoompilot.jetlink.tests
+        # Without this xcodebuild refuses to sign the test bundle: "the target
+        # does not have an Info.plist file and one is not being generated".
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  Jetlink:
+    build: { targets: { Jetlink: all, JetlinkTests: [test] } }
+    run: { config: Debug }
+    # The app hosts the tests; it must not start a server (a USB link, the
+    # user's cache) while it does.
+    test: { config: Debug, targets: [JetlinkTests], commandLineArguments: { "-startServerOnLaunch NO": true } }

@@ -1,0 +1,68 @@
+{
+  "err_cast_fp32.trt": {
+    "error": "head Cast targets 1, expected FLOAT16 (10)"
+  },
+  "err_cast_output.trt": {
+    "error": "head Cast head_cast feeds a graph output; dropping it would rename one"
+  },
+  "err_gather_range.trt": {
+    "retypedImages": true,
+    "stripped": 0
+  },
+  "err_no_cast.trt": {
+    "error": "could not find the head Cast: no Cast ends the uint8 image chain"
+  },
+  "err_no_images.trt": {
+    "retypedImages": false,
+    "stripped": 0
+  },
+  "err_nothing_crosses.trt": {
+    "retypedImages": true,
+    "stripped": 0
+  },
+  "err_policy_reads_images.trt": {
+    "retypedImages": true,
+    "stripped": 0
+  },
+  "err_tinygrad_arity.trt": {
+    "error": "Contiguous is not a plain one-in one-out passthrough"
+  },
+  "err_tinygrad_op.trt": {
+    "error": "unknown org.tinygrad op 'Frobnicate'; it may not be a no-op, so dropping it is not safe"
+  },
+  "err_uint8_arith.trt": {
+    "error": "Add \"it's add\" reads the uint8 images; only layout ops and the head Cast are expected there"
+  },
+  "nocut.trt": {
+    "retypedImages": true,
+    "stripped": 0
+  },
+  "noentry.trt": {
+    "retypedImages": true,
+    "stripped": 1
+  },
+  "noshape.trt": {
+    "retypedImages": true,
+    "stripped": 1
+  },
+  "notype.trt": {
+    "retypedImages": true,
+    "stripped": 1
+  },
+  "queued.trt": {
+    "retypedImages": true,
+    "stripped": 1
+  },
+  "stateful.trt": {
+    "retypedImages": true,
+    "stripped": 1
+  },
+  "unrecorded.trt": {
+    "retypedImages": true,
+    "stripped": 0
+  },
+  "variants.trt": {
+    "retypedImages": true,
+    "stripped": 1
+  }
+}

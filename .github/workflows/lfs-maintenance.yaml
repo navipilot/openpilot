@@ -1,0 +1,83 @@
+name: Sync comma's LFS
+
+env:
+  LFS_URL: 'https://huggingface.co/sunnypilot/sunnypilot-lfs.git/info/lfs'
+  LFS_PUSH_URL: 'https://huggingface.co/sunnypilot/sunnypilot-lfs.git/info/lfs'
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Runs at 00:00 UTC every day
+  push:
+    branches:
+      - 'master'
+  pull_request:
+    branches:
+      - 'master'
+  workflow_dispatch: # enables manual triggering
+    inputs:
+      upstream_branch:
+        default: 'master'
+        type: string
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    # Skip if PR is in draft mode
+    if: (github.event_name != 'pull_request' || (github.event_name == 'pull_request' && github.event.pull_request.draft == false)) && !github.event.pull_request.head.repo.fork
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          repository: 'commaai/openpilot'
+          ref: ${{ inputs.upstream_branch }}
+
+      - name: LFS Fetch
+        run: |
+          git lfs fetch
+
+      - name: Set up Git
+        run: |
+          git config --global user.name 'GitHub Action'
+          git config --global user.email 'action@github.com'
+
+      - name: Setup hf
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git config --global credential.helper store
+          echo "https://user:${HF_TOKEN}@huggingface.co" > ~/.git-credentials
+
+      - name: Ensure branch
+        run: |
+          if git symbolic-ref -q HEAD >/dev/null; then
+              echo "Already on a branch, proceeding with push"
+            else
+              echo "Detached HEAD state detected, creating temporary branch"
+            git checkout -b temp_branch
+          fi
+
+      - name: Update LFS Config
+        run: |
+          echo '[lfs]' > .lfsconfig
+          echo '    url = ${{ env.LFS_URL }}' >> .lfsconfig
+          echo '    pushurl = ${{ env.LFS_PUSH_URL }}' >> .lfsconfig
+          echo '    locksverify = false' >> .lfsconfig
+
+      - name: Configure LFS transfer settings
+        run: |
+          git config lfs.activitytimeout 300
+          git config lfs.transfer.maxretries 5
+          git config lfs.concurrenttransfers 4
+
+      - name: Push LFS
+        id: sync-and-commit
+        run: |
+          git lfs ls-files -l
+          for attempt in 1 2 3; do
+            echo "Push attempt $attempt..."
+            git lfs push --all origin && exit 0
+            echo "Attempt $attempt failed, retrying in 30s..."
+            sleep 30
+          done
+          echo "All push attempts failed"
+          exit 1

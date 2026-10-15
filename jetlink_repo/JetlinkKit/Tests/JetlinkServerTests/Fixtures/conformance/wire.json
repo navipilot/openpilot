@@ -1,0 +1,586 @@
+{
+  "datagrams": {
+    "frame": {
+      "file": "wire.datagrams.bin",
+      "flags": 1,
+      "name": "INFER_REQ",
+      "parts": [
+        8,
+        140000,
+        184
+      ],
+      "seq": 21,
+      "sizes": [
+        46762,
+        46761,
+        46761
+      ],
+      "token": 3237998097,
+      "type": 8
+    },
+    "headers": [
+      {
+        "hex": "4a46524d01000000010000000000000020000000",
+        "offset": 0,
+        "seq": 1,
+        "token": 1,
+        "total": 32
+      },
+      {
+        "hex": "4a46524d11eeffc0ffffffffe8fd000028140600",
+        "offset": 65000,
+        "seq": 4294967295,
+        "token": 3237998097,
+        "total": 398376
+      },
+      {
+        "hex": "4a46524dffffffff070000000700000000000001",
+        "offset": 7,
+        "seq": 7,
+        "token": 4294967295,
+        "total": 16777216
+      }
+    ],
+    "pieces": [
+      {
+        "pieces": [
+          [
+            0,
+            32
+          ]
+        ],
+        "total": 32
+      },
+      {
+        "pieces": [
+          [
+            0,
+            65000
+          ]
+        ],
+        "total": 65000
+      },
+      {
+        "pieces": [
+          [
+            0,
+            32501
+          ],
+          [
+            32501,
+            32500
+          ]
+        ],
+        "total": 65001
+      },
+      {
+        "pieces": [
+          [
+            0,
+            43334
+          ],
+          [
+            43334,
+            43334
+          ],
+          [
+            86668,
+            43333
+          ]
+        ],
+        "total": 130001
+      },
+      {
+        "pieces": [
+          [
+            0,
+            56911
+          ],
+          [
+            56911,
+            56911
+          ],
+          [
+            113822,
+            56911
+          ],
+          [
+            170733,
+            56911
+          ],
+          [
+            227644,
+            56911
+          ],
+          [
+            284555,
+            56911
+          ],
+          [
+            341466,
+            56910
+          ]
+        ],
+        "total": 398376
+      }
+    ]
+  },
+  "headers": [
+    {
+      "flags": 0,
+      "hex": "4a4c4e4b03000100070000000000000000000000000000000000000000000000",
+      "length": 0,
+      "msg_type": 1,
+      "name": "HELLO_REQ",
+      "reserved": 0,
+      "seq": 7
+    },
+    {
+      "flags": 1,
+      "hex": "4a4c4e4b03000200ef0300000100000001000000630000000000000000000000",
+      "length": 1,
+      "msg_type": 2,
+      "name": "HELLO_RESP",
+      "reserved": 99,
+      "seq": 1007
+    },
+    {
+      "flags": 2,
+      "hex": "4a4c4e4b03000300d707000002000000ff030000000000000000008000000000",
+      "length": 1023,
+      "msg_type": 3,
+      "name": "ENGINE_REQ",
+      "reserved": 9223372036854775808,
+      "seq": 2007
+    },
+    {
+      "flags": 128,
+      "hex": "4a4c4e4b03000400bf0b00008000000000001000000000000000000000000000",
+      "length": 1048576,
+      "msg_type": 4,
+      "name": "ENGINE_RESP",
+      "reserved": 0,
+      "seq": 3007
+    },
+    {
+      "flags": 131,
+      "hex": "4a4c4e4b03000500a70f00008300000000000001630000000000000000000000",
+      "length": 16777216,
+      "msg_type": 5,
+      "name": "UPLOAD_CHUNK",
+      "reserved": 99,
+      "seq": 4007
+    },
+    {
+      "flags": 0,
+      "hex": "4a4c4e4b030006008f1300000000000000000000000000000000008000000000",
+      "length": 0,
+      "msg_type": 6,
+      "name": "UPLOAD_DONE",
+      "reserved": 9223372036854775808,
+      "seq": 5007
+    },
+    {
+      "flags": 1,
+      "hex": "4a4c4e4b03000700771700000100000001000000000000000000000000000000",
+      "length": 1,
+      "msg_type": 7,
+      "name": "PROGRESS",
+      "reserved": 0,
+      "seq": 6007
+    },
+    {
+      "flags": 2,
+      "hex": "4a4c4e4b030008005f1b000002000000ff030000630000000000000000000000",
+      "length": 1023,
+      "msg_type": 8,
+      "name": "INFER_REQ",
+      "reserved": 99,
+      "seq": 7007
+    },
+    {
+      "flags": 128,
+      "hex": "4a4c4e4b03000900471f00008000000000001000000000000000008000000000",
+      "length": 1048576,
+      "msg_type": 9,
+      "name": "INFER_RESP",
+      "reserved": 9223372036854775808,
+      "seq": 8007
+    },
+    {
+      "flags": 131,
+      "hex": "4a4c4e4b03000c002f2300008300000000000001000000000000000000000000",
+      "length": 16777216,
+      "msg_type": 12,
+      "name": "STATE_REQ",
+      "reserved": 0,
+      "seq": 9007
+    },
+    {
+      "flags": 0,
+      "hex": "4a4c4e4b03000d00172700000000000000000000630000000000000000000000",
+      "length": 0,
+      "msg_type": 13,
+      "name": "STATE_RESP",
+      "reserved": 99,
+      "seq": 10007
+    },
+    {
+      "flags": 1,
+      "hex": "4a4c4e4b03000e00ff2a00000100000001000000000000000000008000000000",
+      "length": 1,
+      "msg_type": 14,
+      "name": "ERROR",
+      "reserved": 9223372036854775808,
+      "seq": 11007
+    },
+    {
+      "flags": 2,
+      "hex": "4a4c4e4b03000f00e72e000002000000ff030000000000000000000000000000",
+      "length": 1023,
+      "msg_type": 15,
+      "name": "PING",
+      "reserved": 0,
+      "seq": 12007
+    },
+    {
+      "flags": 128,
+      "hex": "4a4c4e4b03001000cf3200008000000000001000630000000000000000000000",
+      "length": 1048576,
+      "msg_type": 16,
+      "name": "PONG",
+      "reserved": 99,
+      "seq": 13007
+    },
+    {
+      "flags": 131,
+      "hex": "4a4c4e4b03001100b73600008300000000000001000000000000008000000000",
+      "length": 16777216,
+      "msg_type": 17,
+      "name": "SHUTDOWN_REQ",
+      "reserved": 9223372036854775808,
+      "seq": 14007
+    },
+    {
+      "flags": 0,
+      "hex": "4a4c4e4b030012009f3a00000000000000000000000000000000000000000000",
+      "length": 0,
+      "msg_type": 18,
+      "name": "SHUTDOWN_RESP",
+      "reserved": 0,
+      "seq": 15007
+    },
+    {
+      "flags": 1,
+      "hex": "4a4c4e4b03001300873e00000100000001000000630000000000000000000000",
+      "length": 1,
+      "msg_type": 19,
+      "name": "LEAVE",
+      "reserved": 99,
+      "seq": 16007
+    }
+  ],
+  "infer_req": [
+    {
+      "flags": 0,
+      "frame_id": 0,
+      "hex": "0000000000000000"
+    },
+    {
+      "flags": 1,
+      "frame_id": 1,
+      "hex": "0100000001000000"
+    },
+    {
+      "flags": 3,
+      "frame_id": 4242,
+      "hex": "9210000003000000"
+    },
+    {
+      "flags": 2,
+      "frame_id": 4294967295,
+      "hex": "ffffffff02000000"
+    }
+  ],
+  "infer_resp": [
+    {
+      "frame_id": 42,
+      "gpu_us": 28000,
+      "hex": "2a00000004000000606d00008200000048710000",
+      "queue_us": 130,
+      "status": 4,
+      "total_us": 29000
+    },
+    {
+      "frame_id": 0,
+      "gpu_us": 0,
+      "hex": "0000000001000000000000000000000000000000",
+      "queue_us": 0,
+      "status": 1,
+      "total_us": 0
+    },
+    {
+      "frame_id": 4294967295,
+      "gpu_us": 4294967295,
+      "hex": "ffffffff00000000ffffffff0100000000000080",
+      "queue_us": 1,
+      "status": 0,
+      "total_us": 2147483648
+    }
+  ],
+  "messages": [
+    {
+      "flags": 0,
+      "json": "{\"client\":{\"name\":\"modeld\",\"nonce\":7}}",
+      "name": "HELLO_REQ",
+      "parts": null,
+      "seq": 1,
+      "type": 1
+    },
+    {
+      "flags": 0,
+      "json": "{\"protocol\":3,\"engine_state\":\"none\",\"sleep_after\":0.0}",
+      "name": "HELLO_RESP",
+      "parts": null,
+      "seq": 1,
+      "type": 2
+    },
+    {
+      "flags": 0,
+      "json": null,
+      "name": "PING",
+      "parts": [],
+      "seq": 2,
+      "type": 15
+    },
+    {
+      "flags": 0,
+      "json": null,
+      "name": "PONG",
+      "parts": [],
+      "seq": 2,
+      "type": 16
+    },
+    {
+      "flags": 0,
+      "json": "{\"sha256\":\"a086d5249fc308bb73993d1e64630c669d4c7df5bde85f42ad61902543648525\",\"nbytes\":765953504,\"frame_skip\":4}",
+      "name": "ENGINE_REQ",
+      "parts": null,
+      "seq": 3,
+      "type": 3
+    },
+    {
+      "flags": 3,
+      "json": null,
+      "name": "INFER_REQ",
+      "parts": [
+        8,
+        800,
+        184
+      ],
+      "seq": 4,
+      "type": 8
+    },
+    {
+      "flags": 0,
+      "json": null,
+      "name": "INFER_RESP",
+      "parts": [
+        20,
+        971
+      ],
+      "seq": 4,
+      "type": 9
+    },
+    {
+      "flags": 0,
+      "json": null,
+      "name": "UPLOAD_CHUNK",
+      "parts": [
+        8,
+        985
+      ],
+      "seq": 5,
+      "type": 5
+    },
+    {
+      "flags": 0,
+      "json": null,
+      "name": "UPLOAD_CHUNK",
+      "parts": [
+        8,
+        2008
+      ],
+      "seq": 6,
+      "type": 5
+    },
+    {
+      "flags": 0,
+      "json": null,
+      "name": "INFER_RESP",
+      "parts": [
+        20,
+        460
+      ],
+      "seq": 12,
+      "type": 9
+    },
+    {
+      "flags": 0,
+      "json": null,
+      "name": "UPLOAD_CHUNK",
+      "parts": [
+        8,
+        1496
+      ],
+      "seq": 13,
+      "type": 5
+    },
+    {
+      "flags": 0,
+      "json": null,
+      "name": "INFER_RESP",
+      "parts": [
+        20,
+        461
+      ],
+      "seq": 14,
+      "type": 9
+    },
+    {
+      "flags": 0,
+      "json": null,
+      "name": "STATE_RESP",
+      "parts": [
+        16352
+      ],
+      "seq": 7,
+      "type": 13
+    },
+    {
+      "flags": 0,
+      "json": null,
+      "name": "ERROR",
+      "parts": [
+        16353
+      ],
+      "seq": 8,
+      "type": 14
+    },
+    {
+      "flags": 0,
+      "json": null,
+      "name": "INFER_RESP",
+      "parts": [
+        20,
+        8264,
+        8,
+        64
+      ],
+      "seq": 9,
+      "type": 9
+    },
+    {
+      "flags": 0,
+      "json": null,
+      "name": "INFER_RESP",
+      "parts": [
+        20,
+        73808
+      ],
+      "seq": 11,
+      "type": 9
+    },
+    {
+      "flags": 0,
+      "json": null,
+      "name": "SHUTDOWN_REQ",
+      "parts": [],
+      "seq": 10,
+      "type": 17
+    },
+    {
+      "flags": 0,
+      "json": "{\"stage\":\"build\",\"frac\":0.5,\"msg\":\"half\"}",
+      "name": "PROGRESS",
+      "parts": null,
+      "seq": 0,
+      "type": 7
+    }
+  ],
+  "payload": "byte i of a binary payload is (seq * 31 + i * 7) % 251",
+  "streams": {
+    "tcp": {
+      "bytes": 123171,
+      "ends": [
+        70,
+        156,
+        188,
+        220,
+        363,
+        1388,
+        2411,
+        3436,
+        5485,
+        5998,
+        7535,
+        8048,
+        24433,
+        40818,
+        49206,
+        123066,
+        123098,
+        123171
+      ],
+      "file": "wire.tcp.bin"
+    },
+    "usb_gadget": {
+      "bytes": 376832,
+      "ends": [
+        16384,
+        32768,
+        49152,
+        65536,
+        81920,
+        98304,
+        114688,
+        131072,
+        147456,
+        163840,
+        180224,
+        196608,
+        212992,
+        245760,
+        262144,
+        344064,
+        360448,
+        376832
+      ],
+      "file": "wire.usb_gadget.bin"
+    },
+    "usb_host": {
+      "bytes": 123171,
+      "ends": [
+        70,
+        156,
+        188,
+        220,
+        363,
+        1388,
+        2411,
+        3436,
+        5485,
+        5998,
+        7535,
+        8048,
+        24433,
+        40818,
+        49206,
+        123066,
+        123098,
+        123171
+      ],
+      "file": "wire.usb_host.bin"
+    }
+  }
+}

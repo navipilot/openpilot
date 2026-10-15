@@ -1,0 +1,567 @@
+# Everything a v* tag produces: the macOS app, the Android app, the Linux
+# server for Jetsons and PCs, the GitHub release that carries them, and then
+# the iPhone app on TestFlight (testflight.yml).
+# A push to main builds the Linux server too and puts it on the edge
+# prerelease under fixed names, which is what `install.sh --ref main` installs,
+# unless the push changed only the comma's side (ci.yml's filter, repeated
+# here): the server is the same, so edge keeps the build it has.
+#
+# Signing and notarizing need six secrets (docs/publishing.md lists them). With
+# none of them the build still runs and produces an ad hoc signed zip labelled
+# unsigned, so a fork can cut its own release. The APK's key is three more;
+# without them a fork's APK is signed with the runner's debug key, and the
+# notes say so, while zoompilot/jetlink's release stops. The Mac app's update
+# feed needs one more, SPARKLE_ED_PRIVATE_KEY: a fork without it ships no feed,
+# and zoompilot/jetlink's release stops.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+    branches: [main]
+
+concurrency:
+  group: release-${{ github.ref }}
+  # a newer push to main replaces an edge build still running; a tag finishes
+  cancel-in-progress: ${{ github.ref_type == 'branch' }}
+
+permissions:
+  contents: write
+  id-token: write
+
+env:
+  # zoompilot/jetlink's release stops where a fork's carries on without a key.
+  UPSTREAM: ${{ github.repository == 'zoompilot/jetlink' }}
+
+jobs:
+  changes:
+    name: What changed
+    runs-on: ubuntu-24.04
+    outputs:
+      # a tag builds everything; main only what the server is built from
+      server: ${{ github.ref_type == 'tag' || steps.filter.outputs.apps == 'true' }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Sort the changed files
+        id: filter
+        if: github.ref_type == 'branch'
+        uses: dorny/paths-filter@v4
+        with:
+          # every: a file counts only if it matches every line below, so the
+          # '!' lines exclude. With the default, some, each line matches on
+          # its own and '!docs/**' alone would match README.md.
+          predicate-quantifier: every
+          # Everything rebuilds the apps and the servers except the comma's
+          # side, which the comma takes as a git pin and nothing builds: the
+          # comma and openpilot packages, their tests, the root script and
+          # the bench tools, the installer and the host CLI, and the docs.
+          # jetlink/transport and protocol.py are the wire and stay in.
+          filters: |
+            apps:
+              - '**'
+              - '!jetlink/comma/**'
+              - '!jetlink/openpilot/**'
+              - '!scripts/comma/**'
+              - '!scripts/deploy_to_comma.sh'
+              - '!scripts/jetlink'
+              - '!install.sh'
+              - '!tests/comma_fakes.py'
+              - '!tests/test_comma_*.py'
+              - '!tests/openpilot/**'
+              - '!tests/installer/**'
+              - '!docs/**'
+              - '!**/*.md'
+
+  check:
+    name: Check the tag
+    # everything but the Linux server hangs off this, so a push to main builds
+    # only that
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    outputs:
+      prerelease: ${{ steps.kind.outputs.prerelease }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Check the tag matches the package version
+        run: macos/scripts/check-version.sh "${GITHUB_REF_NAME}"
+
+      - name: Check for a prerelease
+        id: kind
+        run: |
+          # Both spellings of a prerelease: a hyphenated semver tag, and the
+          # PEP 440 suffixes jetlink.__version__ carries (check-version.sh),
+          # which have no hyphen.
+          case "$GITHUB_REF_NAME" in
+            *-*|*a[0-9]*|*b[0-9]*|*rc[0-9]*) echo "prerelease=true" ;;
+            *) echo "prerelease=false" ;;
+          esac >> "$GITHUB_OUTPUT"
+
+  macos-app:
+    name: macOS app
+    needs: check
+    runs-on: macos-26
+    env:
+      HAVE_SIGNING: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 != '' && secrets.NOTARY_KEY_ID != '' }}
+      HAVE_UPDATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY != '' }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Select Xcode
+        uses: ./.github/actions/select-xcode
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Report the signing mode
+        run: |
+          if [ "$HAVE_SIGNING" = "true" ]; then
+            echo "signing with a Developer ID certificate and notarizing"
+          else
+            echo "no signing secrets: this build will be ad hoc signed and labelled unsigned"
+          fi
+
+      - name: Import the signing certificate
+        if: env.HAVE_SIGNING == 'true'
+        env:
+          MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+          NOTARY_PRIVATE_KEY_P8_BASE64: ${{ secrets.NOTARY_PRIVATE_KEY_P8_BASE64 }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/build.keychain-db"
+          echo "KEYCHAIN_PATH=$KEYCHAIN" >> "$GITHUB_ENV"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          echo "$MACOS_CERTIFICATE_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -P "$MACOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+          rm -f "$RUNNER_TEMP/cert.p12"
+          IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN" | grep 'Developer ID Application' | head -1 | sed -E 's/.*"(.*)"/\1/')"
+          if [ -z "$IDENTITY" ]; then
+            echo "error: the keychain has no Developer ID Application identity" >&2
+            exit 1
+          fi
+          echo "SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+          echo "$NOTARY_PRIVATE_KEY_P8_BASE64" | base64 --decode > "$RUNNER_TEMP/AuthKey.p8"
+          echo "NOTARY_KEY_PATH=$RUNNER_TEMP/AuthKey.p8" >> "$GITHUB_ENV"
+
+      - name: Build and sign the app
+        env:
+          # The feed installed copies check, this repository's latest release.
+          # Only a build signed with both keys gets one; without it the app
+          # does not update itself.
+          JETLINK_UPDATE_FEED_URL: ${{ env.HAVE_SIGNING == 'true' && env.HAVE_UPDATE_KEY == 'true' && format('https://github.com/{0}/releases/latest/download/appcast.xml', github.repository) || '' }}
+        run: |
+          # SIGN_IDENTITY is in the environment only when the step above ran;
+          # the scripts default it to "-" (ad hoc) otherwise.
+          make -C macos app
+
+      - name: Check the app serves
+        run: make -C macos smoke
+        # The signed bundle's Swift server over TCP on a scratch cache: hello
+        # and ping over the wire protocol, then SIGTERM ends it.
+
+      - name: Notarize the app
+        if: env.HAVE_SIGNING == 'true'
+        env:
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+        run: make -C macos notarize
+
+      - name: Build the DMG and the zip
+        env:
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+        run: |
+          # notarize.sh leaves its submission archive behind; it is not a
+          # release artifact and it matches the upload pattern.
+          rm -f macos/build/Jetlink-notarize.zip
+          make -C macos dmg
+
+      - name: Write the update feed
+        # An unsigned build does not update itself, so it has no feed.
+        if: env.HAVE_SIGNING == 'true'
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          # appcast.xml goes on the release with the DMG. Installed copies
+          # find it at releases/latest/download/appcast.xml, so without it no
+          # one would be offered this release.
+          if [ "$HAVE_UPDATE_KEY" != true ]; then
+            if [ "$UPSTREAM" = true ]; then
+              echo "error: SPARKLE_ED_PRIVATE_KEY is not set; installed copies would never see this release" >&2
+              exit 1
+            fi
+            echo "::warning::no SPARKLE_ED_PRIVATE_KEY, so this release has no update feed"
+            exit 0
+          fi
+          make -C macos appcast
+
+      - name: Label an unsigned build
+        if: env.HAVE_SIGNING != 'true'
+        run: |
+          # An ad hoc signature cannot be notarized, so a DMG of it would only
+          # invite people to install something Gatekeeper refuses. Ship the zip
+          # alone; the release job reads a missing DMG as an unsigned build.
+          cd macos/build
+          VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Jetlink.app/Contents/Info.plist)"
+          rm -f "Jetlink-$VERSION-macOS.dmg"
+
+      - name: Delete the temporary keychain
+        if: always()
+        run: |
+          # KEYCHAIN_PATH is set by the import step, so it is empty when that
+          # step did not run and this is a no-op.
+          if [ -n "${KEYCHAIN_PATH:-}" ] && [ -f "$KEYCHAIN_PATH" ]; then
+            security delete-keychain "$KEYCHAIN_PATH" || true
+          fi
+          rm -f "$RUNNER_TEMP/AuthKey.p8"
+
+      - name: Upload the app artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-app
+          path: |
+            macos/build/Jetlink-*.dmg
+            macos/build/Jetlink-*.zip
+            macos/build/appcast.xml
+
+  android-swift:
+    name: Swift server for Android
+    needs: check
+    uses: ./.github/workflows/android-swift.yml
+
+  android-app:
+    name: Android app
+    needs: android-swift
+    runs-on: ubuntu-24.04
+    env:
+      # Gradle stops the build when the keystore comes without its password
+      # or alias.
+      HAVE_SIGNING: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+      # The release key's certificate (docs/publishing.md): Android installs
+      # an update only over an app signed with the same key.
+      RELEASE_CERT_SHA256: ab49203553fbfdc9b296ea19bc39a2b8e8a6543037e4e77c7023c69926cd2a8f
+    outputs:
+      # for the release notes, which warn about a debug key
+      release-key: ${{ env.HAVE_SIGNING }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # Gradle and the app's dependencies, from main's last CI run
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Download the Swift server
+        uses: actions/download-artifact@v4
+        with:
+          name: libjetlink-arm64-v8a
+          path: swift-out
+
+      - name: Report the signing mode
+        run: |
+          # Each runner makes a new debug key, so a debug-signed APK updates
+          # no earlier release: a fork's may, jetlink's may not.
+          if [ "$HAVE_SIGNING" = "true" ]; then
+            echo "signing with the release key"
+          elif [ "$UPSTREAM" = "true" ]; then
+            echo "error: no ANDROID_KEYSTORE_BASE64 secret (docs/publishing.md#android-release-key)" >&2
+            exit 1
+          else
+            echo "no signing secrets: this APK will be signed with the runner's debug key"
+          fi
+
+      - name: Write the release key
+        if: env.HAVE_SIGNING == 'true'
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.keystore"
+          echo "JETLINK_ANDROID_KEYSTORE=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+
+      - name: Build the APK
+        working-directory: android
+        env:
+          # read only when the step above named the keystore
+          JETLINK_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          JETLINK_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: ./gradlew --no-daemon :app:assembleRelease -Pjetlink.prebuiltSwift="$GITHUB_WORKSPACE/swift-out"
+
+      - name: Check the APK's key
+        run: |
+          set -euo pipefail
+          APK=android/app/build/outputs/apk/release/app-release.apk
+          # the runner's newest build tools
+          TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          CERTS="$("$TOOLS/apksigner" verify --print-certs "$APK")"
+          printf '%s\n' "$CERTS"
+          # "Signer #1 certificate ..." or, with one v2 signer, "V2 Signer: certificate ..."
+          DIGEST="$(sed -n 's/^.*[Ss]igner.* certificate SHA-256 digest: //p' <<<"$CERTS" | head -1)"
+          if [ "$UPSTREAM" = true ] && [ "$DIGEST" != "$RELEASE_CERT_SHA256" ]; then
+            echo "error: signed with $DIGEST, not the release key $RELEASE_CERT_SHA256" >&2
+            exit 1
+          fi
+          mkdir -p dist
+          cp "$APK" "dist/Jetlink-${GITHUB_REF_NAME#v}-Android.apk"
+
+      - name: Upload the APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-app
+          path: dist/Jetlink-*-Android.apk
+          if-no-files-found: error
+          # the release carries it; an APK is a zip already
+          retention-days: 7
+          compression-level: 0
+
+  linux-server:
+    name: Linux server (${{ matrix.flavor }})
+    needs: changes
+    # a fork's main has no edge prerelease to fill
+    if: needs.changes.outputs.server == 'true' && (github.ref_type == 'tag' || github.repository == 'zoompilot/jetlink')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # the Jetson build (TensorRT 10) and the PC build (TensorRT 11.3),
+          # each on a native runner; 22.04's glibc runs on 22.04 and 24.04
+          - flavor: linux-aarch64
+            runner: ubuntu-22.04-arm
+          - flavor: linux-x86_64
+            runner: ubuntu-22.04
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    env:
+      FLAVOR: ${{ matrix.flavor }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      # NVIDIA's pinned header debs and onnxruntime's tarball
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/jetlink-build
+          key: jetlink-server-build-${{ matrix.flavor }}-${{ hashFiles('scripts/build-linux.sh') }}
+
+      - name: Build the server
+        run: scripts/build-linux.sh "$FLAVOR"
+        # The one way the server is built, here, in a container on a Mac or on
+        # a Jetson: dist/jetlink-server-<version>-<flavor>.tar.gz and its
+        # .sha256. On a tag v<__version__> the version is the release's.
+
+      - name: Check the tarball
+        run: |
+          set -euo pipefail
+          # what install.sh checks, then the binary, which runs on this
+          # runner: it is the flavor's processor
+          (cd dist && sha256sum -c jetlink-server-*-"$FLAVOR".tar.gz.sha256)
+          tar -xzf dist/jetlink-server-*-"$FLAVOR".tar.gz -C "$RUNNER_TEMP"
+          cd "$RUNNER_TEMP"/jetlink-server-*-"$FLAVOR"
+          echo "SERVER_DIR=$PWD" >>"$GITHUB_ENV"
+          [ -f bin/JetlinkKit_JetlinkStatusPage.resources/Resources/index.html ]
+          [ "$(bin/jetlink-server --version)" = "$(cat VERSION)" ]
+          bin/jetlink-server serve --help >/dev/null
+          # no GPU here, so TensorRT has to say it cannot run
+          if bin/jetlink-server backends --backend trt; then
+            echo "error: backends --backend trt passed on a runner without a GPU" >&2
+            exit 1
+          fi
+
+      - name: Check it loads on the other distributions
+        run: |
+          set -euo pipefail
+          # The binary against each distribution's glibc, libstdc++ and
+          # libcurl, which the installer supports untested on hardware. No GPU
+          # in a container, so TensorRT has to fail for want of a driver, not
+          # of a library. Debian's own image has no libcurl, so its buildpack
+          # one with curl stands in; Arch has no arm64 image.
+          images="buildpack-deps:bookworm-curl fedora:latest opensuse/tumbleweed"
+          [ "$FLAVOR" = linux-x86_64 ] && images="$images archlinux:latest"
+          for image in $images; do docker pull -q "$image" >/dev/null & done
+          wait
+          for image in $images; do
+            echo "==> $image"
+            rc=0
+            out="$(docker run --rm -v "$SERVER_DIR:/srv:ro" "$image" /srv/bin/jetlink-server backends --backend trt 2>&1)" || rc=$?
+            printf '%s\n' "$out"
+            if [ "$rc" != 1 ] || [[ $out != *"no CUDA driver"* ]]; then
+              echo "error: the server did not load on $image" >&2
+              exit 1
+            fi
+          done
+
+      - name: Upload the tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-server-${{ matrix.flavor }}
+          path: dist/jetlink-server-*
+          if-no-files-found: error
+
+  edge:
+    name: Edge prerelease
+    needs: linux-server
+    if: github.ref == 'refs/heads/main' && github.repository == 'zoompilot/jetlink'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download the Linux server
+        uses: actions/download-artifact@v4
+        with:
+          pattern: linux-server-*
+          path: dist
+          merge-multiple: true
+
+      - name: Refresh the edge prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        working-directory: dist
+        run: |
+          set -euo pipefail
+          # Fixed names: the installer finds main's build without knowing its
+          # version.
+          for arch in aarch64 x86_64; do
+            found=(jetlink-server-*-linux-"$arch".tar.gz)
+            if [ "${#found[@]}" != 1 ] || [ ! -f "${found[0]}" ]; then
+              echo "error: wanted one linux-$arch tarball, found: ${found[*]}" >&2
+              exit 1
+            fi
+            name="jetlink-server-edge-linux-$arch.tar.gz"
+            mv "${found[0]}" "$name"
+            sha256sum "$name" > "$name.sha256"
+          done
+          NOTES="Builds of main at ${GITHUB_SHA::7}, for testing. install.sh --ref main installs them."
+          if gh release view edge >/dev/null 2>&1; then
+            # the tag follows main
+            gh api --method PATCH "repos/$GH_REPO/git/refs/tags/edge" -f sha="$GITHUB_SHA" -F force=true >/dev/null
+            gh release edit edge --prerelease --notes "$NOTES"
+          else
+            gh release create edge --prerelease --title "Edge" --notes "$NOTES" --target "$GITHUB_SHA"
+          fi
+          gh release upload edge --clobber jetlink-server-edge-linux-*
+
+  release:
+    name: GitHub release
+    # The server is required: install.sh takes the newest release, so one
+    # without it would stop every Linux install and update.
+    needs: [check, macos-app, android-app, linux-server]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      # Named, not the whole run: the step below releases every file it
+      # finds, so only what belongs on the release comes down.
+      - name: Download the macOS app
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-app
+          path: artifacts/macos-app
+
+      - name: Download the Android app
+        uses: actions/download-artifact@v4
+        with:
+          name: android-app
+          path: artifacts/android-app
+
+      - name: Download the Linux server
+        uses: actions/download-artifact@v4
+        with:
+          pattern: linux-server-*
+          path: artifacts/linux-server
+          merge-multiple: true
+
+      - name: Write SHA256SUMS
+        run: |
+          # For the apps people download by hand: the DMG, or the zip of an
+          # unsigned build, and the APK. The Linux tarballs keep their own
+          # .sha256, which install.sh reads.
+          mkdir -p artifacts/sums
+          for app in artifacts/macos-app/Jetlink-* artifacts/android-app/Jetlink-*; do
+            (cd "$(dirname "$app")" && sha256sum "$(basename "$app")")
+          done > artifacts/sums/SHA256SUMS
+          cat artifacts/sums/SHA256SUMS
+
+      - name: List what is being released
+        run: find artifacts -type f -exec ls -lh {} +
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ needs.check.outputs.prerelease }}
+          ANDROID_RELEASE_KEY: ${{ needs.android-app.outputs.release-key }}
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          mapfile -t FILES < <(find artifacts -type f | sort)
+          if [ "${#FILES[@]}" -eq 0 ]; then
+            echo "error: nothing to release" >&2
+            exit 1
+          fi
+          # The notes are the tag's section of CHANGELOG.md, less the heading
+          # the release title repeats. A tag without a section gets GitHub's
+          # generated notes. The Mac app's update window shows the same
+          # sections (macos/scripts/make-appcast.sh).
+          python3 scripts/changelog.py notes "$GITHUB_REF_NAME" > changelog.md
+          if [ -s changelog.md ]; then
+            ARGS=(--notes-file changelog.md --title "Jetlink $GITHUB_REF_NAME")
+          else
+            ARGS=(--generate-notes --title "Jetlink $GITHUB_REF_NAME")
+          fi
+          if [ "$PRERELEASE" = true ]; then
+            ARGS+=(--prerelease)
+          fi
+          gh release create "$GITHUB_REF_NAME" "${ARGS[@]}" "${FILES[@]}"
+
+          # Append the footer to the notes, rather than
+          # replacing them.
+          NOTES="$(gh release view "$GITHUB_REF_NAME" --json body --jq .body)"
+          # The backticks below are Markdown, not command substitutions.
+          # shellcheck disable=SC2016
+          {
+            printf '%s\n\n' "$NOTES"
+            # The DMG when signed, else the zip.
+            MAC="$(find artifacts/macos-app -name 'Jetlink-*-macOS.dmg' | head -1)"
+            [ -n "$MAC" ] || MAC="$(find artifacts/macos-app -name 'Jetlink-*-macOS.zip' | head -1)"
+            MAC="$(basename "$MAC")"
+            APK="Jetlink-$VERSION-Android.apk"
+            printf '## Install\n\n'
+            printf 'Mac (Apple silicon): [%s](https://github.com/%s/releases/download/%s/%s)\n\n' "$MAC" "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME" "$MAC"
+            printf 'iPhone and iPad:\n\n[![Available on TestFlight](https://zoompilot.ai/jetlink/assets/testflight-badge.svg)](https://testflight.apple.com/join/DAsYk5sP)\n\n'
+            printf 'Android 12 or later: [%s](https://github.com/%s/releases/download/%s/%s) ([how to install](https://github.com/%s/blob/%s/docs/android-app.md#install))\n\n' "$APK" "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME" "$APK" "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME"
+            printf 'Jetson or Linux PC:\n\n'
+            printf '```bash\ncurl -fsSL https://raw.githubusercontent.com/zoompilot/jetlink/main/install.sh | bash\n```\n\n'
+            printf 'It picks the server build: `jetlink-server-%s-linux-aarch64` for a Jetson, `-linux-x86_64` for a PC.\n\n' "$VERSION"
+            if [ "${MAC%.zip}" != "$MAC" ]; then
+              printf '## Mac app is unsigned\n\n'
+              printf 'macOS blocks the first open. Right-click Jetlink in Applications > **Open**, or **System Settings > Privacy & Security > Open Anyway**. Or:\n\n'
+              printf '```bash\nxattr -d com.apple.quarantine /Applications/Jetlink.app\n```\n'
+            fi
+            if [ "$ANDROID_RELEASE_KEY" != true ]; then
+              printf '\n## Android app has a debug key\n\n'
+              printf 'It will not install over an earlier Jetlink. Uninstall that first, which deletes its models.\n'
+            fi
+          } > notes.md
+          gh release edit "$GITHUB_REF_NAME" --notes-file notes.md
+
+  testflight:
+    name: TestFlight
+    # After the release, so TestFlight never has a version GitHub does not.
+    # The App Store takes X.Y.Z alone, so a prerelease stays off it.
+    needs: [check, release]
+    if: needs.check.outputs.prerelease == 'false'
+    uses: ./.github/workflows/testflight.yml
+    secrets: inherit

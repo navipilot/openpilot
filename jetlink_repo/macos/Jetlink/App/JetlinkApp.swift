@@ -1,0 +1,127 @@
+import AppKit
+import SwiftUI
+
+@main
+struct JetlinkApp: App {
+  @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
+  @State private var appState = AppState()
+  @State private var navigation = Navigation()
+
+  var body: some Scene {
+    Window("Jetlink", id: "main") {
+      MainWindow()
+        .jetlinkEnvironment(appState)
+        .environment(navigation)
+        .onAppear {
+          delegate.appState = appState
+          appState.launch()
+        }
+    }
+    .defaultSize(width: 1000, height: 640)
+    .commands { AppCommands(appState: appState, navigation: navigation) }
+
+    MenuBarExtra {
+      MenuBarView()
+        .jetlinkEnvironment(appState)
+        .environment(navigation)
+        .onAppear {
+          delegate.appState = appState
+          appState.launch()
+        }
+    } label: {
+      Image(nsImage: MenuBarGlyph.image(menuBarState))
+        .accessibilityLabel("Jetlink")
+    }
+    .menuBarExtraStyle(.menu)
+
+    Settings {
+      SettingsView()
+        .jetlinkEnvironment(appState)
+        .environment(navigation)
+    }
+  }
+
+  /// The icon's mark in three states: faded with no server, in outline while
+  /// it waits for a comma, and filled once a comma is on the other end.
+  private var menuBarState: MenuBarGlyph.State {
+    switch appState.server.runState {
+    case .stopped, .failed:
+      return .off
+    case .starting, .stopping:
+      return .waiting
+    case .serving:
+      return appState.server.link.state == .connected ? .connected : .waiting
+    }
+  }
+}
+
+extension View {
+  /// Every store the views read, from the one state the app owns.
+  func jetlinkEnvironment(_ appState: AppState) -> some View {
+    self
+      .environment(appState)
+      .environment(appState.settings)
+      .environment(appState.server)
+      .environment(appState.models)
+      .environment(appState.logs)
+      .environment(appState.updates)
+  }
+}
+
+struct AppCommands: Commands {
+  let appState: AppState
+  let navigation: Navigation
+
+  var body: some Commands {
+    CommandGroup(after: .appInfo) {
+      if appState.updates.isAvailable {
+        Button("Check for Updates…") { appState.updates.checkForUpdates() }
+          .disabled(!appState.updates.canCheckForUpdates)
+      }
+    }
+    CommandGroup(replacing: .newItem) {}
+    CommandGroup(after: .sidebar) {
+      Divider()
+      Button("Status") { navigation.selection = .status }
+        .keyboardShortcut("1", modifiers: .command)
+      Button("Models") { navigation.selection = .models }
+        .keyboardShortcut("2", modifiers: .command)
+      Button("Benchmark") { navigation.selection = .benchmark }
+        .keyboardShortcut("3", modifiers: .command)
+      Button("Logs") { navigation.selection = .logs }
+        .keyboardShortcut("4", modifiers: .command)
+    }
+    CommandMenu("Server") {
+      Button("Start Server") { appState.server.start() }
+        .keyboardShortcut("r", modifiers: .command)
+        .disabled(!canStart)
+      Button("Stop Server") { appState.server.stop() }
+        .keyboardShortcut(".", modifiers: .command)
+        .disabled(appState.server.runState != .serving)
+      Button("Restart Server") { appState.server.restart() }
+        .disabled(appState.server.runState != .serving)
+      Divider()
+      Button("Refresh Model List") { appState.models.refreshCatalog() }
+        .keyboardShortcut("r", modifiers: [.command, .shift])
+        .disabled(appState.server.runState != .serving)
+      Divider()
+      Button("Show Cache in Finder") {
+        NSWorkspace.shared.activateFileViewerSelecting([cacheURL])
+      }
+    }
+  }
+
+  private var canStart: Bool {
+    switch appState.server.runState {
+    case .stopped, .failed: true
+    case .starting, .serving, .stopping: false
+    }
+  }
+
+  private var cacheURL: URL {
+    if let cache = appState.server.info?.cache, !cache.isEmpty {
+      return URL(fileURLWithPath: cache)
+    }
+    return appState.settings.cacheDirectory
+  }
+}

@@ -1,0 +1,130 @@
+import JetlinkKit
+import JetlinkUI
+import SwiftUI
+
+/// The places in the app.
+enum SidebarItem: String, CaseIterable, Identifiable, Hashable {
+  case status, models, benchmark, logs
+
+  var id: String { rawValue }
+
+  var title: String {
+    switch self {
+    case .status: "Status"
+    case .models: "Models"
+    case .benchmark: "Benchmark"
+    case .logs: "Logs"
+    }
+  }
+
+  var symbol: String {
+    switch self {
+    case .status: "gauge.with.dots.needle.33percent"
+    case .models: "shippingbox"
+    case .benchmark: "stopwatch"
+    case .logs: "doc.text"
+    }
+  }
+}
+
+/// Which place the window is showing. The View menu sets it too,
+/// so it lives outside the window's own state.
+@MainActor
+@Observable
+final class Navigation {
+  var selection: SidebarItem? = .status
+
+  init(selection: SidebarItem? = .status) {
+    self.selection = selection
+  }
+}
+
+struct MainWindow: View {
+  @Environment(ServerStore.self) private var server
+  @Environment(ModelStore.self) private var models
+  @Environment(Navigation.self) private var navigation
+
+  var body: some View {
+    @Bindable var navigation = navigation
+    NavigationSplitView {
+      List(SidebarItem.allCases, selection: $navigation.selection) { item in
+        Label(item.title, systemImage: item.symbol)
+          .tag(item)
+      }
+      .navigationSplitViewColumnWidth(min: 160, ideal: 180)
+    } detail: {
+      detail
+        .navigationTitle(navigation.selection?.title ?? "Jetlink")
+        .toolbar {
+          // The activity view is an inset, not a glass pill: the toolbar's own
+          // background around the item is turned off where the toolbar has one.
+          if #available(macOS 26, *) {
+            ToolbarItem(placement: .principal) {
+              ToolbarActivityView()
+            }
+            .sharedBackgroundVisibility(.hidden)
+          } else {
+            ToolbarItem(placement: .principal) {
+              ToolbarActivityView()
+            }
+          }
+          ToolbarItem(placement: .primaryAction) {
+            runButton
+          }
+        }
+    }
+    .frame(minWidth: 860, minHeight: 540)
+    // A command the server refused, such as Use Model on a model it cannot
+    // find, from whichever screen sent it.
+    .alert("Couldn't complete the action", isPresented: modelErrorPresented) {
+      Button("OK") { models.clearError() }
+    } message: {
+      Text(models.lastError ?? "")
+    }
+  }
+
+  private var modelErrorPresented: Binding<Bool> {
+    Binding(get: { models.lastError != nil }, set: { if !$0 { models.clearError() } })
+  }
+
+  @ViewBuilder
+  private var detail: some View {
+    @Bindable var navigation = navigation
+    switch navigation.selection ?? .status {
+    case .status: StatusView(selection: $navigation.selection)
+    case .models: ModelsView()
+    case .benchmark: BenchmarkView()
+    case .logs: LogsView()
+    }
+  }
+
+  @ViewBuilder
+  private var runButton: some View {
+    switch server.runState {
+    case .stopped, .failed:
+      Button("Start Server", systemImage: "play.fill") { server.start() }
+        .help("Start the server")
+    case .serving:
+      Button("Stop Server", systemImage: "stop.fill") { server.stop() }
+        .help("Stop the server")
+    case .starting, .stopping:
+      Button {
+      } label: {
+        ProgressView()
+          .controlSize(.small)
+      }
+      .disabled(true)
+      .help(server.runState == .starting ? "The server is starting" : "The server is stopping")
+    }
+  }
+}
+
+#Preview("Serving") {
+  MainWindow()
+    .environment(ServerStore.preview(runState: .serving, info: PreviewData.serverInfo, link: PreviewData.linkWaiting, engine: PreviewData.engineReady))
+    .environment(ModelStore.preview(catalog: PreviewData.catalog, inventory: PreviewData.inventory, engine: PreviewData.engineReady))
+    .environment(LogBuffer.preview(lines: PreviewData.logLines))
+    .environment(AppSettings.preview())
+    .environment(Navigation())
+    .frame(width: 1000, height: 640)
+}

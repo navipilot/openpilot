@@ -1,0 +1,74 @@
+import numpy as np
+from opendbc.can import CANPacker
+from opendbc.car import Bus
+from opendbc.car.lateral import apply_steer_angle_limits_vm
+from opendbc.car.interfaces import CarControllerBase
+from opendbc.car.tesla.teslacan import TeslaCAN
+from opendbc.car.tesla.values import CarControllerParams
+from opendbc.car.vehicle_model import VehicleModel
+from opendbc.sunnypilot.car.tesla.coop_steering import CoopSteeringCarController
+from opendbc.sunnypilot.car.tesla.speed_limit_controller import TeslaSpeedLimitController
+
+
+def get_safety_CP():
+  # We use the TESLA_MODEL_Y platform for lateral limiting to match safety
+  # A Model 3 at 40 m/s using the Model Y limits sees a <0.3% difference in max angle (from curvature factor)
+  from opendbc.car.tesla.interface import CarInterface
+  return CarInterface.get_non_essential_params("TESLA_MODEL_Y")
+
+
+class CarController(CarControllerBase):
+  def __init__(self, dbc_names, CP, CP_SP):
+    CarControllerBase.__init__(self, dbc_names, CP, CP_SP)
+    self.coop_steer = CoopSteeringCarController()
+    self.speed_limit_controller = TeslaSpeedLimitController(CP_SP)
+    self.apply_angle_last = 0
+    self.packer = CANPacker(dbc_names[Bus.party])
+    self.tesla_can = TeslaCAN(CP, self.packer)
+
+    # Vehicle model used for lateral limiting
+    self.VM = VehicleModel(get_safety_CP())
+
+  def update(self, CC, CC_SP, CS, now_nanos):
+    actuators = CC.actuators
+    can_sends = []
+    # 自动限速报文与常规控制共用本周期发送队列，并继续受 Panda 安全钩子约束。
+    can_sends.extend(self.speed_limit_controller.update(CC, CS, now_nanos))
+
+    # Wait until the override condition clears before steering
+    # Canceling is done on rising edge of CS.out.steeringDisengage and is handled generically with CC.cruiseControl.cancel
+    lat_active = CC.latActive and not CS.out.steeringDisengage
+
+    if self.frame % 2 == 0:
+      # Angular rate limit based on speed
+      self.apply_angle_last = apply_steer_angle_limits_vm(actuators.steeringAngleDeg, self.apply_angle_last, CS.out.vEgoRaw, CS.out.steeringAngleDeg,
+                                                          lat_active, CarControllerParams, self.VM)
+
+      can_sends.append(self.tesla_can.create_steering_control(*self.coop_steer.update(self.apply_angle_last, lat_active, self.CP_SP, CS, self.VM)))
+
+    if self.frame % 10 == 0:
+      can_sends.append(self.tesla_can.create_steering_allowed())
+
+    # Longitudinal control
+    if self.CP.openpilotLongitudinalControl:
+      if self.frame % 4 == 0:
+        state = 13 if CC.cruiseControl.cancel else 4  # 4=ACC_ON, 13=ACC_CANCEL_GENERIC_SILENT
+        accel = float(np.clip(actuators.accel, CarControllerParams.ACCEL_MIN, CarControllerParams.ACCEL_MAX if lat_active else 0))
+        cntr = (self.frame // 4) % 8
+        can_sends.append(self.tesla_can.create_longitudinal_command(state, accel, cntr, CS.out.vEgo, CC.longActive, CS.cruise_override))
+
+    else:
+      # Increment counter so cancel is prioritized even without openpilot longitudinal
+      if CC.cruiseControl.cancel:
+        cntr = (CS.das_control["DAS_controlCounter"] + 1) % 8
+        can_sends.append(self.tesla_can.create_longitudinal_command(13, 0, cntr, CS.out.vEgo, False, True))
+
+    # TODO: HUD control
+    new_actuators = actuators.as_builder()
+    new_actuators.steeringAngleDeg = self.apply_angle_last
+    new_actuators.accel = self.coop_steer.coop_apply_angle_sat_last # debug
+    new_actuators.curvature = float(self.coop_steer.debug_angle_desired_limited) # debug
+    new_actuators.torque = float(self.coop_steer.angle_override) # debug
+
+    self.frame += 1
+    return new_actuators, can_sends

@@ -1,0 +1,102 @@
+# xcodegen spec for the Jetlink iPhone and iPad app.
+#
+# Regenerate with `make project`. The generated Jetlink.xcodeproj is committed
+# so `open Jetlink.xcodeproj` works without installing xcodegen. Signing comes
+# from Config/Signing.xcconfig, and your own team and bundle identifier from
+# Config/Local.xcconfig beside it, which git ignores; nothing about you lands
+# in the committed project.
+name: Jetlink
+options:
+  deploymentTarget: { iOS: "26.1" }
+  xcodeVersion: "26.6"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+packages:
+  JetlinkKit:
+    path: ../JetlinkKit
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    MARKETING_VERSION: ${JETLINK_VERSION}
+    CURRENT_PROJECT_VERSION: ${JETLINK_BUILD}
+    CODE_SIGN_STYLE: Automatic
+    TARGETED_DEVICE_FAMILY: "1,2"
+    ARCHS: arm64
+    DEAD_CODE_STRIPPING: YES
+targets:
+  Jetlink:
+    type: application
+    platform: iOS
+    configFiles:
+      Debug: Config/Signing.xcconfig
+      Release: Config/Signing.xcconfig
+    sources:
+      - path: Jetlink
+      - path: Resources/Assets.xcassets
+      - path: Resources/PrivacyInfo.xcprivacy
+        buildPhase: resources
+    dependencies:
+      - package: JetlinkKit
+        products: [JetlinkKit, JetlinkUI, JetlinkRegistry, JetlinkServer, JetlinkORT]
+    info:
+      path: Resources/Info.plist
+      properties:
+        CFBundleName: Jetlink
+        CFBundleDisplayName: Jetlink
+        CFBundleIdentifier: $(PRODUCT_BUNDLE_IDENTIFIER)
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleIconName: AppIcon
+        LSRequiresIPhoneOS: true
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        # Every orientation, and no UIRequiresFullScreen: on an iPad the app
+        # runs beside others in Split View and Stage Manager. It says so when
+        # it leaves the screen, which is what stops the model.
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        # A trackpad or mouse on an iPad drives the app as a pointer.
+        UIApplicationSupportsIndirectInputEvents: true
+        UIRequiredDeviceCapabilities: [arm64, metal]
+        NSLocalNetworkUsageDescription: Jetlink connects to your comma over the USB cable.
+        # The browse that asks for Local Network access at launch.
+        NSBonjourServices: [_jetlink._tcp]
+        # A model can be copied in from the Finder or the Files app, as well
+        # as imported; the app keeps its own copy.
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: false
+        ITSAppUsesNonExemptEncryption: false
+        NSHumanReadableCopyright: "MIT License. Copyright 2026 Zeph Leggett."
+    entitlements:
+      path: Resources/Jetlink.entitlements
+      properties:
+        # CoreML compiles the 766 MB model inside the app. On a Mac that
+        # peaked near 3 GB resident; this is headroom for it on an iPhone or iPad.
+        com.apple.developer.kernel.increased-memory-limit: true
+    settings:
+      base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_USER_SCRIPT_SANDBOXING: YES
+schemes:
+  # Run builds Release: frame times from an unoptimized build mean little,
+  # and this is how the app is used in the car. Jetlink Debug is for the
+  # debugger.
+  Jetlink:
+    build: { targets: { Jetlink: all } }
+    run: { config: Release }
+    profile: { config: Release }
+    archive: { config: Release }
+  Jetlink Debug:
+    build: { targets: { Jetlink: all } }
+    run: { config: Debug }
+    archive: { config: Release }

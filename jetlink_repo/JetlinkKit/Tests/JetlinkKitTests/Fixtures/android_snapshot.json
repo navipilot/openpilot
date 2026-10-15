@@ -1,0 +1,229 @@
+{
+  "benchmark" : {
+    "detail" : "",
+    "elapsed" : 60.100000000000001,
+    "frame" : {
+      "max" : 31.399999999999999,
+      "mean" : 24.100000000000001,
+      "p50" : 23.800000000000001,
+      "p90" : 25.199999999999999,
+      "p99" : 27.899999999999999
+    },
+    "frames" : 1195,
+    "report" : {
+      "accelerator" : {
+        "max" : 28.199999999999999,
+        "mean" : 21.899999999999999,
+        "p50" : 21.699999999999999,
+        "p90" : 22.800000000000001,
+        "p99" : 25.100000000000001
+      },
+      "build" : "Release build, frame thread user-interactive, CPU keep-warm off",
+      "cancelled" : false,
+      "device" : "htp-SM8650",
+      "frame" : {
+        "max" : 31.399999999999999,
+        "mean" : 24.100000000000001,
+        "p50" : 23.800000000000001,
+        "p90" : 25.199999999999999,
+        "p99" : 27.899999999999999
+      },
+      "frames" : 1195,
+      "output" : {
+        "max" : 0.40000000000000002,
+        "mean" : 0.20000000000000001,
+        "p50" : 0.20000000000000001,
+        "p90" : 0.20000000000000001,
+        "p99" : 0.29999999999999999
+      },
+      "over35" : 0,
+      "over50" : 0,
+      "queues" : {
+        "max" : 1.1000000000000001,
+        "mean" : 0.40000000000000002,
+        "p50" : 0.40000000000000002,
+        "p90" : 0.5,
+        "p99" : 0.69999999999999996
+      },
+      "seconds" : 60.100000000000001,
+      "sha256" : "a086d5249fc308bb7c0ffbcbb2b8a53c3f6b1f0a1d2c3b4a5e6f7081920304050",
+      "thermal_at_end" : "fair",
+      "thermal_at_start" : "nominal",
+      "windows" : [
+        {
+          "frame" : {
+            "max" : 29,
+            "mean" : 23.899999999999999,
+            "p50" : 23.699999999999999,
+            "p90" : 24.899999999999999,
+            "p99" : 26.800000000000001
+          },
+          "start_second" : 0,
+          "thermal" : "nominal"
+        },
+        {
+          "frame" : {
+            "max" : 31.399999999999999,
+            "mean" : 24.300000000000001,
+            "p50" : 24,
+            "p90" : 25.399999999999999,
+            "p99" : 27.899999999999999
+          },
+          "start_second" : 10,
+          "thermal" : "fair"
+        }
+      ]
+    },
+    "report_text" : "Jetlink benchmark, htp-SM8650\nmodel a086d5249fc308bb, 1195 frames at 20 Hz over 60 s\nRelease build, frame thread user-interactive, CPU keep-warm off\nframe        mean 24.1  p50 23.8  p90 25.2  p99 27.9  max 31.4 ms\naccelerator  mean 21.9  p50 21.7  p90 22.8  p99 25.1  max 28.2 ms\nqueues       mean 0.4  p50 0.4  p90 0.5  p99 0.7  max 1.1 ms\noutput       mean 0.2  p50 0.2  p90 0.2  p99 0.3  max 0.4 ms\nover 35 ms: 0   over 50 ms: 0\ntemperature: nominal at start, fair at end\nby window:\n     0 s  mean  23.9  p99  26.8  max  29.0 ms  nominal\n    10 s  mean  24.3  p99  27.9  max  31.4 ms  fair",
+    "state" : "done",
+    "total" : 60
+  },
+  "catalog" : {
+    "count" : 2,
+    "default_ref" : "37bfa1413edcdc2e8844984b83727c33f81d8f46",
+    "error" : null,
+    "fetched_at" : 1759000000
+  },
+  "disk" : {
+    "engines_bytes" : 800000000,
+    "free_bytes" : 40000000000,
+    "models_bytes" : 765953504
+  },
+  "engine" : {
+    "detail" : "",
+    "frac" : 1,
+    "load_only" : false,
+    "msg" : "",
+    "sha256" : "a086d5249fc308bb7c0ffbcbb2b8a53c3f6b1f0a1d2c3b4a5e6f7081920304050",
+    "stage" : null,
+    "state" : "ready"
+  },
+  "history" : [
+    {
+      "at" : 1759000000,
+      "stats" : {
+        "fps" : 19.899999999999999,
+        "frames" : 12345,
+        "gpu_ms" : null,
+        "served_ms" : {
+          "max" : 41.899999999999999,
+          "mean" : 31.600000000000001,
+          "p99" : 38.399999999999999
+        },
+        "slow" : 0,
+        "stages_ms" : {
+          "gpu" : 29.399999999999999,
+          "other" : 1.2,
+          "queue" : 0.59999999999999998,
+          "send" : 0.40000000000000002
+        },
+        "total_ms" : null,
+        "window_s" : 1
+      }
+    }
+  ],
+  "imports" : [
+
+  ],
+  "link" : {
+    "detail" : "",
+    "medium" : "usb3",
+    "peer" : "usb",
+    "state" : "connected"
+  },
+  "medium" : {
+    "name" : "usb3",
+    "slow" : false,
+    "title" : "USB 3"
+  },
+  "models" : [
+    {
+      "build_time" : "2026-09-17T11:04:00Z",
+      "bytes" : 766000000,
+      "can_use" : false,
+      "display_name" : "Cinque Terre Model V3",
+      "has_files" : false,
+      "id" : "404a18cfd86d29630000000000000000000000000000000000000000000000ff",
+      "is_default" : true,
+      "is_loaded" : false,
+      "is_local" : false,
+      "is_orphan" : false,
+      "is_requested_by_comma" : false,
+      "name" : "Cinque Terre Model V3",
+      "prepared_for" : [
+
+      ],
+      "ref" : "37bfa1413edcdc2e8844984b83727c33f81d8f46",
+      "sha256" : "404a18cfd86d29630000000000000000000000000000000000000000000000ff",
+      "status" : {
+        "frac" : 0.41999999999999998,
+        "kind" : "downloading",
+        "rate_bps" : 41000000
+      }
+    },
+    {
+      "build_time" : "2026-08-30T09:41:12Z",
+      "bytes" : 765953504,
+      "can_use" : false,
+      "display_name" : "BMRLNAP Model v4",
+      "has_files" : true,
+      "id" : "a086d5249fc308bb7c0ffbcbb2b8a53c3f6b1f0a1d2c3b4a5e6f7081920304050",
+      "is_default" : false,
+      "is_loaded" : true,
+      "is_local" : false,
+      "is_orphan" : false,
+      "is_requested_by_comma" : true,
+      "name" : "BMRLNAP Model v4",
+      "prepared_for" : [
+        {
+          "backend" : "ort",
+          "build_seconds" : 190.5,
+          "built_at" : "2026-09-28T10:00:00Z",
+          "bytes" : 800000000,
+          "checkpoint" : null,
+          "current" : true,
+          "device" : "htp-SM8650",
+          "key" : "a086d5249fc308bb.ort1.29.0.htp-SM8650",
+          "path" : "/data/jetlink/engines/a086d5249fc308bb.ort1.29.0.htp-SM8650.ortcache",
+          "runtime_version" : "1.29.0",
+          "sha256" : "a086d5249fc308bb7c0ffbcbb2b8a53c3f6b1f0a1d2c3b4a5e6f7081920304050"
+        }
+      ],
+      "ref" : "f877d7a0ccc3cce943c76e285214c020cd65c899",
+      "sha256" : "a086d5249fc308bb7c0ffbcbb2b8a53c3f6b1f0a1d2c3b4a5e6f7081920304050",
+      "status" : {
+        "kind" : "loaded"
+      }
+    }
+  ],
+  "port" : 5599,
+  "recent" : {
+    "fps" : 19.899999999999999,
+    "frames" : 12345,
+    "gpu_ms" : null,
+    "served_ms" : {
+      "max" : 41.899999999999999,
+      "mean" : 31.600000000000001,
+      "p99" : 38.399999999999999
+    },
+    "slow" : 0,
+    "stages_ms" : {
+      "gpu" : 29.399999999999999,
+      "other" : 1.2,
+      "queue" : 0.59999999999999998,
+      "send" : 0.40000000000000002
+    },
+    "total_ms" : null,
+    "window_s" : 1
+  },
+  "running" : true,
+  "server" : {
+    "backend" : "ort",
+    "detail" : "",
+    "device" : "htp-SM8650",
+    "runtime_version" : "1.29.0",
+    "state" : "serving"
+  },
+  "shutdown_requests" : 0,
+  "version" : 10
+}

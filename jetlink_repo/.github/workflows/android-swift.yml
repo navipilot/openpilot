@@ -1,0 +1,63 @@
+# libjetlink.so, the server the Android app runs, built in one place for the
+# workflows that package it (ci.yml and release.yml) and uploaded as the
+# artifact libjetlink-arm64-v8a: arm64-v8a/libjetlink.so beside the NDK's
+# libc++_shared.so, which the app's build takes as -Pjetlink.prebuiltSwift.
+# It runs in a swift:6.4 container: the Swift SDK for Android only builds
+# with the toolchain of its own version.
+name: Swift server for Android
+
+on:
+  workflow_call:
+
+env:
+  NDK_VERSION: "30.0.16248370"
+  NDK_RELEASE: r30
+  ONNXRUNTIME: "1.29.0"
+
+jobs:
+  build:
+    name: libjetlink.so
+    runs-on: ubuntu-24.04
+    container: swift:6.4-noble
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Install curl and unzip
+        run: apt-get update && apt-get install -y --no-install-recommends ca-certificates curl unzip
+
+      - name: Cache the NDK
+        id: ndk
+        uses: actions/cache@v4
+        with:
+          path: /opt/android-ndk
+          key: android-ndk-${{ env.NDK_VERSION }}
+
+      - name: Download the NDK
+        if: steps.ndk.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL -o /tmp/ndk.zip "https://dl.google.com/android/repository/android-ndk-${NDK_RELEASE}-linux.zip"
+          unzip -q /tmp/ndk.zip -d /tmp/ndk
+          mkdir -p /opt/android-ndk
+          mv "/tmp/ndk/android-ndk-${NDK_RELEASE}" "/opt/android-ndk/${NDK_VERSION}"
+
+      - name: Install the Swift SDK for Android
+        run: |
+          swift sdk install \
+            https://download.swift.org/swift-6.4.0-release/android-sdk/swift-6.4.0-RELEASE/swift-6.4.0-RELEASE_android.artifactbundle.tar.gz \
+            --checksum 21fb555122a3d801ad943d48df7ebffdd8824de61c25c180bb792d3edaee0b43
+
+      - name: Build libjetlink.so
+        run: |
+          curl -fsSL -o /tmp/onnxruntime.aar \
+            "https://repo1.maven.org/maven2/com/microsoft/onnxruntime/onnxruntime-android-qnn/${ONNXRUNTIME}/onnxruntime-android-qnn-${ONNXRUNTIME}.aar"
+          ANDROID_NDK_HOME="/opt/android-ndk/${NDK_VERSION}" bash android/scripts/swift-build.sh "$PWD/swift-out" /tmp/onnxruntime.aar release
+        # The `jetlink` product: the server the Linux job tests, with the QNN
+        # backend and the JNI bridge (android/README.md).
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libjetlink-arm64-v8a
+          path: swift-out
+          if-no-files-found: error
+          retention-days: 7

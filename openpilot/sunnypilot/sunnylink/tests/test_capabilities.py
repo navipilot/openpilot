@@ -1,0 +1,118 @@
+"""
+Copyright (c) 2021-, Haibin Wen, sunnypilot, and a number of other contributors.
+
+This file is part of sunnypilot and is licensed under the MIT License.
+See the LICENSE.md file in the root directory for more details.
+
+Sentinel tests for the capabilities payload contract. PROTOCOL_VERSION is the
+wire-protocol version observable by the dashboard; bumping it is a breaking
+change and must be intentional. KNOWN_PROTOCOL_VERSIONS pins the set we
+explicitly support — when the constant is bumped, this list must be edited in
+the same commit so the bump shows up in code review.
+"""
+from __future__ import annotations
+
+import subprocess
+import sys
+import textwrap
+from pathlib import Path
+
+from openpilot.sunnypilot.sunnylink.capabilities import (
+  CAPABILITY_DEFAULTS,
+  CAPABILITY_FIELDS,
+  CAPABILITY_LABELS,
+  PROTOCOL_VERSION,
+  generate_capabilities,
+)
+from openpilot.common.test import OpenpilotTestCase
+
+
+KNOWN_PROTOCOL_VERSIONS = (1,)
+LATEST_KNOWN = max(KNOWN_PROTOCOL_VERSIONS)
+REPO_ROOT = Path(__file__).resolve().parents[4]
+
+
+def caps():
+  return generate_capabilities()
+
+
+def test_capabilities_import_does_not_require_unrelated_brand_packages():
+  script = textwrap.dedent("""
+    import importlib.abc
+    import sys
+
+    class MissingReleaseBrands(importlib.abc.MetaPathFinder):
+      def find_spec(self, fullname, path, target=None):
+        if fullname.startswith(("opendbc.car.hyundai", "opendbc.car.subaru")):
+          raise ModuleNotFoundError(f"No module named {fullname!r}", name=fullname)
+        return None
+
+    sys.meta_path.insert(0, MissingReleaseBrands())
+    from openpilot.sunnypilot.sunnylink.capabilities import CAPABILITY_LABELS, _resolve_brand_capabilities
+    assert CAPABILITY_LABELS
+    caps = {"brand": "tesla"}
+    _resolve_brand_capabilities(caps, "", None)
+    assert caps == {"brand": "tesla"}
+  """)
+  result = subprocess.run([sys.executable, "-c", script], cwd=REPO_ROOT, text=True, capture_output=True)
+  assert result.returncode == 0, result.stderr
+
+
+class TestProtocolVersion(OpenpilotTestCase):
+  def test_protocol_version_in_capability_fields(self):
+    assert "protocol_version" in CAPABILITY_FIELDS
+
+  def test_protocol_version_has_label(self):
+    assert "protocol_version" in CAPABILITY_LABELS
+
+  def test_protocol_version_default_is_set(self):
+    assert CAPABILITY_DEFAULTS.get("protocol_version") == PROTOCOL_VERSION
+
+  def test_protocol_version_emitted(self, caps):
+    assert "protocol_version" in caps
+    assert isinstance(caps["protocol_version"], int)
+    assert caps["protocol_version"] >= 1
+
+  def test_protocol_version_matches_constant(self, caps):
+    assert caps["protocol_version"] == PROTOCOL_VERSION
+
+  def test_protocol_version_is_known(self):
+    """Sentinel against accidental bumps. Edit KNOWN_PROTOCOL_VERSIONS if intentional."""
+    assert PROTOCOL_VERSION in KNOWN_PROTOCOL_VERSIONS, (
+      f"PROTOCOL_VERSION={PROTOCOL_VERSION} is not in KNOWN_PROTOCOL_VERSIONS={KNOWN_PROTOCOL_VERSIONS}. " +
+      "If this bump is intentional, add it to KNOWN_PROTOCOL_VERSIONS."
+    )
+
+  def test_protocol_version_matches_latest_known(self):
+    assert PROTOCOL_VERSION == LATEST_KNOWN, (
+      "Test invariant: PROTOCOL_VERSION must equal max(KNOWN_PROTOCOL_VERSIONS)."
+    )
+
+
+class TestOpaquePerBrandFlags(OpenpilotTestCase):
+  def test_subaru_has_sng_field_present(self):
+    assert "subaru_has_sng" in CAPABILITY_FIELDS
+
+  def test_hyundai_alpha_long_available_field_present(self):
+    assert "hyundai_alpha_long_available" in CAPABILITY_FIELDS
+
+  def test_subaru_has_sng_default_false(self, caps):
+    assert caps["subaru_has_sng"] is False
+
+  def test_hyundai_alpha_long_available_default_false(self, caps):
+    assert caps["hyundai_alpha_long_available"] is False
+
+
+class TestCapabilitiesShape(OpenpilotTestCase):
+  def test_all_fields_present(self, caps):
+    for field in CAPABILITY_FIELDS:
+      assert field in caps, f"capabilities missing {field}"
+
+  def test_all_fields_have_labels(self):
+    for field in CAPABILITY_FIELDS:
+      assert field in CAPABILITY_LABELS, f"CAPABILITY_LABELS missing {field}"
+
+  def test_string_defaults_are_strings(self, caps):
+    assert isinstance(caps["brand"], str)
+    assert isinstance(caps["steer_control_type"], str)
+    assert isinstance(caps["device_type"], str)

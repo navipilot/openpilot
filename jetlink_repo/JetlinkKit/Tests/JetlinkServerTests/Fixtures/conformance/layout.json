@@ -1,0 +1,194 @@
+{
+  "cases": [
+    {
+      "feeds_back": true,
+      "hidden_range": [
+        32,
+        64
+      ],
+      "hidden_state": [
+        32,
+        64
+      ],
+      "infer_resp_nbytes": 148,
+      "reply_nelem": 32
+    },
+    {
+      "feeds_back": true,
+      "hidden_range": [
+        32,
+        64
+      ],
+      "hidden_state": [
+        -32,
+        null
+      ],
+      "infer_resp_nbytes": 148,
+      "reply_nelem": 32
+    },
+    {
+      "feeds_back": true,
+      "hidden_range": [
+        32,
+        64
+      ],
+      "hidden_state": [
+        32,
+        null
+      ],
+      "infer_resp_nbytes": 148,
+      "reply_nelem": 32
+    },
+    {
+      "feeds_back": true,
+      "hidden_range": [
+        32,
+        64
+      ],
+      "hidden_state": [
+        -32,
+        64
+      ],
+      "infer_resp_nbytes": 148,
+      "reply_nelem": 32
+    },
+    {
+      "feeds_back": true,
+      "hidden_range": [
+        0,
+        32
+      ],
+      "hidden_state": [
+        null,
+        32
+      ],
+      "infer_resp_nbytes": 148,
+      "reply_nelem": 32
+    },
+    {
+      "feeds_back": true,
+      "hidden_range": [
+        30,
+        62
+      ],
+      "hidden_state": [
+        30,
+        -2
+      ],
+      "infer_resp_nbytes": 148,
+      "reply_nelem": 32
+    },
+    {
+      "feeds_back": false,
+      "hidden_range": [
+        40,
+        64
+      ],
+      "hidden_state": [
+        40,
+        100
+      ],
+      "infer_resp_nbytes": 180,
+      "reply_nelem": 40
+    },
+    {
+      "feeds_back": false,
+      "hidden_range": [
+        0,
+        10
+      ],
+      "hidden_state": [
+        -100,
+        10
+      ],
+      "infer_resp_nbytes": 236,
+      "reply_nelem": 54
+    },
+    {
+      "feeds_back": false,
+      "hidden_range": null,
+      "hidden_state": [
+        50,
+        40
+      ],
+      "infer_resp_nbytes": 276,
+      "reply_nelem": 64
+    },
+    {
+      "feeds_back": false,
+      "hidden_range": null,
+      "hidden_state": [
+        64,
+        null
+      ],
+      "infer_resp_nbytes": 276,
+      "reply_nelem": 64
+    },
+    {
+      "feeds_back": false,
+      "hidden_range": [
+        0,
+        64
+      ],
+      "hidden_state": [
+        null,
+        null
+      ],
+      "infer_resp_nbytes": 20,
+      "reply_nelem": 0
+    },
+    {
+      "feeds_back": false,
+      "hidden_range": null,
+      "hidden_state": null,
+      "infer_resp_nbytes": 276,
+      "reply_nelem": 64
+    }
+  ],
+  "slices": "each case adds output_slices {\"plan\": [0, 16], \"hidden_state\": its bounds}, or no hidden_state for null",
+  "spec": {
+    "checkpoint": null,
+    "frame_skip": 4,
+    "input_shapes": {
+      "action_t": [
+        1,
+        2
+      ],
+      "big_img": [
+        1,
+        12,
+        8,
+        16
+      ],
+      "desire_pulse": [
+        1,
+        33,
+        8
+      ],
+      "features_buffer": [
+        1,
+        32,
+        4,
+        8
+      ],
+      "img": [
+        1,
+        12,
+        8,
+        16
+      ],
+      "traffic_convention": [
+        1,
+        2
+      ]
+    },
+    "nbytes": 4096,
+    "output_shapes": {
+      "outputs": [
+        1,
+        64
+      ]
+    },
+    "sha256": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+  }
+}

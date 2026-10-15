@@ -1,0 +1,19 @@
+{
+  "source": "00000063--a5c578c804",
+  "event6Fusion": [
+    {"t": 160.02, "rawDistance": 63.0, "vEgo": 11.17},
+    {"t": 161.02, "rawDistance": 60.0, "vEgo": 10.89},
+    {"t": 162.01, "rawDistance": 46.0, "vEgo": 10.03},
+    {"t": 163.97, "rawDistance": 32.0, "vEgo": 6.87},
+    {"t": 165.92, "rawDistance": 26.0, "vEgo": 4.17},
+    {"t": 166.87, "rawDistance": 20.0, "vEgo": 2.95},
+    {"t": 167.86, "rawDistance": 17.0, "vEgo": 2.03},
+    {"t": 168.82, "rawDistance": 16.0, "vEgo": 0.86},
+    {"t": 169.78, "rawDistance": 16.0, "vEgo": 0.18}
+  ],
+  "event7": {"startRequests": 62, "startApplied": 0, "eventMismatch": 62},
+  "event15": {"startRequests": 11, "startApplied": 0, "eventMismatch": 11, "releaseSamples": 148},
+  "genericGreenE2e": {"samples": 414, "trafficApplied": 0, "vStart": 9.513, "vMin": 0.258},
+  "leftTurn": {"samples": 196, "red": 0, "green": 77, "off": 119},
+  "maxBypassSeconds": 46.81
+}
