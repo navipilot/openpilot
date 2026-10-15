@@ -281,7 +281,7 @@ SConscript([
   'openpilot/system/loggerd/SConscript',
 ])
 
-if arch == "comma_arm64":
+if arch == "comma_arm64" or any(str(target).startswith('openpilot/system/camerad/') for target in BUILD_TARGETS):
   SConscript(['openpilot/system/camerad/SConscript'])
 
 # Build selfdrive

@@ -15,3 +15,8 @@ env = Environment(
 
 panda = env.SharedObject("panda.os", "panda.c")
 libpanda = env.SharedLibrary("libpanda.so", [panda])
+
+f4_env = env.Clone()
+f4_env.Append(CPPDEFINES=['TEST_STM32F4'])
+f4 = f4_env.SharedObject("panda_f4.os", "panda.c")
+f4_env.SharedLibrary("libpanda_f4.so", [f4])

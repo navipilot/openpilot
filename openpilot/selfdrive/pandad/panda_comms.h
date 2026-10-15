@@ -10,13 +10,42 @@
 #define TIMEOUT 0
 #define SPI_BUF_SIZE 2048
 
+struct libusb_context;
+struct libusb_device_handle;
 
-class PandaSpiHandle {
+class PandaCommsHandle {
 public:
+  virtual ~PandaCommsHandle() = default;
   std::string hw_serial;
   std::atomic<bool> connected = true;
   std::atomic<bool> comms_healthy = true;
 
+  virtual int control_write(uint8_t request, uint16_t param1, uint16_t param2, unsigned int timeout=TIMEOUT) = 0;
+  virtual int control_read(uint8_t request, uint16_t param1, uint16_t param2, unsigned char *data, uint16_t length, unsigned int timeout=TIMEOUT) = 0;
+  virtual int bulk_write(unsigned char endpoint, unsigned char* data, int length, unsigned int timeout=TIMEOUT) = 0;
+  virtual int bulk_read(unsigned char endpoint, unsigned char* data, int length, unsigned int timeout=TIMEOUT) = 0;
+};
+
+class PandaUsbHandle : public PandaCommsHandle {
+public:
+  PandaUsbHandle(std::string serial);
+  ~PandaUsbHandle();
+  int control_write(uint8_t request, uint16_t param1, uint16_t param2, unsigned int timeout=TIMEOUT) override;
+  int control_read(uint8_t request, uint16_t param1, uint16_t param2, unsigned char *data, uint16_t length, unsigned int timeout=TIMEOUT) override;
+  int bulk_write(unsigned char endpoint, unsigned char* data, int length, unsigned int timeout=TIMEOUT) override;
+  int bulk_read(unsigned char endpoint, unsigned char* data, int length, unsigned int timeout=TIMEOUT) override;
+  void cleanup();
+  static std::vector<std::string> list();
+
+private:
+  libusb_context *ctx = nullptr;
+  libusb_device_handle *dev_handle = nullptr;
+  std::recursive_mutex hw_lock;
+  void handle_usb_issue(int err, const char func[]);
+};
+
+class PandaSpiHandle : public PandaCommsHandle {
+public:
   PandaSpiHandle(std::string serial);
   ~PandaSpiHandle();
 

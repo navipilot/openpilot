@@ -14,7 +14,7 @@ typedef enum {
   ISP_BPS_PROCESSED,  // fully processed image through the BPS
 } SpectraOutputType;
 
-// For the comma 3X three camera platform
+// For the comma 3/3X three camera platform
 
 struct CameraConfig {
   int camera_num;
@@ -27,6 +27,10 @@ struct CameraConfig {
   bool vignetting_correction;
   SpectraOutputType output_type;
   bool staggered_sof;  // SOF is staggered (half-period offset) from other cameras
+
+  bool uses_staggered_sof(cereal::FrameData::ImageSensor sensor) const {
+    return staggered_sof && sensor != cereal::FrameData::ImageSensor::AR0231;
+  }
 };
 
 // NOTE: to be able to disable road and wide road, we still have to configure the sensor over i2c

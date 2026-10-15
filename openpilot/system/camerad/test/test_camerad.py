@@ -118,10 +118,13 @@ class TestCamerad(OpenpilotTestCase):
     laggy_frames = {k: v for k, v in diffs.items() if v > 1.1}
     assert len(laggy_frames) == 0, f"Frames not synced properly: {laggy_frames=}"
 
-    # cabin camera should be staggered ~25ms from road camera
+    # DOS/AR0231 clocks are in phase; H7/OX03C10 and OS04C10 retain their 25ms stagger.
     for i in n:
       offset_ms = abs(self.logs['cabinCameraState']['timestampSof'][i] - self.logs['narrowRoadCameraState']['timestampSof'][i]) / 1e6
-      assert 20 < offset_ms < 30, f"cabin camera stagger out of range at frame {i}: {offset_ms:.1f}ms (expected ~25ms)"
+      if self.logs['cabinCameraState']['imageSensor'][i] == 'ar0231':
+        assert offset_ms < 1.1, f"AR0231 cabin camera not synced at frame {i}: {offset_ms:.1f}ms"
+      else:
+        assert 20 < offset_ms < 30, f"cabin camera stagger out of range at frame {i}: {offset_ms:.1f}ms (expected ~25ms)"
 
   def test_sanity_checks(self):
     self._sanity_checks(self.logs)

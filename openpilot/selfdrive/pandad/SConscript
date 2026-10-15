@@ -1,8 +1,15 @@
 Import('env', 'arch', 'common', 'messaging')
 
 if arch != "Darwin":
-  libs = [common, messaging, 'pthread']
-  panda = env.Library('panda', ['panda.cc', 'spi.cc'])
+  import libusb
+  from panda import Panda
+
+  env = env.Clone()
+  env.Append(CPPPATH=[libusb.INCLUDE_DIR], LIBPATH=[libusb.LIB_DIR],
+             CPPDEFINES=[('HEALTH_PACKET_VERSION', Panda.HEALTH_PACKET_VERSION),
+                         ('CAN_PACKET_VERSION_HASH', Panda.CAN_PACKET_VERSION)])
+  libs = [common, messaging, 'pthread', 'usb-1.0']
+  panda = env.Library('panda', ['panda.cc', 'spi.cc', 'panda_comms.cc'])
 
   env.Program('pandad', ['main.cc', 'pandad.cc', 'panda_safety.cc'], LIBS=[panda] + libs)
 

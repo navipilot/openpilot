@@ -21,7 +21,7 @@ This branch contains the complete source snapshot of
 Dependencies are vendored as ordinary directories, not Git submodules. Their
 licenses and original executable permissions are preserved.
 
-| Dependency | Pinned upstream commit |
+| Dependency | Imported upstream base commit |
 | --- | --- |
 | `jetlink_repo` | `f843d92c0d645c1c1132295aa276a09f3d91da21` |
 | `msgq_repo` | `e7396e76dadbb49e374d4b664ff6bbb43a39bcb0` |
@@ -49,15 +49,47 @@ git lfs fsck
 This is a **source branch, not a prebuilt device release**. The existing device
 launcher builds it on first boot, expects the dependencies for the pinned
 `AGNOS_VERSION` in `launch_env.sh`, and creates the import links to the vendored
-packages. **The upstream [2026-10-10 release notes](CHANGELOG.md) explicitly
-restrict this version to C3XL and describe Tesla-specific experimental features.
-Do not assume compatibility with other comma hardware or vehicles.**
+packages. The upstream [2026-10-10 release notes](CHANGELOG.md) describe the
+original C3XL-only snapshot and Tesla-specific experimental features.
+
+This branch additionally restores **comma 3 (`tici`) code support**, including
+the AR0231 camera driver, its image-processing configuration, in-phase camera
+synchronization and STM32F4/DOS Panda firmware with USB communication,
+MCU-specific flashing and recovery. Native device identification distinguishes `tici` from
+`tizi`. Existing C3X/C3XL OX03C10/OS04C10 probing and staggered camera timing are
+retained. Driving/driver-monitoring models, Jetlink selection and vehicle safety
+policies are not replaced by the reference fork's versions.
+
+**C3 hardware validation is still required.** Successful source builds and host
+regressions are not evidence that a physical C3 has installed, maintained 20 Hz
+camera/model operation, connected to the vehicle or driven safely. This is not a
+validated device release or a blanket expansion of vehicle compatibility.
 Jetlink acceleration additionally requires a compatible external
 server; see [`jetlink_repo/README.md`](jetlink_repo/README.md).
 Source integrity checks and desktop tests do not establish device compatibility
 or driving safety. Validate installation, compilation, cameras, Panda, model
 startup and Jetlink connectivity on the intended comma hardware and supported
 vehicle before use; retain a known-working installation for recovery.
+
+The AR0231 driver/register configuration was restored from
+`navipilot/openpilot:Carrot` at
+`31254e6538aa4a7b863077d9bcb3ef1f275cbcbd`, without importing that branch's
+models, Bluetooth/AGNOS changes or vehicle-control experiments. The missing
+Panda F4 platform was adapted from its Panda snapshot
+`c61d998ff8fdda9cbb8a1a6d5b5d0b198085b9c4`; existing H7 firmware and the
+branch's own opendbc safety code are retained. See [`panda/README.md`](panda/README.md)
+for firmware build/verification commands. On AGNOS,
+native camera regressions can be built and run with:
+
+```sh
+scons --minimal openpilot/system/camerad/test/test_sensors openpilot/system/camerad/camerad
+openpilot/system/camerad/test/test_sensors
+```
+
+Host camera builds additionally need Clang and the SDM845 kernel's installed
+camera UAPI headers. The device-only `openpilot/system/camerad/test/test_camerad.py`
+checks camera liveness, exposure, frame continuity and sensor-specific phase;
+run it on the actual target device before on-road use.
 
 Next, refer to the sunnypilot community forum for [installation instructions](https://community.sunnypilot.ai/t/read-before-installing-sunnypilot/254), as well as a complete list of [Recommended Branch Installations](https://community.sunnypilot.ai/t/recommended-branch-installations/235).
 

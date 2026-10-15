@@ -3,6 +3,7 @@
 #include <unistd.h>
 
 #include <cassert>
+#include <algorithm>
 #include <stdexcept>
 #include <vector>
 
@@ -13,10 +14,21 @@
 const bool PANDAD_MAXOUT = getenv("PANDAD_MAXOUT") != nullptr;
 
 Panda::Panda(std::string serial) {
-  handle = std::make_unique<PandaSpiHandle>(serial);
-  LOGW("connected to %s over SPI", serial.c_str());
+  try {
+    handle = std::make_unique<PandaSpiHandle>(serial);
+    LOGW("connected to %s over SPI", serial.c_str());
+  } catch (const std::runtime_error &error) {
+    LOGW("SPI connection failed for %s: %s; trying USB", serial.c_str(), error.what());
+    handle = std::make_unique<PandaUsbHandle>(serial);
+    LOGW("connected to %s over USB", serial.c_str());
+  }
 
-  hw_type = cereal::PandaState::PandaType::TRES;
+  hw_type = get_hw_type();
+  uint32_t versions[2] = {};
+  if (handle->control_read(0xdd, 0, 0, reinterpret_cast<unsigned char *>(versions), sizeof(versions)) != sizeof(versions) ||
+      versions[0] != HEALTH_PACKET_VERSION || versions[1] != CAN_PACKET_VERSION_HASH) {
+    throw std::runtime_error("Panda packet ABI mismatch: reflash firmware");
+  }
   can_reset_communications();
 }
 
@@ -33,7 +45,13 @@ std::string Panda::hw_serial() {
 }
 
 std::vector<std::string> Panda::list() {
-  return PandaSpiHandle::list();
+  auto serials = PandaSpiHandle::list();
+  for (const auto &serial : PandaUsbHandle::list()) {
+    if (std::find(serials.begin(), serials.end(), serial) == serials.end()) {
+      serials.push_back(serial);
+    }
+  }
+  return serials;
 }
 
 void Panda::set_safety_model(cereal::CarParams::SafetyModel safety_model, uint16_t safety_param) {
@@ -87,13 +105,13 @@ void Panda::set_ir_pwr(uint16_t ir_pwr) {
 std::optional<health_t> Panda::get_state() {
   health_t health {0};
   int err = handle->control_read(0xd2, 0, 0, (unsigned char*)&health, sizeof(health));
-  return err >= 0 ? std::make_optional(health) : std::nullopt;
+  return err == sizeof(health) ? std::make_optional(health) : std::nullopt;
 }
 
 std::optional<can_health_t> Panda::get_can_state(uint16_t can_number) {
   can_health_t can_health {0};
   int err = handle->control_read(0xc2, can_number, 0, (unsigned char*)&can_health, sizeof(can_health));
-  return err >= 0 ? std::make_optional(can_health) : std::nullopt;
+  return err == sizeof(can_health) ? std::make_optional(can_health) : std::nullopt;
 }
 
 void Panda::set_loopback(bool loopback) {
@@ -115,7 +133,7 @@ std::optional<std::string> Panda::get_serial() {
 
 bool Panda::up_to_date() {
   if (auto fw_sig = get_firmware_version()) {
-    for (auto fn : { "panda.bin.signed", "panda_h7.bin.signed" }) {
+    for (auto fn : {hw_type == cereal::PandaState::PandaType::DOS ? "panda.bin.signed" : "panda_h7.bin.signed"}) {
       auto content = util::read_file(std::string("../../../panda/board/obj/") + fn);
       if (content.size() >= fw_sig->size() &&
           memcmp(content.data() + content.size() - fw_sig->size(), fw_sig->data(), fw_sig->size()) == 0) {

@@ -16,6 +16,11 @@ void can_tx_comms_resume_spi(void) { };
 #include "boards/board_declarations.h"
 #include "opendbc/safety/safety.h"
 #include "main_definitions.h"
+#include "drivers/drivers.h"
+#ifdef TEST_STM32F4
+// Exercise the F4 queue sizing and transmit restrictions with native hardware stubs.
+#define STM32F4
+#endif
 #include "drivers/can_common.h"
 
 can_ring *rx_q = &can_rx_q;

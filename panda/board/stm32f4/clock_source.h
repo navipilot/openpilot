@@ -1,0 +1,33 @@
+#pragma once
+
+#include "board/drivers/drivers.h"
+
+#define CLOCK_SOURCE_PERIOD_MS 50U
+#define CLOCK_SOURCE_PULSE_LEN_MS 2U
+
+void clock_source_set_timer_params(uint16_t param1, uint16_t param2) {
+  register_set(&(TIM1->CCR1), ((param1 >> 8U) * 10U), 0xFFFFU);
+  register_set(&(TIM1->CCR2), ((param1 & 0xFFU) * 10U), 0xFFFFU);
+  register_set(&(TIM1->CCR3), ((param2 >> 8U) * 10U), 0xFFFFU);
+  register_set(&(TIM1->ARR), (((param2 & 0xFFU) * 10U) - 1U), 0xFFFFU);
+}
+
+void clock_source_init(bool enable_channel1) {
+  register_set(&(TIM1->PSC), ((APB2_TIMER_FREQ * 100U) - 1U), 0xFFFFU);
+  register_set(&(TIM1->ARR), ((CLOCK_SOURCE_PERIOD_MS * 10U) - 1U), 0xFFFFU);
+  register_set(&(TIM1->CCR1), (CLOCK_SOURCE_PULSE_LEN_MS * 10U), 0xFFFFU);
+  register_set(&(TIM1->CCR2), (CLOCK_SOURCE_PULSE_LEN_MS * 10U), 0xFFFFU);
+  register_set(&(TIM1->CCR3), (CLOCK_SOURCE_PULSE_LEN_MS * 10U), 0xFFFFU);
+  register_set(&(TIM1->CCMR1), (0b110UL << TIM_CCMR1_OC1M_Pos) | (0b110UL << TIM_CCMR1_OC2M_Pos), 0xFFFFU);
+  register_set(&(TIM1->CCMR2), (0b110UL << TIM_CCMR2_OC3M_Pos), 0xFFFFU);
+  register_set(&(TIM1->CCER), TIM_CCER_CC1E | TIM_CCER_CC2NE | TIM_CCER_CC3NE, 0xFFFFU);
+  register_set(&(TIM1->BDTR), TIM_BDTR_MOE, 0xFFFFU);
+  NVIC_DisableIRQ(TIM1_UP_TIM10_IRQn);
+  NVIC_DisableIRQ(TIM1_CC_IRQn);
+  if (enable_channel1) {
+    set_gpio_alternate(GPIOA, 8, GPIO_AF1_TIM1);
+  }
+  set_gpio_alternate(GPIOB, 14, GPIO_AF1_TIM1);
+  set_gpio_alternate(GPIOB, 15, GPIO_AF1_TIM1);
+  register_set(&(TIM1->CR1), TIM_CR1_CEN, 0x3FU);
+}

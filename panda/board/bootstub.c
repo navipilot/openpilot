@@ -46,7 +46,11 @@ int main(void) {
 
   // validate length
   int len = (int)_app_start[0];
+#ifdef STM32F4
+  if ((len < 8) || (len > (0x180000 - 0x4000 - RSANUMBYTES))) goto fail;
+#else
   if ((len < 8) || (len > (0x1000000 - 0x4000 - 4 - RSANUMBYTES))) goto fail;
+#endif
 
   // compute SHA hash
   uint8_t digest[SHA_DIGEST_SIZE];

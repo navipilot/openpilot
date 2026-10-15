@@ -22,20 +22,34 @@ bool can_loopback = false;
   extern can_ring can_##x; \
   can_ring can_##x = { .w_ptr = 0, .r_ptr = 0, .fifo_size = (size), .elems = (CANPacket_t *)&(elems_##x) };
 
+#ifdef STM32F4
+// Keep the current 64-byte packet ABI, but fit queues in the F413's upper SRAM.
+#define CAN_RX_BUFFER_SIZE 1536U
+#define CAN_TX_BUFFER_SIZE 256U
+#else
 #define CAN_RX_BUFFER_SIZE 4096U
 #define CAN_TX_BUFFER_SIZE 416U
+#endif
 
 #ifdef STM32H7
 // ITCM RAM and DTCM RAM are the fastest for Cortex-M7 core access
 __attribute__((section(".axisram"))) can_buffer(rx_q, CAN_RX_BUFFER_SIZE)
 __attribute__((section(".itcmram"))) can_buffer(tx1_q, CAN_TX_BUFFER_SIZE)
 __attribute__((section(".itcmram"))) can_buffer(tx2_q, CAN_TX_BUFFER_SIZE)
+#elif defined(STM32F4)
+__attribute__((section(".canram"))) can_buffer(rx_q, CAN_RX_BUFFER_SIZE)
+__attribute__((section(".canram"))) can_buffer(tx1_q, CAN_TX_BUFFER_SIZE)
+__attribute__((section(".canram"))) can_buffer(tx2_q, CAN_TX_BUFFER_SIZE)
 #else  // kept for PC
 can_buffer(rx_q, CAN_RX_BUFFER_SIZE)
 can_buffer(tx1_q, CAN_TX_BUFFER_SIZE)
 can_buffer(tx2_q, CAN_TX_BUFFER_SIZE)
 #endif
+#ifdef STM32F4
+__attribute__((section(".canram"))) can_buffer(tx3_q, CAN_TX_BUFFER_SIZE)
+#else
 can_buffer(tx3_q, CAN_TX_BUFFER_SIZE)
+#endif
 
 // FIXME:
 // cppcheck-suppress misra-c2012-9.3
@@ -122,7 +136,18 @@ bus_config_t bus_config[PANDA_CAN_CNT] = {
   { .bus_lookup = 2U, .can_num_lookup = 2U, .can_speed = 5000U, .can_data_speed = 20000U, .canfd_auto = false, .canfd_enabled = false, .brs_enabled = false, .canfd_non_iso = false },
 };
 
+#ifdef STM32F4
+static void can_platform_init(void) {
+  for (uint8_t i = 0U; i < PANDA_CAN_CNT; i++) {
+    bus_config[i].can_data_speed = 0U;
+  }
+}
+#endif
+
 void can_init_all(void) {
+#ifdef STM32F4
+  can_platform_init();
+#endif
   for (uint8_t i=0U; i < PANDA_CAN_CNT; i++) {
     bus_config[i].canfd_enabled = false;
     can_clear(can_queues[i]);
@@ -162,7 +187,13 @@ bool can_check_checksum(CANPacket_t *packet) {
 }
 
 void can_send(CANPacket_t *to_push, uint8_t bus_number, bool skip_tx_hook) {
-  if (skip_tx_hook || safety_tx_hook(to_push) != 0) {
+#ifdef STM32F4
+  // bxCAN cannot transmit FD or DLC > 8. Return these as rejected, never truncate.
+  bool platform_valid = (to_push->fd == 0U) && (to_push->data_len_code <= 8U);
+#else
+  bool platform_valid = true;
+#endif
+  if (platform_valid && (skip_tx_hook || safety_tx_hook(to_push) != 0)) {
     if (bus_number < PANDA_CAN_CNT) {
       // add CAN packet to send queue
       tx_buffer_overflow += can_push(can_queues[bus_number], to_push) ? 0U : 1U;

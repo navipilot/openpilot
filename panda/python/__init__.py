@@ -129,6 +129,7 @@ class Panda:
 
   # from https://github.com/commaai/openpilot/blob/103b4df18cbc38f4129555ab8b15824d1a672bdf/cereal/log.capnp#L648
   HW_TYPE_UNKNOWN = b'\x00'
+  HW_TYPE_DOS = b'\x06'
   HW_TYPE_RED_PANDA = b'\x07'
   HW_TYPE_TRES = b'\x09'
   HW_TYPE_CUATRO = b'\x0a'
@@ -148,9 +149,10 @@ class Panda:
   HEALTH_FLAG_SOM_RESET_TRIGGERED = 1 << 6
 
   H7_DEVICES = [HW_TYPE_RED_PANDA, HW_TYPE_TRES, HW_TYPE_CUATRO, HW_TYPE_BODY]
-  SUPPORTED_DEVICES = H7_DEVICES
+  F4_DEVICES = [HW_TYPE_DOS]
+  SUPPORTED_DEVICES = F4_DEVICES + H7_DEVICES
 
-  INTERNAL_DEVICES = (HW_TYPE_TRES, HW_TYPE_CUATRO)
+  INTERNAL_DEVICES = (HW_TYPE_DOS, HW_TYPE_TRES, HW_TYPE_CUATRO)
 
   HARNESS_STATUS_NC = 0
   HARNESS_STATUS_NORMAL = 1
@@ -409,9 +411,9 @@ class Panda:
 
     # determine sectors to erase
     apps_sectors_cumsum = accumulate(mcu_type.config.sector_sizes[1:])
-    last_sector = next((i + 1 for i, v in enumerate(apps_sectors_cumsum) if v > len(code)), -1)
+    last_sector = next((i + 1 for i, v in enumerate(apps_sectors_cumsum) if v >= len(code)), -1)
     assert last_sector >= 1, "Binary too small? No sector to erase."
-    assert last_sector < 7, "Binary too large! Risk of overwriting provisioning chunk."
+    assert last_sector < len(mcu_type.config.sector_sizes), "Binary too large! Risk of overwriting provisioning chunk."
 
     # unlock flash
     logger.info("flash: unlocking")
@@ -443,7 +445,7 @@ class Panda:
       return
 
     if not fn:
-      fn = os.path.join(FW_PATH, McuType.H7.config.app_fn)
+      fn = os.path.join(FW_PATH, self.get_mcu_type().config.app_fn)
     assert os.path.isfile(fn)
     logger.debug("flash: main version is %s", self.get_version())
     if not self.bootstub:
@@ -458,7 +460,7 @@ class Panda:
     logger.debug("flash: bootstub version is %s", self.get_version())
 
     # do flash
-    Panda.flash_static(self._handle, code, mcu_type=McuType.H7)
+    Panda.flash_static(self._handle, code, mcu_type=self.get_mcu_type())
 
     # reconnect
     if reconnect:
@@ -509,7 +511,7 @@ class Panda:
   def up_to_date(self, fn=None) -> bool:
     current = self.get_signature()
     if fn is None:
-      fn = os.path.join(FW_PATH, McuType.H7.config.app_fn)
+      fn = os.path.join(FW_PATH, self.get_mcu_type().config.app_fn)
     expected = Panda.get_signature_from_firmware(fn)
     return (current == expected)
 
@@ -617,6 +619,14 @@ class Panda:
   def get_type(self):
     return self._handle.controlRead(Panda.REQUEST_IN, 0xc1, 0, 0, 0x40)
 
+  def get_mcu_type(self):
+    hw_type = self.get_type()
+    if hw_type in self.F4_DEVICES:
+      return McuType.F4
+    if hw_type in self.H7_DEVICES:
+      return McuType.H7
+    raise ValueError(f"Unknown HW: {hw_type}")
+
   def get_packets_versions(self):
     dat = self._handle.controlRead(Panda.REQUEST_IN, 0xdd, 0, 0, 8)
     if dat and len(dat) == 8:
@@ -643,7 +653,7 @@ class Panda:
     return self._serial
 
   def get_dfu_serial(self):
-    return PandaDFU.st_serial_to_dfu_serial(self._serial, McuType.H7)
+    return PandaDFU.st_serial_to_dfu_serial(self._serial, self.get_mcu_type())
 
   def get_uid(self):
     """

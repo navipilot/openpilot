@@ -20,12 +20,16 @@ public:
   }
 
   static cereal::InitData::DeviceType get_device_type() {
+    return get_device_type(get_name());
+  }
+
+  static cereal::InitData::DeviceType get_device_type(const std::string &name) {
     static const std::map<std::string, cereal::InitData::DeviceType> device_map = {
       {"tizi", cereal::InitData::DeviceType::TIZI},
-      {"tici", cereal::InitData::DeviceType::TIZI},
+      {"tici", cereal::InitData::DeviceType::TICI},
       {"mici", cereal::InitData::DeviceType::MICI}
     };
-    static const auto it = device_map.find(get_name());
+    const auto it = device_map.find(name);
     assert(it != device_map.end());
     return it->second;
   }
@@ -50,7 +54,7 @@ public:
 
   static void set_ir_power(int percent) {
     auto device = get_device_type();
-    if (device == cereal::InitData::DeviceType::TIZI) {
+    if (device == cereal::InitData::DeviceType::TICI || device == cereal::InitData::DeviceType::TIZI) {
       return;
     }
 

@@ -1047,7 +1047,8 @@ bool SpectraCamera::openSensor() {
 
   // Figure out which sensor we have
   if (!init_sensor_lambda(new OS04C10) &&
-      !init_sensor_lambda(new OX03C10)) {
+      !init_sensor_lambda(new OX03C10) &&
+      !init_sensor_lambda(new AR0231)) {
     LOGE("** sensor %d FAILED bringup, disabling", cc.camera_num);
     enabled = false;
     return false;
@@ -1171,7 +1172,7 @@ void SpectraCamera::configICP() {
   void *cfg = alloc_w_mmu_hdl(m->video0_fd, cfg_size, (uint32_t*)&cfg_handle, 0x1,
                               CAM_MEM_FLAG_HW_READ_WRITE | CAM_MEM_FLAG_UMD_ACCESS | CAM_MEM_FLAG_HW_SHARED_ACCESS,
                               m->icp_device_iommu);
-  memcpy(cfg, bps_cfg[sensor->num()], cfg_size);
+  memcpy(cfg, bps_cfg[sensor->bps_blob_index()], cfg_size);
 
   struct cam_icp_acquire_dev_info icp_info = {
     .scratch_mem_size = 0x0,
@@ -1206,7 +1207,7 @@ void SpectraCamera::configICP() {
   // BPSIQSettings struct
   uint32_t settings_size = sizeof(bps_settings[0]) / sizeof(bps_settings[0][0]);
   bps_iq.init(m, settings_size, 0x20, true, m->icp_device_iommu);
-  memcpy(bps_iq.ptr, bps_settings[sensor->num()], settings_size);
+  memcpy(bps_iq.ptr, bps_settings[sensor->bps_blob_index()], settings_size);
 
   // for cdm register writes, just make it bigger than you need
   bps_cdm_program_array.init(m, 0x1000, 0x20, true, m->icp_device_iommu);
@@ -1214,7 +1215,7 @@ void SpectraCamera::configICP() {
   // striping lib output
   uint32_t striping_size = sizeof(bps_striping_output[0]) / sizeof(bps_striping_output[0][0]);
   bps_striping.init(m, striping_size, 0x20, true, m->icp_device_iommu);
-  memcpy(bps_striping.ptr, bps_striping_output[sensor->num()], striping_size);
+  memcpy(bps_striping.ptr, bps_striping_output[sensor->bps_blob_index()], striping_size);
 
   // used internally by the BPS, we just allocate it.
   // size comes from the BPSStripingLib
@@ -1513,7 +1514,7 @@ bool SpectraCamera::waitForFrameReady(uint64_t request_id) {
 }
 
 bool SpectraCamera::processFrame(int buf_idx, uint64_t request_id, uint64_t ife_frame_id, uint64_t timestamp) {
-  if (!syncFirstFrame(cc.camera_num, request_id, ife_frame_id, timestamp, cc.staggered_sof)) {
+  if (!syncFirstFrame(cc.camera_num, request_id, ife_frame_id, timestamp, cc.uses_staggered_sof(sensor->image_sensor))) {
     return false;
   }
 

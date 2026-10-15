@@ -215,6 +215,7 @@ public:
   SpectraMaster *m;
 
 private:
+  friend struct SpectraCameraTest;
   void clearAndRequeue(uint64_t from_request_id);
   bool validateEvent(uint64_t request_id, uint64_t ife_frame_id);
   bool waitForFrameReady(uint64_t request_id);

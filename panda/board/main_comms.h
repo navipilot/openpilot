@@ -263,7 +263,9 @@ int comms_control_handler(ControlPacket_t *req, uint8_t *resp) {
       break;
     // **** 0xe8: set can-fd auto swithing mode
     case 0xe8:
+#ifdef STM32H7
       bus_config[req->param1].canfd_auto = req->param2 > 0U;
+#endif
       break;
     // **** 0xf1: Clear CAN ring buffer.
     case 0xf1:
@@ -299,6 +301,7 @@ int comms_control_handler(ControlPacket_t *req, uint8_t *resp) {
       break;
     // **** 0xf9: set CAN FD data bitrate
     case 0xf9:
+#ifdef STM32H7
       if ((req->param1 < PANDA_CAN_CNT) &&
            is_speed_valid(req->param2, data_speeds, sizeof(data_speeds)/sizeof(data_speeds[0]))) {
         bus_config[req->param1].can_data_speed = req->param2;
@@ -307,14 +310,17 @@ int comms_control_handler(ControlPacket_t *req, uint8_t *resp) {
         bool ret = can_init(CAN_NUM_FROM_BUS_NUM(req->param1));
         UNUSED(ret);
       }
+#endif
       break;
     // **** 0xfc: set CAN FD non-ISO mode
     case 0xfc:
+#ifdef STM32H7
       if (req->param1 < PANDA_CAN_CNT) {
         bus_config[req->param1].canfd_non_iso = (req->param2 != 0U);
         bool ret = can_init(CAN_NUM_FROM_BUS_NUM(req->param1));
         UNUSED(ret);
       }
+#endif
       break;
     default:
       print("NO HANDLER ");

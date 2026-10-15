@@ -1,6 +1,28 @@
 # Welcome to panda
 
-panda speaks CAN and CAN FD, and it runs on the [STM32H725](https://www.st.com/resource/en/reference_manual/rm0468-stm32h723733-stm32h725735-and-stm32h730-value-line-advanced-armbased-32bit-mcus-stmicroelectronics.pdf).
+panda speaks CAN and CAN FD on the [STM32H725](https://www.st.com/resource/en/reference_manual/rm0468-stm32h723733-stm32h725735-and-stm32h730-value-line-advanced-armbased-32bit-mcus-stmicroelectronics.pdf).
+The internal DOS panda in comma three (tici) is also supported on STM32F413, with classic CAN only.
+
+### DOS firmware
+
+Running `scons` in this directory builds both `board/obj/panda.bin.signed` and
+`board/obj/bootstub.panda.bin` for DOS, alongside the existing H7 artifacts.
+Python flashing/recovery selects images and flash geometry from the detected hardware.
+Native pandad retains H7 SPI support and supports DOS over USB. DOS SPI can be
+enabled for development with `ENABLE_SPI=1`.
+
+DOS camera strobes use in-phase TIM1 channels at 20 Hz; H7 retains its TIM1/TIM8
+staggered cabin strobe. Both use the current header-derived health/CAN version
+hashes, 6-byte CAN headers and XOR checksums. F4 rejects FD and DLC > 8 packets
+rather than truncating them. Its queues hold 1536 RX and 256 TX entries per bus
+to fit the current 64-byte internal packet representation in SRAM.
+DOS has no H7 sound/DTS peripheral: sound level is zero and the temperature
+field uses the lower-bound sentinel (-40 °C); its health packet layout is unchanged.
+
+After building, focused compatibility checks can be run with
+`python -m pytest tests/usbprotocol/test_comms.py tests/usbprotocol/test_f4_compatibility.py`.
+Physical flashing/recovery, CAN timing, harness orientation, fan/IR control and
+camera strobe phase still require hardware-in-the-loop validation.
 
 ## Directory structure
 
