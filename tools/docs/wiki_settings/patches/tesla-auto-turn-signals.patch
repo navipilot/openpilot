@@ -1,0 +1,54 @@
+--- a/EN-Tesla-Automatic-Turn-Signals.md
++++ b/EN-Tesla-Automatic-Turn-Signals.md
+@@ -28,3 +28,15 @@
+ <!-- CARROT:MANUAL:BEGIN TeslaAutoTurnSignals -->
+ <!-- CARROT:REVIEW reviewed-for="" -->
++
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++Requests left/right lamps from existing ATC turn/lane-change decisions, holds through finishing, then cancels its own request. Automatic feedback is not driver confirmation. Physical stalk input and hazards take priority. Invalid feedback cancels the request; unconfirmed cancellation stops further automatic output for this onroad cycle.
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++Default OFF; reboot after changing. Requires supported Model 3/Y, the vehicle CAN bus, fresh physical stalk input and matching Panda firmware. It does not grant steering or departure permission. Validate both directions and failure/manual takeover on the exact vehicle in a closed course before road use. CAN or device power loss cannot guarantee lamp cancellation.
++<!-- CARROT:SECTION:END USAGE -->
++
++<!-- CARROT:SECTION:BEGIN REFERENCE -->
++Execution: `openpilot/selfdrive/car/tesla_turn_signals.py`. Intent: `openpilot/selfdrive/controls/lib/desire_helper.py`. Safety: `opendbc_repo/opendbc/safety/safety/safety_tesla_turn_signals.h`. See the Tesla user guide for diagnostics and limitations.
++<!-- CARROT:SECTION:END REFERENCE -->
+ <!-- CARROT:MANUAL:END TeslaAutoTurnSignals -->
+--- a/KO-Tesla-자동-방향지시등.md
++++ b/KO-Tesla-자동-방향지시등.md
+@@ -28,3 +28,15 @@
+ <!-- CARROT:MANUAL:BEGIN TeslaAutoTurnSignals -->
+ <!-- CARROT:REVIEW reviewed-for="" -->
++
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++기존 ATC 회전·차로변경 판단에 따라 좌우 램프를 요청하고 완료 단계까지 유지한 뒤 자동 요청을 취소합니다. 자동 피드백을 운전자 확인으로 사용하지 않으며 실제 스토크·비상등 조작을 우선합니다. 잘못된 피드백은 요청을 취소하고, 취소를 확인하지 못하면 해당 주행의 추가 자동 출력을 중지합니다.
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++기본 꺼짐이며 변경 후 재부팅합니다. 지원 Model 3/Y, 차량 CAN 버스, 신선한 실제 스토크 입력과 일치하는 Panda 펌웨어가 필요합니다. 조향·출발 권한은 늘리지 않습니다. 일반 도로 사용 전 해당 차량의 폐쇄 시험장에서 좌우 동작·고장·운전자 개입을 확인하세요. CAN 단절이나 장치 전원 상실 시 소등은 보장할 수 없습니다.
++<!-- CARROT:SECTION:END USAGE -->
++
++<!-- CARROT:SECTION:BEGIN REFERENCE -->
++실행: `openpilot/selfdrive/car/tesla_turn_signals.py`. 의도: `openpilot/selfdrive/controls/lib/desire_helper.py`. 안전: `opendbc_repo/opendbc/safety/safety/safety_tesla_turn_signals.h`. 진단과 제한은 Tesla 사용자 가이드를 참고하세요.
++<!-- CARROT:SECTION:END REFERENCE -->
+ <!-- CARROT:MANUAL:END TeslaAutoTurnSignals -->
+--- a/ZH-特斯拉自动转向灯.md
++++ b/ZH-特斯拉自动转向灯.md
+@@ -28,3 +28,15 @@
+ <!-- CARROT:MANUAL:BEGIN TeslaAutoTurnSignals -->
+ <!-- CARROT:REVIEW reviewed-for="" -->
++
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++根据现有 ATC 转弯、变道判断请求左右转向灯，保持至动作完成阶段后取消自身请求。自动灯反馈不作为驾驶员确认；真实拨杆和双闪操作优先。反馈无效时取消当前请求；取消未确认时，本次运行不再自动输出。
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++默认关闭，修改后需重启。要求受支持的 Model 3/Y、车辆 CAN 总线、有效且新鲜的真实拨杆输入及匹配的 Panda 固件。不增加转向或起步权限。公共道路使用前必须在目标车辆的封闭场地验证左右灯、故障和人工接管；CAN 断线或设备断电时无法保证物理熄灯。
++<!-- CARROT:SECTION:END USAGE -->
++
++<!-- CARROT:SECTION:BEGIN REFERENCE -->
++执行：`openpilot/selfdrive/car/tesla_turn_signals.py`。意图：`openpilot/selfdrive/controls/lib/desire_helper.py`。安全层：`opendbc_repo/opendbc/safety/safety/safety_tesla_turn_signals.h`。诊断与限制见 Tesla 用户指南。
++<!-- CARROT:SECTION:END REFERENCE -->
+ <!-- CARROT:MANUAL:END TeslaAutoTurnSignals -->

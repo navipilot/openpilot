@@ -1,4 +1,5 @@
 import copy
+import time
 from opendbc.can import CANDefine, CANParser
 from opendbc.car import Bus, create_button_events, structs
 from opendbc.car.carlog import carlog
@@ -63,6 +64,8 @@ class CarState(CarStateBase):
     self._tesla_speed_resume_up_nanos = 0
     self._tesla_speed_resume_down_nanos = 0
     self._tesla_speed_resume_wait_idle = False
+    self._turn_stalk_direction = 0
+    self._turn_stalk_counts = [0, 0]
 
   def observe_speed_wheel_frame(self, data: bytes, monotonic_nanos: int) -> None:
     if len(data) != 8 or (data[0] & 0x03) != 1:
@@ -257,6 +260,22 @@ class CarState(CarStateBase):
     # Blinkers
     ret.leftBlinker = cp_party.vl["UI_warning"]["leftBlinkerBlinking"] in (1, 2)
     ret.rightBlinker = cp_party.vl["UI_warning"]["rightBlinkerBlinking"] in (1, 2)
+    if self.CP.flags & TeslaFlags.AUTO_TURN_SIGNALS:
+      stalk = int(cp_party.vl["SCCM_leftStalk"]["SCCM_turnIndicatorStalkStatus"])
+      stamp = cp_party.ts_nanos["SCCM_leftStalk"]["SCCM_turnIndicatorStalkStatus"]
+      ret.turnSignalDriverValid = stamp > 0 and 0 <= time.monotonic_ns() - stamp <= 1_000_000_000 and stalk in range(5)
+      if ret.turnSignalDriverValid:
+        # A press and release can arrive in the same receive batch.
+        positions = cp_party.vl_all["SCCM_leftStalk"]["SCCM_turnIndicatorStalkStatus"]
+        for position in positions or [stalk]:
+          direction = 1 if position in (3, 4) else 2 if position in (1, 2) else 0
+          if direction and direction != self._turn_stalk_direction:
+            self._turn_stalk_counts[direction - 1] = (self._turn_stalk_counts[direction - 1] + 1) % 256
+          self._turn_stalk_direction = direction
+        ret.turnSignalDriverDirection = self._turn_stalk_direction
+      else:
+        self._turn_stalk_direction = 0
+      ret.leftBlinkerStalkCount, ret.rightBlinkerStalkCount = self._turn_stalk_counts
 
     # High beam stalk used as generic toggle (openpilot convention)
     ret.genericToggle = cp_party.vl["UI_warning"]["highBeam"] == 1
@@ -334,7 +353,8 @@ class CarState(CarStateBase):
   @staticmethod
   def get_can_parsers(CP):
     parsers = {
-      Bus.party: CANParser(DBC[CP.carFingerprint][Bus.party], [], CANBUS.party),
+      Bus.party: CANParser(DBC[CP.carFingerprint][Bus.party],
+                           [("SCCM_leftStalk", float("nan"))] if CP.flags & TeslaFlags.AUTO_TURN_SIGNALS else [], CANBUS.party),
       Bus.ap_party: CANParser(DBC[CP.carFingerprint][Bus.party], [], CANBUS.autopilot_party),
     }
     if CP.flags & TeslaFlags.HAS_VEHICLE_BUS:

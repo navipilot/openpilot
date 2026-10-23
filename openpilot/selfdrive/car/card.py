@@ -26,6 +26,8 @@ from openpilot.selfdrive.car.card_diagnostics import should_log_card_diagnostics
 from openpilot.selfdrive.car.cruise import VCruiseCarrot
 from openpilot.selfdrive.car.car_specific import MockCarState
 from openpilot.selfdrive.car.openpilot_toggle import CruiseMainOpenpilotToggle
+from openpilot.selfdrive.car.tesla_turn_signals import TeslaTurnSignals
+from opendbc.car.tesla.values import TeslaFlags
 from openpilot.selfdrive.controls.lib.lateral_readiness import LateralStartupGate
 from openpilot.selfdrive.carrot.xiaoge.xiaoge_vision import (
   XiaogeVisionResult,
@@ -134,6 +136,9 @@ class Car:
       safety_config = structs.CarParams.SafetyConfig()
       safety_config.safetyModel = structs.CarParams.SafetyModel.noOutput
       self.CP.safetyConfigs = [safety_config]
+    self.tesla_signals = TeslaTurnSignals(
+      self.CP.brand == "tesla" and not self.CP.passive and bool(self.CP.flags & TeslaFlags.AUTO_TURN_SIGNALS))
+    self.tesla_signal_status = self.tesla_signals.status
 
     if self.CP.secOcRequired:
       # Copy user key if available
@@ -224,6 +229,16 @@ class Car:
 
     self.sm.update(0)
     sm_done_ns = time.monotonic_ns()
+    signal_now = can_list[-1][0] if REPLAY and can_list else sm_done_ns
+    self.tesla_signals.observe(can_list, signal_now)
+    urgent_sends = self.tesla_signals.take_sends(signal_now, cancel_only=True)
+    if urgent_sends:
+      self.can_callbacks[1](urgent_sends)
+    CS.autoTurnSignalDirection = self.tesla_signals.owned_direction
+    CS.autoTurnSignalStatus = self.tesla_signals.status if self.CP.brand == "tesla" else ""
+    if self.tesla_signals.status != self.tesla_signal_status:
+      cloudlog.event("tesla_auto_turn_signal", status=self.tesla_signals.status)
+      self.tesla_signal_status = self.tesla_signals.status
     if self.sm.updated['customReservedRawData0']:
       try:
         self.xiaoge_vision_result = parse_xiaoge_vision_payload(bytes(self.sm['customReservedRawData0']))
@@ -379,6 +394,10 @@ class Car:
       model_v2 = self.sm['modelV2'] if self.sm.valid['modelV2'] and self.sm.alive['modelV2'] else None
       radar_state = self.sm['radarState'] if self.sm.valid['radarState'] and self.sm.alive['radarState'] else None
       self.last_actuators_output, can_sends = self.CI.apply(CC, now_nanos, model_v2, radar_state)
+      if self.tesla_signals.configured:
+        fresh = all(self.sm.seen[s] and self.sm.alive[s] and self.sm.valid[s] and
+                    0 <= time.monotonic() - self.sm.recv_time[s] <= 0.2 for s in ('carControl', 'modelV2'))
+        can_sends.extend(self.tesla_signals.update(CS, CC, self.sm['modelV2'].meta, fresh, now_nanos))
       apply_done_ns = time.monotonic_ns()
       self.pm.send('sendcan', can_list_to_can_capnp(can_sends, msgtype='sendcan', valid=CS.canValid))
       sendcan_done_ns = time.monotonic_ns()

@@ -4,6 +4,7 @@ from opendbc.car.tesla.carcontroller import CarController
 from opendbc.car.tesla.carstate import CarState
 from opendbc.car.tesla.values import TeslaSafetyFlags, TeslaFlags, CANBUS, CAR, DBC, FSD_14_FW, Ecu
 from opendbc.car.tesla.radar_interface import RadarInterface, RADAR_START_ADDR
+from openpilot.common.params import Params
 
 
 class CarInterface(CarInterfaceBase):
@@ -49,6 +50,9 @@ class CarInterface(CarInterfaceBase):
     has_vehicle_bus = 0x3DF in fingerprint[CANBUS.vehicle]
     if has_vehicle_bus:
       ret.flags |= TeslaFlags.HAS_VEHICLE_BUS.value
+      if candidate in (CAR.TESLA_MODEL_3, CAR.TESLA_MODEL_Y) and Params().get_bool("TeslaAutoTurnSignals"):
+        ret.flags |= TeslaFlags.AUTO_TURN_SIGNALS.value
+        ret.safetyConfigs[0].safetyParam |= TeslaSafetyFlags.AUTO_TURN_SIGNALS.value
 
     ret.alphaLongitudinalAvailable = True
     if alpha_long:

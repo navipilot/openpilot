@@ -28,6 +28,14 @@ The controller waits for a stable limit, then adjusts the set speed one displaye
 - To resume automatic adjustment, turn the wheel in one direction and then the opposite direction within one second. Disengaging and re-engaging also clears the manual pause.
 - If the vehicle does not acknowledge an adjustment, the controller stops retrying that unchanged target and set speed.
 
+## Automatic turn signals
+
+`TeslaAutoTurnSignals` defaults to OFF and applies after reboot. On Model 3/Y with the additional vehicle bus and fresh physical stalk input, it requests lamps for the existing ATC turn/lane-change decisions, including turn preparation. It does not enable navigation, change lane-change gates, or grant steering or departure permission. Unsupported or stalkless signal layouts do not become supported by enabling the switch.
+
+The controller preserves original CAN fields and explicitly cancels its own request after completion or control loss. Driver operation takes priority. Automatic feedback and cancellation tails are not driver confirmation. Shutdown requires fresh UI and physical OFF confirmation; faults or unavailable feedback are not success. Status is recorded in `carState.autoTurnSignalStatus` and `tesla_auto_turn_signal` events. An unconfirmed cancellation disables further automatic output until the next onroad cycle. CAN loss or device power loss cannot guarantee physical cancellation.
+
+Validate both directions, manual takeover, hazards, completion and failure handling on the exact vehicle in a closed course before road use. Other Tesla control features and traffic-light departure restrictions remain unchanged.
+
 ## Cooperative steering and tire pressure
 
 Cooperative steering blends the driver's steering torque with the planned angle, ramps steering back in on engagement, and removes excess override when an angle limit is reached. Existing EPS override and steering-angle limits still apply.
