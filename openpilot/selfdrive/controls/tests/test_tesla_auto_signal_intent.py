@@ -246,42 +246,107 @@ def test_real_turn_disable_does_not_complete_lamps_until_started_and_stably_stra
   from openpilot.selfdrive.controls.lib.desire_helper import DesireHelper
 
   h = setup.helper
+  sign = 1 if direction == 1 else -1
   setup.carrot_man.atcType = "turn left" if direction == 1 else "turn right"
   getattr(h, "left" if direction == 1 else "right").dist_to_edge_far = 5.
   step(setup)
   request = step(setup).auto_signal_request_id
-  model = NS(meta=NS(desireState=[0.] * 5), orientationRate=NS(z=[.4] * 16), orientation=NS(z=[.2] * 16))
+  model = NS(meta=NS(desireState=[0.] * 5), orientationRate=NS(z=[sign * .4] * 16), orientation=NS(z=[sign * .2] * 16))
   h._check_desire_state = DesireHelper._check_desire_state.__get__(h)
-  model.orientationRate.z[15] = .2
+  model.orientationRate.z[15] = sign * .2
   for _ in range(10):
-    step(setup, model=model, speed=5., angle=100.)
+    step(setup, model=model, speed=5., angle=sign * 100.)
     assert h.turn_disable_count == 200  # Original steering behavior is unchanged.
     assert h.auto_signal_request_id == request
   for speed, angle, yaw in ((0., 0., 0.), (.5, 100., .02), (2., 70., .08)):
-    model.orientationRate.z = [yaw] * 16
+    model.orientationRate.z = [sign * yaw] * 16
     for _ in range(30):
-      assert step(setup, model=model, speed=speed, angle=angle).auto_signal_request_id == request
-  model.orientationRate.z = [.01] * 16
+      assert step(setup, model=model, speed=speed, angle=sign * angle).auto_signal_request_id == request
+  model.orientationRate.z = [sign * .01] * 16
   for _ in range(19):
-    assert step(setup, model=model, speed=5., angle=10.).auto_signal_request_id == request
-  assert not step(setup, model=model, speed=5., angle=10.).auto_signal_request_id
+    assert step(setup, model=model, speed=5., angle=sign * 10.).auto_signal_request_id == request
+  assert not step(setup, model=model, speed=5., angle=sign * 10.).auto_signal_request_id
   for _ in range(10):
-    assert not step(setup, model=model, speed=5., angle=10.).auto_signal_request_id
+    assert not step(setup, model=model, speed=5., angle=sign * 10.).auto_signal_request_id
 
 
-def test_turn_navigation_can_end_before_geometry_settles_and_abort_does_not_relight(setup):
+@pytest.mark.parametrize("navigation_type", ["", "none", "none prepare", "straight", "straight prepare"])
+@pytest.mark.parametrize("direction", [1, 2])
+def test_turn_navigation_can_end_before_geometry_settles_and_abort_does_not_relight(setup, navigation_type, direction):
+  sign = 1 if direction == 1 else -1
+  setup.carrot_man.atcType = "turn left" if direction == 1 else "turn right"
+  getattr(setup.helper, "left" if direction == 1 else "right").dist_to_edge_far = 5.
+  step(setup)
+  request = step(setup).auto_signal_request_id
+  model = NS(orientationRate=NS(z=[sign * .2] * 16), orientation=NS(z=[sign * .2] * 16))
+  for _ in range(10):
+    assert step(setup, model=model, speed=4., angle=sign * 90.).auto_signal_request_id == request
+  setup.carrot_man.atcType = navigation_type
+  for _ in range(100):
+    assert step(setup, model=model, speed=4., angle=sign * 90.).auto_signal_request_id == request
+  assert not step(setup, model=model, active=False).auto_signal_request_id
+  assert not step(setup, model=model).auto_signal_request_id
+
+
+@pytest.mark.parametrize("navigation_type", ["", "none", "none prepare", "straight", "straight prepare"])
+def test_navigation_exit_lamp_hold_finishes_after_stable_geometry(setup, navigation_type):
   setup.carrot_man.atcType = "turn left"
   setup.helper.left.dist_to_edge_far = 5.
   step(setup)
   request = step(setup).auto_signal_request_id
   model = NS(orientationRate=NS(z=[.2] * 16), orientation=NS(z=[.2] * 16))
   for _ in range(10):
-    assert step(setup, model=model, speed=4., angle=90.).auto_signal_request_id == request
-  setup.carrot_man.atcType = ""
-  for _ in range(100):
-    assert step(setup, model=model, speed=4., angle=90.).auto_signal_request_id == request
-  assert not step(setup, model=model, active=False).auto_signal_request_id
-  assert not step(setup, model=model).auto_signal_request_id
+    step(setup, model=model, speed=4., angle=90.)
+  setup.carrot_man.atcType = navigation_type
+  assert step(setup, model=model, speed=4., angle=90.).auto_signal_request_id == request
+  model.orientationRate.z = [.01] * 16
+  for _ in range(19):
+    assert step(setup, model=model, speed=4., angle=10.).auto_signal_request_id == request
+  assert not step(setup, model=model, speed=4., angle=10.).auto_signal_request_id
+  for _ in range(10):
+    assert not step(setup, model=model, speed=4., angle=10.).auto_signal_request_id
+
+
+@pytest.mark.parametrize("direction", [1, 2])
+def test_opposite_navigation_turn_starts_a_new_request_without_reusing_geometry(setup, direction):
+  h = setup.helper
+  sign = 1 if direction == 1 else -1
+  setup.carrot_man.atcType = "turn left" if direction == 1 else "turn right"
+  h.left.dist_to_edge_far = h.right.dist_to_edge_far = 5.
+  step(setup)
+  request = step(setup).auto_signal_request_id
+  model = NS(orientationRate=NS(z=[sign * .2] * 16), orientation=NS(z=[sign * .2] * 16))
+  for _ in range(10):
+    step(setup, model=model, speed=4., angle=sign * 90.)
+  setup.carrot_man.atcType = "turn right" if direction == 1 else "turn left"
+  setup.carrot_man.xTurnInfo = 3 - direction
+  step(setup, model=model, speed=4., angle=sign * 90.)
+  for _ in range(10):
+    step(setup, model=model, speed=4., angle=sign * 90.)
+    assert h.auto_signal_direction == 3 - direction
+    assert h.auto_signal_request_id > request
+    assert h._auto_turn_started == 0.
+  model.orientationRate.z = [-sign * .2] * 16
+  for _ in range(10):
+    step(setup, model=model, speed=4., angle=-sign * 90.)
+  assert h._auto_turn_started >= .3
+
+
+@pytest.mark.parametrize("direction", [1, 2])
+@pytest.mark.parametrize("opposite_input", ["angle", "yaw"])
+def test_turn_start_geometry_must_match_requested_direction(setup, direction, opposite_input):
+  sign = 1 if direction == 1 else -1
+  setup.carrot_man.atcType = "turn left" if direction == 1 else "turn right"
+  getattr(setup.helper, "left" if direction == 1 else "right").dist_to_edge_far = 5.
+  step(setup)
+  request = step(setup).auto_signal_request_id
+  model = NS(orientationRate=NS(z=[sign * (-.2 if opposite_input == "yaw" else .2)] * 16), orientation=NS(z=[0.] * 16))
+  for _ in range(10):
+    step(setup, model=model, speed=4., angle=sign * (-90. if opposite_input == "angle" else 90.))
+  assert setup.helper._auto_turn_started == 0.
+  model.orientationRate.z = [.01] * 16
+  for _ in range(30):
+    assert step(setup, model=model, speed=4., angle=5.).auto_signal_request_id == request
 
 
 @pytest.mark.parametrize("geometry", ["missing", "nan", "heading", "not_started"])
