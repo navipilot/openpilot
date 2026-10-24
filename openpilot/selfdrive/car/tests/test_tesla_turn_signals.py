@@ -19,7 +19,7 @@ def template(counter=4):
 
 def state(**kwargs):
   values = {"leftBlinkerStalkCount": 0, "rightBlinkerStalkCount": 0, "turnSignalDriverValid": True,
-            "turnSignalDriverDirection": 0, "canValid": True, "gearShifter": "drive"}
+            "turnSignalDriverDirection": 0, "canValid": True, "vehicleSensorsInvalid": False, "gearShifter": "drive"}
   return NS(**(values | kwargs))
 
 
@@ -89,6 +89,15 @@ def test_invalid_driver_input_does_not_masquerade_as_manual_takeover():
   assert not c.session.manual
 
 
+@pytest.mark.parametrize("direction", [1, 2])
+def test_invalid_vehicle_sensors_cancel_active_lamp_session(direction):
+  c = opened(direction)
+  sends = update(c, N + 3, direction=direction, cs=state(vehicleSensorsInvalid=True))
+  assert c.status == "cancelling:vehicle_sensors_invalid"
+  assert not c.session.manual
+  assert sends and all(frame.dat[1] & 3 == 3 for frame in sends)
+
+
 def cancelling(direction=1):
   c = opened(direction)
   sent = update(c, N + 3, direction=0)[0]
@@ -128,15 +137,16 @@ def test_independent_receive_clock_cancels_when_controlsd_stops():
   assert c.take_sends(N + CONTEXT_NS + 2, cancel_only=True)[0].dat[1] & 3 == 3
 
 
-@pytest.mark.parametrize("gate", ["disabled", "model", "lateral", "can", "gear", "driver", "stalk", "no_template"])
+@pytest.mark.parametrize("gate", ["disabled", "model", "lateral", "can", "sensors", "gear", "driver", "stalk", "no_template"])
 def test_start_gates(gate):
   c = TeslaTurnSignals(gate != "disabled")
   feedback(c, N, body=gate != "no_template")
-  cs = state(canValid=gate != "can", gearShifter="park" if gate == "gear" else "drive",
+  cs = state(canValid=gate != "can", vehicleSensorsInvalid=gate == "sensors", gearShifter="park" if gate == "gear" else "drive",
              turnSignalDriverValid=gate != "stalk", turnSignalDriverDirection=1 if gate == "driver" else 0)
   assert not update(c, fresh=gate != "model", active=gate != "lateral", cs=cs)
   expected = {"disabled": "disabled", "model": "blocked:context_stale", "lateral": "blocked:lateral_inactive",
-              "can": "blocked:can_invalid", "gear": "blocked:not_in_drive", "driver": "blocked:driver",
+              "can": "blocked:can_invalid", "sensors": "blocked:vehicle_sensors_invalid",
+              "gear": "blocked:not_in_drive", "driver": "blocked:driver",
               "stalk": "blocked:driver_input_unavailable", "no_template": "waiting:body_template"}
   assert c.status == expected[gate]
 
@@ -491,13 +501,13 @@ def test_detected_extension_and_real_can1_stalk_reach_lamp_sender(direction, sta
   monkeypatch.setattr("opendbc.car.tesla.carstate.time.clock_gettime_ns", lambda clock: N)
   monkeypatch.setattr("opendbc.car.tesla.carstate.time.monotonic_ns", lambda: N - 5_000_000_000)
   cs = ci.update([(N, [packet] if stalk_present else [])])
-  assert cs.turnSignalDriverValid == stalk_present
+  assert cs.turnSignalDriverValid == (stalk_present and size == 4)
   # Other required driving messages are covered separately; this isolates the extension-input boundary.
   cs.canValid, cs.gearShifter = True, "drive"
   c = TeslaTurnSignals.from_car_params(cp, enabled=True)
   feedback(c, N)
   sends = update(c, direction=direction, cs=cs)
-  if stalk_present:
+  if stalk_present and size == 4:
     assert len(sends) == 1 and sends[0].src == 1
     assert sends[0].address == BODY and sends[0].dat[1] & 3 == direction
   else:

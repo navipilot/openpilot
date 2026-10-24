@@ -227,6 +227,7 @@ class TeslaTurnSignals:
     request_id = int(meta.autoTurnSignalRequestId) if fresh else 0
     checks = ((self.configured, self.disabled_status), (fresh, "context_stale"),
               (control.latActive, "lateral_inactive"), (state.canValid, "can_invalid"),
+              (not state.vehicleSensorsInvalid, "vehicle_sensors_invalid"),
               (str(state.gearShifter) == "drive", "not_in_drive"),
               (state.turnSignalDriverValid, "driver_input_unavailable"),
               (not driver and not pressed, "driver"), (not hazards, "hazards"))

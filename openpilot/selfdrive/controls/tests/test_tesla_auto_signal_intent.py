@@ -15,14 +15,13 @@ def setup():
   return fixture
 
 
-@pytest.mark.parametrize("size,position,direction", [
-  (3, 1, 2), (3, 2, 2), (3, 3, 1), (3, 4, 1),
-  (4, 1, 2), (4, 2, 2), (4, 3, 2), (4, 4, 2),
-  (4, 5, 1), (4, 6, 1), (4, 7, 1), (4, 8, 1),
+@pytest.mark.parametrize("position,direction", [
+  (1, 2), (2, 2), (3, 2), (4, 2),
+  (5, 1), (6, 1), (7, 1), (8, 1),
 ])
 @pytest.mark.parametrize("bus", [0, 1])
 @pytest.mark.parametrize("release_in_batch", [False, True])
-def test_received_stalk_frame_selects_matching_lane_change(setup, monkeypatch, size, position, direction, bus, release_in_batch):
+def test_received_stalk_frame_selects_matching_lane_change(setup, monkeypatch, position, direction, bus, release_in_batch):
   from opendbc.can import CANPacker
   from opendbc.car.tesla.interface import CarInterface
   from opendbc.car.tesla.tests.test_auto_turn_signals import N, params, stalk_frame
@@ -34,7 +33,7 @@ def test_received_stalk_frame_selects_matching_lane_change(setup, monkeypatch, s
   monkeypatch.setattr("opendbc.car.tesla.carstate.time.clock_gettime_ns", lambda clock: N)
 
   def receive(positions, lamp_direction=0):
-    frames = [stalk_frame(p, bus, size) for p in positions]
+    frames = [stalk_frame(p, bus) for p in positions]
     frames.append(packer.make_can_msg("UI_warning", 0, {"leftBlinkerBlinking": 2 if lamp_direction == 1 else 0,
                                                       "rightBlinkerBlinking": 2 if lamp_direction == 2 else 0}))
     cs = ci.update([(N, frames)])
@@ -50,7 +49,7 @@ def test_received_stalk_frame_selects_matching_lane_change(setup, monkeypatch, s
   assert h.lane_change_direction == direction
 
 
-@pytest.mark.parametrize("invalid", ["sna", "crc", "dlc"])
+@pytest.mark.parametrize("invalid", ["sna", "crc", "dlc", "three_byte"])
 def test_untrusted_stalk_cannot_start_a_manual_lane_change(setup, monkeypatch, invalid):
   from opendbc.car.tesla.interface import CarInterface
   from opendbc.car.tesla.tests.test_auto_turn_signals import N, params, stalk_frame
@@ -62,6 +61,8 @@ def test_untrusted_stalk_cannot_start_a_manual_lane_change(setup, monkeypatch, i
     frame = (frame[0], bytes((frame[1][0] ^ 1,)) + frame[1][1:], frame[2])
   elif invalid == "dlc":
     frame = (frame[0], frame[1][:2], frame[2])
+  elif invalid == "three_byte":
+    frame = (frame[0], frame[1][:3], frame[2])
   monkeypatch.setattr("opendbc.car.tesla.carstate.time.clock_gettime_ns", lambda clock: N)
   for packet in (stalk_frame(0), frame, frame):
     cs = ci.update([(N, [packet])])
