@@ -9,7 +9,7 @@
 +<!-- CARROT:SECTION:END BEHAVIOR -->
 +
 +<!-- CARROT:SECTION:BEGIN USAGE -->
-+Default OFF; reboot after changing. Requires supported Model 3/Y, the vehicle CAN bus, fresh physical stalk input and matching Panda firmware. It does not grant steering or departure permission. Validate both directions and failure/manual takeover on the exact vehicle in a closed course before road use. CAN or device power loss cannot guarantee lamp cancellation.
++Default OFF; reboot after changing. Requires supported Model 3/Y, CAN1 extension detection shared with the speed wheel (`0x3DF`), fresh physical stalk input and matching Panda firmware. CAN1 stalk input is preferred once observed; stale or conflicting input blocks output. Lamp-specific templates and UI/physical feedback are still required. App requests last through the existing maneuver. `blocked:*` and `waiting:*` diagnostics identify blockers; they are not new on-screen alerts. It does not grant steering or departure permission. Validate both directions and failure/manual takeover on the exact vehicle in a closed course before road use. CAN or device power loss cannot guarantee lamp cancellation.
 +<!-- CARROT:SECTION:END USAGE -->
 +
 +<!-- CARROT:SECTION:BEGIN REFERENCE -->
@@ -27,7 +27,7 @@
 +<!-- CARROT:SECTION:END BEHAVIOR -->
 +
 +<!-- CARROT:SECTION:BEGIN USAGE -->
-+기본 꺼짐이며 변경 후 재부팅합니다. 지원 Model 3/Y, 차량 CAN 버스, 신선한 실제 스토크 입력과 일치하는 Panda 펌웨어가 필요합니다. 조향·출발 권한은 늘리지 않습니다. 일반 도로 사용 전 해당 차량의 폐쇄 시험장에서 좌우 동작·고장·운전자 개입을 확인하세요. CAN 단절이나 장치 전원 상실 시 소등은 보장할 수 없습니다.
++기본 꺼짐이며 변경 후 재부팅합니다. 지원 Model 3/Y, 속도 휠과 공유하는 CAN1 확장선 감지(`0x3DF`), 신선한 실제 스토크 입력과 일치하는 Panda 펌웨어가 필요합니다. 수신된 CAN1 스토크를 우선하고 시간 초과·충돌 시 출력을 차단합니다. 램프 템플릿과 UI·실제 램프 피드백은 별도로 필요하며 App 요청도 기존 동작 완료까지 유지합니다. `blocked:*`, `waiting:*`는 화면 경고가 아닌 기록용 진단입니다. 조향·출발 권한은 늘리지 않습니다. 일반 도로 사용 전 해당 차량의 폐쇄 시험장에서 좌우 동작·고장·운전자 개입을 확인하세요. CAN 단절이나 장치 전원 상실 시 소등은 보장할 수 없습니다.
 +<!-- CARROT:SECTION:END USAGE -->
 +
 +<!-- CARROT:SECTION:BEGIN REFERENCE -->
@@ -45,7 +45,7 @@
 +<!-- CARROT:SECTION:END BEHAVIOR -->
 +
 +<!-- CARROT:SECTION:BEGIN USAGE -->
-+默认关闭，修改后需重启。要求受支持的 Model 3/Y、车辆 CAN 总线、有效且新鲜的真实拨杆输入及匹配的 Panda 固件。不增加转向或起步权限。公共道路使用前必须在目标车辆的封闭场地验证左右灯、故障和人工接管；CAN 断线或设备断电时无法保证物理熄灯。
++默认关闭，修改后需重启。要求受支持的 Model 3/Y、与自动巡航滚轮共用的 CAN1 拓展线检测（`0x3DF`）、有效且新鲜的真实拨杆输入及匹配的 Panda 固件。收到 CAN1 拨杆后优先使用该来源；输入陈旧或冲突时禁止自动输出。仍需独立的灯控模板及 UI/物理灯反馈；App 请求保持至既有动作完成。`blocked:*`、`waiting:*` 用于记录具体阻断原因，不是新增屏幕告警。不增加转向或起步权限。公共道路使用前必须在目标车辆的封闭场地验证左右灯、故障和人工接管；CAN 断线或设备断电时无法保证物理熄灯。
 +<!-- CARROT:SECTION:END USAGE -->
 +
 +<!-- CARROT:SECTION:BEGIN REFERENCE -->

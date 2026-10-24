@@ -44,9 +44,8 @@ class CarInterface(CarInterfaceBase):
     # - Radar CAN lines must be tapped and connected to CAN bus 1 (normally not used for tesla vehicles)
     ret.radarUnavailable = RADAR_START_ADDR not in fingerprint[1] or Bus.radar not in DBC[candidate]
 
-    # Vehicle-bus availability gates both infotainment gestures and the
-    # automatic cruise-speed wheel. The latter is always enabled with Tesla
-    # openpilot longitudinal control when the required bus is available.
+    # The same extension-bus detection gates gestures, the speed wheel and automatic turn signals.
+    # Speed-wheel control additionally requires Tesla openpilot longitudinal control.
     has_vehicle_bus = 0x3DF in fingerprint[CANBUS.vehicle]
     if has_vehicle_bus:
       ret.flags |= TeslaFlags.HAS_VEHICLE_BUS.value

@@ -27,7 +27,6 @@ from openpilot.selfdrive.car.cruise import VCruiseCarrot
 from openpilot.selfdrive.car.car_specific import MockCarState
 from openpilot.selfdrive.car.openpilot_toggle import CruiseMainOpenpilotToggle
 from openpilot.selfdrive.car.tesla_turn_signals import TeslaTurnSignals
-from opendbc.car.tesla.values import TeslaFlags
 from openpilot.selfdrive.controls.lib.lateral_readiness import LateralStartupGate
 from openpilot.selfdrive.carrot.xiaoge.xiaoge_vision import (
   XiaogeVisionResult,
@@ -136,9 +135,8 @@ class Car:
       safety_config = structs.CarParams.SafetyConfig()
       safety_config.safetyModel = structs.CarParams.SafetyModel.noOutput
       self.CP.safetyConfigs = [safety_config]
-    self.tesla_signals = TeslaTurnSignals(
-      self.CP.brand == "tesla" and not self.CP.passive and bool(self.CP.flags & TeslaFlags.AUTO_TURN_SIGNALS))
-    self.tesla_signal_status = self.tesla_signals.status
+    self.tesla_signals = TeslaTurnSignals.from_car_params(self.CP, enabled=self.params.get_bool("TeslaAutoTurnSignals"))
+    self.tesla_signal_status = None if self.CP.brand == "tesla" else self.tesla_signals.status
 
     if self.CP.secOcRequired:
       # Copy user key if available
@@ -229,7 +227,7 @@ class Car:
 
     self.sm.update(0)
     sm_done_ns = time.monotonic_ns()
-    signal_now = can_list[-1][0] if REPLAY and can_list else sm_done_ns
+    signal_now = can_list[-1][0] if REPLAY and can_list else time.clock_gettime_ns(getattr(time, "CLOCK_BOOTTIME", time.CLOCK_MONOTONIC))
     self.tesla_signals.observe(can_list, signal_now)
     urgent_sends = self.tesla_signals.take_sends(signal_now, cancel_only=True)
     if urgent_sends:
@@ -397,7 +395,8 @@ class Car:
       if self.tesla_signals.configured:
         fresh = all(self.sm.seen[s] and self.sm.alive[s] and self.sm.valid[s] and
                     0 <= time.monotonic() - self.sm.recv_time[s] <= 0.2 for s in ('carControl', 'modelV2'))
-        can_sends.extend(self.tesla_signals.update(CS, CC, self.sm['modelV2'].meta, fresh, now_nanos))
+        signal_now = now_nanos if REPLAY else time.clock_gettime_ns(getattr(time, "CLOCK_BOOTTIME", time.CLOCK_MONOTONIC))
+        can_sends.extend(self.tesla_signals.update(CS, CC, self.sm['modelV2'].meta, fresh, signal_now))
       apply_done_ns = time.monotonic_ns()
       self.pm.send('sendcan', can_list_to_can_capnp(can_sends, msgtype='sendcan', valid=CS.canValid))
       sendcan_done_ns = time.monotonic_ns()

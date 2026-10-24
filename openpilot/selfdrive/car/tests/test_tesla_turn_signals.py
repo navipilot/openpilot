@@ -106,6 +106,10 @@ def test_start_gates(gate):
   cs = state(canValid=gate != "can", gearShifter="park" if gate == "gear" else "drive",
              turnSignalDriverValid=gate != "stalk", turnSignalDriverDirection=1 if gate == "driver" else 0)
   assert not update(c, fresh=gate != "model", active=gate != "lateral", cs=cs)
+  expected = {"disabled": "disabled", "model": "blocked:context_stale", "lateral": "blocked:lateral_inactive",
+              "can": "blocked:can_invalid", "gear": "blocked:not_in_drive", "driver": "blocked:driver",
+              "stalk": "blocked:driver_input_unavailable", "no_template": "waiting:body_template"}
+  assert c.status == expected[gate]
 
 
 @pytest.mark.parametrize("direction", [1, 2, 3])
@@ -236,3 +240,73 @@ def test_fault_or_unavailable_feedback_cancels_an_active_session(ui, front):
   feedback(c, N + 3, ui=ui, front=front)
   assert c.session.cancelling
   assert c.take_sends(N + 4)[0].dat[1] & 3 == 3
+
+
+@pytest.mark.parametrize("gate,expected", [
+  ("ready", "idle"), ("off", "disabled:setting_off"), ("vehicle_bus", "blocked:vehicle_bus_unavailable"),
+  ("restart", "blocked:restart_required"), ("safety", "blocked:safety_configuration"),
+  ("passive", "disabled:passive"), ("platform", "disabled:unsupported_platform"),
+])
+def test_configuration_reports_why_extension_signals_are_not_enabled(gate, expected):
+  from opendbc.car.tesla.tests.test_auto_turn_signals import params
+  from opendbc.car.tesla.values import TeslaFlags
+
+  cp = params(vehicle_bus=gate != "vehicle_bus", enabled=gate != "restart")
+  if gate == "safety":
+    cp.safetyConfigs[0].safetyParam = 0
+  elif gate == "passive":
+    cp.passive = True
+  elif gate == "platform":
+    cp.carFingerprint = "TESLA_MODEL_X"
+  c = TeslaTurnSignals.from_car_params(cp, enabled=gate != "off")
+  assert c.status == expected
+  assert c.configured == (gate == "ready")
+  assert bool(cp.flags & TeslaFlags.HAS_VEHICLE_BUS) == (gate != "vehicle_bus")
+
+
+@pytest.mark.parametrize("gate,expected", [
+  ("ui", "waiting:ui_feedback"), ("front", "waiting:front_feedback"),
+  ("lamp", "waiting:lamps_off"), ("invalid", "waiting:invalid_lamp_feedback"),
+])
+def test_feedback_waits_report_specific_cause(gate, expected):
+  c = TeslaTurnSignals(True)
+  feedback(c, N, ui=(2, 0) if gate == "lamp" else (0, 0), front=(3, 0) if gate == "invalid" else (0, 0))
+  if gate == "ui":
+    c.ui_time = 0
+  elif gate == "front":
+    c.front_time = 0
+  assert not update(c)
+  assert c.status == expected
+  feedback(c, N + 1)
+  assert update(c, N + 1)
+
+
+@pytest.mark.parametrize("direction", [1, 2])
+@pytest.mark.parametrize("stalk_present", [False, True])
+def test_detected_extension_and_real_can1_stalk_reach_lamp_sender(direction, stalk_present, monkeypatch):
+  from opendbc.car import Bus
+  from opendbc.car.tesla.carstate import CarState
+  from opendbc.car.tesla.tests.test_auto_turn_signals import params
+  from opendbc.car.tesla.values import TeslaFlags
+
+  cp = params(longitudinal=True)
+  assert cp.flags & TeslaFlags.AUTO_SPEED_LIMIT
+  decoder = CarState(cp)
+  parsers = CarState.get_can_parsers(cp)
+  packet = CANPacker("tesla_model3_vehicle").make_can_msg("SCCM_leftStalk", 1, {"SCCM_turnIndicatorStalkStatus": 0})
+  parsers[Bus.adas].update([[N, [packet] if stalk_present else []]])
+  monkeypatch.setattr("opendbc.car.tesla.carstate.time.clock_gettime_ns", lambda clock: N)
+  monkeypatch.setattr("opendbc.car.tesla.carstate.time.monotonic_ns", lambda: N - 5_000_000_000)
+  cs = decoder.update(parsers)
+  assert cs.turnSignalDriverValid == stalk_present
+  # Other required driving messages are covered separately; this isolates the extension-input boundary.
+  cs.canValid, cs.gearShifter = True, "drive"
+  c = TeslaTurnSignals.from_car_params(cp, enabled=True)
+  feedback(c, N)
+  sends = update(c, direction=direction, cs=cs)
+  if stalk_present:
+    assert len(sends) == 1 and sends[0].src == 1
+    assert sends[0].address == BODY and sends[0].dat[1] & 3 == direction
+  else:
+    assert not sends and c.status == "blocked:driver_input_unavailable"
+  assert decoder.tesla_manual_speed_adjustment_counter == 0

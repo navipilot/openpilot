@@ -2,6 +2,10 @@
 
 日期：2026-10-23
 
+版本说明：第 1–7 节记录初始移植时的本机验证及边界，随后该版本已发布为 `73fb3a6b5`。第 8 节记录实车不亮灯反馈后的复现；第 9 节记录 2026-10-24 的本地灯控修复，第 10 节记录历史三项安全测试失败的解释及测试适配。后两项尚未完成目标车辆验收，提交/发布状态见下一段。
+
+发布说明（2026-10-24）：按用户要求，将第 9、10 节修复一起提交并发布至 `navipilot/openpilot:try`，以前版 `73fb3a6b5` 为基线；各节“未提交/未推送”为对应测试时点的状态。实际发布 SHA 及是否成功以远端核验和交付消息为准。本次不包含原有 Hyundai DBC、字体改动，不新增固件保护，也不代表已部署、刷写或完成实车验收。
+
 ## 1. 结论与交付边界
 
 已在 carrot 实现：使用既有导航/ATC 转弯、变道意图，向受支持的 Tesla 请求左右转向灯，保持至既有动作结束，再取消自身请求。包含自动灯来源隔离、真实拨杆优先、反馈确认、独立失联看门狗、有界取消重试和 Panda 安全约束。
@@ -230,3 +234,165 @@ KO/EN 用户指南及三语设置说明已同步，参数总数更新为 190。W
 尚未验证具体车辆响应、固件与 Tesla 版本兼容、无拨杆年款、真实手机 App 端到端路线、离线日志的不同单调时钟及断电行为。拨杆新鲜度采用运行设备单调时钟，离线回放若不对齐 CAN 时间会保守禁用，不能把本机夹具测试称作实车回放通过。
 
 **必须由实车验收补齐“目标车可正常使用”的证据；本报告没有保证断线/断电时车辆一定熄灯，也没有保证安全回归的原有失败已经解决。**
+
+## 8. 实车不亮灯反馈后的排查
+
+用户反馈：开关开启，7706 的 `carrotCmd=LANECHANGE` 左右变道与导航左右转弯均能执行，但转向灯不亮，Comma 3 和车辆无报错。本节针对已发布源码 `73fb3a6b533bde2ebb198c1f83973f3795fd782a` 做只读分析；没有取得该次实车 rlog、运行时 CarParams 或 Panda 状态，不能据此认定目标车根因已经确认或修复。
+
+### 本机已复现的阻断点与实现缺陷
+
+所有执行均先进入 `carrot`，使用 `op venv`。复现使用真实 DBC、当前参数生成逻辑和已有 DesireHelper/执行器夹具，没有连接车辆或发送真实 CAN。
+
+| 检查项 | 实际复现结果 | 结论边界 |
+|---|---|---|
+| 参数开启，但 fingerprint 的 bus1 缺少 `0x3DF` | `CP.flags=4`，自动灯功能位关闭，`safetyParam=0`；相同夹具加入该消息后为 `flags=44`、`safetyParam=8` | 开关开启不代表运行时准入成功。这些数值来自合成 fingerprint，不是用户车辆读数 |
+| 实体拨杆消息来源 | 同一 DBC 的 idle `0x249` 在 bus0 时 `turnSignalDriverValid=True`；只在 bus1 时为 False，party 时间戳为 0 | 当前解析固定读取 bus0。两个 DBC 都有该消息，不证明用户车辆实际上在哪条总线上发送 |
+| 拨杆无效时的灯请求 | 即使模拟有效的导航方向、控制和灯反馈，执行器发送 0 帧，状态仍为 `idle` | 有静默阻断缺陷；无界面报错不能证明灯控链路正常 |
+| 真实 App 短命令的完整起始阶段 | LEFT/RIGHT 均在第 0–3 帧有对应灯方向；第 4 帧起方向为 0，但原状态机仍为 `laneChangeStarting` | App 请求约 0.2 秒到期会错误地结束灯意图。不同于原状态机仍继续执行的变道生命周期 |
+| CAN 时间域偏移 | 将反馈时间设置为执行器时间之后 30 秒时，发送 0 帧、状态为 `waiting_for_vehicle_feedback` | 新鲜度检查依赖时间域一致。此为合成风险检查，不代表用户设备存在该偏移 |
+
+主要代码位置：
+
+- `opendbc_repo/opendbc/car/tesla/interface.py`：`has_vehicle_bus` 与 CP/safety 功能位。
+- `opendbc_repo/opendbc/car/tesla/carstate.py`：仅从 `cp_party` 读取 `SCCM_leftStalk`，以及拨杆有效性和计数。
+- `openpilot/selfdrive/controls/lib/desire_helper.py`：App 的 0.2 秒计数，以及 `_update_auto_signal` 对当前 `atc_enabled` 的持续依赖。
+- `openpilot/selfdrive/car/tesla_turn_signals.py`：`update` 准入；尚未创建会话时 `_cancel` 直接返回，未记录具体阻断原因。
+- `openpilot/selfdrive/car/card.py`：灯状态进入 carState/cloudlog，但没有相应的用户界面告警。
+
+重新运行现有意图、Tesla 参数/拨杆、执行器和 card 四个测试模块，结果为 **76 passed，3 条既有 pytest 配置警告**。这些原测试仍能通过，同时上述缺陷能够复现，说明之前覆盖不足：意图测试以持续导航意图为主，没有覆盖真实 App 短命令的完整生命周期；拨杆测试只注入 bus0，执行器夹具默认拨杆有效。不能用这些通过结果宣称目标车可正常亮灯。
+
+### 应先用现有实车日志区分的公共阻断点
+
+变道/转弯由 carrot 原有链路驱动，自动灯另走独立准入和 CAN 链路，所以“车辆完成了动作”不能证明自动灯已发出请求。两个场景都完全不亮，优先检查公共链路；App 的短命令问题不能单独解释导航也不亮。
+
+1. 核对实际安装版本、开关修改后是否重启，以及本次运行的 `CarParams.flags & 32`、`safetyConfigs[].safetyParam & 8`。再比对实际 `pandaStates` 的安全模式和参数；本机构建成功不等于车端已刷入匹配固件。
+2. 核对原始接收 CAN 中 bus1 的 `0x3DF`、`0x3E9`、`0x3F5`，以及 bus0 的 `0x311`。原有转向控制可用不代表 vehicle CAN 已接入或映射正确；缺少必需总线时不能靠删门禁解决。
+3. 同时核对 `0x249` 的实际来源、刷新率和枚举，以及 `carState.turnSignalDriverValid/Direction`。没有实体拨杆的年款不能假定该信号存在，需要明确对应的驾驶员输入协议。
+4. 对齐 `modelV2.meta.autoTurnSignalDirection/autoTurnSignalRequestId`、`carControl.latActive`、`carState.canValid/gearShifter` 和 `autoTurnSignalStatus`；检查 `sendcan` 是否真正含有 bus1 `0x3E9`。
+5. 已有发送时，区分同报文的 bus1 TX echo（src `0x81`）、拒绝回报（`0xC1`），以及真实 UI/物理灯变化。TX echo 只证明报文发出，不证明车辆接受或灯已亮。
+
+取证优先使用本次已有日志；不要为了补日志再次在公共道路试验，不要绕过安全门禁或用原始 CAN 命令试点灯。
+
+### 最小修复方案与当前状态
+
+1. 将 App 灯请求绑定到原状态机已接受的变道会话，锁存来源、方向和请求 ID，按既有状态机的完成/取消条件结束，而不是随 0.2 秒命令消失。保留原有盲区、驾驶员确认、横向退出等条件，不能用自动灯反过来批准变道。
+2. 依据实际车辆拓扑修正真实拨杆解析。若证实信号在 vehicle bus，则显式注册和解析该来源，保留校验、新鲜度、按压计数及驾驶员优先；不能直接令 `turnSignalDriverValid=True` 或拿自动灯回读代替驾驶员输入。
+3. 将未启用、拨杆缺失/过期、模板缺失、UI/前灯反馈缺失、控制/模型过期、Panda 拒绝等原因分别诊断。避免在没有会话时一律留在 `idle`，也不能把“开关已开”显示成“功能已就绪”。
+4. 增加左右 App 短命令贯穿 starting/finishing/完成/取消的回归，以及实际来源拨杆、消息缺失/陈旧、固件不匹配和逐层阻断的回归；复核时间域。之后才进行匹配固件的台架和封闭场地验收。
+
+**本轮仅更新排查报告，没有修改灯控实现、刷写设备或推送分支。软件缺陷已复现，但该车的公共阻断点仍待实际日志确认，不能宣称已修复。**
+
+## 9. CAN1 拓展线链路修复（2026-10-24）
+
+### 依据与检测原则
+
+用户补充车辆已连接 CAN1 拓展线，现有自动模拟巡航滚轮功能可以使用。代码核对确认，两项功能**原本就共用** `interface.py` 中 `has_vehicle_bus = 0x3DF in fingerprint[CANBUS.vehicle]` 的检测，生成同一个 `TeslaFlags.HAS_VEHICLE_BUS`。不是自动灯遗漏了拓展线判断，也不能仅凭旧的 bus0 拨杆解析就推断没有接线。
+
+自动滚轮发的是 CAN1 `0x3C2`，自动灯发的是 CAN1 `0x3E9`；两者只共享总线可用性判断，不共享报文内容或执行权限。保持现有识别标准，不将“任何 bus 上有消息”视为已接入拓展线。灯控还需独立的真实 idle 模板、UI/前灯反馈和 feature 权限；滚轮工作并不等于这些灯控条件全部满足。
+
+### 已实施的最小修复
+
+| 修改 | 结果与保护 |
+|---|---|
+| CAN1 真实拨杆来源 | 仅在灯功能启用时，为 vehicle parser 预注册可选 `SCCM_leftStalk`，不改变原有 UI/TPMS 必需消息。CAN1 一旦收到该信号即优先使用，未曾收到时兼容原 CAN0 来源；CAN1 过期后不偷偷切回另一总线的 idle 值 |
+| 来源冲突与按压计数 | 新鲜来源方向冲突、无效枚举或另一来源出现无法对应的快速按压时，拒绝自动输出；半按到全按不重复计数，镜像输入及短暂无效恢复也不将同一次按压当作新请求。不伪造有效拨杆，不用灯反馈替代驾驶员输入 |
+| App 变道生命周期 | 灯方向锁存到原状态机已经接受的 pre/starting/finishing 会话，而不是 0.2 秒命令脉冲。完成、取消、驾驶员操作或原有准入失效时释放；同一已取消会话不恢复重亮，下一条真正接受的 App 命令可获得新 ID |
+| 导航准备到转弯 | 左/右 `turn … prepare` 切到同方向 `turn …` 时，原 ATC 会抑制动作切换一帧，旧灯意图因此错误归零。现在仅桥接已存在的同方向灯请求，保持 ID；原有转弯动作的一帧抑制仍然保留，不增加转向权限 |
+| CAN 时间域 | C++ CAN 事件使用 `CLOCK_BOOTTIME`；仅灯控接收/发送时钟和真实拨杆新鲜度改用相同时钟（不支持的平台使用 `CLOCK_MONOTONIC`）。模型/控制的接收新鲜度仍使用 SubMaster 原有 monotonic 时间，不修改巡航滚轮或普通控制器时钟。REPLAY 的灯执行器仍用日志时间，未宣称完整车辆离线回放已通过 |
+| 明确阻断原因 | 配置时区分开关关闭、车型不支持、passive、未识别拓展线、需要重启、CP 安全配置缺失。运行时区分拨杆不可用、控制/CAN/D 挡不满足、模板与 UI/前灯反馈缺失等。首次 Tesla 状态也记录 cloudlog，不再因没有会话而始终留在 `idle` |
+
+CP 灯功能位仍为 32，Panda 独立权限仍为 8。自动灯不依赖 alpha longitudinal 或自动滚轮是否开启，避免把灯控错误绑定到纵向功能。现有滚轮发送逻辑、Panda 生产规则、报文格式、模板消费、取消与熄灯确认均未放宽；此次没有新增 schema、参数或固件修改。
+
+### 当前诊断含义
+
+状态从 `carState.autoTurnSignalStatus` 和 `tesla_auto_turn_signal` 事件读取，**不是新增屏幕告警**。
+
+| 状态 | 应检查的环节 |
+|---|---|
+| `blocked:vehicle_bus_unavailable` | 本次启动是否在 CAN1 检测到 `0x3DF`，而非只看设置开关 |
+| `blocked:restart_required` | 设置已开，但本次 CarParams 没有灯功能位，需按原流程重启重新识别 |
+| `blocked:safety_configuration` | CP 请求的 Tesla 安全配置中缺少灯控权限；不代表已经验证设备固件 |
+| `blocked:driver_input_unavailable` | `0x249` 来源、刷新率、枚举、双来源冲突；无拨杆或不同协议布局仍未自动支持 |
+| `blocked:context_stale` / `blocked:lateral_inactive` / `blocked:can_invalid` / `blocked:not_in_drive` | 原有控制和新鲜度准入 |
+| `waiting:ui_feedback` / `waiting:front_feedback` | 缺少新鲜 bus0 `0x311` / bus1 `0x3F5` |
+| `waiting:body_template` | 缺少新鲜、正确校验的 bus1 idle `0x3E9` |
+| `waiting:lamps_off` / `waiting:invalid_lamp_feedback` | 当前不具备双侧关闭且有效的起始灯状态 |
+| `cancelling:panda_rejected` / `fault:panda_rejected_cancel` | 收到拒绝回报；需核对实际安全模式、固件及原始收发报文，不能视为车辆已执行 |
+
+### 验证结果
+
+均先进入 `carrot` 并执行 `op venv`。主机回归：
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest -q \
+  -o addopts= -p no:cacheprovider --confcutdir=/home/jeff/carrot \
+  openpilot/selfdrive/controls/tests/test_tesla_auto_signal_intent.py \
+  openpilot/selfdrive/controls/tests/test_desire_helper.py \
+  openpilot/selfdrive/controls/tests/test_desire_helper_stalk.py \
+  openpilot/selfdrive/controls/tests/test_lever_forced_turn.py \
+  openpilot/selfdrive/controls/tests/test_lane_change_side_obstacles.py \
+  openpilot/selfdrive/controls/tests/test_lateral_readiness.py \
+  openpilot/selfdrive/controls/tests/test_lateral_startup_control.py \
+  opendbc_repo/opendbc/car/tesla/tests \
+  openpilot/selfdrive/car/tests/test_tesla_turn_signals.py \
+  openpilot/selfdrive/car/tests/test_tesla_signal_card.py
+```
+
+结果：**351 passed，23 subtests passed**。覆盖左右 App 短命令贯穿整个状态机、350ms 后才有灯模板/反馈仍可请求、完成与驾驶员/控制/CAN/拖车取消后不重亮、下一条命令、导航准备到左右转弯、CAN1/兼容 CAN0 拨杆、同批次按压释放、来源冲突与镜像计数、无拓展线/错误 bus 的标记、拨杆缺失、配置/反馈阻断诊断，以及现有 Tesla 自动滚轮、转向与启动门禁。模拟暂停导致的两个时钟相差 5 秒时，card 仍使用 CAN 对应时钟；未把时间域差当作接收陈旧。
+
+独立运行 `opendbc_repo/opendbc/safety/tests/test_tesla_turn_signals.py`：**10 passed**，沿用现有 C 测试库，包含 feature 位组合、真实模板、可修改位、总线/长度/校验、反向取消和有界重试。没有重新运行全量安全套件或重建固件；第 5 节原有 3 项转向安全失败没有在此次处理，不能将这 10 项通过说成全量安全全绿。
+
+新增/修改的聚焦 Python Ruff 通过；`card.py` 对照当前 HEAD 的 22 条旧诊断无新增。pytest 仍有 3 条已有插件配置警告。EN/KO 用户指南及三语 Wiki 补丁同步；本地重新生成、应用补丁、再次生成后 **595 个 Markdown 文件验证通过**，用户文档映射检查通过。Wiki 未发布。
+
+**当前交付是本地软件修复及上述本机证据，未提交、未推送、未部署或刷写。仍未取得目标车原始日志，不能证明它此前一定是 CAN1 拨杆问题，也不能保证此次修改后该车已能正常亮灯。设备仍须具备匹配的 Panda 灯控规则，并先完成台架/封闭场地验证，不应直接继续公共道路试验。**
+
+## 10. 历史三项转向安全测试失败的核对与适配
+
+### 同一个预期冲突，不是三个独立故障
+
+三项均为继承自 `safety/tests/common.py` 的 `test_angle_cmd_when_disabled`：
+
+- `TestTeslaStockSafety`：原厂纵向。
+- `TestTeslaLongitudinalSafety`：openpilot 纵向。
+- `TestTeslaAutoSpeedLimitSafety`：openpilot 纵向加自动巡航滚轮。
+
+先在 `carrot` 中执行 `op venv`，运行既有 SCons C 库目标确认源码状态，再运行原三项测试，复现 **3 failed**。进一步完整枚举每种模式的 `controls_allowed`、转向请求位、19 个测量角度和 19 个请求角度，即每种模式 1444 个组合：三种模式均只有 **361 个 `controls_allowed=False` 且转向请求位为开**的组合与通用测试预期不同。请求位为 NONE 时的角度约束没有出现此类差异。
+
+原因在本分支既有 `opendbc_repo/opendbc/safety/safety.h` 的 `steer_angle_cmd_checks`：局部 `aol_allowed` 固定为 true，允许横向独立于原厂巡航，仍执行角速率检查。通用测试却沿用“`controls_allowed=False` 时所有主动转向都应拒绝”的预期。这个测试把原厂巡航授权关闭与转向报文的 NONE 位混在了一起，与当前分支的独立横向策略不一致。主机 `controlsd.py` 也明确允许 `(selfdrive_active or always_lateral)` 后再检查横向开关、故障、车速、启动准备等条件。
+
+**不能为了通过该通用测试就直接将 `aol_allowed` 改为 false，或在 Tesla 中无条件添加 `!controls_allowed` 禁止转向；这会改变本分支独立横向/全时横向的行为。**
+
+### 本次修改及验证边界
+
+此次只修改 `opendbc_repo/opendbc/safety/tests/test_tesla.py`：
+
+1. 在 Tesla 测试基类中提供相同测试名的分支专属预期。保留完整的授权/请求位/测量角度/请求角度组合；主动请求在预置相同上一请求、满足角速率等条件时可以独立于巡航，NONE 请求仍必须贴合测量角度。逐次确认 TX 不改变巡航授权。
+2. 扩展原有 inactive 检查，在巡航授权开/关两种状态下均验证测量角度限幅，以及正、负两个方向的错误关闭角度必须被拒绝。
+3. 新增未开巡航时的角速率正反例，覆盖 0、1、5、10、25、50m/s，以及负角、零角、正角；每次单独设置上一请求，确保超速变化仍被拒绝，不能通过连续请求的副作用蒙混过关。
+4. 新增横向/纵向隔离检查：独立横向报文被接受后，不得打开 `controls_allowed`，也不得因此允许非零纵向加速。
+
+没有修改共享通用测试、生产安全代码、任何限值或权限位，也没有增加 skip/xfail 标记。**这是测试与既有分支策略的适配，不是新增 Panda 独立横向授权机制或固件安全加固。** 固件中的 `aol_allowed=true` 仍然存在，Panda 并没有因此开始独立读取主机的 `AlwaysLateral` 开关；主机横向门禁仍是现有架构的一部分。测试全绿不能被解释为这方面的架构风险已经消失。
+
+### 最新验证结果
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest -q \
+  -o addopts= -p no:cacheprovider --confcutdir=/home/jeff/carrot \
+  opendbc_repo/opendbc/safety/tests/test_tesla.py \
+  opendbc_repo/opendbc/safety/tests/test_tesla_turn_signals.py
+```
+
+结果：**116 passed，40 skipped，339 subtests passed，0 failed**。没有用 `-k` 排除历史失败。40 个跳过包含既有抽象基类及不适用测试；相较原 38 个增加的 2 个来自基类新增的两种测试方法被收集，不是将失败改成跳过。仍有 3 条既有 pytest 插件配置警告。
+
+为验证适配后不会放过真正的约束破坏，另在会话目录生成并编译两份隔离 C 库，未覆盖正常库或生产源码：
+
+| 隔离故障注入 | 测试确实拒绝的例子 |
+|---|---|
+| 去掉 NONE 请求的测量角度检查 | 修正后的同名测试在测量 -90°、请求 -80°、转向请求位为关时断言失败 |
+| 未开巡航时跳过主动转向角速率检查 | 新增角速率测试在 0m/s、上一请求 -90°、单次变化 +6.1° 时断言失败 |
+
+这两个预期失败证明测试并非无条件接受当前返回值；它们不是正常代码的回归失败。隔离产物及结果保存在本会话 `files/tesla-disabled-mutants/`，正常 C 库未替换。
+
+同时运行实际控制器反馈、协同转向、主机 `AlwaysLateral`/转向门禁及启动准备测试：**103 passed**。修改文件 Ruff 与 diff 空白检查通过。生产安全规则无变化，未为此次测试适配重新构建或刷写四种固件；第 9 节灯控仍要求设备具备匹配固件。
+
+**截至本节，原三项测试失败已通过明确的分支策略适配消除；没有据此宣称车辆问题已全部解决、固件增加了新保护，或完成实车安全认证。本次仍未提交或推送。**

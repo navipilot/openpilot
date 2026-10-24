@@ -74,6 +74,7 @@ class DesireHelper:
     self.auto_signal_request_id = 0
     self._auto_signal_counter = time.monotonic_ns()
     self._auto_lane_completed = False
+    self._auto_lane_direction = LaneChangeDirection.none
     self._auto_turn_consumed = False
     self._auto_atc_type = ""
 
@@ -598,22 +599,39 @@ class DesireHelper:
 
   def _update_auto_signal(self, carstate, carrot_man, lateral_active, atc_enabled, atc_st, driver_st, previous):
     direction = LaneChangeDirection.none
+    turn_handoff = self.atc_type in ("turn left", "turn right") and self._auto_atc_type == self.atc_type + " prepare"
     if self.atc_type != self._auto_atc_type:
       self._auto_turn_consumed = False
       self._auto_lane_completed = False
     self._auto_atc_type = self.atc_type
     if previous == LaneChangeState.laneChangeFinishing and self.lane_change_state != previous:
       self._auto_lane_completed = True
-    if self.lane_change_state == LaneChangeState.laneChangeStarting:
+    if self.lane_change_state == LaneChangeState.laneChangeStarting and previous != self.lane_change_state:
+      self._auto_lane_completed = False
+    if (self.carrot_lane_change_count > 0 and previous == LaneChangeState.off and
+        self.lane_change_state == LaneChangeState.preLaneChange):
       self._auto_lane_completed = False
     if self.turn_disable_count > 0:
       self._auto_turn_consumed = True
-    if (self.tesla_auto_signals and lateral_active and carstate.canValid and not carstate.trailerConnected and
-        not driver_st and self.desire_disable_count == 0):
+    permitted = (self.tesla_auto_signals and lateral_active and carstate.canValid and not carstate.trailerConnected and
+                 not driver_st and self.desire_disable_count == 0)
+    if not permitted or self.lane_change_state == LaneChangeState.off or self._auto_lane_completed:
+      if not permitted and self._auto_lane_direction != LaneChangeDirection.none:
+        self._auto_lane_completed = True
+      self._auto_lane_direction = LaneChangeDirection.none
+    elif (atc_enabled and self._auto_lane_direction == LaneChangeDirection.none and
+          (self.lane_change_state == LaneChangeState.preLaneChange or previous == LaneChangeState.preLaneChange)):
+      # The App command is a short pulse; only the existing FSM owns the maneuver's lifetime.
+      self._auto_lane_direction = LaneChangeDirection.left if atc_st == BLINKER_LEFT else LaneChangeDirection.right
+    if permitted:
       if atc_enabled and self.turn_direction != TurnDirection.none and not self._auto_turn_consumed:
         direction = LaneChangeDirection.left if self.turn_direction == TurnDirection.turnLeft else LaneChangeDirection.right
-      elif (atc_enabled and self.lane_change_state != LaneChangeState.off and not self._auto_lane_completed):
-        direction = LaneChangeDirection.left if atc_st == BLINKER_LEFT else LaneChangeDirection.right
+      elif self._auto_lane_direction != LaneChangeDirection.none:
+        direction = self._auto_lane_direction
+      elif (turn_handoff and not self._auto_turn_consumed and self.atc_active != 2 and not self.blinker_ignore and
+            self.auto_signal_direction == (LaneChangeDirection.left if self.atc_type == "turn left" else LaneChangeDirection.right)):
+        # ATC suppresses maneuver changes for one frame, not an already requested same-direction lamp.
+        direction = self.auto_signal_direction
       elif (not self._auto_turn_consumed and not self._auto_lane_completed and self.atc_active != 2 and
             not self.blinker_ignore and getattr(carrot_man, "xTurnInfo", 0) in (1, 2) and
             self.atc_type in ("turn left prepare", "turn right prepare", "atc left", "atc right") and

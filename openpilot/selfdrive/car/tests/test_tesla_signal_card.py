@@ -12,12 +12,14 @@ from openpilot.selfdrive.pandad import can_list_to_can_capnp
 
 
 @pytest.mark.parametrize("gate", ["ready", "startup", "dashcam", "stale_model", "stale_control"])
-def test_final_card_boundary_uses_gated_control_and_fresh_intent(gate):
+@pytest.mark.parametrize("suspend_ns", [0, 5_000_000_000])
+def test_final_card_boundary_uses_gated_control_and_fresh_intent(gate, suspend_ns):
   path = Path(__file__).parents[1] / "card.py"
   tree = ast.parse(path.read_text())
   method = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "controls_update")
   ns = {"car": car, "REPLAY": False, "can_list_to_can_capnp": can_list_to_can_capnp,
-        "time": NS(monotonic=lambda: N / 1e9, monotonic_ns=lambda: N)}
+        "time": NS(monotonic=lambda: (N - suspend_ns) / 1e9, monotonic_ns=lambda: N - suspend_ns,
+                   clock_gettime_ns=lambda clock: N if clock == 7 else N - suspend_ns, CLOCK_BOOTTIME=7, CLOCK_MONOTONIC=1)}
   exec(compile(ast.Module(body=[method], type_ignores=[]), str(path), "exec"), ns)
   meta = log.ModelDataV2.new_message()
   meta.meta.autoTurnSignalDirection = "left"
@@ -30,7 +32,7 @@ def test_final_card_boundary_uses_gated_control_and_fresh_intent(gate):
 
   sm = Messages(messages)
   sm.valid = sm.alive = sm.seen = dict.fromkeys(("modelV2", "carControl", "radarState"), True)
-  sm.recv_time = dict.fromkeys(sm.valid, N / 1e9)
+  sm.recv_time = dict.fromkeys(sm.valid, (N - suspend_ns) / 1e9)
   if gate.startswith("stale"):
     sm.recv_time["modelV2" if gate == "stale_model" else "carControl"] -= 1
   if gate == "startup":
@@ -49,7 +51,7 @@ def test_final_card_boundary_uses_gated_control_and_fresh_intent(gate):
   stages = ("apply", "sendcan", "total")
   card = NS(initialized_prev=True, params=params, sm=sm, CI=controller,
             pm=NS(send=lambda *args: sent.append(args)), tesla_signals=signals,
-            lateral_startup=LateralStartupGate(ready=gate != "startup"), card_diag_recv_ns=N,
+            lateral_startup=LateralStartupGate(ready=gate != "startup"), card_diag_recv_ns=N - suspend_ns,
             card_diag_stage_names=stages, card_diag_stage_current=dict.fromkeys(stages, 0),
             card_diag_stage_sum_us=dict.fromkeys(stages, 0), card_diag_stage_max_us=dict.fromkeys(stages, 0),
             card_diag_process_max_us=0, card_diag_slow_process=0, card_diag_frames=0)

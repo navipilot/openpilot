@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 
 from opendbc.car.can_definitions import CanData
+from opendbc.car.tesla.values import CAR, TeslaFlags, TeslaSafetyFlags
 
 BODY = 0x3E9
 UI = 0x311
@@ -50,7 +51,7 @@ class Session:
 
 
 class TeslaTurnSignals:
-  def __init__(self, configured: bool):
+  def __init__(self, configured: bool, *, disabled_reason: str = "disabled"):
     self.configured = configured
     self.session: Session | None = None
     self.template: bytes | None = None
@@ -60,9 +61,29 @@ class TeslaTurnSignals:
     self.ui_time = self.front_time = 0
     self.context_time = 0
     self.blocked_id = 0
-    self.status = "idle" if configured else "disabled"
+    self.disabled_status = disabled_reason
+    self.status = "idle" if configured else disabled_reason
     self.last_stalk_counts: tuple[int, int] | None = None
     self.failed = False
+
+  @classmethod
+  def from_car_params(cls, CP, *, enabled: bool):
+    reason = None
+    if CP.brand != "tesla":
+      reason = "disabled:not_tesla"
+    elif not enabled:
+      reason = "disabled:setting_off"
+    elif CP.carFingerprint not in (CAR.TESLA_MODEL_3, CAR.TESLA_MODEL_Y):
+      reason = "disabled:unsupported_platform"
+    elif CP.passive:
+      reason = "disabled:passive"
+    elif not CP.flags & TeslaFlags.HAS_VEHICLE_BUS:
+      reason = "blocked:vehicle_bus_unavailable"
+    elif not CP.flags & TeslaFlags.AUTO_TURN_SIGNALS:
+      reason = "blocked:restart_required"
+    elif not any(str(s.safetyModel) == "tesla" and s.safetyParam & TeslaSafetyFlags.AUTO_TURN_SIGNALS for s in CP.safetyConfigs):
+      reason = "blocked:safety_configuration"
+    return cls(reason is None, disabled_reason=reason or "disabled")
 
   @property
   def owned_direction(self) -> int:
@@ -139,19 +160,37 @@ class TeslaTurnSignals:
 
     direction = meta.autoTurnSignalDirection.raw if fresh else 0
     request_id = int(meta.autoTurnSignalRequestId) if fresh else 0
-    allowed = (self.configured and fresh and control.latActive and state.canValid and
-               str(state.gearShifter) == "drive" and state.turnSignalDriverValid and not driver and not pressed and not hazards)
-    if not allowed or direction not in (1, 2) or not request_id:
-      self._cancel(now, "intent_or_control_inactive")
+    checks = ((self.configured, self.disabled_status), (fresh, "context_stale"),
+              (control.latActive, "lateral_inactive"), (state.canValid, "can_invalid"),
+              (str(state.gearShifter) == "drive", "not_in_drive"),
+              (state.turnSignalDriverValid, "driver_input_unavailable"),
+              (not driver and not pressed, "driver"), (not hazards, "hazards"))
+    blocked = next((reason for valid, reason in checks if not valid), None)
+    if blocked:
+      self._cancel(now, blocked)
+      if self.session is None and not self.failed:
+        self.status = f"blocked:{blocked}" if self.configured else self.disabled_status
+    elif direction not in (1, 2) or not request_id:
+      self._cancel(now, "intent_inactive")
+      if self.session is None and self.status.startswith(("blocked:", "waiting:")) and not self.failed:
+        self.status = "idle"
     elif s is not None:
       if request_id != s.request_id or direction != s.direction:
         self._cancel(now, "request_changed")
     elif not self.failed and request_id != self.blocked_id:
-      if self._off(now) and self.template is not None and 0 <= now - self.template_time <= TEMPLATE_NS:
+      if not 0 < self.ui_time <= now or now - self.ui_time > FEEDBACK_NS:
+        self.status = "waiting:ui_feedback"
+      elif not 0 < self.front_time <= now or now - self.front_time > FEEDBACK_NS:
+        self.status = "waiting:front_feedback"
+      elif 3 in self.ui or any(v in (2, 3) for v in self.front):
+        self.status = "waiting:invalid_lamp_feedback"
+      elif self.ui != (0, 0) or self.front != (0, 0):
+        self.status = "waiting:lamps_off"
+      elif self.template is None or not 0 <= now - self.template_time <= TEMPLATE_NS:
+        self.status = "waiting:body_template"
+      else:
         self.session = Session(request_id, direction, now)
         self.status = "active"
-      else:
-        self.status = "waiting_for_vehicle_feedback"
     self.advance(now)
     return self.take_sends(now)
 
