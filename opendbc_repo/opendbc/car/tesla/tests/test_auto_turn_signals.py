@@ -11,6 +11,25 @@ from opendbc.car.tesla.values import CAR, TeslaFlags, TeslaSafetyFlags
 N = 10_000_000_000
 
 
+def observe(cs, frames, timestamp=N):
+  for _, data, source in frames:
+    cs.observe_turn_stalk_frame(data, source, timestamp)
+
+
+def stalk_frame(position, bus=1, size=4, counter=0):
+  if size == 3:
+    return (0x249, bytes((0, counter, position)), bus)
+  data = bytearray((0, counter, position, 0))
+  crc = 0
+  for value in (0, position, 0, 0):
+    crc ^= value
+    for _ in range(8):
+      crc = ((crc << 1) ^ 0x2F) & 255 if crc & 128 else (crc << 1) & 255
+  magic = (0x9B, 0xE8, 0x2A, 0xD3, 0xD3, 0x83, 0x4C, 0x5E, 0x3F, 0x5E, 0xE2, 0x28, 0x3A, 0x13, 0xAF, 0xCE)
+  data[0] = crc ^ magic[counter]
+  return (0x249, bytes(data), bus)
+
+
 def params(candidate=CAR.TESLA_MODEL_Y, enabled=True, vehicle_bus=True, longitudinal=False):
   fingerprint = gen_empty_fingerprint()
   if vehicle_bus:
@@ -56,18 +75,17 @@ def test_real_stalk_frames_count_presses_without_counting_half_to_full_twice(bus
   cp = params()
   cs = CarState(cp)
   parsers = CarState.get_can_parsers(cp)
-  parser = parsers[Bus.party if bus == 0 else Bus.adas]
   packer = CANPacker("tesla_model3_party" if bus == 0 else "tesla_model3_vehicle")
   with patch("opendbc.car.tesla.carstate.time.clock_gettime_ns", return_value=N):
     for raw, direction, counts in ((3, 1, (1, 0)), (4, 1, (1, 0)), (0, 0, (1, 0)),
                                    (3, 1, (2, 0)), (1, 2, (2, 1)), (2, 2, (2, 1))):
       frame = packer.make_can_msg("SCCM_leftStalk", bus, {"SCCM_turnIndicatorStalkStatus": raw})
-      parser.update([[N, [frame]]])
+      observe(cs, [frame])
       ret = cs.update(parsers)
       assert ret.turnSignalDriverValid
       assert ret.turnSignalDriverDirection == direction
       assert (ret.leftBlinkerStalkCount, ret.rightBlinkerStalkCount) == counts
-    parser.update([[N, [packer.make_can_msg("SCCM_leftStalk", bus, {"SCCM_turnIndicatorStalkStatus": 5})]]])
+    observe(cs, [packer.make_can_msg("SCCM_leftStalk", bus, {"SCCM_turnIndicatorStalkStatus": 5})])
     assert not cs.update(parsers).turnSignalDriverValid
   with patch("opendbc.car.tesla.carstate.time.clock_gettime_ns", return_value=N + 1_000_000_001):
     assert not cs.update(parsers).turnSignalDriverValid
@@ -94,7 +112,7 @@ def test_press_and_release_in_one_batch_is_not_lost(bus):
   packer = CANPacker("tesla_model3_party" if bus == 0 else "tesla_model3_vehicle")
   frames = [packer.make_can_msg("SCCM_leftStalk", bus, {"SCCM_turnIndicatorStalkStatus": position}) for position in (3, 4, 0)]
   with patch("opendbc.car.tesla.carstate.time.clock_gettime_ns", return_value=N):
-    parsers[Bus.party if bus == 0 else Bus.adas].update([[N, frames]])
+    observe(cs, frames)
     ret = cs.update(parsers)
   assert ret.turnSignalDriverValid and ret.turnSignalDriverDirection == 0
   assert ret.leftBlinkerStalkCount == 1 and ret.rightBlinkerStalkCount == 0
@@ -108,7 +126,7 @@ def test_conflicting_fresh_sources_do_not_authorize_automatic_output(party_posit
   for bus, position in ((0, party_position), (1, 3)):
     packer = CANPacker("tesla_model3_party" if bus == 0 else "tesla_model3_vehicle")
     frame = packer.make_can_msg("SCCM_leftStalk", bus, {"SCCM_turnIndicatorStalkStatus": position})
-    parsers[Bus.party if bus == 0 else Bus.adas].update([[N, [frame]]])
+    observe(cs, [frame])
   with patch("opendbc.car.tesla.carstate.time.clock_gettime_ns", return_value=N):
     assert not cs.update(parsers).turnSignalDriverValid
 
@@ -119,9 +137,9 @@ def test_vehicle_stalk_does_not_fall_back_to_idle_party_when_stale():
   parsers = CarState.get_can_parsers(cp)
   vehicle = CANPacker("tesla_model3_vehicle")
   party = CANPacker("tesla_model3_party")
-  parsers[Bus.adas].update([[N, [vehicle.make_can_msg("SCCM_leftStalk", 1, {"SCCM_turnIndicatorStalkStatus": 0})]]])
+  observe(cs, [vehicle.make_can_msg("SCCM_leftStalk", 1, {"SCCM_turnIndicatorStalkStatus": 0})])
   later = N + 1_000_000_001
-  parsers[Bus.party].update([[later, [party.make_can_msg("SCCM_leftStalk", 0, {"SCCM_turnIndicatorStalkStatus": 0})]]])
+  observe(cs, [party.make_can_msg("SCCM_leftStalk", 0, {"SCCM_turnIndicatorStalkStatus": 0})], later)
   with patch("opendbc.car.tesla.carstate.time.clock_gettime_ns", return_value=later):
     assert not cs.update(parsers).turnSignalDriverValid
 
@@ -135,7 +153,7 @@ def test_mirrored_stalk_and_invalid_gap_do_not_double_count_a_press():
     for party, vehicle, valid in ((3, 3, True), (4, 3, True), (0, 3, False), (3, 3, True)):
       for bus, position in enumerate((party, vehicle)):
         frame = packers[bus].make_can_msg("SCCM_leftStalk", bus, {"SCCM_turnIndicatorStalkStatus": position})
-        parsers[Bus.party if bus == 0 else Bus.adas].update([[N, [frame]]])
+        observe(cs, [frame])
       ret = cs.update(parsers)
       assert ret.turnSignalDriverValid == valid
       assert ret.leftBlinkerStalkCount == 1
@@ -147,8 +165,98 @@ def test_party_fast_press_is_not_ignored_when_vehicle_bus_is_idle():
   parsers = CarState.get_can_parsers(cp)
   vehicle = CANPacker("tesla_model3_vehicle")
   party = CANPacker("tesla_model3_party")
-  parsers[Bus.adas].update([[N, [vehicle.make_can_msg("SCCM_leftStalk", 1, {"SCCM_turnIndicatorStalkStatus": 0})]]])
+  observe(cs, [vehicle.make_can_msg("SCCM_leftStalk", 1, {"SCCM_turnIndicatorStalkStatus": 0})])
   frames = [party.make_can_msg("SCCM_leftStalk", 0, {"SCCM_turnIndicatorStalkStatus": p}) for p in (3, 0)]
-  parsers[Bus.party].update([[N, frames]])
+  observe(cs, frames)
   with patch("opendbc.car.tesla.carstate.time.clock_gettime_ns", return_value=N):
     assert not cs.update(parsers).turnSignalDriverValid
+
+
+@pytest.mark.parametrize("bus", [0, 1])
+@pytest.mark.parametrize("size,positions", [(3, range(8)), (4, range(16))])
+def test_every_stalk_code_is_decoded_by_actual_frame_length(bus, size, positions):
+  for position in positions:
+    ci = CarInterface(params())
+    with patch("opendbc.car.tesla.carstate.time.clock_gettime_ns", return_value=N):
+      ret = ci.update([(N, [stalk_frame(position, bus, size)])])
+    valid = position < (5 if size == 3 else 9)
+    expected = (1 if position in (3, 4) else 2 if position in (1, 2) else 0) if size == 3 else (
+      1 if 5 <= position <= 8 else 2 if 1 <= position <= 4 else 0)
+    assert ret.turnSignalDriverValid == valid
+    assert ret.turnSignalDriverDirection == (expected if valid else 0)
+
+
+@pytest.mark.parametrize("counter", range(16))
+@pytest.mark.parametrize("position", [0, 2, 4, 6, 8, 9])
+def test_new_layout_crc_and_sna_are_checked(counter, position):
+  from opendbc.car.tesla.carstate import decode_tesla_stalk
+
+  _, data, _ = stalk_frame(position, counter=counter)
+  expected = 1 if 5 <= position <= 8 else 2 if 1 <= position <= 4 else 0
+  assert decode_tesla_stalk(data) == (expected if position < 9 else None)
+  for index in (0, 2, 3):
+    damaged = bytearray(data)
+    damaged[index] ^= 0x80
+    assert decode_tesla_stalk(bytes(damaged)) is None
+
+
+@pytest.mark.parametrize("size", [0, 1, 2, 5, 8])
+def test_unknown_dlc_cannot_fall_back_to_party_idle(size):
+  cs = CarState(params())
+  parsers = CarState.get_can_parsers(cs.CP)
+  observe(cs, [stalk_frame(0, 0, 3), (0x249, bytes(size), 1)])
+  with patch("opendbc.car.tesla.carstate.time.clock_gettime_ns", return_value=N):
+    assert not cs.update(parsers).turnSignalDriverValid
+
+
+@pytest.mark.parametrize("left", [False, True])
+def test_mixed_layout_sources_compare_normalized_direction(left):
+  cs = CarState(params())
+  parsers = CarState.get_can_parsers(cs.CP)
+  observe(cs, [stalk_frame(3 if left else 1, 0, 3), stalk_frame(6 if left else 2, 1, 4)])
+  with patch("opendbc.car.tesla.carstate.time.clock_gettime_ns", return_value=N):
+    ret = cs.update(parsers)
+  assert ret.turnSignalDriverValid
+  assert ret.turnSignalDriverDirection == (1 if left else 2)
+
+
+def test_opposite_fast_presses_from_two_sources_are_ambiguous_even_after_release():
+  cs = CarState(params())
+  parsers = CarState.get_can_parsers(cs.CP)
+  observe(cs, [stalk_frame(3, 0, 3), stalk_frame(0, 0, 3), stalk_frame(2, 1, 4), stalk_frame(0, 1, 4)])
+  with patch("opendbc.car.tesla.carstate.time.clock_gettime_ns", return_value=N):
+    ret = cs.update(parsers)
+  assert not ret.turnSignalDriverValid
+  assert ret.leftBlinkerStalkCount == ret.rightBlinkerStalkCount == 0
+
+
+@pytest.mark.parametrize("bus", [0, 1])
+@pytest.mark.parametrize("positions,direction", [([1, 2, 3, 4, 0], 2), ([5, 6, 7, 8, 0], 1)])
+def test_new_layout_half_full_and_release_are_one_press(bus, positions, direction):
+  ci = CarInterface(params())
+  frames = [stalk_frame(position, bus, counter=i) for i, position in enumerate(positions)]
+  with patch("opendbc.car.tesla.carstate.time.clock_gettime_ns", return_value=N):
+    ret = ci.update([(N, frames)])
+  assert ret.turnSignalDriverValid and ret.turnSignalDriverDirection == 0
+  assert (ret.leftBlinkerStalkCount, ret.rightBlinkerStalkCount) == ((1, 0) if direction == 1 else (0, 1))
+
+
+@pytest.mark.parametrize("source", [2, 0x80, 0x81, 0xC1])
+def test_transmitted_or_unrelated_stalk_frames_never_become_driver_input(source):
+  ci = CarInterface(params())
+  with patch("opendbc.car.tesla.carstate.time.clock_gettime_ns", return_value=N):
+    ret = ci.update([(N, [stalk_frame(6, source)])])
+  assert not ret.turnSignalDriverValid
+  assert ret.leftBlinkerStalkCount == ret.rightBlinkerStalkCount == 0
+
+
+@pytest.mark.parametrize("bus", [0, 1])
+@pytest.mark.parametrize("size,position", [(3, 3), (4, 6)])
+@pytest.mark.parametrize("age", [1_000_000_001, -1])
+def test_old_or_future_press_in_receive_batch_is_not_revived_by_fresh_idle(bus, size, position, age):
+  ci = CarInterface(params())
+  packets = [(N - age, [stalk_frame(position, bus, size)]), (N, [stalk_frame(0, bus, size)])]
+  with patch("opendbc.car.tesla.carstate.time.clock_gettime_ns", return_value=N):
+    ret = ci.update(packets)
+  assert ret.turnSignalDriverValid and ret.turnSignalDriverDirection == 0
+  assert ret.leftBlinkerStalkCount == ret.rightBlinkerStalkCount == 0

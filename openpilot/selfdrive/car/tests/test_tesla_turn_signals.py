@@ -60,6 +60,35 @@ def opened(direction=1):
   return c
 
 
+def test_diagnostics_distinguish_submissions_echoes_and_rejections_without_side_effects():
+  c = opened()
+  assert c.diagnostics(N + 2)["active_submissions"] == 1
+  assert c.diagnostics(N + 2)["active_tx_echoes"] == 1
+  sent = c.take_sends(N + 3)[0]
+  snapshot = c.diagnostics(N + 3)
+  assert snapshot["active_submissions"] == 2 and snapshot["active_tx_echoes"] == 1
+  assert snapshot["awaiting_echo"] and snapshot["on_seen"]
+  echo(c, sent, N + 4, source=0xC1)
+  assert c.diagnostics(N + 4)["panda_rejections"] == 1
+  assert c.status == "cancelling:panda_rejected"
+  feedback(c, N + 5, ui=(2, 0), front=(1, 0))
+  cancel = c.take_sends(N + 6)[0]
+  assert cancel.dat[1] & 3 == 3
+  echo(c, cancel, N + 7)
+  echo(c, cancel, N + 8)  # Duplicate RX cannot inflate counters.
+  snapshot = c.diagnostics(N + 8)
+  assert snapshot["active_submissions"] == 2 and snapshot["active_tx_echoes"] == 1
+  assert snapshot["cancel_submissions"] == snapshot["cancel_tx_echoes"] == 1
+  assert not snapshot["awaiting_echo"]
+
+
+def test_invalid_driver_input_does_not_masquerade_as_manual_takeover():
+  c = opened()
+  update(c, N + 3, cs=state(turnSignalDriverValid=False, rightBlinkerStalkCount=1))
+  assert c.status == "cancelling:driver_input_unavailable"
+  assert not c.session.manual
+
+
 def cancelling(direction=1):
   c = opened(direction)
   sent = update(c, N + 3, direction=0)[0]
@@ -448,21 +477,20 @@ def test_feedback_waits_report_specific_cause(gate, expected):
 
 @pytest.mark.parametrize("direction", [1, 2])
 @pytest.mark.parametrize("stalk_present", [False, True])
-def test_detected_extension_and_real_can1_stalk_reach_lamp_sender(direction, stalk_present, monkeypatch):
-  from opendbc.car import Bus
-  from opendbc.car.tesla.carstate import CarState
-  from opendbc.car.tesla.tests.test_auto_turn_signals import params
+@pytest.mark.parametrize("size", [3, 4])
+def test_detected_extension_and_real_can1_stalk_reach_lamp_sender(direction, stalk_present, size, monkeypatch):
+  from opendbc.car.tesla.interface import CarInterface
+  from opendbc.car.tesla.tests.test_auto_turn_signals import params, stalk_frame
   from opendbc.car.tesla.values import TeslaFlags
 
   cp = params(longitudinal=True)
   assert cp.flags & TeslaFlags.AUTO_SPEED_LIMIT
-  decoder = CarState(cp)
-  parsers = CarState.get_can_parsers(cp)
-  packet = CANPacker("tesla_model3_vehicle").make_can_msg("SCCM_leftStalk", 1, {"SCCM_turnIndicatorStalkStatus": 0})
-  parsers[Bus.adas].update([[N, [packet] if stalk_present else []]])
+  ci = CarInterface(cp)
+  decoder = ci.CS
+  packet = stalk_frame(0, size=size)
   monkeypatch.setattr("opendbc.car.tesla.carstate.time.clock_gettime_ns", lambda clock: N)
   monkeypatch.setattr("opendbc.car.tesla.carstate.time.monotonic_ns", lambda: N - 5_000_000_000)
-  cs = decoder.update(parsers)
+  cs = ci.update([(N, [packet] if stalk_present else [])])
   assert cs.turnSignalDriverValid == stalk_present
   # Other required driving messages are covered separately; this isolates the extension-input boundary.
   cs.canValid, cs.gearShifter = True, "drive"

@@ -139,8 +139,13 @@ class DesireHelper:
       driver_valid = bool(getattr(carstate, "turnSignalDriverValid", False))
       counts = (getattr(carstate, "leftBlinkerStalkCount", 0), getattr(carstate, "rightBlinkerStalkCount", 0))
       last, self._driver_signal_counts = self._driver_signal_counts, counts
-      press = (BLINKER_LEFT if counts[0] != last[0] else BLINKER_RIGHT if counts[1] != last[1] else BLINKER_NONE) if last else BLINKER_NONE
-      if driver_valid and (driver in (1, 2) or press):
+      left_press, right_press = (counts[0] != last[0], counts[1] != last[1]) if last else (False, False)
+      press = (BLINKER_LEFT if left_press else BLINKER_RIGHT) if left_press != right_press else BLINKER_NONE
+      if not driver_valid:
+        self._manual_signal_direction = BLINKER_NONE
+        self._manual_signal_grace = 0.0
+        st = BLINKER_NONE
+      elif driver in (1, 2) or press:
         self._manual_signal_direction = driver or press
         self._manual_signal_grace = 1.0
         st = self._manual_signal_direction
@@ -173,6 +178,13 @@ class DesireHelper:
     last, self.stalk_counts = self.stalk_counts, counts
     if last is None:
       return BLINKER_NONE
+    if self.tesla_auto_signals:
+      left_press, right_press = counts[0] != last[0], counts[1] != last[1]
+      if not getattr(carstate, "turnSignalDriverValid", False) or left_press == right_press:
+        return BLINKER_NONE
+      direction = BLINKER_LEFT if left_press else BLINKER_RIGHT
+      driver = getattr(carstate, "turnSignalDriverDirection", 0)
+      return direction if driver in (0, direction) else BLINKER_NONE
     if counts[0] != last[0]:
       return BLINKER_LEFT
     if counts[1] != last[1]:
@@ -619,8 +631,9 @@ class DesireHelper:
   def _update_auto_turn_geometry(self, carstate, modeldata):
     if self._auto_turn_direction == LaneChangeDirection.none:
       return
-    rates = getattr(getattr(modeldata, "orientationRate", None), "z", ())
-    headings = getattr(getattr(modeldata, "orientation", None), "z", ())
+    # Cap'n Proto lists support iteration and integer indexing, but not slicing.
+    rates = list(getattr(getattr(modeldata, "orientationRate", None), "z", ()))
+    headings = list(getattr(getattr(modeldata, "orientation", None), "z", ()))
     signed_angle = getattr(carstate, "steeringAngleDeg", float("nan"))
     angle = abs(signed_angle)
     if (len(rates) < 16 or len(headings) < 16 or

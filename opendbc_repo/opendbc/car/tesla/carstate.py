@@ -1,9 +1,11 @@
 import copy
 import time
+from dataclasses import dataclass, field
 from opendbc.can import CANDefine, CANParser
 from opendbc.car import Bus, create_button_events, structs
 from opendbc.car.carlog import carlog
 from opendbc.car.common.conversions import Conversions as CV
+from opendbc.car.crc import CRC8H2F, mk_crc8_fun
 from opendbc.car.interfaces import CarStateBase
 from opendbc.car.tesla.values import DBC, CANBUS, GEAR_MAP, STEER_THRESHOLD, TeslaFlags
 
@@ -17,6 +19,9 @@ SPEED_AUTO_RESUME_GESTURE_NS = 1_000_000_000
 STOCK_ACC_CANCEL_STATES = (0, 1, 2, 12, 13, 14, 15)
 STOCK_ACC_CANCEL_PULSE_FRAMES = 4
 TESLA_EAC_NON_FAULT_INHIBITS = ("EAC_ERROR_IDLE", "EAC_ERROR_MIN_SPEED")
+TESLA_STALK_CRC = mk_crc8_fun(CRC8H2F)
+TESLA_STALK_MAGIC = (0x9B, 0xE8, 0x2A, 0xD3, 0xD3, 0x83, 0x4C, 0x5E,
+                     0x3F, 0x5E, 0xE2, 0x28, 0x3A, 0x13, 0xAF, 0xCE)
 
 
 def update_tesla_gas_pressed(previous: bool, pedal_position: float) -> bool:
@@ -28,8 +33,25 @@ def get_tesla_tpms_pressure(pressure_bar: float) -> float:
   return round(pressure_bar * TESLA_TPMS_BAR_TO_PSI, 1) if pressure_bar < TESLA_TPMS_PRESSURE_SNA else 0.0
 
 
-def get_tesla_stalk_direction(position: float) -> int:
-  return 1 if position in (3, 4) else 2 if position in (1, 2) else 0
+def decode_tesla_stalk(data: bytes) -> int | None:
+  if len(data) == 3:
+    position = data[2] & 7
+    if position < 5:
+      return 1 if position in (3, 4) else 2 if position in (1, 2) else 0
+  elif len(data) == 4:
+    payload = bytes((data[1] & 0xF0, data[2], data[3], 0))
+    checksum = TESLA_STALK_CRC(payload) ^ TESLA_STALK_MAGIC[data[1] & 15]
+    position = data[2] & 15
+    if data[0] == checksum and position < 9:
+      return 1 if position >= 5 else 2 if position else 0
+  return None
+
+
+@dataclass
+class TeslaStalkInput:
+  timestamp: int = 0
+  direction: int | None = None
+  samples: list[tuple[int, int]] = field(default_factory=list)
 
 
 class CarState(CarStateBase):
@@ -70,6 +92,18 @@ class CarState(CarStateBase):
     self._tesla_speed_resume_wait_idle = False
     self._turn_stalk_direction = 0
     self._turn_stalk_counts = [0, 0]
+    self._turn_stalk_inputs: dict[int, TeslaStalkInput] = {}
+
+  def observe_turn_stalk_frame(self, data: bytes, source: int, monotonic_nanos: int) -> None:
+    if not self.CP.flags & TeslaFlags.AUTO_TURN_SIGNALS or source not in (CANBUS.party, CANBUS.vehicle):
+      return
+    stalk = self._turn_stalk_inputs.setdefault(source, TeslaStalkInput())
+    stalk.timestamp = monotonic_nanos
+    stalk.direction = decode_tesla_stalk(data)
+    if stalk.direction is None:
+      stalk.samples.clear()
+    else:
+      stalk.samples.append((monotonic_nanos, stalk.direction))
 
   def observe_speed_wheel_frame(self, data: bytes, monotonic_nanos: int) -> None:
     if len(data) != 8 or (data[0] & 0x03) != 1:
@@ -265,34 +299,32 @@ class CarState(CarStateBase):
     ret.leftBlinker = cp_party.vl["UI_warning"]["leftBlinkerBlinking"] in (1, 2)
     ret.rightBlinker = cp_party.vl["UI_warning"]["rightBlinkerBlinking"] in (1, 2)
     if self.CP.flags & TeslaFlags.AUTO_TURN_SIGNALS:
-      signal = "SCCM_turnIndicatorStalkStatus"
-      vehicle = can_parsers.get(Bus.adas)
-      # Prefer the extension's vehicle bus once observed; never mask its loss with a different bus's idle value.
-      source = vehicle if vehicle is not None and vehicle.ts_nanos["SCCM_leftStalk"][signal] else cp_party
-      stalk = int(source.vl["SCCM_leftStalk"][signal])
-      stamp = source.ts_nanos["SCCM_leftStalk"][signal]
+      # Decode raw DLC before normalizing: a four-byte right full press is a legacy left value.
+      vehicle = self._turn_stalk_inputs.get(CANBUS.vehicle)
+      party = self._turn_stalk_inputs.get(CANBUS.party)
+      source = vehicle if vehicle is not None else party
       now = time.clock_gettime_ns(getattr(time, "CLOCK_BOOTTIME", time.CLOCK_MONOTONIC))
-      ret.turnSignalDriverValid = stamp > 0 and 0 <= now - stamp <= 1_000_000_000 and stalk in range(5)
-      if source is not cp_party:
-        party_stamp = cp_party.ts_nanos["SCCM_leftStalk"][signal]
-        if party_stamp > 0 and 0 <= now - party_stamp <= 1_000_000_000:
-          party_stalk = int(cp_party.vl["SCCM_leftStalk"][signal])
-          party_presses = cp_party.vl_all["SCCM_leftStalk"][signal]
-          source_presses = source.vl_all["SCCM_leftStalk"][signal]
-          ret.turnSignalDriverValid &= party_stalk in range(5) and get_tesla_stalk_direction(party_stalk) == get_tesla_stalk_direction(stalk)
-          if (any(get_tesla_stalk_direction(p) for p in party_presses) and
-              not any(get_tesla_stalk_direction(p) for p in source_presses or [stalk])):
+      samples = {bus: [direction for timestamp, direction in stalk.samples if 0 <= now - timestamp <= 1_000_000_000]
+                 for bus, stalk in self._turn_stalk_inputs.items()}
+      source_samples = samples.get(CANBUS.vehicle if vehicle is not None else CANBUS.party, [])
+      ret.turnSignalDriverValid = (source is not None and source.timestamp > 0 and
+                                   0 <= now - source.timestamp <= 1_000_000_000 and source.direction is not None)
+      if source is vehicle and party is not None and party.timestamp > 0:
+        if 0 <= now - party.timestamp <= 1_000_000_000:
+          ret.turnSignalDriverValid &= party.direction is not None and party.direction == source.direction
+          party_presses = {d for d in samples.get(CANBUS.party, []) if d}
+          source_presses = {d for d in source_samples if d}
+          if party_presses and party_presses != source_presses:
             ret.turnSignalDriverValid = False
       if ret.turnSignalDriverValid:
-        # A press and release can arrive in the same receive batch.
-        positions = source.vl_all["SCCM_leftStalk"][signal]
-        for position in positions or [stalk]:
-          direction = get_tesla_stalk_direction(position)
+        for direction in source_samples or [source.direction]:
           if direction and direction != self._turn_stalk_direction:
             self._turn_stalk_counts[direction - 1] = (self._turn_stalk_counts[direction - 1] + 1) % 256
           self._turn_stalk_direction = direction
         ret.turnSignalDriverDirection = self._turn_stalk_direction
       ret.leftBlinkerStalkCount, ret.rightBlinkerStalkCount = self._turn_stalk_counts
+      for stalk in self._turn_stalk_inputs.values():
+        stalk.samples.clear()
 
     # High beam stalk used as generic toggle (openpilot convention)
     ret.genericToggle = cp_party.vl["UI_warning"]["highBeam"] == 1
@@ -370,13 +402,10 @@ class CarState(CarStateBase):
   @staticmethod
   def get_can_parsers(CP):
     parsers = {
-      Bus.party: CANParser(DBC[CP.carFingerprint][Bus.party],
-                           [("SCCM_leftStalk", float("nan"))] if CP.flags & TeslaFlags.AUTO_TURN_SIGNALS else [], CANBUS.party),
+      Bus.party: CANParser(DBC[CP.carFingerprint][Bus.party], [], CANBUS.party),
       Bus.ap_party: CANParser(DBC[CP.carFingerprint][Bus.party], [], CANBUS.autopilot_party),
     }
     if CP.flags & TeslaFlags.HAS_VEHICLE_BUS:
       messages = [("UI_status2", 2), ("VCSEC_TPMSDisplay", 1)]
-      if CP.flags & TeslaFlags.AUTO_TURN_SIGNALS:
-        messages.append(("SCCM_leftStalk", float("nan")))
       parsers[Bus.adas] = CANParser("tesla_model3_vehicle", messages, CANBUS.vehicle)
     return parsers

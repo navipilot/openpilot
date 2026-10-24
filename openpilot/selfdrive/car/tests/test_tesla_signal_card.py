@@ -5,7 +5,7 @@ from types import SimpleNamespace as NS
 import pytest
 
 from openpilot.cereal import car, log
-from openpilot.selfdrive.car.tests.test_tesla_turn_signals import N, feedback
+from openpilot.selfdrive.car.tests.test_tesla_turn_signals import N, feedback, opened, state
 from openpilot.selfdrive.car.tesla_turn_signals import TeslaTurnSignals
 from openpilot.selfdrive.controls.lib.lateral_readiness import LateralStartupGate
 from openpilot.selfdrive.pandad import can_list_to_can_capnp
@@ -20,6 +20,37 @@ def test_received_driver_input_precedes_independent_cancellation_boundary():
   urgent = min(node.lineno for node in calls if node.func.attr == "take_sends")
   assert driver < observe < urgent
 
+
+def test_lamp_diagnostics_are_periodic_only_during_sessions_and_immediate_on_status_change():
+  path = Path(__file__).parents[1] / "card.py"
+  tree = ast.parse(path.read_text())
+  method = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "_log_tesla_signals")
+  events = []
+  namespace = {"cloudlog": NS(event=lambda name, **values: events.append((name, values)))}
+  exec(compile(ast.Module(body=[method], type_ignores=[]), str(path), "exec"), namespace)
+  signals = TeslaTurnSignals(True)
+  card = NS(tesla_signals=signals, tesla_signal_status=None, tesla_signal_log_ns=0)
+  def log_signals(now):
+    namespace["_log_tesla_signals"](card, state(), now)
+
+  log_signals(N)
+  log_signals(N + 5_000_000_000)
+  assert len(events) == 1
+
+  card.tesla_signals = signals = opened()
+  log_signals(N + 1)
+  for tick in range(1, 100):
+    log_signals(N + 1 + tick * 10_000_000)
+  assert len(events) == 2
+  log_signals(N + 1_000_000_001)
+  assert len(events) == 3
+  assert events[-1][0] == "tesla_auto_turn_signal"
+  assert events[-1][1]["active_submissions"] == events[-1][1]["active_tx_echoes"] == 1
+  signals.status = "cancelling:driver_input_unavailable"
+  log_signals(N + 1_000_000_002)
+  assert len(events) == 4
+  assert events[-1][1]["status"] == signals.status
+  assert signals.session.sent == 1  # Logging never submits or advances a request.
 
 @pytest.mark.parametrize("gate", ["ready", "startup", "dashcam", "stale_model", "stale_control"])
 @pytest.mark.parametrize("suspend_ns", [0, 5_000_000_000])

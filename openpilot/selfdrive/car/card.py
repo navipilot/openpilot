@@ -137,6 +137,7 @@ class Car:
       self.CP.safetyConfigs = [safety_config]
     self.tesla_signals = TeslaTurnSignals.from_car_params(self.CP, enabled=self.params.get_bool("TeslaAutoTurnSignals"))
     self.tesla_signal_status = None if self.CP.brand == "tesla" else self.tesla_signals.status
+    self.tesla_signal_log_ns = 0
 
     if self.CP.secOcRequired:
       # Copy user key if available
@@ -201,6 +202,16 @@ class Car:
     self.card_diag_stage_max_us = dict.fromkeys(self.card_diag_stage_names, 0)
     self.runtime_diagnostics = RuntimeDiagnostics('card', cloudlog.event)
 
+  def _log_tesla_signals(self, CS, now: int) -> None:
+    changed = self.tesla_signals.status != self.tesla_signal_status
+    if not changed and (self.tesla_signals.session is None or now - self.tesla_signal_log_ns < 1_000_000_000):
+      return
+    cloudlog.event("tesla_auto_turn_signal", **self.tesla_signals.diagnostics(now),
+                   driver_valid=CS.turnSignalDriverValid, driver_direction=CS.turnSignalDriverDirection,
+                   stalk_counts=(CS.leftBlinkerStalkCount, CS.rightBlinkerStalkCount))
+    self.tesla_signal_status = self.tesla_signals.status
+    self.tesla_signal_log_ns = now
+
   def state_update(self) -> car.CarState:
     """carState update loop, driven by can"""
 
@@ -235,9 +246,7 @@ class Car:
       self.can_callbacks[1](urgent_sends)
     CS.autoTurnSignalDirection = self.tesla_signals.owned_direction
     CS.autoTurnSignalStatus = self.tesla_signals.status if self.CP.brand == "tesla" else ""
-    if self.tesla_signals.status != self.tesla_signal_status:
-      cloudlog.event("tesla_auto_turn_signal", status=self.tesla_signals.status)
-      self.tesla_signal_status = self.tesla_signals.status
+    self._log_tesla_signals(CS, signal_now)
     if self.sm.updated['customReservedRawData0']:
       try:
         self.xiaoge_vision_result = parse_xiaoge_vision_payload(bytes(self.sm['customReservedRawData0']))

@@ -45,6 +45,9 @@ class Session:
   cancel_started: int = 0
   cancel_attempts: int = 0
   cancel_echo: bool = False
+  active_echoes: int = 0
+  cancel_echoes: int = 0
+  rejected: int = 0
   manual: bool = False
   on_seen: bool = False
   off_since: int | None = None
@@ -93,6 +96,30 @@ class TeslaTurnSignals:
   def owned_direction(self) -> int:
     return self.session.direction if self.session is not None and not self.session.manual else 0
 
+  def diagnostics(self, now: int) -> dict:
+    s = self.session
+    return {
+      "status": self.status,
+      "request_id": s.request_id if s else 0,
+      "direction": s.direction if s else 0,
+      "active_submissions": s.sent - s.cancel_attempts if s else 0,
+      "cancel_submissions": s.cancel_attempts if s else 0,
+      "active_tx_echoes": s.active_echoes if s else 0,
+      "cancel_tx_echoes": s.cancel_echoes if s else 0,
+      "panda_rejections": s.rejected if s else 0,
+      "awaiting_echo": s is not None and s.awaiting is not None,
+      "manual": s.manual if s else False,
+      "on_seen": s.on_seen if s else False,
+      "session_ms": (now - s.started) // 1_000_000 if s else None,
+      "body_age_ms": (now - self.template_time) // 1_000_000 if self.template_time else None,
+      "template_ready": self.template is not None,
+      "ui_age_ms": (now - self.ui_time) // 1_000_000 if self.ui_time else None,
+      "front_age_ms": (now - self.front_time) // 1_000_000 if self.front_time else None,
+      "context_age_ms": (now - self.context_time) // 1_000_000 if self.context_time else None,
+      "ui": self.ui,
+      "front": self.front,
+    }
+
   def _feedback_fresh(self, now: int) -> bool:
     return all(t > 0 and 0 <= now - t <= FEEDBACK_NS for t in (self.ui_time, self.front_time))
 
@@ -133,7 +160,7 @@ class TeslaTurnSignals:
 
   def observe_driver(self, state, now: int) -> None:
     counts = (int(state.leftBlinkerStalkCount), int(state.rightBlinkerStalkCount))
-    if self.last_stalk_counts is not None and counts != self.last_stalk_counts:
+    if state.turnSignalDriverValid and self.last_stalk_counts is not None and counts != self.last_stalk_counts:
       self.driver_press_time = now
     self.last_stalk_counts = counts
     driver = state.turnSignalDriverValid and state.turnSignalDriverDirection != 0
@@ -164,12 +191,16 @@ class TeslaTurnSignals:
         if s is not None and address == BODY and data == s.awaiting and source in (0x81, 0xC1):
           s.awaiting = None
           if source == 0xC1:
+            s.rejected += 1
             if s.cancelling:
               self._fail("panda_rejected_cancel")
             else:
               self._cancel(now, "panda_rejected")
-          elif s.cancelling and data[1] & 3 == 3:
-            s.cancel_echo = True
+          elif data[1] & 3 == 3:
+            s.cancel_echoes += 1
+            s.cancel_echo = s.cancelling
+          else:
+            s.active_echoes += 1
         if s is not None:
           if ((0 < self.ui_time <= now and now - self.ui_time <= FEEDBACK_NS and self.ui[2 - s.direction] in (1, 2)) or
               (0 < self.front_time <= now and now - self.front_time <= FEEDBACK_NS and self.front[2 - s.direction] == 1)):

@@ -19,6 +19,8 @@ class CarInterface(CarInterfaceBase):
       for address, data, source in frames:
         if address == 0x3C2 and source == CANBUS.vehicle:
           self.CS.observe_speed_wheel_frame(data, mono_time)
+        elif address == 0x249:
+          self.CS.observe_turn_stalk_frame(data, source, mono_time)
     return super().update(can_packets)
 
   @staticmethod

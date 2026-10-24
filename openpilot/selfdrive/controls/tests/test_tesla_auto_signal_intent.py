@@ -15,6 +15,74 @@ def setup():
   return fixture
 
 
+@pytest.mark.parametrize("size,position,direction", [
+  (3, 1, 2), (3, 2, 2), (3, 3, 1), (3, 4, 1),
+  (4, 1, 2), (4, 2, 2), (4, 3, 2), (4, 4, 2),
+  (4, 5, 1), (4, 6, 1), (4, 7, 1), (4, 8, 1),
+])
+@pytest.mark.parametrize("bus", [0, 1])
+@pytest.mark.parametrize("release_in_batch", [False, True])
+def test_received_stalk_frame_selects_matching_lane_change(setup, monkeypatch, size, position, direction, bus, release_in_batch):
+  from opendbc.can import CANPacker
+  from opendbc.car.tesla.interface import CarInterface
+  from opendbc.car.tesla.tests.test_auto_turn_signals import N, params, stalk_frame
+
+  ci = CarInterface(params())
+  setup.carrot_man.atcType = ""
+  h = setup.helper
+  packer = CANPacker("tesla_model3_party")
+  monkeypatch.setattr("opendbc.car.tesla.carstate.time.clock_gettime_ns", lambda clock: N)
+
+  def receive(positions, lamp_direction=0):
+    frames = [stalk_frame(p, bus, size) for p in positions]
+    frames.append(packer.make_can_msg("UI_warning", 0, {"leftBlinkerBlinking": 2 if lamp_direction == 1 else 0,
+                                                      "rightBlinkerBlinking": 2 if lamp_direction == 2 else 0}))
+    cs = ci.update([(N, frames)])
+    cs.canValid, cs.vEgo = True, 25.
+    h.update(cs, NS(), True, .5, setup.carrot_man, NS())
+
+  receive([0])
+  receive([position, 0] if release_in_batch else [position], direction)
+  assert h.lane_change_state == log.LaneChangeState.preLaneChange
+  assert h.driver_blinker_state == direction
+  receive([0] if release_in_batch else [position], direction)
+  assert h.lane_change_state == log.LaneChangeState.laneChangeStarting
+  assert h.lane_change_direction == direction
+
+
+@pytest.mark.parametrize("invalid", ["sna", "crc", "dlc"])
+def test_untrusted_stalk_cannot_start_a_manual_lane_change(setup, monkeypatch, invalid):
+  from opendbc.car.tesla.interface import CarInterface
+  from opendbc.car.tesla.tests.test_auto_turn_signals import N, params, stalk_frame
+
+  ci = CarInterface(params())
+  setup.carrot_man.atcType = ""
+  frame = stalk_frame(9 if invalid == "sna" else 4)
+  if invalid == "crc":
+    frame = (frame[0], bytes((frame[1][0] ^ 1,)) + frame[1][1:], frame[2])
+  elif invalid == "dlc":
+    frame = (frame[0], frame[1][:2], frame[2])
+  monkeypatch.setattr("opendbc.car.tesla.carstate.time.clock_gettime_ns", lambda clock: N)
+  for packet in (stalk_frame(0), frame, frame):
+    cs = ci.update([(N, [packet])])
+    cs.canValid, cs.vEgo = True, 25.
+    setup.helper.update(cs, NS(), True, .5, setup.carrot_man, NS())
+  assert setup.helper.lane_change_state == log.LaneChangeState.off
+  assert not setup.helper.auto_signal_request_id
+  assert cs.leftBlinkerStalkCount == cs.rightBlinkerStalkCount == 0
+
+
+@pytest.mark.parametrize("valid,counts", [(True, (1, 1)), (False, (1, 0)), (False, (0, 1))])
+def test_ambiguous_or_invalid_counter_changes_never_default_to_left(setup, valid, counts):
+  cs = NS(leftBlinker=False, rightBlinker=False, autoTurnSignalDirection=0, turnSignalDriverDirection=0,
+          turnSignalDriverValid=True, leftBlinkerStalkCount=0, rightBlinkerStalkCount=0)
+  h = setup.helper
+  assert h._update_driver_blinker(cs)[0] == h._update_stalk(cs) == 0
+  cs.turnSignalDriverValid = valid
+  cs.leftBlinkerStalkCount, cs.rightBlinkerStalkCount = counts
+  assert h._update_driver_blinker(cs)[0] == h._update_stalk(cs) == 0
+
+
 def step(f, lamp=False, owned=0, driver=0, active=True, prob=.5, valid=True, trailer=False, model=None, speed=25., angle=0.):
   cs = NS(canValid=valid, leftBlinker=lamp and owned != 2, rightBlinker=lamp and owned == 2, vEgo=speed, aEgo=0., trailerConnected=trailer,
           steeringAngleDeg=angle,
@@ -268,6 +336,98 @@ def test_real_turn_disable_does_not_complete_lamps_until_started_and_stably_stra
   assert not step(setup, model=model, speed=5., angle=sign * 10.).auto_signal_request_id
   for _ in range(10):
     assert not step(setup, model=model, speed=5., angle=sign * 10.).auto_signal_request_id
+
+
+@pytest.mark.parametrize("direction", [1, 2])
+@pytest.mark.parametrize("reader", [False, True], ids=["builder", "reader"])
+def test_turn_lifecycle_with_real_capnp_model_lists(setup, direction, reader):
+  sign = 1 if direction == 1 else -1
+  setup.carrot_man.atcType = "turn left" if direction == 1 else "turn right"
+  getattr(setup.helper, "left" if direction == 1 else "right").dist_to_edge_far = 5.
+  model = log.ModelDataV2.new_message()
+  model.meta.desireState = [0.] * 8
+  model.orientationRate.z = [sign * .2] * 33
+  model.orientation.z = [sign * .2] * 33
+  step(setup, model=model.as_reader() if reader else model, speed=5., angle=sign * 90.)
+  request = step(setup, model=model.as_reader() if reader else model, speed=5., angle=sign * 90.).auto_signal_request_id
+  assert request
+
+  for _ in range(10):
+    h = step(setup, model=model.as_reader() if reader else model, speed=5., angle=sign * 90.)
+    assert h.auto_signal_direction == direction
+    assert h.auto_signal_request_id == request
+  assert h._auto_turn_started >= .3
+
+  model.orientationRate.z = [sign * .01] * 33
+  for _ in range(19):
+    assert step(setup, model=model.as_reader() if reader else model, speed=5., angle=sign * 10.).auto_signal_request_id == request
+  assert not step(setup, model=model.as_reader() if reader else model, speed=5., angle=sign * 10.).auto_signal_request_id
+  for _ in range(10):
+    assert not step(setup, model=model.as_reader() if reader else model, speed=5., angle=sign * 10.).auto_signal_request_id
+
+
+@pytest.mark.parametrize("reader", [False, True], ids=["builder", "reader"])
+@pytest.mark.parametrize("invalid", ["short_rates", "short_headings", "nan_rate", "nan_heading", "angle", "speed"])
+def test_real_capnp_invalid_geometry_cannot_complete_turn(setup, reader, invalid):
+  h = setup.helper
+  h._auto_turn_direction = log.LaneChangeDirection.left
+  h._auto_turn_started = .3
+  h._auto_turn_peak_angle = 90.
+  h._auto_turn_settled = .95
+  model = log.ModelDataV2.new_message()
+  model.orientationRate.z = [.01] * (15 if invalid == "short_rates" else 33)
+  model.orientation.z = [0.] * (15 if invalid == "short_headings" else 33)
+  if invalid == "nan_rate":
+    model.orientationRate.z[0] = float("nan")
+  elif invalid == "nan_heading":
+    model.orientation.z[15] = float("nan")
+  cs = NS(vEgo=float("inf") if invalid == "speed" else 5., steeringAngleDeg=float("nan") if invalid == "angle" else 5.)
+  for _ in range(40):
+    h._update_auto_turn_geometry(cs, model.as_reader() if reader else model)
+    assert h._auto_turn_direction == log.LaneChangeDirection.left
+    assert not h._auto_turn_consumed
+    assert h._auto_turn_settled == 0.
+
+
+@pytest.mark.parametrize("direction", [1, 2])
+def test_real_turn_model_roundtrip_reaches_lamp_controller(setup, direction):
+  from openpilot.selfdrive.car.tests.test_tesla_turn_signals import N, echo, feedback, state
+  from openpilot.selfdrive.car.tesla_turn_signals import TeslaTurnSignals
+
+  sign = 1 if direction == 1 else -1
+  setup.carrot_man.atcType = "turn left" if direction == 1 else "turn right"
+  getattr(setup.helper, "left" if direction == 1 else "right").dist_to_edge_far = 5.
+  signals = TeslaTurnSignals(True)
+  lamp_on = cancelled = False
+  active_sends = 0
+  for frame in range(90):
+    now = N + frame * 50_000_000
+    turning = frame < 45
+    model = log.ModelDataV2.new_message()
+    model.orientationRate.z = [sign * (.2 if turning else .01)] * 33
+    model.orientation.z = [sign * .2] * 33
+    h = step(setup, model=model, speed=5., angle=sign * (90. if turning else 10.))
+    model.meta.autoTurnSignalDirection = h.auto_signal_direction
+    model.meta.autoTurnSignalRequestId = h.auto_signal_request_id
+    ui = (2, 0) if direction == 1 else (0, 2)
+    front = (1, 0) if direction == 1 else (0, 1)
+    feedback(signals, now, ui=ui if lamp_on else (0, 0), front=front if lamp_on else (0, 0))
+    with log.ModelDataV2.from_bytes(model.to_bytes()) as received:
+      sends = signals.update(state(), NS(latActive=True), received.meta, True, now)
+    for send in sends:
+      if send.dat[1] & 3 == direction:
+        assert not cancelled
+        active_sends += 1
+        lamp_on = True
+      else:
+        assert send.dat[1] & 3 == 3 and not h.auto_signal_request_id
+        cancelled = True
+        lamp_on = False
+      echo(signals, send, now + 1)
+  assert active_sends >= 40
+  assert cancelled and not lamp_on
+  assert signals.status == "cancelled" and signals.session is None
+  assert not h.auto_signal_request_id
 
 
 @pytest.mark.parametrize("navigation_type", ["", "none", "none prepare", "straight", "straight prepare"])
