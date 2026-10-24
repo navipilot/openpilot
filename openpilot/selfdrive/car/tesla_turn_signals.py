@@ -48,6 +48,8 @@ class Session:
   manual: bool = False
   on_seen: bool = False
   off_since: int | None = None
+  last_on: int = 0
+  lost_since: int | None = None
 
 
 class TeslaTurnSignals:
@@ -65,6 +67,8 @@ class TeslaTurnSignals:
     self.status = "idle" if configured else disabled_reason
     self.last_stalk_counts: tuple[int, int] | None = None
     self.failed = False
+    self.driver_idle_time = 0
+    self.driver_press_time = 0
 
   @classmethod
   def from_car_params(cls, CP, *, enabled: bool):
@@ -113,6 +117,31 @@ class TeslaTurnSignals:
     if self.session is not None:
       self.blocked_id = self.session.request_id
 
+  def _handoff(self, now: int) -> None:
+    s = self.session
+    if s is not None:
+      # CANCEL may extinguish a human's signal. Defer Panda bookkeeping
+      # cleanup until fresh physical idle and stable, actual lamp OFF.
+      s.manual = True
+      if self.failed:
+        return
+      self._cancel(now, "driver")
+      if self.session is not None:
+        s.cancel_started = 0
+        s.off_since = None
+        self.status = "driver_takeover:waiting_off"
+
+  def observe_driver(self, state, now: int) -> None:
+    counts = (int(state.leftBlinkerStalkCount), int(state.rightBlinkerStalkCount))
+    if self.last_stalk_counts is not None and counts != self.last_stalk_counts:
+      self.driver_press_time = now
+    self.last_stalk_counts = counts
+    driver = state.turnSignalDriverValid and state.turnSignalDriverDirection != 0
+    pressed = self.driver_press_time and 0 <= now - self.driver_press_time <= CONTEXT_NS
+    self.driver_idle_time = now if state.turnSignalDriverValid and not (driver or pressed) else 0
+    if driver or pressed:
+      self._handoff(now)
+
   def observe(self, packets, now: int) -> None:
     if not self.configured:
       return
@@ -126,6 +155,8 @@ class TeslaTurnSignals:
           if data[0] == ((0x11 + 3 + sum(data[1:])) & 0xFF):
             self.ui = ((data[3] >> 0) & 3, (data[3] >> 2) & 3)
             self.ui_time = timestamp
+            if all(v in (1, 2) for v in self.ui):
+              self._handoff(now)
         elif source == 1 and address == FRONT and len(data) == 8:
           self.front = ((data[6] >> 2) & 3, (data[6] >> 4) & 3)
           self.front_time = timestamp
@@ -139,24 +170,27 @@ class TeslaTurnSignals:
               self._cancel(now, "panda_rejected")
           elif s.cancelling and data[1] & 3 == 3:
             s.cancel_echo = True
+        if s is not None:
+          if ((0 < self.ui_time <= now and now - self.ui_time <= FEEDBACK_NS and self.ui[2 - s.direction] in (1, 2)) or
+              (0 < self.front_time <= now and now - self.front_time <= FEEDBACK_NS and self.front[2 - s.direction] == 1)):
+            self._handoff(now)
         if s is not None and self._feedback_fresh(now):
           if self.ui[s.direction - 1] in (1, 2) and self.front[s.direction - 1] == 1:
             s.on_seen = True
+            s.last_on = now
           if 3 in self.ui or any(v in (2, 3) for v in self.front):
             self._cancel(now, "invalid_lamp_feedback")
     self.advance(now)
 
   def update(self, state, control, meta, fresh: bool, now: int) -> list[CanData]:
     self.context_time = now if fresh else 0
-    counts = (int(state.leftBlinkerStalkCount), int(state.rightBlinkerStalkCount))
-    pressed = self.last_stalk_counts is not None and counts != self.last_stalk_counts
-    self.last_stalk_counts = counts
+    self.observe_driver(state, now)
+    pressed = self.driver_press_time and 0 <= now - self.driver_press_time <= CONTEXT_NS
     driver = state.turnSignalDriverValid and state.turnSignalDriverDirection != 0
     hazards = all(v in (1, 2) for v in self.ui)
     s = self.session
-    if s is not None and (driver or pressed or hazards):
-      s.manual = True
-      self._cancel(now, "driver")
+    if hazards:
+      self._handoff(now)
 
     direction = meta.autoTurnSignalDirection.raw if fresh else 0
     request_id = int(meta.autoTurnSignalRequestId) if fresh else 0
@@ -208,6 +242,20 @@ class TeslaTurnSignals:
       else:
         s.off_since = None
       return
+    if s.manual:
+      idle = self.driver_idle_time and 0 <= now - self.driver_idle_time <= CONTEXT_NS
+      if not idle or not self._off(now):
+        s.off_since = None
+        return
+      if s.off_since is None:
+        s.off_since = now
+      if now - s.off_since < OFF_STABLE_NS:
+        return
+      if not s.cancel_started:
+        s.cancel_started = now
+        self.status = "cancelling:driver_cleanup"
+      if s.awaiting is not None and now - s.submitted >= ECHO_NS:
+        s.awaiting = None
     if not s.cancelling:
       if not self.context_time or not 0 <= now - self.context_time <= CONTEXT_NS:
         self._cancel(now, "context_stale")
@@ -217,6 +265,18 @@ class TeslaTurnSignals:
         self._cancel(now, "feedback_stale")
       elif not s.on_seen and now - s.started >= 2_500_000_000:
         self._cancel(now, "lamp_not_confirmed")
+      elif s.sent and now - s.submitted >= TEMPLATE_NS and s.awaiting is None:
+        self._cancel(now, "body_template_starved")
+      elif s.on_seen:
+        if self._off(now):
+          if s.lost_since is None:
+            s.lost_since = now
+          elif now - s.lost_since >= OFF_STABLE_NS:
+            self._cancel(now, "lamps_lost")
+        else:
+          s.lost_since = None
+        if now - s.last_on >= 2_500_000_000:
+          self._cancel(now, "lamp_feedback_lost")
     s = self.session
     if s is None:
       return
@@ -224,10 +284,6 @@ class TeslaTurnSignals:
       s.awaiting = None
       self._cancel(now, "tx_echo_timeout")
     if s.cancelling:
-      if s.manual and s.cancel_echo:
-        self.status = "driver_takeover"
-        self.session = None
-        return
       if s.cancel_echo and self._off(now):
         if s.off_since is None:
           s.off_since = now
@@ -243,6 +299,8 @@ class TeslaTurnSignals:
   def take_sends(self, now: int, *, cancel_only: bool = False) -> list[CanData]:
     s = self.session
     if (s is None or self.failed or s.awaiting is not None or s.cancel_echo or
+        (s.manual and (not s.cancel_started or not self.driver_idle_time or
+                       not 0 <= now - self.driver_idle_time <= CONTEXT_NS or not self._off(now))) or
         (cancel_only and not s.cancelling) or self.template is None or
         not 0 <= now - self.template_time <= TEMPLATE_NS):
       return []

@@ -228,6 +228,7 @@ class Car:
     self.sm.update(0)
     sm_done_ns = time.monotonic_ns()
     signal_now = can_list[-1][0] if REPLAY and can_list else time.clock_gettime_ns(getattr(time, "CLOCK_BOOTTIME", time.CLOCK_MONOTONIC))
+    self.tesla_signals.observe_driver(CS, signal_now)
     self.tesla_signals.observe(can_list, signal_now)
     urgent_sends = self.tesla_signals.take_sends(signal_now, cancel_only=True)
     if urgent_sends:

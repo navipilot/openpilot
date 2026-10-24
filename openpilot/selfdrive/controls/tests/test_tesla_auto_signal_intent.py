@@ -15,11 +15,12 @@ def setup():
   return fixture
 
 
-def step(f, lamp=False, owned=0, driver=0, active=True, prob=.5, valid=True, trailer=False):
-  cs = NS(canValid=valid, leftBlinker=lamp and owned != 2, rightBlinker=lamp and owned == 2, vEgo=25., aEgo=0., trailerConnected=trailer,
+def step(f, lamp=False, owned=0, driver=0, active=True, prob=.5, valid=True, trailer=False, model=None, speed=25., angle=0.):
+  cs = NS(canValid=valid, leftBlinker=lamp and owned != 2, rightBlinker=lamp and owned == 2, vEgo=speed, aEgo=0., trailerConnected=trailer,
+          steeringAngleDeg=angle,
           steeringTorque=0., steeringPressed=False, leftBlinkerStalkCount=0, rightBlinkerStalkCount=0,
           turnSignalDriverValid=True, turnSignalDriverDirection=driver, autoTurnSignalDirection=owned)
-  f.helper.update(cs, NS(), active, prob, f.carrot_man, NS())
+  f.helper.update(cs, model or NS(), active, prob, f.carrot_man, NS())
   return f.helper
 
 
@@ -128,7 +129,7 @@ def test_app_short_command_lamp_lasts_until_fsm_completion(setup, argument, dire
   h = step(setup)
   request = h.auto_signal_request_id
   assert request
-  for _ in range(12):
+  for _ in range(120):
     h = step(setup)
     assert h.lane_change_state == log.LaneChangeState.laneChangeStarting
     assert h.auto_signal_direction == direction
@@ -207,4 +208,98 @@ def test_turn_preparation_to_turn_keeps_one_lamp_session(setup, side, direction)
   assert h.desire == (log.Desire.turnLeft if direction == 1 else log.Desire.turnRight)
   assert h.auto_signal_direction == direction and h.auto_signal_request_id == request
   h.turn_disable_count = 10
-  assert not step(setup).auto_signal_request_id
+  assert step(setup).auto_signal_request_id == request
+
+
+def test_unknown_lamp_is_not_driver_even_without_an_automatic_owner(setup):
+  setup.carrot_man.atcType = ""
+  for _ in range(5):
+    h = step(setup, lamp=True)
+    assert h.driver_blinker_state == 0
+    assert h.lane_change_state == log.LaneChangeState.off
+
+
+@pytest.mark.parametrize("driver", [1, 2])
+@pytest.mark.parametrize("opposite_tail", [False, True])
+def test_manual_provenance_survives_release_and_fast_tap(setup, driver, opposite_tail):
+  h = setup.helper
+  cs = NS(leftBlinker=False, rightBlinker=False, turnSignalDriverValid=True, turnSignalDriverDirection=0,
+          leftBlinkerStalkCount=0, rightBlinkerStalkCount=0)
+  assert h._update_driver_blinker(cs)[0] == 0
+  setattr(cs, "leftBlinkerStalkCount" if driver == 1 else "rightBlinkerStalkCount", 1)
+  assert h._update_driver_blinker(cs)[0] == driver
+  cs.leftBlinker, cs.rightBlinker = opposite_tail and driver == 2, opposite_tail and driver == 1
+  for _ in range(5):
+    assert h._update_driver_blinker(cs)[0] == 0  # The physical lamp can arrive after a quick release.
+  cs.leftBlinker, cs.rightBlinker = driver == 1, driver == 2
+  for _ in range(30):
+    assert h._update_driver_blinker(cs)[0] == driver
+  cs.leftBlinker = cs.rightBlinker = False
+  for _ in range(12):
+    assert h._update_driver_blinker(cs)[0] == 0
+  cs.leftBlinker, cs.rightBlinker = driver == 1, driver == 2
+  assert h._update_driver_blinker(cs)[0] == 0
+
+
+@pytest.mark.parametrize("direction", [1, 2])
+def test_real_turn_disable_does_not_complete_lamps_until_started_and_stably_straight(setup, direction):
+  from openpilot.selfdrive.controls.lib.desire_helper import DesireHelper
+
+  h = setup.helper
+  setup.carrot_man.atcType = "turn left" if direction == 1 else "turn right"
+  getattr(h, "left" if direction == 1 else "right").dist_to_edge_far = 5.
+  step(setup)
+  request = step(setup).auto_signal_request_id
+  model = NS(meta=NS(desireState=[0.] * 5), orientationRate=NS(z=[.4] * 16), orientation=NS(z=[.2] * 16))
+  h._check_desire_state = DesireHelper._check_desire_state.__get__(h)
+  model.orientationRate.z[15] = .2
+  for _ in range(10):
+    step(setup, model=model, speed=5., angle=100.)
+    assert h.turn_disable_count == 200  # Original steering behavior is unchanged.
+    assert h.auto_signal_request_id == request
+  for speed, angle, yaw in ((0., 0., 0.), (.5, 100., .02), (2., 70., .08)):
+    model.orientationRate.z = [yaw] * 16
+    for _ in range(30):
+      assert step(setup, model=model, speed=speed, angle=angle).auto_signal_request_id == request
+  model.orientationRate.z = [.01] * 16
+  for _ in range(19):
+    assert step(setup, model=model, speed=5., angle=10.).auto_signal_request_id == request
+  assert not step(setup, model=model, speed=5., angle=10.).auto_signal_request_id
+  for _ in range(10):
+    assert not step(setup, model=model, speed=5., angle=10.).auto_signal_request_id
+
+
+def test_turn_navigation_can_end_before_geometry_settles_and_abort_does_not_relight(setup):
+  setup.carrot_man.atcType = "turn left"
+  setup.helper.left.dist_to_edge_far = 5.
+  step(setup)
+  request = step(setup).auto_signal_request_id
+  model = NS(orientationRate=NS(z=[.2] * 16), orientation=NS(z=[.2] * 16))
+  for _ in range(10):
+    assert step(setup, model=model, speed=4., angle=90.).auto_signal_request_id == request
+  setup.carrot_man.atcType = ""
+  for _ in range(100):
+    assert step(setup, model=model, speed=4., angle=90.).auto_signal_request_id == request
+  assert not step(setup, model=model, active=False).auto_signal_request_id
+  assert not step(setup, model=model).auto_signal_request_id
+
+
+@pytest.mark.parametrize("geometry", ["missing", "nan", "heading", "not_started"])
+def test_turn_completion_requires_valid_started_and_road_geometry(setup, geometry):
+  setup.carrot_man.atcType = "turn left"
+  setup.helper.left.dist_to_edge_far = 5.
+  step(setup)
+  request = step(setup).auto_signal_request_id
+  model = NS(orientationRate=NS(z=[.2] * 16), orientation=NS(z=[.2] * 16))
+  if geometry != "not_started":
+    for _ in range(10):
+      step(setup, model=model, speed=4., angle=90.)
+  model.orientationRate.z = [.01] * 16
+  if geometry == "missing":
+    model.orientation.z = []
+  elif geometry == "nan":
+    model.orientationRate.z[0] = float("nan")
+  elif geometry == "heading":
+    model.orientation.z[15] = .5
+  for _ in range(40):
+    assert step(setup, model=model, speed=4., angle=5.).auto_signal_request_id == request

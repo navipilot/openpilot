@@ -5,7 +5,7 @@
  <!-- CARROT:REVIEW reviewed-for="" -->
 +
 +<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
-+Requests left/right lamps from existing ATC turn/lane-change decisions, holds through finishing, then cancels its own request. Automatic feedback is not driver confirmation. Physical stalk input and hazards take priority. Invalid feedback cancels the request; unconfirmed cancellation stops further automatic output for this onroad cycle.
++Requests lamps through the existing maneuver; turns require started-turn and stable straightening evidence independently of the steering desire. Each repeat needs a new idle template and TX echo; missing templates or lost feedback ends the automatic session. Unknown/automatic lamps are not driver confirmation. Stalk input, hazards or an unexpected opposite lamp stops automatic output; cleanup cancellation waits for fresh idle stalk and stable actual OFF. Unconfirmed cancellation stops further automatic output for this onroad cycle.
 +<!-- CARROT:SECTION:END BEHAVIOR -->
 +
 +<!-- CARROT:SECTION:BEGIN USAGE -->
@@ -23,7 +23,7 @@
  <!-- CARROT:REVIEW reviewed-for="" -->
 +
 +<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
-+기존 ATC 회전·차로변경 판단에 따라 좌우 램프를 요청하고 완료 단계까지 유지한 뒤 자동 요청을 취소합니다. 자동 피드백을 운전자 확인으로 사용하지 않으며 실제 스토크·비상등 조작을 우선합니다. 잘못된 피드백은 요청을 취소하고, 취소를 확인하지 못하면 해당 주행의 추가 자동 출력을 중지합니다.
++기존 동작 동안 램프를 요청하며 회전은 조향 판단과 별개로 회전 시작과 안정된 직진 복귀를 확인합니다. 반복마다 새 유휴 템플릿과 TX 에코가 필요하며 템플릿·피드백 상실 시 자동 세션을 종료합니다. 출처 불명·자동 램프는 운전자 확인이 아닙니다. 스토크·비상등·예상 밖 반대 램프 감지 시 자동 출력을 멈추고 신선한 스토크 중립과 안정된 실제 OFF 이후 취소합니다. 취소 미확인 시 해당 주행의 추가 자동 출력을 중지합니다.
 +<!-- CARROT:SECTION:END BEHAVIOR -->
 +
 +<!-- CARROT:SECTION:BEGIN USAGE -->
@@ -41,7 +41,7 @@
  <!-- CARROT:REVIEW reviewed-for="" -->
 +
 +<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
-+根据现有 ATC 转弯、变道判断请求左右转向灯，保持至动作完成阶段后取消自身请求。自动灯反馈不作为驾驶员确认；真实拨杆和双闪操作优先。反馈无效时取消当前请求；取消未确认时，本次运行不再自动输出。
++沿用现有动作请求灯光；转弯另需实际开始和稳定回正证据，不跟随转向欲望提前结束。每次重复须有新 idle 模板和 TX 回报；模板或灯反馈丢失时结束自动会话。未知来源或自动灯不作为驾驶员确认。拨杆、双闪或意外对侧灯优先，立即停止自动输出；清理取消延后至新鲜拨杆中立且双侧稳定真关闭，未确认取消则本次运行不再自动输出。
 +<!-- CARROT:SECTION:END BEHAVIOR -->
 +
 +<!-- CARROT:SECTION:BEGIN USAGE -->

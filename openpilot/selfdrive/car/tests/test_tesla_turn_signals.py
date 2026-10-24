@@ -131,12 +131,41 @@ def test_bad_template_and_reused_template_are_rejected():
   assert not c.take_sends(N + 4)
 
 
-def test_driver_takes_ownership_without_waiting_for_manual_lamp_to_go_dark():
+@pytest.mark.parametrize("driver", [1, 2])
+def test_driver_takes_ownership_without_cancelling_manual_lamp(driver):
+  from opendbc.car.structs import CarParams
+  from opendbc.car.tesla.values import TeslaSafetyFlags
+  from opendbc.safety.tests.libsafety import libsafety_py
+
+  safety = libsafety_py.libsafety
+  assert safety.set_safety_hooks(CarParams.SafetyModel.tesla, TeslaSafetyFlags.AUTO_TURN_SIGNALS) == 0
+  safety.init_tests()
+  safety.set_timer(0)
+  safety.safety_rx_hook(libsafety_py.make_CANPacket(BODY, 1, template()))
+  assert safety.safety_tx_hook(libsafety_py.make_CANPacket(BODY, 1, body_frame(template(), 1)))
   c = opened()
-  sends = update(c, N + 3, cs=state(leftBlinkerStalkCount=1, turnSignalDriverDirection=1))
+  sends = update(c, N + 3, cs=state(leftBlinkerStalkCount=1, turnSignalDriverDirection=driver))
+  assert not sends
   assert c.owned_direction == 0
-  echo(c, sends[0], N + 4)
-  assert c.session is None and c.status == "driver_takeover"
+  assert c.session.manual and c.status == "driver_takeover:waiting_off"
+  for tick in range(1, 651):
+    now = N + tick * 100_000_000
+    feedback(c, now, ui=(2, 0) if driver == 1 else (0, 2), front=(1, 0) if driver == 1 else (0, 1))
+    assert not update(c, now, cs=state(leftBlinkerStalkCount=1))
+  for tick in range(651, 666):
+    now = N + tick * 100_000_000
+    safety.set_timer(tick * 100_000)
+    safety.safety_rx_hook(libsafety_py.make_CANPacket(BODY, 1, template()))
+    c.observe_driver(state(leftBlinkerStalkCount=1), now)
+    feedback(c, now)
+    sends = c.take_sends(now, cancel_only=True)
+    if sends:
+      assert sends[0].dat[1] & 3 == 3
+      assert safety.safety_tx_hook(libsafety_py.make_CANPacket(BODY, 1, sends[0].dat))
+      echo(c, sends[0], now + 1)
+  assert c.session is None
+  sends = update(c, now + 2, direction=2, request=2, cs=state(leftBlinkerStalkCount=1))
+  assert safety.safety_tx_hook(libsafety_py.make_CANPacket(BODY, 1, sends[0].dat))
 
 
 def test_reverse_request_cancels_before_other_direction():
@@ -222,16 +251,152 @@ def test_rejected_cancel_is_never_reported_as_success():
   assert c.owned_direction == 1
 
 
+def test_driver_handoff_cannot_hide_latched_cancel_failure():
+  c = opened()
+  cancel = update(c, N + 3, direction=0)[0]
+  echo(c, cancel, N + 4, source=0xC1)
+  assert not update(c, N + 5, cs=state(turnSignalDriverDirection=2))
+  assert c.failed and c.status == "fault:panda_rejected_cancel"
+  assert not c.owned_direction
+
+
 def test_hazards_and_fast_driver_tap_release_automatic_ownership():
   for hazards in (False, True):
     c = opened()
     if hazards:
       feedback(c, N + 3, ui=(2, 2), front=(1, 1))
     sends = update(c, N + 4, cs=state(leftBlinkerStalkCount=1 if not hazards else 0))
-    assert sends[0].dat[1] & 3 == 3
+    assert not sends
     assert not c.owned_direction
-    echo(c, sends[0], N + 5)
-    assert c.status == "driver_takeover"
+    assert c.status == "driver_takeover:waiting_off"
+
+
+@pytest.mark.parametrize("direction", [1, 2])
+def test_sustained_requests_use_fresh_counters_echo_and_real_c_safety(direction):
+  from opendbc.car.structs import CarParams
+  from opendbc.car.tesla.values import TeslaSafetyFlags
+  from opendbc.safety.tests.libsafety import libsafety_py
+
+  safety = libsafety_py.libsafety
+  assert safety.set_safety_hooks(CarParams.SafetyModel.tesla, TeslaSafetyFlags.AUTO_TURN_SIGNALS) == 0
+  safety.init_tests()
+  c = TeslaTurnSignals(True)
+  for tick in range(101):
+    now = N + tick * 100_000_000
+    safety.set_timer(tick * 100_000)
+    feedback(c, now, ui=((1 if tick % 2 else 2), 0) if direction == 1 else (0, (1 if tick % 2 else 2)),
+             front=(1 - tick % 2, 0) if direction == 1 else (0, 1 - tick % 2), body=False) if tick else feedback(c, now, body=False)
+    original = template(tick % 16)
+    c.observe([(now, [(BODY, original, 1)])], now)
+    safety.safety_rx_hook(libsafety_py.make_CANPacket(BODY, 1, original))
+    sends = update(c, now, direction=direction)
+    assert len(sends) == 1 and sends[0].dat == body_frame(original, direction)
+    packet = libsafety_py.make_CANPacket(BODY, 1, sends[0].dat)
+    assert safety.safety_tx_hook(packet)
+    assert not safety.safety_tx_hook(packet)
+    echo(c, sends[0], now + 1)
+    assert c.status == "active"
+  assert c.session.sent == 101
+  feedback(c, now + 2)
+  cancel = update(c, now + 2, direction=0)[0]
+  safety.safety_rx_hook(libsafety_py.make_CANPacket(BODY, 1, template()))
+  assert safety.safety_tx_hook(libsafety_py.make_CANPacket(BODY, 1, cancel.dat))
+  echo(c, cancel, now + 3)
+  for tick in range(1, 8):
+    feedback(c, now + tick * 100_000_000)
+  assert c.session is None
+  assert not update(c, now + 700_000_001, direction=direction)
+
+
+def test_missing_new_template_cancels_instead_of_reporting_active_forever():
+  c = opened()
+  c.template = None
+  for tick in range(1, 20):
+    now = N + tick * 100_000_000
+    feedback(c, now, ui=(2, 0), front=(1, 0), body=False)
+    assert not update(c, now)
+  assert c.status == "cancelling:body_template_starved"
+  feedback(c, now + 1, ui=(2, 0), front=(1, 0))
+  assert c.take_sends(now + 1)[0].dat[1] & 3 == 3
+  c.advance(now + CANCEL_NS + 2)
+  assert c.failed
+
+
+@pytest.mark.parametrize("missing", [0, UI, FRONT])
+def test_unknown_opposite_lamp_yields_without_cancelling_it(missing):
+  c = opened()
+  if missing == 0:
+    feedback(c, N + 10, ui=(0, 2), front=(0, 1))
+  else:
+    if missing == UI:
+      c.ui_time = 0
+      frame = CANPacker("tesla_model3_vehicle").make_can_msg("ID3F5VCFRONT_lighting", 1, {"VCFRONT_turnSignalRightStatus": 1})
+    else:
+      c.front_time = 0
+      frame = CANPacker("tesla_model3_party").make_can_msg("UI_warning", 0, {"rightBlinkerBlinking": 2})
+    c.observe([(N + 10, [frame])], N + 10)
+  assert c.session.manual and c.owned_direction == 0
+  assert not c.take_sends(N + 10, cancel_only=True)
+  assert not update(c, N + 11)
+
+
+@pytest.mark.parametrize("gate", ["held", "stale", "dark", "hazards"])
+def test_manual_cleanup_cannot_send_until_fresh_idle_and_true_off(gate):
+  c = opened()
+  update(c, N + 3, cs=state(turnSignalDriverDirection=1))
+  for tick in range(1, 80):
+    now = N + tick * 100_000_000
+    c.observe_driver(state(turnSignalDriverDirection=1 if gate == "held" else 0,
+                           turnSignalDriverValid=gate != "stale"), now)
+    feedback(c, now, ui=(1, 0) if gate == "dark" else (2, 2) if gate == "hazards" else (0, 0),
+             front=(1, 1) if gate == "hazards" else (0, 0))
+    assert not c.take_sends(now, cancel_only=True)
+  assert c.session.manual and not c.failed
+
+
+@pytest.mark.parametrize("dark", [True, False])
+def test_lamp_dark_phase_is_not_real_off_but_lost_lamps_cancel(dark):
+  c = opened()
+  cancelled = False
+  for tick in range(1, 13):
+    now = N + tick * 100_000_000
+    feedback(c, now, ui=(1, 0) if dark else (0, 0), front=(0, 0))
+    sends = update(c, now)
+    if sends:
+      cancelled |= sends[0].dat[1] & 3 == 3
+      echo(c, sends[0], now + 1)
+  assert cancelled != dark
+  assert c.status == ("active" if dark else "cancelled")
+
+
+def test_no_confirmed_lit_phase_after_initial_blink_is_bounded():
+  c = opened()
+  for tick in range(1, 28):
+    now = N + tick * 100_000_000
+    feedback(c, now, ui=(1, 0), front=(0, 0))
+    for sent in update(c, now):
+      echo(c, sent, now + 1)
+  assert c.status == "cancelling:lamp_feedback_lost"
+
+
+@pytest.mark.parametrize("source", [0x81, 0xC1, None])
+def test_delayed_rejected_or_lost_active_echo_never_sends_unconfirmed_repeats(source):
+  c = TeslaTurnSignals(True)
+  feedback(c, N)
+  first = update(c)[0]
+  for tick in range(1, 12):
+    now = N + tick * 100_000_000
+    feedback(c, now, ui=(2, 0), front=(1, 0))
+    assert not update(c, now)
+  if source is not None:
+    echo(c, first, now + 1, source=source)
+    sends = update(c, now + 2)
+    assert sends[0].dat[1] & 3 == (1 if source == 0x81 else 3)
+  else:
+    now = N + 1_200_000_001
+    feedback(c, now, ui=(2, 0), front=(1, 0))
+    assert update(c, now)[0].dat[1] & 3 == 3
+    assert c.status == "cancelling:tx_echo_timeout"
 
 
 @pytest.mark.parametrize("ui,front", [((3, 0), (0, 0)), ((2, 3), (1, 0)), ((2, 0), (2, 0)), ((2, 0), (1, 3))])

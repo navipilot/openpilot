@@ -11,6 +11,16 @@ from openpilot.selfdrive.controls.lib.lateral_readiness import LateralStartupGat
 from openpilot.selfdrive.pandad import can_list_to_can_capnp
 
 
+def test_received_driver_input_precedes_independent_cancellation_boundary():
+  tree = ast.parse((Path(__file__).parents[1] / "card.py").read_text())
+  calls = [node for node in ast.walk(tree) if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+           and isinstance(node.func.value, ast.Attribute) and node.func.value.attr == "tesla_signals"]
+  driver = next(node.lineno for node in calls if node.func.attr == "observe_driver")
+  observe = next(node.lineno for node in calls if node.func.attr == "observe")
+  urgent = min(node.lineno for node in calls if node.func.attr == "take_sends")
+  assert driver < observe < urgent
+
+
 @pytest.mark.parametrize("gate", ["ready", "startup", "dashcam", "stale_model", "stale_control"])
 @pytest.mark.parametrize("suspend_ns", [0, 5_000_000_000])
 def test_final_card_boundary_uses_gated_control_and_fresh_intent(gate, suspend_ns):
