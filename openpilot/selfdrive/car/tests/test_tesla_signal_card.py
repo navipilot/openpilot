@@ -11,6 +11,27 @@ from openpilot.selfdrive.controls.lib.lateral_readiness import LateralStartupGat
 from openpilot.selfdrive.pandad import can_list_to_can_capnp
 
 
+@pytest.mark.parametrize("confirmed", [False, True])
+def test_card_publishes_confirmed_request_id_separately_from_ownership(confirmed):
+  path = Path(__file__).parents[1] / "card.py"
+  tree = ast.parse(path.read_text())
+  method = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "state_update")
+  fields = {"autoTurnSignalDirection", "autoTurnSignalReadyRequestId", "autoTurnSignalStatus"}
+  assignments = [n for n in method.body if isinstance(n, ast.Assign) and
+                 any(isinstance(t, ast.Attribute) and isinstance(t.value, ast.Name) and
+                     t.value.id == "CS" and t.attr in fields for t in n.targets)]
+  assert len(assignments) == 3
+  signals = opened()
+  if not confirmed:
+    signals.session.on_seen = False
+  cs = car.CarState.new_message()
+  namespace = {"self": NS(tesla_signals=signals, CP=NS(brand="tesla")), "CS": cs, "signal_now": N + 3}
+  exec(compile(ast.Module(body=assignments, type_ignores=[]), str(path), "exec"), namespace)
+  assert cs.autoTurnSignalDirection == 1
+  assert cs.autoTurnSignalReadyRequestId == int(confirmed)
+  assert cs.autoTurnSignalStatus == "active"
+
+
 def test_received_driver_input_precedes_independent_cancellation_boundary():
   tree = ast.parse((Path(__file__).parents[1] / "card.py").read_text())
   calls = [node for node in ast.walk(tree) if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)

@@ -63,6 +63,8 @@ class TeslaTurnSignals:
     self.session: Session | None = None
     self.template: bytes | None = None
     self.template_time = 0
+    self.template_consumed_time = 0
+    self.body_rx = self.body_idle_rx = self.body_invalid_rx = self.body_non_idle_rx = 0
     self.ui = (0, 0)
     self.front = (3, 3)
     self.ui_time = self.front_time = 0
@@ -98,8 +100,19 @@ class TeslaTurnSignals:
   def owned_direction(self) -> int:
     return self.session.direction if self.session is not None and not self.session.manual else 0
 
+  def ready_request_id(self, now: int) -> int:
+    s = self.session
+    if (s is None or self.failed or s.cancelling or s.manual or not s.active_echoes or not s.on_seen or
+        not self.context_time or not 0 <= now - self.context_time <= CONTEXT_NS or
+        not 0 <= now - s.started < SESSION_NS or not self._feedback_available(now) or
+        not 0 <= now - s.last_on < 2_500_000_000 or
+        not 0 <= now - s.last_front_on < 2_500_000_000 + FEEDBACK_DEGRADED_NS):
+      return 0
+    return s.request_id
+
   def diagnostics(self, now: int) -> dict:
     s = self.session
+    template_ready = self.template is not None and 0 <= now - self.template_time <= TEMPLATE_NS
     return {
       "status": self.status,
       "request_id": s.request_id if s else 0,
@@ -114,7 +127,18 @@ class TeslaTurnSignals:
       "on_seen": s.on_seen if s else False,
       "session_ms": (now - s.started) // 1_000_000 if s else None,
       "body_age_ms": (now - self.template_time) // 1_000_000 if self.template_time else None,
-      "template_ready": self.template is not None,
+      "template_ready": template_ready,
+      "template_counter": self.template[6] >> 4 if self.template is not None else None,
+      "pending_counter": s.awaiting[6] >> 4 if s and s.awaiting is not None else None,
+      "submission_age_ms": (now - s.submitted) // 1_000_000 if s and s.sent else None,
+      "send_state": ("idle" if s is None else "fault" if self.failed else "driver_takeover" if s.manual else
+                     "cancelling" if s.cancelling else "waiting:tx_echo" if s.awaiting is not None else
+                     "ready" if template_ready else "waiting:body_template"),
+      "ready_request_id": self.ready_request_id(now),
+      "body_rx": self.body_rx,
+      "body_idle_rx": self.body_idle_rx,
+      "body_invalid_rx": self.body_invalid_rx,
+      "body_non_idle_rx": self.body_non_idle_rx,
       "ui_age_ms": (now - self.ui_time) // 1_000_000 if self.ui_time else None,
       "front_age_ms": (now - self.front_time) // 1_000_000 if self.front_time else None,
       "physical_on_age_ms": (now - s.last_front_on) // 1_000_000 if s and s.last_front_on else None,
@@ -189,8 +213,16 @@ class TeslaTurnSignals:
         continue
       for address, payload, source in frames:
         data = bytes(payload)
-        if source == 1 and address == BODY and len(data) == 8 and not data[1] & 3 and body_checksum(data) == data[7]:
-          self.template, self.template_time = data, timestamp
+        if source == 1 and address == BODY:
+          self.body_rx += 1
+          if len(data) != 8 or body_checksum(data) != data[7]:
+            self.body_invalid_rx += 1
+          elif data[1] & 3:
+            self.body_non_idle_rx += 1
+          else:
+            self.body_idle_rx += 1
+            if timestamp >= self.template_time and timestamp > self.template_consumed_time:
+              self.template, self.template_time = data, timestamp
         elif source == 0 and address == UI and len(data) == 7 and timestamp >= self.ui_time:
           # UI_warning is Motorola left at bit 25 and Intel right at bit 26.
           if data[0] == ((0x11 + 3 + sum(data[1:])) & 0xFF):
@@ -320,8 +352,6 @@ class TeslaTurnSignals:
         self._cancel(now, "feedback_stale")
       elif not s.on_seen and now - s.started >= 2_500_000_000:
         self._cancel(now, "lamp_not_confirmed")
-      elif s.sent and now - s.submitted >= TEMPLATE_NS and s.awaiting is None:
-        self._cancel(now, "body_template_starved")
       elif s.on_seen:
         if self._off(now):
           if s.lost_since is None:
@@ -365,6 +395,7 @@ class TeslaTurnSignals:
     if s.cancelling and s.cancel_attempts >= 3:
       return []
     data = body_frame(self.template, 3 if s.cancelling else s.direction)
+    self.template_consumed_time = self.template_time
     self.template = None
     s.awaiting, s.submitted = data, now
     s.sent += 1

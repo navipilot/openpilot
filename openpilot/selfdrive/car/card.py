@@ -245,6 +245,7 @@ class Car:
     if urgent_sends:
       self.can_callbacks[1](urgent_sends)
     CS.autoTurnSignalDirection = self.tesla_signals.owned_direction
+    CS.autoTurnSignalReadyRequestId = self.tesla_signals.ready_request_id(signal_now)
     CS.autoTurnSignalStatus = self.tesla_signals.status if self.CP.brand == "tesla" else ""
     self._log_tesla_signals(CS, signal_now)
     if self.sm.updated['customReservedRawData0']:

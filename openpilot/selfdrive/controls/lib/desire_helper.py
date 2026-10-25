@@ -558,7 +558,11 @@ class DesireHelper:
                                     not atc_lane_change_retry_line_blocked
               start_gate = (side.lane_change_available_geom and self.lane_change_delay == 0) or \
                            side.lane_line_info_edge_detect or solid_line_blocked or block_released_auto or atc_line_release
-              if start_gate and not lever_undecided:
+              # Only automatic Tesla requests wait for their own echoed, physically confirmed lamp session.
+              signal_ready = (not self.tesla_auto_signals or driver_enabled or
+                              (self.auto_signal_request_id != 0 and
+                               getattr(carstate, "autoTurnSignalReadyRequestId", 0) == self.auto_signal_request_id))
+              if start_gate and not lever_undecided and signal_ready:
                 if solid_line_blocked:
                   if atc_line_release or (torque_applied and not (bsd_active and block_lanechange_bsd)):
                     self.lane_change_state = LaneChangeState.laneChangeStarting

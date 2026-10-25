@@ -86,10 +86,12 @@ def test_ambiguous_or_invalid_counter_changes_never_default_to_left(setup, valid
 
 def step(f, lamp=False, owned=0, driver=0, active=True, prob=.5, valid=True, trailer=False, model=None, speed=25., angle=0.,
          **state_overrides):
+  # FSM unit cases assume a confirmed executor; coupled cases override with the real controller's readiness.
   cs = NS(canValid=valid, leftBlinker=lamp and owned != 2, rightBlinker=lamp and owned == 2, vEgo=speed, aEgo=0., trailerConnected=trailer,
           steeringAngleDeg=angle,
           steeringTorque=0., steeringPressed=False, leftBlinkerStalkCount=0, rightBlinkerStalkCount=0,
-          turnSignalDriverValid=True, turnSignalDriverDirection=driver, autoTurnSignalDirection=owned)
+          turnSignalDriverValid=True, turnSignalDriverDirection=driver, autoTurnSignalDirection=owned,
+          autoTurnSignalReadyRequestId=f.helper.auto_signal_request_id)
   cs.__dict__.update(state_overrides)
   f.helper.update(cs, model or NS(), active, prob, f.carrot_man, NS())
   return f.helper
@@ -103,9 +105,26 @@ def app_request(f, direction):
 
 
 @pytest.mark.parametrize("direction", [1, 2])
+@pytest.mark.parametrize("ready", [0, 99])
+def test_automatic_lane_change_cannot_start_without_matching_lamp_confirmation(setup, direction, ready):
+  app_request(setup, direction)
+  h = step(setup, autoTurnSignalReadyRequestId=0)
+  request = h.auto_signal_request_id
+  assert request and request != 99
+  for _ in range(20):
+    step(setup, autoTurnSignalReadyRequestId=ready)
+    assert h.lane_change_state == log.LaneChangeState.preLaneChange
+    assert h.auto_signal_request_id == request
+  step(setup, autoTurnSignalReadyRequestId=request)
+  assert h.lane_change_state == log.LaneChangeState.laneChangeStarting
+
+
+@pytest.mark.parametrize("direction", [1, 2])
 @pytest.mark.parametrize("source", ["app", "bluetooth"])
 @pytest.mark.parametrize("wait", ["delay", "bsd", "torque"])
-def test_single_app_action_waits_then_emits_through_all_lane_phases_with_native_safety(setup, direction, source, wait):
+@pytest.mark.parametrize("template_period", [20, 40], ids=["1s", "2s"])
+def test_single_app_action_waits_then_emits_through_all_lane_phases_with_native_safety(setup, direction, source, wait,
+                                                                                   template_period):
   from opendbc.can import CANPacker
   from opendbc.car.structs import CarParams
   from opendbc.car.tesla.values import TeslaSafetyFlags
@@ -129,12 +148,18 @@ def test_single_app_action_waits_then_emits_through_all_lane_phases_with_native_
   request = None
   phases = set()
   cancelled = False
+  pending_echoes = []
   for frame in range(200):
     now = N + frame * 50_000_000
+    for due, sent in pending_echoes:
+      if due == frame:
+        echo(core, sent, now)
+    pending_echoes = [(due, sent) for due, sent in pending_echoes if due > frame]
     side.bsd_hold_counter = 10 if wait == "bsd" and frame < 30 else 0
     side.lane_change_available = not side.bsd_hold_counter
     torque = (1. if direction == 1 else -1.) if wait == "torque" and frame >= 30 else 0.
-    step(setup, prob=.5 if frame < 70 else 0., steeringPressed=bool(torque), steeringTorque=torque)
+    step(setup, prob=.5 if frame < 70 else 0., steeringPressed=bool(torque), steeringTorque=torque,
+         autoTurnSignalReadyRequestId=core.ready_request_id(now))
     if frame == 0:
       request = h.auto_signal_request_id
       assert request
@@ -157,8 +182,8 @@ def test_single_app_action_waits_then_emits_through_all_lane_phases_with_native_
         "ID3F5VCFRONT_lighting", 1, {"VCFRONT_turnSignalLeftStatus": front[0], "VCFRONT_turnSignalRightStatus": front[1]}))
     assert all(f[0] in (UI, FRONT) for f in feedback_frames)
     safety.set_timer(frame * 50_000)
-    if frame % 20 == 0:
-      original = template((frame // 20) % 16)
+    if frame % template_period == 0:
+      original = template((frame // template_period) % 16)
       feedback_frames.append((BODY, original, 1))
       safety.safety_rx_hook(libsafety_py.make_CANPacket(BODY, 1, original))
     core.observe([(now, feedback_frames)], now)
@@ -174,13 +199,59 @@ def test_single_app_action_waits_then_emits_through_all_lane_phases_with_native_
       else:
         assert sent.dat[1] & 3 == 3 and not h.auto_signal_request_id
         cancelled = True
-      echo(core, sent, now + 1)
+      pending_echoes.append((frame + 2, sent))
     if cancelled and core.session is None:
       feedback(core, now + 2)
   assert phases == {log.LaneChangeState.preLaneChange, log.LaneChangeState.laneChangeStarting,
                     log.LaneChangeState.laneChangeFinishing}
   assert cancelled and core.session is None and core.status == "cancelled"
   assert not h.auto_signal_request_id and h.lane_change_state == log.LaneChangeState.off
+
+
+@pytest.mark.parametrize("direction", [1, 2])
+def test_no_echo_keeps_app_in_preparation_then_expires_without_rearming(setup, direction):
+  from openpilot.selfdrive.car.tests.test_tesla_turn_signals import N, feedback, state
+  from openpilot.selfdrive.car.tesla_turn_signals import TeslaTurnSignals
+
+  app_request(setup, direction)
+  core = TeslaTurnSignals(True)
+  h = setup.helper
+  active_sends = 0
+  for frame in range(240):
+    now = N + frame * 50_000_000
+    step(setup, autoTurnSignalReadyRequestId=core.ready_request_id(now))
+    assert h.lane_change_state in (log.LaneChangeState.off, log.LaneChangeState.preLaneChange)
+    feedback(core, now, ui=(2, 0) if frame and direction == 1 else (0, 2) if frame else (0, 0),
+             front=(1, 0) if frame and direction == 1 else (0, 1) if frame else (0, 0))
+    meta = log.ModelDataV2.new_message().meta
+    meta.autoTurnSignalDirection, meta.autoTurnSignalRequestId = h.auto_signal_direction, h.auto_signal_request_id
+    for sent in core.update(state(), NS(latActive=True), meta.as_reader(), True, now):
+      active_sends += int(sent.dat[1] & 3 == direction)
+    assert core.ready_request_id(now) == 0
+  assert active_sends == 1 and core.failed
+  assert not h.auto_signal_request_id and not h._auto_app_direction
+
+
+@pytest.mark.parametrize("direction", [1, 2])
+def test_manual_driver_bypasses_automatic_lamp_readiness_gate(setup, direction):
+  setup.carrot_man.atcType = ""
+  step(setup, driver=direction, autoTurnSignalReadyRequestId=0)
+  h = step(setup, driver=direction, autoTurnSignalReadyRequestId=0)
+  assert h.lane_change_state == log.LaneChangeState.laneChangeStarting
+  assert not h.auto_signal_request_id
+
+
+@pytest.mark.parametrize("direction", [1, 2])
+def test_lamp_readiness_loss_during_execution_does_not_abruptly_reset_steering(setup, direction):
+  app_request(setup, direction)
+  h = step(setup, autoTurnSignalReadyRequestId=0)
+  step(setup, autoTurnSignalReadyRequestId=h.auto_signal_request_id)
+  assert h.lane_change_state == log.LaneChangeState.laneChangeStarting
+  request = h.auto_signal_request_id
+  for _ in range(10):
+    step(setup, autoTurnSignalReadyRequestId=0)
+    assert h.lane_change_state == log.LaneChangeState.laneChangeStarting
+    assert h.auto_signal_request_id == request
 
 
 @pytest.mark.parametrize("direction", [1, 2])
@@ -366,8 +437,10 @@ def test_navigation_lane_change_holds_lamps_from_preparation_to_finishing(setup,
     side.edge_available = True
     side.lane_appeared = frame == 30
     # Left navigation still requires the existing driver torque confirmation.
+    now = N + frame * 50_000_000
     step(setup, prob=.5 if frame < 60 else 0., steeringPressed=direction == 1 and frame == 30,
-         steeringTorque=1. if direction == 1 and frame == 30 else 0.)
+         steeringTorque=1. if direction == 1 and frame == 30 else 0.,
+         autoTurnSignalReadyRequestId=core.ready_request_id(now))
     if frame == 0:
       request = h.auto_signal_request_id
       assert request
@@ -377,7 +450,6 @@ def test_navigation_lane_change_holds_lamps_from_preparation_to_finishing(setup,
     if frame and not cancelled:
       ui[direction - 1] = 2 if frame % 16 < 8 else 1
       front[direction - 1] = int(frame % 16 < 8)
-    now = N + frame * 50_000_000
     feedback(core, now, ui=tuple(ui), front=tuple(front))
     meta = log.ModelDataV2.new_message().meta
     meta.autoTurnSignalDirection, meta.autoTurnSignalRequestId = h.auto_signal_direction, h.auto_signal_request_id
@@ -406,11 +478,11 @@ def test_manual_ownership_at_every_app_phase_never_sends_cancel_into_driver_lamp
   h.laneChangeNeedTorque = int(phase == "pre")
   core = TeslaTurnSignals(True)
   for frame in range(5):
-    step(setup)
+    now = N + frame * 50_000_000
+    step(setup, autoTurnSignalReadyRequestId=core.ready_request_id(now))
     if phase == "finishing" and frame >= 2:
       h.lane_change_state = log.LaneChangeState.laneChangeFinishing
       h.lane_change_ll_prob = .5
-    now = N + frame * 50_000_000
     ui = (2, 0) if direction == 1 else (0, 2)
     front = (1, 0) if direction == 1 else (0, 1)
     feedback(core, now, ui=ui if frame else (0, 0), front=front if frame else (0, 0))
@@ -741,7 +813,8 @@ def test_real_capnp_invalid_geometry_cannot_complete_turn(setup, reader, invalid
 
 
 @pytest.mark.parametrize("direction", [1, 2])
-def test_real_turn_model_roundtrip_reaches_lamp_controller(setup, direction):
+@pytest.mark.parametrize("template_period", [1, 40], ids=["50ms", "2s"])
+def test_real_turn_model_roundtrip_reaches_lamp_controller(setup, direction, template_period):
   from openpilot.selfdrive.car.tests.test_tesla_turn_signals import N, echo, feedback, state
   from openpilot.selfdrive.car.tesla_turn_signals import TeslaTurnSignals
 
@@ -774,7 +847,8 @@ def test_real_turn_model_roundtrip_reaches_lamp_controller(setup, direction):
     model.meta.autoTurnSignalRequestId = h.auto_signal_request_id
     ui = ((2 if frame % 16 < 8 else 1), 0) if direction == 1 else (0, (2 if frame % 16 < 8 else 1))
     front = (int(frame % 16 < 8), 0) if direction == 1 else (0, int(frame % 16 < 8))
-    feedback(signals, now, ui=ui if lamp_on else (0, 0), front=front if lamp_on else (0, 0))
+    feedback(signals, now, ui=ui if lamp_on else (0, 0), front=front if lamp_on else (0, 0),
+             body=frame % template_period == 0)
     with log.ModelDataV2.from_bytes(model.to_bytes()) as received:
       sends = signals.update(state(), NS(latActive=True), received.meta, True, now)
     for send in sends:
@@ -787,7 +861,7 @@ def test_real_turn_model_roundtrip_reaches_lamp_controller(setup, direction):
         cancelled = True
         lamp_on = False
       echo(signals, send, now + 1)
-  assert active_sends == 119
+  assert active_sends == len(range(0, 119, template_period))
   assert cancelled and not lamp_on
   assert signals.status == "cancelled" and signals.session is None
   assert not h.auto_signal_request_id

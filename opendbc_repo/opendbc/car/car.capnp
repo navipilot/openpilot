@@ -288,6 +288,7 @@ struct CarState {
   autoTurnSignalStatus @106 :Text;
   turnSignalDriverValid @107 :Bool;
   turnSignalDriverDirection @108 :UInt8; # actual stalk: 0 released, 1 left, 2 right
+  autoTurnSignalReadyRequestId @109 :UInt64; # TX echoed and lamps confirmed for this automatic maneuver; zero otherwise
   struct VehicleGps {
     available @0 :Bool;
     valid @1 :Bool; # receive/continuity checks, not a decoded satellite fix flag

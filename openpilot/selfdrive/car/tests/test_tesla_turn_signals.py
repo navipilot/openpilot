@@ -397,6 +397,7 @@ def test_session_limit_requests_cancel_even_with_fresh_controls():
 
 def test_schema_defaults_disable_automatic_provenance():
   assert car.CarState.new_message().autoTurnSignalDirection == 0
+  assert car.CarState.new_message().autoTurnSignalReadyRequestId == 0
   assert not car.CarState.new_message().turnSignalDriverValid
   assert log.ModelDataV2.new_message().meta.autoTurnSignalRequestId == 0
 
@@ -520,18 +521,159 @@ def test_sustained_requests_use_fresh_counters_echo_and_real_c_safety(direction)
   assert not update(c, now + 700_000_001, direction=direction)
 
 
-def test_missing_new_template_cancels_instead_of_reporting_active_forever():
+@pytest.mark.parametrize("direction", [1, 2])
+def test_missing_template_waits_and_resumes_same_request_with_fresh_template(direction):
+  c = opened(direction)
+  c.template = None
+  for tick in range(1, 21):
+    now = N + tick * 100_000_000
+    feedback(c, now, ui=(2, 0) if direction == 1 else (0, 2),
+             front=(1, 0) if direction == 1 else (0, 1), body=False)
+    assert not update(c, now, direction=direction)
+    assert not c.session.cancelling and c.blocked_id == 0
+  c.observe([(now, [(BODY, template(7), 1)])], now)
+  resumed = update(c, now, direction=direction)
+  assert len(resumed) == 1 and resumed[0].dat == body_frame(template(7), direction)
+  assert c.session.request_id == 1
+
+
+def test_missing_template_wait_is_bounded_by_session_deadline():
   c = opened()
   c.template = None
-  for tick in range(1, 20):
+  for tick in range(1, 601):
     now = N + tick * 100_000_000
     feedback(c, now, ui=(2, 0), front=(1, 0), body=False)
     assert not update(c, now)
-  assert c.status == "cancelling:body_template_starved"
+    assert c.session.cancelling == (tick == 600)
+  assert c.status == "cancelling:session_timeout" and c.blocked_id == 1
   feedback(c, now + 1, ui=(2, 0), front=(1, 0))
   assert c.take_sends(now + 1)[0].dat[1] & 3 == 3
   c.advance(now + CANCEL_NS + 2)
   assert c.failed
+
+
+@pytest.mark.parametrize("direction", [1, 2])
+def test_missing_template_does_not_hide_physical_lamp_loss(direction):
+  c = opened(direction)
+  c.template = None
+  for tick in range(1, 8):
+    now = N + tick * 100_000_000
+    feedback(c, now, body=False)
+    assert not update(c, now, direction=direction)
+  assert c.status == "cancelling:lamps_lost" and c.blocked_id == 1
+  feedback(c, now + 1)
+  assert c.take_sends(now + 1)[0].dat[1] & 3 == 3
+
+
+@pytest.mark.parametrize("direction", [1, 2])
+def test_readiness_requires_both_physical_confirmation_and_exact_tx_echo(direction):
+  c = TeslaTurnSignals(True)
+  feedback(c, N)
+  sent = update(c, direction=direction)[0]
+  assert c.ready_request_id(N) == 0
+  feedback(c, N + 1, ui=(2, 0) if direction == 1 else (0, 2),
+           front=(1, 0) if direction == 1 else (0, 1), body=False)
+  assert c.session.on_seen and c.ready_request_id(N + 1) == 0
+  echo(c, sent, N + 2)
+  assert c.ready_request_id(N + 2) == 1
+  cs = car.CarState.new_message(autoTurnSignalReadyRequestId=c.ready_request_id(N + 2))
+  with car.CarState.from_bytes(cs.to_bytes()) as received:
+    assert received.autoTurnSignalReadyRequestId == 1
+  assert c.ready_request_id(N + CONTEXT_NS + 1) == 0
+  assert c.ready_request_id(N - 1) == 0
+
+
+@pytest.mark.parametrize("gate", ["manual", "cancel", "fault", "context", "feedback", "session"])
+def test_readiness_drops_on_execution_failure_or_handoff(gate):
+  c = opened()
+  now = N + 3
+  assert c.ready_request_id(now) == 1
+  if gate == "manual":
+    c.observe_driver(state(turnSignalDriverDirection=1), now)
+  elif gate == "cancel":
+    update(c, now, direction=0)
+  elif gate == "fault":
+    cancel = update(c, now, direction=0)[0]
+    echo(c, cancel, now, source=0xC1)
+  elif gate == "context":
+    c.context_time = 0
+  elif gate == "feedback":
+    c.front_time = 0
+  else:
+    now = N + SESSION_NS
+    c.context_time = c.ui_time = c.front_time = now
+  assert c.ready_request_id(now) == 0
+
+
+def test_consumed_or_out_of_order_template_cannot_be_reused_after_echo():
+  c = TeslaTurnSignals(True)
+  feedback(c, N)
+  first = update(c)[0]
+  echo(c, first, N + 1)
+  for timestamp in (N - 1, N):
+    c.observe([(timestamp, [(BODY, template(), 1)])], N + 2)
+    assert not c.take_sends(N + 2)
+  c.observe([(N + 3, [(BODY, template(5), 1), (BODY, template(6), 1)])], N + 3)
+  c.observe([(N + 2, [(BODY, template(4), 1)])], N + 3)
+  assert c.take_sends(N + 3)[0].dat == body_frame(template(6), 1)
+  assert not c.take_sends(N + 4)
+
+
+def test_template_diagnostics_separate_filtered_rx_waiting_and_awaiting_echo():
+  c = opened()
+  c.template = None
+  now = N + 3
+  snapshot = c.diagnostics(now)
+  assert snapshot["send_state"] == "waiting:body_template" and snapshot["ready_request_id"] == 1
+  c.observe([(now, [(BODY, bytes(8), 1), (BODY, body_frame(template(), 1), 1)])], now)
+  snapshot = c.diagnostics(now)
+  assert snapshot["body_rx"] == 4 and snapshot["body_idle_rx"] == 2
+  assert snapshot["body_invalid_rx"] == snapshot["body_non_idle_rx"] == 1
+  assert not c.take_sends(now)
+  c.observe([(now + 1, [(BODY, template(6), 1)])], now + 1)
+  assert c.diagnostics(now + 1)["send_state"] == "ready"
+  sent = c.take_sends(now + 1)[0]
+  snapshot = c.diagnostics(now + 1)
+  assert snapshot["send_state"] == "waiting:tx_echo"
+  assert snapshot["pending_counter"] == 7 and not snapshot["template_ready"]
+  echo(c, sent, now + 2)
+  assert c.diagnostics(now + 2)["send_state"] == "waiting:body_template"
+
+
+@pytest.mark.parametrize("direction", [1, 2])
+def test_native_panda_template_race_is_rejected_and_never_retried_as_active(direction):
+  from opendbc.car.structs import CarParams
+  from opendbc.car.tesla.values import TeslaSafetyFlags
+  from opendbc.safety.tests.libsafety import libsafety_py
+
+  safety = libsafety_py.libsafety
+  assert safety.set_safety_hooks(CarParams.SafetyModel.tesla, TeslaSafetyFlags.AUTO_TURN_SIGNALS) == 0
+  safety.init_tests()
+  safety.set_timer(0)
+  safety.safety_rx_hook(libsafety_py.make_CANPacket(BODY, 1, template()))
+  c = TeslaTurnSignals(True)
+  feedback(c, N)
+  first = update(c, direction=direction)[0]
+  assert safety.safety_tx_hook(libsafety_py.make_CANPacket(BODY, 1, first.dat))
+  echo(c, first, N + 1)
+  feedback(c, N + 2, ui=(2, 0) if direction == 1 else (0, 2),
+           front=(1, 0) if direction == 1 else (0, 1), body=False)
+  assert c.ready_request_id(N + 2) == 1
+  c.observe([(N + 3, [(BODY, template(5), 1)])], N + 3)
+  safety.safety_rx_hook(libsafety_py.make_CANPacket(BODY, 1, template(5)))
+  second = update(c, N + 3, direction=direction)[0]
+  # OEM RX advances on Panda after the host has built its next frame.
+  safety.safety_rx_hook(libsafety_py.make_CANPacket(BODY, 1, template(6)))
+  assert not safety.safety_tx_hook(libsafety_py.make_CANPacket(BODY, 1, second.dat))
+  echo(c, second, N + 4, source=0xC1)
+  assert c.status == "cancelling:panda_rejected" and c.ready_request_id(N + 4) == 0
+  c.observe([(N + 5, [(BODY, template(6), 1)])], N + 5)
+  cancel = update(c, N + 5, direction=direction)[0]
+  assert cancel.dat[1] & 3 == 3
+  assert safety.safety_tx_hook(libsafety_py.make_CANPacket(BODY, 1, cancel.dat))
+  echo(c, cancel, N + 6)
+  assert not update(c, N + 7, direction=direction)
+  assert c.blocked_id == 1 and c.session.active_echoes == 1 and c.session.rejected == 1
 
 
 @pytest.mark.parametrize("missing", [0, UI, FRONT])
