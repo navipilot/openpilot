@@ -10,6 +10,7 @@ FRONT = 0x3F5
 TEMPLATE_NS = 1_500_000_000
 CONTEXT_NS = 200_000_000
 FEEDBACK_NS = 500_000_000
+FEEDBACK_DEGRADED_NS = 1_500_000_000
 ECHO_NS = 1_200_000_000
 SESSION_NS = 60_000_000_000
 CANCEL_NS = 5_000_000_000
@@ -52,6 +53,7 @@ class Session:
   on_seen: bool = False
   off_since: int | None = None
   last_on: int = 0
+  last_front_on: int = 0
   lost_since: int | None = None
 
 
@@ -115,6 +117,8 @@ class TeslaTurnSignals:
       "template_ready": self.template is not None,
       "ui_age_ms": (now - self.ui_time) // 1_000_000 if self.ui_time else None,
       "front_age_ms": (now - self.front_time) // 1_000_000 if self.front_time else None,
+      "physical_on_age_ms": (now - s.last_front_on) // 1_000_000 if s and s.last_front_on else None,
+      "feedback": "fresh" if self._feedback_fresh(now) else "degraded" if self._feedback_available(now) else "stale",
       "context_age_ms": (now - self.context_time) // 1_000_000 if self.context_time else None,
       "ui": self.ui,
       "front": self.front,
@@ -122,6 +126,14 @@ class TeslaTurnSignals:
 
   def _feedback_fresh(self, now: int) -> bool:
     return all(t > 0 and 0 <= now - t <= FEEDBACK_NS for t in (self.ui_time, self.front_time))
+
+  def _feedback_available(self, now: int) -> bool:
+    # Startup feedback may lag TX, but must still confirm actual lamps before its deadline.
+    times = (self.ui_time, self.front_time)
+    return self._feedback_fresh(now) or (
+      self.session is not None and (self.session.on_seen or self.session.active_echoes > 0) and
+      all(t > 0 and 0 <= now - t <= FEEDBACK_DEGRADED_NS for t in times) and
+      any(0 <= now - t <= FEEDBACK_NS for t in times))
 
   def _off(self, now: int) -> bool:
     return self._feedback_fresh(now) and self.ui == (0, 0) and self.front == (0, 0)
@@ -173,20 +185,26 @@ class TeslaTurnSignals:
     if not self.configured:
       return
     for timestamp, frames in packets:
+      if not 0 < timestamp <= now:
+        continue
       for address, payload, source in frames:
         data = bytes(payload)
         if source == 1 and address == BODY and len(data) == 8 and not data[1] & 3 and body_checksum(data) == data[7]:
           self.template, self.template_time = data, timestamp
-        elif source == 0 and address == UI and len(data) == 7:
+        elif source == 0 and address == UI and len(data) == 7 and timestamp >= self.ui_time:
           # UI_warning is Motorola left at bit 25 and Intel right at bit 26.
           if data[0] == ((0x11 + 3 + sum(data[1:])) & 0xFF):
             self.ui = ((data[3] >> 0) & 3, (data[3] >> 2) & 3)
             self.ui_time = timestamp
             if all(v in (1, 2) for v in self.ui):
               self._handoff(now)
-        elif source == 1 and address == FRONT and len(data) == 8:
+            if 3 in self.ui:
+              self._cancel(now, "invalid_lamp_feedback")
+        elif source == 1 and address == FRONT and len(data) == 8 and timestamp >= self.front_time:
           self.front = ((data[6] >> 2) & 3, (data[6] >> 4) & 3)
           self.front_time = timestamp
+          if any(v in (2, 3) for v in self.front):
+            self._cancel(now, "invalid_lamp_feedback")
         s = self.session
         if s is not None and address == BODY and data == s.awaiting and source in (0x81, 0xC1):
           s.awaiting = None
@@ -208,9 +226,14 @@ class TeslaTurnSignals:
         if s is not None and self._feedback_fresh(now):
           if self.ui[s.direction - 1] in (1, 2) and self.front[s.direction - 1] == 1:
             s.on_seen = True
-            s.last_on = now
-          if 3 in self.ui or any(v in (2, 3) for v in self.front):
-            self._cancel(now, "invalid_lamp_feedback")
+            s.last_on = max(s.last_on, min(self.ui_time, self.front_time))
+        if s is not None and self.front[s.direction - 1] == 1 and 0 <= now - self.front_time <= FEEDBACK_NS:
+          s.last_front_on = max(s.last_front_on, self.front_time)
+        if s is not None and s.on_seen and not self._feedback_fresh(now):
+          if self.ui[s.direction - 1] == 2 and 0 <= now - self.ui_time <= FEEDBACK_NS:
+            s.last_on = max(s.last_on, self.ui_time)
+          if self.front[s.direction - 1] == 1 and 0 <= now - self.front_time <= FEEDBACK_NS:
+            s.last_on = max(s.last_on, self.front_time)
     self.advance(now)
 
   def update(self, state, control, meta, fresh: bool, now: int) -> list[CanData]:
@@ -293,7 +316,7 @@ class TeslaTurnSignals:
         self._cancel(now, "context_stale")
       elif now - s.started >= SESSION_NS:
         self._cancel(now, "session_timeout")
-      elif not self._feedback_fresh(now):
+      elif not self._feedback_available(now):
         self._cancel(now, "feedback_stale")
       elif not s.on_seen and now - s.started >= 2_500_000_000:
         self._cancel(now, "lamp_not_confirmed")
@@ -309,6 +332,9 @@ class TeslaTurnSignals:
           s.lost_since = None
         if now - s.last_on >= 2_500_000_000:
           self._cancel(now, "lamp_feedback_lost")
+        # UI activity alone must never hide a physical channel stuck OFF.
+        if now - s.last_front_on >= 2_500_000_000 + FEEDBACK_DEGRADED_NS:
+          self._cancel(now, "physical_lamp_feedback_lost")
     s = self.session
     if s is None:
       return
