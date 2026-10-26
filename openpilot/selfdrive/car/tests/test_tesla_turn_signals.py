@@ -4,7 +4,8 @@ import pytest
 from opendbc.can import CANPacker
 from openpilot.cereal import car, log
 from openpilot.selfdrive.car.tesla_turn_signals import (
-  BODY, CANCEL_NS, CONTEXT_NS, FEEDBACK_DEGRADED_NS, FRONT, SESSION_NS, UI, TeslaTurnSignals, body_checksum, body_frame,
+  BODY, CANCEL_NS, CONTEXT_NS, FEEDBACK_DEGRADED_NS, FRONT, FRONT_FAULT_GRACE_NS, SESSION_NS, UI,
+  TeslaTurnSignals, body_checksum, body_frame,
 )
 
 N = 10_000_000_000
@@ -73,6 +74,107 @@ def channel_frame(channel, direction=1, lit=True, fault=False):
 
 
 @pytest.mark.parametrize("direction", [1, 2])
+def test_recorded_front_two_one_waveform_does_not_cancel_or_falsely_confirm_light(direction):
+  c = TeslaTurnSignals(True)
+  feedback(c, N)
+  sent = update(c, direction=direction)[0]
+  echo(c, sent, N + 1)
+  active_count = 1
+  for tick in range(1, 41):
+    now = N + tick * 50_000_000
+    phase = 2 if (tick - 1) % 14 < 7 else 1
+    raw = bytes.fromhex(("0200c838820d0800" if phase == 2 else "0100c838820d0400") if direction == 1 else
+                        ("0800c838820c2000" if phase == 2 else "0400c838820c1000"))
+    c.observe([(now, [channel_frame(UI, direction), (FRONT, raw, 1)])], now)
+    assert not c.session.cancelling
+    if tick < 8:
+      assert not c.session.on_seen and c.ready_request_id(now) == 0
+    else:
+      assert c.ready_request_id(now) == 1
+    if tick % 10 == 0:
+      c.observe([(now, [(BODY, template(tick % 16), 1)])], now)
+    for sent in update(c, now, direction=direction):
+      assert sent.dat[1] & 3 == direction
+      echo(c, sent, now + 1)
+      active_count += 1
+  assert active_count == 5 and c.session.on_seen
+
+
+@pytest.mark.parametrize("direction", [1, 2])
+@pytest.mark.parametrize("on_seen", [False, True])
+def test_front_two_persistent_fault_has_fixed_deadline_not_renewed_by_more_frames(direction, on_seen):
+  c = opened(direction) if on_seen else TeslaTurnSignals(True)
+  if not on_seen:
+    feedback(c, N)
+    echo(c, update(c, direction=direction)[0], N + 1)
+  start = N + 50_000_000
+  for tick in range(12):
+    now = start + tick * 50_000_000
+    feedback(c, now, ui=(2, 0) if direction == 1 else (0, 2),
+             front=(2, 0) if direction == 1 else (0, 2))
+    if tick < 10:
+      assert not c.session.cancelling
+    else:
+      assert c.status == "cancelling:invalid_lamp_feedback" and c.ready_request_id(now) == 0
+    for sent in update(c, now, direction=direction):
+      assert sent.dat[1] & 3 == (direction if tick < 10 else 3)
+      echo(c, sent, now + 1)
+  assert c.blocked_id == 1
+
+
+@pytest.mark.parametrize("direction", [1, 2])
+@pytest.mark.parametrize("late", [False, True])
+def test_front_two_deadline_checked_before_recovery_frame_can_clear_it(direction, late):
+  c = opened(direction)
+  start = N + 50_000_000
+  feedback(c, start, ui=(2, 0) if direction == 1 else (0, 2),
+           front=(2, 0) if direction == 1 else (0, 2), body=False)
+  now = start + FRONT_FAULT_GRACE_NS - int(not late)
+  c.context_time = now
+  feedback(c, now, ui=(2, 0) if direction == 1 else (0, 2),
+           front=(1, 0) if direction == 1 else (0, 1), body=False)
+  assert c.session.cancelling == late
+  assert c.ready_request_id(now) == (0 if late else 1)
+
+
+def test_front_two_fault_deadline_runs_without_another_front_frame():
+  c = opened()
+  start = N + 50_000_000
+  feedback(c, start, ui=(2, 0), front=(2, 0), body=False)
+  for tick in range(1, 11):
+    now = start + tick * 50_000_000
+    c.context_time = now
+    c.observe([(now, [channel_frame(UI)])], now)
+  assert c.status == "cancelling:invalid_lamp_feedback"
+  assert c.ready_request_id(now) == 0
+
+
+def test_transient_two_never_renews_physical_on_or_confirms_cancellation():
+  c = opened()
+  last_on = c.session.last_front_on
+  feedback(c, N + 50_000_000, ui=(2, 0), front=(2, 0), body=False)
+  assert c.session.last_front_on == last_on and not c._off(N + 50_000_000)
+  cancel = update(c, N + 50_000_001, direction=0)[0]
+  echo(c, cancel, N + 50_000_002)
+  for tick in range(2, 20):
+    now = N + tick * 50_000_000
+    feedback(c, now, front=(2, 0), body=False)
+    assert c.session is not None and c.status != "cancelled"
+
+
+def test_opposite_front_two_is_not_ignored_and_cannot_extend_its_deadline():
+  c = opened()
+  for tick in range(12):
+    now = N + 50_000_000 + tick * 50_000_000
+    feedback(c, now, ui=(2, 0), front=(1, 2))
+    sends = update(c, now)
+    for sent in sends:
+      echo(c, sent, now + 1)
+    assert c.session.cancelling == (tick >= 10)
+  assert c.status == "cancelling:invalid_lamp_feedback"
+
+
+@pytest.mark.parametrize("direction", [1, 2])
 @pytest.mark.parametrize("slow", [UI, FRONT])
 def test_confirmed_session_bridges_periodic_single_channel_gaps_with_continued_sends(direction, slow):
   c = opened(direction)
@@ -122,11 +224,13 @@ def test_total_or_extended_single_channel_failure_is_terminal_even_after_feedbac
 
 
 @pytest.mark.parametrize("channel", [UI, FRONT])
-def test_explicit_fault_on_only_fresh_channel_cancels_immediately(channel):
+def test_sna_on_only_fresh_channel_cancels_immediately(channel):
   c = opened()
   now = N + 600_000_000
   c.context_time = now
-  c.observe([(now, [channel_frame(channel, fault=True)])], now)
+  frame = channel_frame(channel, fault=True) if channel == UI else CANPacker("tesla_model3_vehicle").make_can_msg(
+    "ID3F5VCFRONT_lighting", 1, {"VCFRONT_turnSignalLeftStatus": 3})
+  c.observe([(now, [frame])], now)
   assert c.status == "cancelling:invalid_lamp_feedback"
   assert c.take_sends(now)[0].dat[1] & 3 == 3
 
@@ -753,7 +857,7 @@ def test_delayed_rejected_or_lost_active_echo_never_sends_unconfirmed_repeats(so
     assert c.status == "cancelling:tx_echo_timeout"
 
 
-@pytest.mark.parametrize("ui,front", [((3, 0), (0, 0)), ((2, 3), (1, 0)), ((2, 0), (2, 0)), ((2, 0), (1, 3))])
+@pytest.mark.parametrize("ui,front", [((3, 0), (0, 0)), ((2, 3), (1, 0)), ((2, 0), (3, 0)), ((2, 0), (1, 3))])
 def test_fault_or_unavailable_feedback_cancels_an_active_session(ui, front):
   c = opened()
   feedback(c, N + 3, ui=ui, front=front)

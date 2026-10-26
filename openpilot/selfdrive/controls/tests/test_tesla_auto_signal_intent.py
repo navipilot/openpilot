@@ -233,6 +233,59 @@ def test_no_echo_keeps_app_in_preparation_then_expires_without_rearming(setup, d
 
 
 @pytest.mark.parametrize("direction", [1, 2])
+def test_app_recorded_two_one_feedback_runs_full_fsm_with_native_safety(setup, direction):
+  from opendbc.car.structs import CarParams
+  from opendbc.car.tesla.values import TeslaSafetyFlags
+  from opendbc.safety.tests.libsafety import libsafety_py
+  from openpilot.selfdrive.car.tests.test_tesla_turn_signals import N, echo, feedback, state, template
+  from openpilot.selfdrive.car.tesla_turn_signals import BODY, TeslaTurnSignals
+
+  app_request(setup, direction)
+  h = setup.helper
+  core = TeslaTurnSignals(True)
+  safety = libsafety_py.libsafety
+  assert safety.set_safety_hooks(CarParams.SafetyModel.tesla, TeslaSafetyFlags.AUTO_TURN_SIGNALS) == 0
+  safety.init_tests()
+  phases = set()
+  cancelled = False
+  request = 0
+  for tick in range(120):
+    now = N + tick * 50_000_000
+    step(setup, prob=.5 if tick < 45 else 0., autoTurnSignalReadyRequestId=core.ready_request_id(now))
+    if tick == 0:
+      request = h.auto_signal_request_id
+    if tick <= 8:
+      assert h.lane_change_state == log.LaneChangeState.preLaneChange
+    if h.auto_signal_request_id:
+      assert h.auto_signal_request_id == request
+    front_value = 2 if (tick - 1) % 14 < 7 else 1
+    ui, front = [0, 0], [0, 0]
+    if tick and not cancelled:
+      ui[direction - 1] = 2 if front_value == 2 else 1
+      front[direction - 1] = front_value
+    feedback(core, now, ui=tuple(ui), front=tuple(front), body=False)
+    safety.set_timer(tick * 50_000)
+    if tick % 10 == 0:
+      original = template((tick // 10) % 16)
+      core.observe([(now, [(BODY, original, 1)])], now)
+      safety.safety_rx_hook(libsafety_py.make_CANPacket(BODY, 1, original))
+    meta = log.ModelDataV2.new_message().meta
+    meta.autoTurnSignalDirection, meta.autoTurnSignalRequestId = h.auto_signal_direction, h.auto_signal_request_id
+    for sent in core.update(state(), NS(latActive=True), meta.as_reader(), True, now):
+      assert safety.safety_tx_hook(libsafety_py.make_CANPacket(BODY, 1, sent.dat))
+      if sent.dat[1] & 3 == direction:
+        assert not cancelled and h.auto_signal_request_id == request
+        phases.add(h.lane_change_state)
+      else:
+        assert sent.dat[1] & 3 == 3 and not h.auto_signal_request_id
+        cancelled = True
+      echo(core, sent, now + 1)
+  assert phases == {log.LaneChangeState.preLaneChange, log.LaneChangeState.laneChangeStarting,
+                    log.LaneChangeState.laneChangeFinishing}
+  assert cancelled and core.status == "cancelled" and core.session is None
+
+
+@pytest.mark.parametrize("direction", [1, 2])
 def test_manual_driver_bypasses_automatic_lamp_readiness_gate(setup, direction):
   setup.carrot_man.atcType = ""
   step(setup, driver=direction, autoTurnSignalReadyRequestId=0)

@@ -11,6 +11,7 @@ TEMPLATE_NS = 1_500_000_000
 CONTEXT_NS = 200_000_000
 FEEDBACK_NS = 500_000_000
 FEEDBACK_DEGRADED_NS = 1_500_000_000
+FRONT_FAULT_GRACE_NS = 500_000_000
 ECHO_NS = 1_200_000_000
 SESSION_NS = 60_000_000_000
 CANCEL_NS = 5_000_000_000
@@ -67,6 +68,7 @@ class TeslaTurnSignals:
     self.body_rx = self.body_idle_rx = self.body_invalid_rx = self.body_non_idle_rx = 0
     self.ui = (0, 0)
     self.front = (3, 3)
+    self.front_fault_since: list[int | None] = [None, None]
     self.ui_time = self.front_time = 0
     self.context_time = 0
     self.blocked_id = 0
@@ -104,7 +106,7 @@ class TeslaTurnSignals:
     s = self.session
     if (s is None or self.failed or s.cancelling or s.manual or not s.active_echoes or not s.on_seen or
         not self.context_time or not 0 <= now - self.context_time <= CONTEXT_NS or
-        not 0 <= now - s.started < SESSION_NS or not self._feedback_available(now) or
+        not 0 <= now - s.started < SESSION_NS or not self._feedback_available(now) or self._front_fault_expired(now) or
         not 0 <= now - s.last_on < 2_500_000_000 or
         not 0 <= now - s.last_front_on < 2_500_000_000 + FEEDBACK_DEGRADED_NS):
       return 0
@@ -146,7 +148,11 @@ class TeslaTurnSignals:
       "context_age_ms": (now - self.context_time) // 1_000_000 if self.context_time else None,
       "ui": self.ui,
       "front": self.front,
+      "front_fault_ms": [(now - t) // 1_000_000 if t is not None else None for t in self.front_fault_since],
     }
+
+  def _front_fault_expired(self, now: int) -> bool:
+    return any(t is not None and now - t >= FRONT_FAULT_GRACE_NS for t in self.front_fault_since)
 
   def _feedback_fresh(self, now: int) -> bool:
     return all(t > 0 and 0 <= now - t <= FEEDBACK_NS for t in (self.ui_time, self.front_time))
@@ -233,9 +239,17 @@ class TeslaTurnSignals:
             if 3 in self.ui:
               self._cancel(now, "invalid_lamp_feedback")
         elif source == 1 and address == FRONT and len(data) == 8 and timestamp >= self.front_time:
+          if self._front_fault_expired(timestamp):
+            self._cancel(now, "invalid_lamp_feedback")
           self.front = ((data[6] >> 2) & 3, (data[6] >> 4) & 3)
           self.front_time = timestamp
-          if any(v in (2, 3) for v in self.front):
+          # Recorded lamps alternate 2/1. Debounce 2, but never use it as ON or OFF confirmation.
+          for side, value in enumerate(self.front):
+            if value != 2:
+              self.front_fault_since[side] = None
+            elif self.front_fault_since[side] is None:
+              self.front_fault_since[side] = timestamp
+          if 3 in self.front:
             self._cancel(now, "invalid_lamp_feedback")
         s = self.session
         if s is not None and address == BODY and data == s.awaiting and source in (0x81, 0xC1):
@@ -350,6 +364,8 @@ class TeslaTurnSignals:
         self._cancel(now, "session_timeout")
       elif not self._feedback_available(now):
         self._cancel(now, "feedback_stale")
+      elif self._front_fault_expired(now):
+        self._cancel(now, "invalid_lamp_feedback")
       elif not s.on_seen and now - s.started >= 2_500_000_000:
         self._cancel(now, "lamp_not_confirmed")
       elif s.on_seen:
