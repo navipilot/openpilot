@@ -21,6 +21,7 @@
               "params": [
                 "AlwaysLateral",
                 "TeslaAutoTurnSignals",
+                "TeslaCanTrafficStop",
                 "TeslaManualLaneSignals",
                 "TeslaModelDesireSignals",
                 "TeslaModelPathSignals",
@@ -1950,6 +1951,23 @@
       "max": 1,
       "default": 0,
       "unit": 1
+    },
+    {
+      "group": "시작",
+      "name": "TeslaCanTrafficStop",
+      "title": "Tesla CAN 빨간불 정지",
+      "descr": "기본 꺼짐, 변경 후 재시작. Tesla Model 3/Y의 활성 openpilot 종제어에서만 신선한 APP_trafficControl 빨간불·126m 미만 정지선을 보조 정지 제약으로 사용합니다. 8바이트·미터 단위·비전 출처만 지원하며 6바이트 DAS_road는 차단합니다. 초록불은 이 제약만 해제합니다. 늦은 빨간불은 제동 한계를 넘을 수 있고, 신호 상실·거리 불일치는 인계와 기존 soft-disable을 요청합니다. 모델·주변 차량·수동 정지는 유지됩니다. 실차 신호와 거리 기준을 확인하고 폐쇄 시험장에서 검증해야 하며 도로 사용 승인을 뜻하지 않습니다.",
+      "egroup": "START",
+      "etitle": "Tesla CAN Red Light Stop",
+      "edescr": "Default OFF; restart required. Tesla Model 3/Y with active openpilot longitudinal control only: fresh APP_trafficControl red and a stop line below 126 m supplement existing stops. Supports only the 8-byte, metre-scale, vision-backed profile; rejects 6-byte DAS_road. Green releases only this constraint. Late red may exceed braking capability; lost/inconsistent signals request takeover and the existing soft-disable. Other obstacles and manual stops remain. Verify the vehicle protocol/distance reference and validate on a closed course; not road acceptance.",
+      "cgroup": "启动设置",
+      "ctitle": "特斯拉 CAN 红灯停车",
+      "cdescr": "默认关闭，修改后重启。仅 Tesla Model 3/Y 且 openpilot 纵向已激活时，使用新鲜 APP_trafficControl 红灯及小于126米的停止线补充停车约束。仅支持8字节、米制、视觉来源协议，拒绝6字节 DAS_road。绿灯只解除本约束，不覆盖其他障碍和人工停车。近距离变红可能超出制动能力；信号丢失或距离不一致会提示接管并请求既有软退出。需核对实车协议和距离参考点，并在封闭场地验证，不代表已通过道路验收。",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1,
+      "risk": "high"
     },
     {
       "group": "시작",

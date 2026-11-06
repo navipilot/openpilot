@@ -1,7 +1,7 @@
 name: Signal integration checks
 on:
   push:
-    branches: [carrot-wip]
+    branches: [carrot-wip, new]
     paths:
       - 'opendbc_repo/**'
       - 'openpilot/cereal/log.capnp'
@@ -55,6 +55,7 @@ jobs:
             openpilot/selfdrive/car/tests/test_tesla_lane_signals.py \
             openpilot/selfdrive/controls/tests/test_tesla_auto_signal_intent.py \
             openpilot/selfdrive/controls/tests/test_tesla_turn_journey.py \
+            openpilot/selfdrive/controls/tests/test_tesla_traffic_stop.py \
             openpilot/selfdrive/controls/tests/test_desire_helper_stalk.py \
             openpilot/selfdrive/controls/tests/test_lever_forced_turn.py \
             openpilot/selfdrive/carrot/tests/test_xiaoge_data.py \

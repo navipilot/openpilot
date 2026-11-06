@@ -12,7 +12,7 @@ class IsolatedParams:
   """Only the documented defaults used by vehicle fixtures; never device IO."""
   def get_bool(self, key):
     assert key in {'TeslaAutoTurnSignals', 'TeslaManualLaneSignals', 'TeslaModelDesireSignals', 'TeslaModelPathSignals',
-                   'NNFF', 'NNFFLite', 'DisableMinSteerSpeed'}, key
+                   'TeslaCanTrafficStop', 'NNFF', 'NNFFLite', 'DisableMinSteerSpeed'}, key
     return False
 
   def put_int(self, key, value):

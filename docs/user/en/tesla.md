@@ -28,6 +28,20 @@ The controller waits for a stable limit, then adjusts the set speed one displaye
 - To resume automatic adjustment, turn the wheel in one direction and then the opposite direction within one second. Disengaging and re-engaging also clears the manual pause.
 - If the vehicle does not acknowledge an adjustment, the controller stops retrying that unchanged target and set speed.
 
+## CAN red-light stopping
+
+`TeslaCanTrafficStop` is an independent, default-OFF switch; restart after changing it. It applies only to Model 3/Y with **active openpilot longitudinal control**, not stock TACC or `AlwaysLateral` alone. It does not require automatic turn signals, Share Data, ONNX lane classification or Signal Assist. Other brands ignore it even if their saved parameter is ON.
+
+The receive-only input is bus 2 `0x25D`, exactly eight bytes, decoded as `APP_trafficControl` in metres. Only an available/active traffic-light feature, vision-backed source, vision-light flag, no suppression/unavailable reason and a known colour qualify. Six-byte `DAS_road` uses a different distance scale and is explicitly rejected; do not identify the protocol from the address or vehicle year alone. `carState.teslaTrafficControl` records validity, original receive time, distance, colour and input status. Optional reception does not create missing-hardware CAN faults.
+
+At least three distinct red observations spanning 0.2 seconds may add a stop constraint when the positive stop-line distance is below 126 m. The provisional target is 2 m before the reported line; the vehicle's actual distance reference must be checked before use. Both ACC and blended planning retain other obstacles and model/manual stops. While a CAN stop is active, blended temporarily uses the ACC stop solver, retaining stronger model braking; release restores the selected mode. The code does not forge a model prediction or radar lead, increase braking limits or grant new Panda permissions. A moving lead does not release the CAN constraint.
+
+At least three continuous, same-target green observations spanning 0.5 seconds release only this constraint. Red hold continues at standstill, including a zero reported distance after acquisition; zero alone cannot start a stop. Yellow/unknown is not green. A signal older than 0.5 seconds, inconsistent target or clock discontinuity during an owned stop requests takeover through existing soft-disable while retaining the old stop target during that handover. Soft-disable ultimately disengages control: the driver must brake and take over, not rely on indefinite automatic holding. A target passed by more than 5 m is not replayed inside the junction.
+
+Pedal input cancels this feature for the current engagement; disengage and re-engage before it can acquire a new stop from new samples. A late red can exceed the existing braking capability: a visible/audible warning does not guarantee stopping. Reasons and bounded progress are logged as `tesla_can_traffic_stop`; these are not a new HUD badge. Missing or unsupported input cannot provide red-light stopping.
+
+**Experimental, not vehicle/road acceptance.** First verify raw CAN, stop-line reference, current-direction relevance and actual brake permissions on the exact vehicle, then validate red/green, lead departure, dropout, driver takeover and near-line changes on a closed course. Do not enable this on public roads based only on software tests.
+
 ## Automatic turn signals
 
 `TeslaAutoTurnSignals` defaults to OFF and applies after reboot. On Model 3/Y with the additional vehicle bus and fresh physical stalk input, turn lamps start with the existing turn desire, not navigation preparation or a distance-only window. Automatic lane changes still request lamps during preparation and require matching TX and lamp confirmation before starting. It does not enable navigation, change other lane-change gates, or grant steering or departure permission. Unsupported or stalkless signal layouts do not become supported by enabling the switch.
