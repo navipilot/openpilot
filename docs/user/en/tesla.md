@@ -30,7 +30,7 @@ The controller waits for a stable limit, then adjusts the set speed one displaye
 
 ## Automatic turn signals
 
-`TeslaAutoTurnSignals` defaults to OFF and applies after reboot. On Model 3/Y with the additional vehicle bus and fresh physical stalk input, it requests lamps for the existing ATC turn/lane-change decisions, including turn preparation. It does not enable navigation, change lane-change gates, or grant steering or departure permission. Unsupported or stalkless signal layouts do not become supported by enabling the switch.
+`TeslaAutoTurnSignals` defaults to OFF and applies after reboot. On Model 3/Y with the additional vehicle bus and fresh physical stalk input, turn lamps start with the existing turn desire, not navigation preparation or a distance-only window. Automatic lane changes still request lamps during preparation and require matching TX and lamp confirmation before starting. It does not enable navigation, change other lane-change gates, or grant steering or departure permission. Unsupported or stalkless signal layouts do not become supported by enabling the switch.
 
 Extension detection is shared with automatic cruise-speed scrolling: `0x3DF` must be observed on CAN1. Working speed scrolling does not replace the separate `0x3E9` idle template and UI/physical lamp feedback required for lamp control. Stalk input prefers CAN1 once observed, with CAN0 compatibility when CAN1 has never supplied that signal; stale or conflicting input blocks automatic output. A short App lane-change command keeps its lamp request through the existing maneuver, not just the command pulse.
 

@@ -684,14 +684,18 @@ def test_finishing_does_not_cancel_early_and_completed_pre_does_not_rearm(setup)
   assert h.auto_signal_request_id == 0
 
 
-def test_pre_turn_signal_does_not_enable_a_maneuver(setup):
-  setup.carrot_man.atcType = "turn left prepare"
-  setup.carrot_man.xTurnInfo = 1
-  setup.carrot_man.xDistToTurn = 100
-  h = step(setup)
-  assert h.desire == log.Desire.none
-  assert h.lane_change_state == log.LaneChangeState.off
-  assert h.auto_signal_direction == log.LaneChangeDirection.left
+@pytest.mark.parametrize("side,direction", [("left", 1), ("right", 2)])
+@pytest.mark.parametrize("distance", [1, 40, 100, 250])
+def test_turn_preparation_and_distance_never_start_lamps(setup, side, direction, distance):
+  setup.carrot_man.atcType = f"turn {side} prepare"
+  setup.carrot_man.xTurnInfo = direction
+  setup.carrot_man.xDistToTurn = distance
+  for _ in range(5):
+    h = step(setup)
+    assert h.desire == log.Desire.none
+    assert h.lane_change_state == log.LaneChangeState.off
+    assert h.auto_signal_direction == log.LaneChangeDirection.none
+    assert not h.auto_signal_request_id
 
 
 def test_driver_rejection_does_not_rearm_the_same_atc_pre_signal(setup):
@@ -720,6 +724,10 @@ def test_completion_latch_survives_off_until_a_new_navigation_request(setup):
   setup.carrot_man.atcType = ""
   step(setup)
   setup.carrot_man.atcType = "turn left prepare"
+  assert not step(setup).auto_signal_request_id
+  setup.carrot_man.atcType = "turn left"
+  setup.helper.left.dist_to_edge_far = 5.
+  step(setup)
   assert step(setup).auto_signal_request_id
 
 
@@ -795,19 +803,20 @@ def test_app_can_send_when_vehicle_feedback_arrives_after_command_pulse(setup, a
 
 
 @pytest.mark.parametrize("side,direction", [("left", 1), ("right", 2)])
-def test_turn_preparation_to_turn_keeps_one_lamp_session(setup, side, direction):
+def test_turn_starts_only_after_preparation_and_maneuver_suppression(setup, side, direction):
   setup.carrot_man.atcType = f"turn {side} prepare"
   setup.carrot_man.xTurnInfo = direction
   setup.carrot_man.xDistToTurn = 100
   getattr(setup.helper, side).dist_to_edge_far = 5.
   h = step(setup)
-  request = h.auto_signal_request_id
-  assert request and h.auto_signal_direction == direction
+  assert not h.auto_signal_request_id
   setup.carrot_man.atcType = f"turn {side}"
   h = step(setup)
   assert h.desire == log.Desire.none  # Keep the original one-frame maneuver suppression.
-  assert h.auto_signal_request_id == request
+  assert not h.auto_signal_request_id
   h = step(setup)
+  request = h.auto_signal_request_id
+  assert request
   assert h.desire == (log.Desire.turnLeft if direction == 1 else log.Desire.turnRight)
   assert h.auto_signal_direction == direction and h.auto_signal_request_id == request
   h.turn_disable_count = 10
@@ -951,9 +960,11 @@ def test_real_turn_model_roundtrip_reaches_lamp_controller(setup, direction, tem
     model.orientationRate.z = [sign * (.2 if turning else .01)] * 33
     model.orientation.z = [sign * .2] * 33
     h = step(setup, model=model, speed=0. if stopped else 5., angle=sign * (90. if turning else 10.))
-    if frame == 0:
+    if frame == 21:
       request = h.auto_signal_request_id
-    if frame < 119:
+    if frame < 21:
+      assert not h.auto_signal_request_id
+    elif frame < 119:
       assert request and h.auto_signal_request_id == request
     model.meta.autoTurnSignalDirection = h.auto_signal_direction
     model.meta.autoTurnSignalRequestId = h.auto_signal_request_id
@@ -973,7 +984,7 @@ def test_real_turn_model_roundtrip_reaches_lamp_controller(setup, direction, tem
         cancelled = True
         lamp_on = False
       echo(signals, send, now + 1)
-  assert active_sends == len(range(0, 119, template_period))
+  assert active_sends == 1 + len([frame for frame in range(22, 119) if frame % template_period == 0])
   assert cancelled and not lamp_on
   assert signals.status == "cancelled" and signals.session is None
   assert not h.auto_signal_request_id

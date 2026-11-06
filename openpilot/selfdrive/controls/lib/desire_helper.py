@@ -776,10 +776,9 @@ class DesireHelper:
 
   def _update_auto_signal(self, carstate, modeldata, carrot_man, lateral_active, atc_enabled, atc_st, driver_st, previous):
     direction = LaneChangeDirection.none
-    turn_type = not self._auto_app_direction and self.atc_type in ("turn left", "turn right", "turn left prepare", "turn right prepare")
-    navigation_direction = (LaneChangeDirection.left if turn_type and self.atc_type in ("turn left", "turn left prepare")
+    turn_type = not self._auto_app_direction and self.atc_type in ("turn left", "turn right")
+    navigation_direction = (LaneChangeDirection.left if turn_type and self.atc_type == "turn left"
                             else LaneChangeDirection.right if turn_type else LaneChangeDirection.none)
-    turn_handoff = self.atc_type in ("turn left", "turn right") and self._auto_atc_type == self.atc_type + " prepare"
     if self.atc_type != self._auto_atc_type:
       if navigation_direction not in (LaneChangeDirection.none, self._auto_turn_direction):
         self._auto_turn_direction = LaneChangeDirection.none
@@ -818,13 +817,8 @@ class DesireHelper:
         direction = LaneChangeDirection.left if self.turn_direction == TurnDirection.turnLeft else LaneChangeDirection.right
       elif self._auto_lane_direction != LaneChangeDirection.none:
         direction = self._auto_lane_direction
-      elif (turn_handoff and not self._auto_turn_consumed and self.atc_active != 2 and not self.blinker_ignore and
-            self.auto_signal_direction == (LaneChangeDirection.left if self.atc_type == "turn left" else LaneChangeDirection.right)):
-        # ATC suppresses maneuver changes for one frame, not an already requested same-direction lamp.
-        direction = self.auto_signal_direction
-      elif (not self._auto_turn_consumed and not self._auto_lane_completed and self.atc_active != 2 and
-            not self.blinker_ignore and getattr(carrot_man, "xTurnInfo", 0) in (1, 2) and
-            self.atc_type in ("turn left prepare", "turn right prepare", "atc left", "atc right") and
+      elif (not self._auto_lane_completed and self.atc_active != 2 and not self.blinker_ignore and
+            self.atc_type in ("atc left", "atc right") and getattr(carrot_man, "xTurnInfo", 0) in (1, 2) and
             0 < getattr(carrot_man, "xDistToTurn", 0) <= min(250, max(40, carstate.vEgo * 8 + 20))):
         direction = LaneChangeDirection.left if carrot_man.xTurnInfo == 1 else LaneChangeDirection.right
       if direction != LaneChangeDirection.none and turn_type and not self._auto_turn_consumed:
