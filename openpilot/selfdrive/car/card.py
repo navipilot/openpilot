@@ -29,6 +29,7 @@ from openpilot.selfdrive.car.openpilot_toggle import CruiseMainOpenpilotToggle
 from openpilot.selfdrive.car.tesla_turn_signals import TeslaTurnSignals
 from openpilot.selfdrive.car.hyundai_spas import SpasSignals
 from openpilot.selfdrive.controls.lib.lateral_readiness import LateralStartupGate
+from openpilot.selfdrive.controls.lib.desire_lib.tesla_turn import turn_signal_context
 from openpilot.selfdrive.carrot.xiaoge.xiaoge_vision import (
   XiaogeVisionResult,
   apply_xiaoge_vision_result,
@@ -404,7 +405,8 @@ class Car:
 
     if self.sm.all_alive(['carControl']):
       # Guard the final application boundary, including a queued pre-reboot CC.
-      if self.params.get_bool("ImpactDashcamReboot"):
+      impact_reboot = self.params.get_bool("ImpactDashcamReboot")
+      if impact_reboot:
         CC = CC.as_builder()
         CC.enabled = CC.latActive = CC.longActive = False
         CC.actuators = car.CarControl.Actuators.new_message()
@@ -431,7 +433,11 @@ class Car:
         fresh = all(self.sm.seen[s] and self.sm.alive[s] and self.sm.valid[s] and
                     0 <= time.monotonic() - self.sm.recv_time[s] <= 0.2 for s in ('carControl', 'modelV2'))
         signal_now = now_nanos if REPLAY else time.clock_gettime_ns(getattr(time, "CLOCK_BOOTTIME", time.CLOCK_MONOTONIC))
-        can_sends.extend(self.tesla_signals.update(CS, CC, self.sm['modelV2'].meta, fresh, signal_now))
+        turn_hold_allowed = False
+        if lateral_ready and not impact_reboot and not CC.latActive:
+          turn_hold_allowed, _ = turn_signal_context(self.sm, CS, time.monotonic(), signal_now, self.params.get_bool("AlwaysLateral"))
+        can_sends.extend(self.tesla_signals.update(CS, CC, self.sm['modelV2'].meta, fresh, signal_now,
+                                                 turn_hold_allowed=turn_hold_allowed))
       apply_done_ns = time.monotonic_ns()
       self.pm.send('sendcan', can_list_to_can_capnp(can_sends, msgtype='sendcan', valid=CS.canValid))
       sendcan_done_ns = time.monotonic_ns()
