@@ -27,6 +27,7 @@ from openpilot.selfdrive.car.cruise import VCruiseCarrot
 from openpilot.selfdrive.car.car_specific import MockCarState
 from openpilot.selfdrive.car.openpilot_toggle import CruiseMainOpenpilotToggle
 from openpilot.selfdrive.car.tesla_turn_signals import TeslaTurnSignals
+from openpilot.selfdrive.car.tesla_lane_signals import TeslaLaneSignals
 from openpilot.selfdrive.car.hyundai_spas import SpasSignals
 from openpilot.selfdrive.controls.lib.lateral_readiness import LateralStartupGate
 from openpilot.selfdrive.controls.lib.desire_lib.tesla_turn import turn_signal_context
@@ -138,6 +139,10 @@ class Car:
       safety_config.safetyModel = structs.CarParams.SafetyModel.noOutput
       self.CP.safetyConfigs = [safety_config]
     self.tesla_signals = TeslaTurnSignals.from_car_params(self.CP, enabled=self.params.get_bool("TeslaAutoTurnSignals"))
+    if self.CP.brand == "tesla":
+      self.tesla_signals.lane_assistance = TeslaLaneSignals(
+        manual=self.params.get_bool("TeslaManualLaneSignals"),
+        desire=self.params.get_bool("TeslaModelDesireSignals"), path=self.params.get_bool("TeslaModelPathSignals"))
     self.tesla_signal_status = None if self.CP.brand == "tesla" else self.tesla_signals.status
     self.tesla_signal_log_ns = 0
     self.spas_signals = SpasSignals(self.CP, self.params)
@@ -436,8 +441,13 @@ class Car:
         turn_hold_allowed = False
         if lateral_ready and not impact_reboot and not CC.latActive:
           turn_hold_allowed, _ = turn_signal_context(self.sm, CS, time.monotonic(), signal_now, self.params.get_bool("AlwaysLateral"))
+        lamp_intent = self.tesla_signals.lane_assistance.update(
+          CS, CC, self.sm['modelV2'], self.xiaoge_vision_result, time.monotonic_ns(),
+          allowed=fresh and lateral_ready and not impact_reboot,
+          busy=bool(self.sm['modelV2'].meta.autoTurnSignalDirection.raw) or
+               (self.tesla_signals.session is not None and not self.tesla_signals.session.lamp_only))
         can_sends.extend(self.tesla_signals.update(CS, CC, self.sm['modelV2'].meta, fresh, signal_now,
-                                                 turn_hold_allowed=turn_hold_allowed))
+                                                 turn_hold_allowed=turn_hold_allowed, lamp_intent=lamp_intent))
       apply_done_ns = time.monotonic_ns()
       self.pm.send('sendcan', can_list_to_can_capnp(can_sends, msgtype='sendcan', valid=CS.canValid))
       sendcan_done_ns = time.monotonic_ns()

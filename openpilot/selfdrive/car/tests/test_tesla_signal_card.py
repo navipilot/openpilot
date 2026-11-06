@@ -7,6 +7,8 @@ import pytest
 from openpilot.cereal import car, log
 from openpilot.selfdrive.car.tests.test_tesla_turn_signals import N, echo, feedback, intent, opened, state
 from openpilot.selfdrive.car.tesla_turn_signals import TeslaTurnSignals
+from openpilot.selfdrive.car.tesla_lane_signals import TeslaLaneSignals
+from openpilot.selfdrive.car.tests.test_tesla_lane_signals import context as lane_context, vision
 from openpilot.selfdrive.controls.lib.lateral_readiness import LateralStartupGate
 from openpilot.selfdrive.controls.lib.desire_lib.tesla_turn import turn_signal_context
 from openpilot.selfdrive.pandad import can_list_to_can_capnp
@@ -125,6 +127,7 @@ def test_final_card_boundary_uses_gated_control_and_fresh_intent(gate, suspend_n
   controller = NS(apply=apply)
   stages = ("apply", "sendcan", "total")
   card = NS(spas_signals=NS(enabled=False), initialized_prev=True, params=params, sm=sm, CI=controller,
+            xiaoge_vision_result=None,
             pm=NS(send=lambda *args: sent.append(args)), tesla_signals=signals,
             lateral_startup=LateralStartupGate(ready=gate != "startup"), card_diag_recv_ns=N - suspend_ns,
             card_diag_stage_names=stages, card_diag_stage_current=dict.fromkeys(stages, 0),
@@ -141,3 +144,85 @@ def test_final_card_boundary_uses_gated_control_and_fresh_intent(gate, suspend_n
       assert signals.session.cancelling == (gate != "ready")
   assert applied[-1][0].latActive == (not stopped_turn and gate not in ("startup", "dashcam"))
   assert cc.latActive == (not stopped_turn)  # Do not mutate the subscribed command.
+
+
+@pytest.mark.parametrize("direction", [1, 2])
+@pytest.mark.parametrize("gate", ["ready", "startup", "dashcam", "stale_model", "stale_control", "disabled"])
+@pytest.mark.parametrize("source", ["manual", "desire", "path"])
+def test_production_card_loop_lamp_observations_preserve_controls(direction, gate, source):
+  path = Path(__file__).parents[1] / "card.py"
+  method = next(n for n in ast.walk(ast.parse(path.read_text())) if isinstance(n, ast.FunctionDef) and n.name == "controls_update")
+  clock = [N]
+  ns = {"car": car, "REPLAY": False, "can_list_to_can_capnp": can_list_to_can_capnp, "turn_signal_context": turn_signal_context,
+        "should_log_card_diagnostics": lambda *args: False,
+        "time": NS(monotonic=lambda: clock[0]/1e9, monotonic_ns=lambda: clock[0],
+                   clock_gettime_ns=lambda _: clock[0], CLOCK_BOOTTIME=7, CLOCK_MONOTONIC=1)}
+  exec(compile(ast.Module(body=[method], type_ignores=[]), str(path), "exec"), ns)
+
+  class Messages(dict):
+    def all_alive(self, services):
+      return True
+
+  sm = Messages(livePose=log.LivePose.new_message())
+  sm.logMonoTime = {"livePose": N}
+  sm.valid = sm.alive = sm.seen = dict.fromkeys(("modelV2", "carControl", "radarState", "livePose"), True)
+  sm.all_checks = lambda services: False
+  sm.recv_time = {}
+  signals = TeslaTurnSignals(True)
+  signals.lane_assistance = TeslaLaneSignals(**{source: gate != "disabled"})
+  sent, applied = [], []
+
+  def apply(cc, *args):
+    applied.append(cc.to_dict())
+    return car.CarControl.Actuators.new_message().as_reader(), []
+
+  stages = ("apply", "sendcan", "total")
+  card = NS(spas_signals=NS(enabled=False), initialized_prev=True,
+            params=NS(get_bool=lambda name: gate == "dashcam" and name == "ImpactDashcamReboot"),
+            sm=sm, CI=NS(apply=apply), pm=NS(send=lambda *args: sent.append(args)), tesla_signals=signals,
+            lateral_startup=LateralStartupGate(ready=gate != "startup"),
+            card_diag_stage_names=stages, card_diag_stage_current=dict.fromkeys(stages, 0),
+            card_diag_stage_sum_us=dict.fromkeys(stages, 0), card_diag_stage_max_us=dict.fromkeys(stages, 0),
+            card_diag_process_max_us=0, card_diag_slow_process=0, card_diag_frames=0)
+  card.card_diag_loop_max_us = card.card_diag_can_timeouts = 0
+  active_packets = []
+  for tick in range(250):  # Real 100 Hz card wakeups, 20 Hz model, 2.5 Hz ONNX.
+    clock[0] = now = N + tick*10_000_000
+    frame = tick//5
+    cs, cc, md = lane_context(direction, max(.6, 1.8-max(0, frame-22)*.055), frame+1)
+    if source != "manual":
+      cc.latActive = True
+      cs.steeringPressed = False
+      if source == "desire":
+        md.meta.desireState = [.1, 0., 0., .85 if direction == 1 else .05, .85 if direction == 2 else .05]
+      else:
+        sign = -1 if direction == 1 else 1
+        cc.actuators.curvature = sign*.002
+        md.position.t = [0., 1., 1.5, 2., 2.5, 3.]
+        md.position.x = [0., 5., 10., 15., 20., 25.]
+        md.position.y = [sign*y for y in (0., .2, .8, 1.5, 2., 2.2)]
+    if active_packets:
+      cs.leftBlinker, cs.rightBlinker = direction == 1, direction == 2
+    sm.update(modelV2=md.as_reader(), radarState=None)
+    sm.recv_time = dict.fromkeys(sm.valid, now/1e9)
+    if gate.startswith("stale"):
+      sm.recv_time["modelV2" if gate == "stale_model" else "carControl"] -= 1.
+    card.xiaoge_vision_result = vision(N+tick//40*400_000_000)
+    card.card_diag_recv_ns = now
+    feedback(signals, now, ui=(2, 0) if active_packets and direction == 1 else (0, 2) if active_packets else (0, 0),
+             front=(1, 0) if active_packets and direction == 1 else (0, 1) if active_packets else (0, 0))
+    before = cc.to_dict()
+    ns["controls_update"](card, cs.as_reader(), cc.as_reader())
+    if gate not in ("dashcam", "startup"):
+      assert applied[-1] == before
+    assert cc.latActive == (source != "manual")
+    assert not cc.enabled and str(md.meta.desire) == "none"
+    with log.Event.from_bytes(sent[-1][1]) as event:
+      for msg in event.sendcan:
+        if msg.dat[1] & 3 == direction:
+          active_packets.append(bytes(msg.dat))
+          signals.observe([(now, [(msg.address, msg.dat, 0x81)])], now)
+  assert bool(active_packets) == (gate == "ready")
+  if active_packets:
+    assert signals.session.lamp_only
+    assert signals.ready_request_id(now) > 1 << 31

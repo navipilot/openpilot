@@ -21,6 +21,9 @@
               "params": [
                 "AlwaysLateral",
                 "TeslaAutoTurnSignals",
+                "TeslaManualLaneSignals",
+                "TeslaModelDesireSignals",
+                "TeslaModelPathSignals",
                 "AutoEngage",
                 "DisableMinSteerSpeed"
               ]
@@ -1947,6 +1950,57 @@
       "max": 1,
       "default": 0,
       "unit": 1
+    },
+    {
+      "group": "시작",
+      "name": "TeslaManualLaneSignals",
+      "title": "Tesla 수동 차로변경 램프",
+      "descr": "Tesla 자동 방향지시등과 데이터 공유가 필요합니다. 30km/h 이상에서 운전자 조향 의도·차선 접근과 ONNX의 연속된 점선 분류·인접 차로 형상을 확인해 좌우 램프만 요청합니다. 크루즈 비활성도 허용하나 조향 권한은 늘리지 않습니다. 실선·불명·오래된 결과는 새 요청을 차단합니다. 차선 색상·진행 방향은 판별하지 못합니다. 기본 꺼짐, 변경 후 재부팅; 폐쇄 시험장 검증 필요.",
+      "egroup": "START",
+      "etitle": "Tesla Manual Lane Lamps",
+      "edescr": "Requires Tesla Automatic Turn Signals and Share Data. At 30 km/h or more, driver torque, sustained boundary approach, repeated ONNX dashed classification and adjacent-lane geometry request lamps only, even without cruise. Solid, unknown or stale results block new requests, never physical stalk operation. No colour or same-direction proof and no steering permission. Default OFF; reboot and closed-course validation required.",
+      "cgroup": "启动设置",
+      "ctitle": "特斯拉手动变道灯",
+      "cdescr": "需开启特斯拉自动转向灯和数据共享。30km/h 以上结合驾驶员转向意图、持续接近车道线、连续 ONNX 虚线分类与相邻车道几何，仅请求左右灯，巡航未激活也可使用。实线、未知或过期结果禁止新自动请求，不限制真实拨杆。不能证明车道线颜色或同向车流，不增加转向权限。默认关闭，修改后重启，需封闭场地实车验证。",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1,
+      "risk": "high"
+    },
+    {
+      "group": "시작",
+      "name": "TeslaModelDesireSignals",
+      "title": "Tesla 모델 의도 램프",
+      "descr": "Tesla 자동 방향지시등·데이터 공유가 필요합니다. 횡제어 활성·30km/h 이상에서 반복된 모델 차로변경 예측과 ONNX 점선·인접 차로 형상으로 램프만 미리 요청합니다. 수동 램프와 독립적인 기본 꺼짐 옵션입니다. 회전 내비 안내·유턴은 대상이 아닙니다. 예측 오점등 가능, 조향 권한 불변. 변경 후 재부팅·폐쇄 시험장 검증 필요.",
+      "egroup": "START",
+      "etitle": "Tesla Model Desire Lamps",
+      "edescr": "Independent default-OFF lane-change prediction lamps: requires Tesla Automatic Turn Signals, Share Data, active lateral control, 30 km/h, repeated model lane-change probability and fresh ONNX dashed/adjacent-lane evidence. May light before an actual maneuver or falsely. Does not use navigation turn announcements, predict U-turns or authorize steering. Reboot and closed-course validation required.",
+      "cgroup": "启动设置",
+      "ctitle": "特斯拉模型意图灯",
+      "cdescr": "独立且默认关闭的变道预测灯：需特斯拉自动转向灯、数据共享、横向控制激活、30km/h 以上、连续模型变道概率及新鲜 ONNX 虚线和相邻车道证据。可能提前或错误亮灯，不使用导航转弯预告，不实现掉头，也不增加转向权限。修改后重启，需封闭场地验证。",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1,
+      "risk": "high"
+    },
+    {
+      "group": "시작",
+      "name": "TeslaModelPathSignals",
+      "title": "Tesla 모델 경로 램프",
+      "descr": "Tesla 자동 방향지시등·데이터 공유가 필요합니다. 횡제어 활성·30km/h 이상에서 차선 곡률 대비 모델 경로의 반복된 경계 통과 예측과 ONNX 점선·인접 차로 형상으로 램프만 요청합니다. 의도 예측과 독립적인 기본 꺼짐 옵션입니다. 내비 회전 사전점등·유턴을 추가하지 않습니다. 오점등 가능, 조향 권한 불변. 변경 후 재부팅·폐쇄 시험장 검증 필요.",
+      "egroup": "START",
+      "etitle": "Tesla Model Path Lamps",
+      "edescr": "Independent default-OFF path prediction lamps: requires Tesla Automatic Turn Signals, Share Data, active lateral control, 30 km/h, repeated predicted boundary crossing relative to lane curvature and fresh ONNX dashed/adjacent-lane evidence. May light early or falsely; no navigation turn preannouncement, U-turn logic or steering permission. Reboot and closed-course validation required.",
+      "cgroup": "启动设置",
+      "ctitle": "特斯拉模型路径灯",
+      "cdescr": "独立且默认关闭的路径预测灯：需特斯拉自动转向灯、数据共享、横向控制激活、30km/h 以上、相对车道曲率连续预测越线及新鲜 ONNX 虚线和相邻车道证据。可能提前或错误亮灯；不恢复导航转弯提前亮灯，不增加掉头逻辑或转向权限。修改后重启，需封闭场地验证。",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1,
+      "risk": "high"
     },
     {
       "group": "시작",
