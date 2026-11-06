@@ -55,6 +55,10 @@ When the vehicle bus supplies tire-pressure data, the four tire readings are ava
 <a id="engagement-and-standstill"></a>
 ## Engagement and standstill
 
+With the vehicle CAN extension, a three-finger contact on the infotainment screen toggles `AlwaysLateral` between 0 and 1, applied live on the next control update. Release before the next contact; holding or duplicate press events do not toggle repeatedly. The shortcut no longer changes Experimental/Chill mode or requires `ExperimentalModeConfirmed`. The default is 0 for an unset parameter; existing saved values are preserved.
+
+OFF removes only cruise-independent lateral permission: steering can still operate while driving control is active. This gesture is not an emergency disengagement or a longitudinal-control switch.
+
 Tesla standstill detection uses the vehicle's ESP signal independently of the stock cruise state. Supported Tesla vehicles can steer at true standstill when driving control is active, or when `AlwaysLateral` is enabled in a forward-driving gear and lateral control is already on. Steering faults and the lateral-enable switch still block steering; minimum steering-speed limits still apply while moving.
 
 Normal stock TACC operation is not treated as an Autosteer conflict. Where the vehicle provides its Autosteer setting, Autosteer or FSD must remain disabled. Existing steering-conflict checks still apply. A continuously idle stock ACC state no longer repeatedly cancels a new stalk engagement; a real transition from active or holding ACC to a cancel state is still forwarded briefly.

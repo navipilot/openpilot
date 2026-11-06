@@ -53,7 +53,7 @@ Model X 虽有平台定义，但接口明确设置为 `dashcamOnly`，不属于�
 | 手机导航与 App 变道 | 使用现有 Carrot 导航、ATC 和变道状态机 | App 通信正常；保留原有使能、盲点和确认规则 |
 | DAS 限速自动滚轮 | 按车辆限速逐格调整巡航设置速度 | 纵向模式、额外车辆 CAN、有效目标和原厂滚轮模板 |
 | 自动转向灯 | 对现有转弯、变道请求管理灯光会话 | Model 3/Y 的已适配拨杆布局、额外 CAN、开关及完整反馈；持续闪灯待实车验收 |
-| 三指触屏 | 切换 `ExperimentalMode` | 额外 CAN 提供触点数据，且已确认实验模式说明 |
+| 三指触屏 | 切换 `AlwaysLateral` 的 0/1 | 额外 CAN 提供触点数据；松开后下一次接触才再次切换 |
 | 四轮胎压 | 读取并提供给共享显示 | 额外 CAN 提供 TPMS 数据 |
 | 原厂盲点、FCW/AEB | 读取原厂状态，保留安全层让行规则 | 依赖原厂信号，不是新增碰撞避免能力 |
 | DAS 道路信息 | 相关数据服务可提供停止线距离和信号灯颜色 | 只提供新鲜原厂数据，不授予导航或起步权限 |
@@ -69,10 +69,10 @@ Model X 虽有平台定义，但接口明确设置为 `dashcamOnly`，不属于�
 | 参数或设置 | 默认/来源 | 作用与限制 |
 |---|---|---|
 | `TeslaAutoTurnSignals` | 默认关闭；启动设置中的“特斯拉自动转向灯” | 修改后需重启。只增加灯光请求，不开启导航、变道、转向或起步权限 |
-| `AlwaysLateral` | 默认关闭；“全时横向控制” | 允许巡航未激活时使用已开启的横向控制，仍受前进挡、输入就绪和故障检查约束 |
+| `AlwaysLateral` | 默认关闭；“全时横向控制” | 三指触屏可实时切换；允许巡航未激活时使用已开启的横向控制，仍受前进挡、输入就绪和故障检查约束 |
 | `AlphaLongitudinalEnabled` | 开发设置中的 alpha longitudinal | 决定是否申请 carrotpilot 纵向控制；受平台和构建限制，不等同实验驾驶模式 |
-| `ExperimentalMode` | 共享实验模式设置 | 三指触屏切换的是此参数，不是纵向控制权或自动灯开关 |
-| `ExperimentalModeConfirmed` | 用户确认实验模式说明后的状态 | 未确认时，Tesla 三指触屏不切换实验模式 |
+| `ExperimentalMode` | 共享实验模式设置 | Tesla 三指触屏不再修改此参数；实验/Chill 模式由原有设置入口管理 |
+| `ExperimentalModeConfirmed` | 用户确认实验模式说明后的状态 | 三指切换 `AlwaysLateral` 不再依赖此状态；实验模式设置入口保留原有确认规则 |
 | `TeslaWakeOnCAN` | 参数默认开启 | 只对已识别/选定的受支持 Model 3/Y 选择 Tesla CAN 唤醒固件；不是自动灯或驾驶使能开关 |
 
 自动限速滚轮没有独立 Carrot Web 开关，协同转向的 Tesla 实现也没有独立用户开关。不要把内部功能标志当成额外可调设置。
@@ -237,7 +237,9 @@ App 变道的灯光意图会锁存到原有 `preLaneChange → laneChangeStartin
 
 雷达需按相应方案接入 CAN1，车型具有雷达 DBC 且检测到 `0x410` 后才启用，解析最多 40 个目标及距离、横向位置、相对速度等，并报告雷达不可用、遮挡或故障。无该硬件/接入时 `radarUnavailable` 为真，不能凭开启导航或设置获得原厂雷达目标。车身扩展 CAN 与雷达接线不是同一适配承诺，不要因为逻辑编号相同就自行并线。
 
-额外 CAN 的 `UI_status2.UI_activeTouchPoints` 变化到三指时会产生按键事件。用户已确认实验模式说明后，它可切换 `ExperimentalMode`；它不切换 `AlphaLongitudinalEnabled`，也不是巡航接入、取消或自动灯开关。当前 Tesla 驱动没有实现完整的原厂按钮映射，跟车距离按键仍标为待实现；控制器的 Tesla HUD 输出也仍有 TODO，不应把数据可读取误认为可向原厂仪表显示全部 Carrot 信息。
+额外 CAN 的 `UI_status2.UI_activeTouchPoints` 变化到三指时会产生按键事件，实时切换 `AlwaysLateral` 的 0/1，下一控制周期读取新值。持续接触、空事件帧和重复按下不会重复切换，松开后才能再次切换。未保存该参数时默认 0，已有保存值不会被升级强制清零。此手势不再修改实验/Chill 模式，也不依赖实验模式确认状态。
+
+关闭 `AlwaysLateral` 只移除“巡航未激活时”的横向许可；主控制仍处于激活状态时，正常转向可以继续。因此这不是紧急接管、巡航取消、纵向控制权或自动灯开关。前进挡、横向已开启、启动输入就绪和故障检查继续生效。当前 Tesla 驱动没有实现完整的原厂按钮映射，跟车距离按键仍标为待实现；控制器的 Tesla HUD 输出也仍有 TODO，不应把数据可读取误认为可向原厂仪表显示全部 Carrot 信息。
 
 <a id="wake-and-park"></a>
 ## 唤醒、P 挡与设备电源
@@ -269,7 +271,7 @@ App 变道的灯光意图会锁存到原有 `preLaneChange → laneChangeStartin
 | 灯还在闪但软件已取消/故障 | 软件状态不是物理熄灯证明；驾驶员处理车辆灯光，保存取消与灯光反馈证据 |
 | 自动设置速度停止 | 检查人工暂停、导航优先、限速新鲜度、模板和车辆响应；不一定是故障 |
 | 静止不转向 | ESP 静止、首次输入就绪、实际横向状态、挡位、EPS 和原厂冲突条件 |
-| 三指触屏无反应 | 额外 CAN 触点数据、实验模式确认状态；不要把它当作安全接管按钮 |
+| 三指触屏无反应 | 额外 CAN 触点数据、是否已松开、`AlwaysLateral` 实际值及横向许可；不要把它当作安全接管按钮 |
 | P 挡后驾驶屏未退出 | 先看安全带和车门，可能是保持此前 ignition 的预期行为 |
 
 诊断应同步保留车辆车型、硬件/固件、软件版本、CarParams 功能标志、设置和原始 CAN 时间戳。灯控重点关联 `modelV2.meta.autoTurnSignalDirection/autoTurnSignalRequestId`、真实拨杆有效性/方向/按下计数、`autoTurnSignalStatus`、CAN1 模板与前灯反馈、CAN0 UI 反馈及 Panda 返回结果。日志对外分享前应去除个人和位置等敏感信息。
@@ -302,7 +304,7 @@ App 变道的灯光意图会锁存到原有 `preLaneChange → laneChangeStartin
 | 踏板、静止、拨杆来源、胎压、触屏和原厂状态 | [`carstate.py`](../../../opendbc_repo/opendbc/car/tesla/carstate.py) |
 | 控制器、协同转向和 DAS 自动滚轮 | [`carcontroller.py`](../../../opendbc_repo/opendbc/car/tesla/carcontroller.py)、[`coop_steering.py`](../../../opendbc_repo/opendbc/car/tesla/coop_steering.py)、[`speed_limit_controller.py`](../../../opendbc_repo/opendbc/car/tesla/speed_limit_controller.py) |
 | CAN 封装、FSD 14 类型兼容和前向雷达 | [`teslacan.py`](../../../opendbc_repo/opendbc/car/tesla/teslacan.py)、[`radar_interface.py`](../../../opendbc_repo/opendbc/car/tesla/radar_interface.py) |
-| 三指实验模式切换、静止横向和实际状态 | [`car_specific.py`](../../../openpilot/selfdrive/car/car_specific.py)、[`controlsd.py`](../../../openpilot/selfdrive/controls/controlsd.py)、[`card.py`](../../../openpilot/selfdrive/car/card.py) |
+| 三指全时横向切换、静止横向和实际状态 | [`car_specific.py`](../../../openpilot/selfdrive/car/car_specific.py)、[`controlsd.py`](../../../openpilot/selfdrive/controls/controlsd.py)、[`card.py`](../../../openpilot/selfdrive/car/card.py) |
 | 手机链路、变道/转弯与独立灯光意图 | [`carrot_man.py`](../../../openpilot/selfdrive/carrot/carrot_man.py)、[`desire_helper.py`](../../../openpilot/selfdrive/controls/lib/desire_helper.py) |
 | 原厂 DAS 道路信息的新鲜度处理 | [`xiaoge_data.py`](../../../openpilot/selfdrive/carrot/xiaoge_data.py) |
 | 自动灯执行、人工交接、取消和故障 | [`tesla_turn_signals.py`](../../../openpilot/selfdrive/car/tesla_turn_signals.py) |
