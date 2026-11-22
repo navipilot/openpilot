@@ -31,7 +31,7 @@ jobs:
           git remote remove carrot 2>/dev/null || true
           git remote add carrot https://github.com/ajouatom/openpilot.git
           git remote remove stable 2>/dev/null || true
-          git remote add stable https://github.com/firestar5683/StarPilot.git
+          git remote add stable https://github.com/StarPilotHQ/StarPilot.git
 
       - name: Sync Carrot
         run: |
