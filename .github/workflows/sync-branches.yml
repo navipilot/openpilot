@@ -15,61 +15,164 @@ concurrency:
 
 jobs:
   sync:
+    name: Sync ${{ matrix.target_branch }}
     runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - source_repo: https://github.com/ajouatom/openpilot.git
+            source_branch: carrot-wip
+            target_branch: Carrot
+
+          - source_repo: https://github.com/StarPilotHQ/StarPilot.git
+            source_branch: stable
+            target_branch: StarPilot
+
+    env:
+      GIT_LFS_FORCE_PROGRESS: "1"
+      GIT_TERMINAL_PROMPT: "0"
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           lfs: false
           token: ${{ secrets.GH_TOKEN }}
 
-      - name: Configure
+      - name: Configure Git and LFS
         run: |
-          set -e
+          set -euo pipefail
+
           git lfs install --local
-          git remote remove carrot 2>/dev/null || true
-          git remote add carrot https://github.com/ajouatom/openpilot.git
-          git remote remove starpilot 2>/dev/null || true
-          git remote add starpilot https://github.com/StarPilotHQ/StarPilot.git
 
-      - name: Sync Carrot
+          git config lfs.concurrenttransfers 16
+
+          git remote remove upstream 2>/dev/null || true
+
+          git remote add upstream "${{ matrix.source_repo }}"
+
+          echo "Source repository: ${{ matrix.source_repo }}"
+          echo "Source branch: ${{ matrix.source_branch }}"
+          echo "Target branch: ${{ matrix.target_branch }}"
+
+      - name: Check Version
+        id: version
         run: |
-          set -e
+          set -euo pipefail
 
-          git fetch carrot \
-            +refs/heads/carrot-wip:refs/remotes/carrot/carrot-wip \
+          SOURCE_SHA=$(git ls-remote upstream \
+            refs/heads/${{ matrix.source_branch }} | awk '{print $1}')
+
+          TARGET_SHA=$(git ls-remote origin \
+            refs/heads/${{ matrix.target_branch }} | awk '{print $1}')
+
+          echo "Source SHA: $SOURCE_SHA"
+          echo "Target SHA: $TARGET_SHA"
+
+          if [ -z "$SOURCE_SHA" ]; then
+            echo "ERROR: Source branch not found."
+            exit 1
+          fi
+
+          if [ "$SOURCE_SHA" = "$TARGET_SHA" ]; then
+            echo "Already up to date. Skip synchronization."
+            echo "needs_sync=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "New version detected."
+            echo "needs_sync=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fetch Git Objects
+        if: steps.version.outputs.needs_sync == 'true'
+        run: |
+          set -euo pipefail
+
+          echo "========== Fetch Git Objects =========="
+
+          git fetch --progress --unshallow upstream \
+            +refs/heads/${{ matrix.source_branch }}:refs/remotes/upstream/source \
             --no-tags
 
-          git branch -f sync-carrot refs/remotes/carrot/carrot-wip
+          git branch -f sync-source refs/remotes/upstream/source
 
-          git lfs fetch --all carrot sync-carrot
-          git lfs push --all origin sync-carrot
+          echo "Git fetch completed."
 
-          git push origin \
-            refs/heads/sync-carrot:refs/heads/Carrot \
-            --force
-
-      - name: Sync StarPilot Stable
+      - name: Download LFS Objects
+        if: steps.version.outputs.needs_sync == 'true'
         run: |
-          set -e
+          set -euo pipefail
 
-          git fetch starpilot \
-            +refs/heads/stable:refs/remotes/starpilot/stable \
-            --no-tags
+          echo "========== Download LFS Objects =========="
 
-          git branch -f sync-starpilot refs/remotes/starpilot/stable
+          git lfs fetch --all upstream sync-source
 
-          git lfs fetch --all starpilot sync-starpilot
-          git lfs push --all origin sync-starpilot
+          echo "LFS download completed."
 
-          git push origin \
-            refs/heads/sync-starpilot:refs/heads/StarPilot \
+          du -sh .git/lfs/objects || true
+
+      - name: Upload LFS Objects
+        if: steps.version.outputs.needs_sync == 'true'
+        run: |
+          set -euo pipefail
+
+          echo "========== Upload LFS Objects =========="
+
+          git lfs push --all origin sync-source
+
+          echo "LFS upload completed."
+
+      - name: Push Target Branch
+        if: steps.version.outputs.needs_sync == 'true'
+        run: |
+          set -euo pipefail
+
+          echo "========== Push Target Branch =========="
+
+          git push --progress origin \
+            refs/heads/sync-source:refs/heads/${{ matrix.target_branch }} \
             --force
+
+          echo "Branch push completed."
+
+      - name: Verify Synchronization
+        run: |
+          set -euo pipefail
+
+          echo "========== Verify Synchronization =========="
+
+          SYNC_SHA=$(git rev-parse refs/remotes/upstream/source 2>/dev/null \
+            || git ls-remote upstream \
+            refs/heads/${{ matrix.source_branch }} | awk '{print $1}')
+
+          TARGET_SHA=$(git ls-remote origin \
+            refs/heads/${{ matrix.target_branch }} | awk '{print $1}')
+
+          echo "Expected SHA: $SYNC_SHA"
+          echo "Target SHA:   $TARGET_SHA"
+
+          if [ -n "$SYNC_SHA" ] && [ "$SYNC_SHA" = "$TARGET_SHA" ]; then
+            echo "Synchronization successful."
+          else
+            echo "ERROR: Commit SHA mismatch."
+            exit 1
+          fi
 
       - name: Show Result
         if: always()
         run: |
-          git ls-remote --heads origin refs/heads/Carrot
-          git ls-remote --heads origin refs/heads/StarPilot
+          echo "========== Final Result =========="
+
+          echo "Source repository:"
+          echo "${{ matrix.source_repo }}"
+
+          echo "Source branch:"
+          echo "${{ matrix.source_branch }}"
+
+          echo "Target branch:"
+
+          git ls-remote --heads origin \
+            refs/heads/${{ matrix.target_branch }}
