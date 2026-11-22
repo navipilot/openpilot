@@ -1,3 +1,4 @@
+
 name: Sync Branches
 
 on:
@@ -30,8 +31,8 @@ jobs:
           git lfs install --local
           git remote remove carrot 2>/dev/null || true
           git remote add carrot https://github.com/ajouatom/openpilot.git
-          git remote remove stable 2>/dev/null || true
-          git remote add stable https://github.com/StarPilotHQ/StarPilot.git
+          git remote remove starpilot 2>/dev/null || true
+          git remote add starpilot https://github.com/StarPilotHQ/StarPilot.git
 
       - name: Sync Carrot
         run: |
@@ -50,25 +51,25 @@ jobs:
             refs/heads/sync-carrot:refs/heads/Carrot \
             --force
 
-      - name: Sync Stable
+      - name: Sync StarPilot Stable
         run: |
           set -e
 
-          git fetch stable \
-            +refs/heads/stable:refs/remotes/stable/stable \
+          git fetch starpilot \
+            +refs/heads/stable:refs/remotes/starpilot/stable \
             --no-tags
 
-          git branch -f sync-stable refs/remotes/stable/stable
+          git branch -f sync-starpilot refs/remotes/starpilot/stable
 
-          git lfs fetch --all stable sync-stable
-          git lfs push --all origin sync-stable
+          git lfs fetch --all starpilot sync-starpilot
+          git lfs push --all origin sync-starpilot
 
           git push origin \
-            refs/heads/sync-stable:refs/heads/Stable \
+            refs/heads/sync-starpilot:refs/heads/StarPilot \
             --force
 
       - name: Show Result
         if: always()
         run: |
           git ls-remote --heads origin refs/heads/Carrot
-          git ls-remote --heads origin refs/heads/Stable
+          git ls-remote --heads origin refs/heads/StarPilot
