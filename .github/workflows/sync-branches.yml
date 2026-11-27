@@ -1,5 +1,4 @@
-
-name: Sync Branches
+name: Sync Carrot
 
 on:
   schedule:
@@ -10,30 +9,21 @@ permissions:
   contents: write
 
 concurrency:
-  group: sync-branches
+  group: sync-carrot
   cancel-in-progress: false
 
 jobs:
   sync:
-    name: Sync ${{ matrix.target_branch }}
+    name: Sync Carrot
     runs-on: ubuntu-latest
     timeout-minutes: 60
-
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - source_repo: https://github.com/ajouatom/openpilot.git
-            source_branch: carrot-wip
-            target_branch: Carrot
-
-          - source_repo: https://github.com/StarPilotHQ/StarPilot.git
-            source_branch: stable
-            target_branch: StarPilot
 
     env:
       GIT_LFS_FORCE_PROGRESS: "1"
       GIT_TERMINAL_PROMPT: "0"
+      SOURCE_REPO: https://github.com/ajouatom/openpilot.git
+      SOURCE_BRANCH: carrot-wip
+      TARGET_BRANCH: Carrot
 
     steps:
       - name: Checkout
@@ -48,16 +38,14 @@ jobs:
           set -euo pipefail
 
           git lfs install --local
-
           git config lfs.concurrenttransfers 16
 
           git remote remove upstream 2>/dev/null || true
+          git remote add upstream "$SOURCE_REPO"
 
-          git remote add upstream "${{ matrix.source_repo }}"
-
-          echo "Source repository: ${{ matrix.source_repo }}"
-          echo "Source branch: ${{ matrix.source_branch }}"
-          echo "Target branch: ${{ matrix.target_branch }}"
+          echo "Source repository: $SOURCE_REPO"
+          echo "Source branch: $SOURCE_BRANCH"
+          echo "Target branch: $TARGET_BRANCH"
 
       - name: Check Version
         id: version
@@ -65,10 +53,10 @@ jobs:
           set -euo pipefail
 
           SOURCE_SHA=$(git ls-remote upstream \
-            refs/heads/${{ matrix.source_branch }} | awk '{print $1}')
+            "refs/heads/$SOURCE_BRANCH" | awk '{print $1}')
 
           TARGET_SHA=$(git ls-remote origin \
-            refs/heads/${{ matrix.target_branch }} | awk '{print $1}')
+            "refs/heads/$TARGET_BRANCH" | awk '{print $1}')
 
           echo "Source SHA: $SOURCE_SHA"
           echo "Target SHA: $TARGET_SHA"
@@ -94,7 +82,7 @@ jobs:
           echo "========== Fetch Git Objects =========="
 
           git fetch --progress --unshallow upstream \
-            +refs/heads/${{ matrix.source_branch }}:refs/remotes/upstream/source \
+            +refs/heads/$SOURCE_BRANCH:refs/remotes/upstream/source \
             --no-tags
 
           git branch -f sync-source refs/remotes/upstream/source
@@ -111,7 +99,6 @@ jobs:
           git lfs fetch --all upstream sync-source
 
           echo "LFS download completed."
-
           du -sh .git/lfs/objects || true
 
       - name: Upload LFS Objects
@@ -133,7 +120,7 @@ jobs:
           echo "========== Push Target Branch =========="
 
           git push --progress origin \
-            refs/heads/sync-source:refs/heads/${{ matrix.target_branch }} \
+            refs/heads/sync-source:refs/heads/$TARGET_BRANCH \
             --force
 
           echo "Branch push completed."
@@ -146,10 +133,10 @@ jobs:
 
           SYNC_SHA=$(git rev-parse refs/remotes/upstream/source 2>/dev/null \
             || git ls-remote upstream \
-            refs/heads/${{ matrix.source_branch }} | awk '{print $1}')
+            "refs/heads/$SOURCE_BRANCH" | awk '{print $1}')
 
           TARGET_SHA=$(git ls-remote origin \
-            refs/heads/${{ matrix.target_branch }} | awk '{print $1}')
+            "refs/heads/$TARGET_BRANCH" | awk '{print $1}')
 
           echo "Expected SHA: $SYNC_SHA"
           echo "Target SHA:   $TARGET_SHA"
@@ -160,19 +147,3 @@ jobs:
             echo "ERROR: Commit SHA mismatch."
             exit 1
           fi
-
-      - name: Show Result
-        if: always()
-        run: |
-          echo "========== Final Result =========="
-
-          echo "Source repository:"
-          echo "${{ matrix.source_repo }}"
-
-          echo "Source branch:"
-          echo "${{ matrix.source_branch }}"
-
-          echo "Target branch:"
-
-          git ls-remote --heads origin \
-            refs/heads/${{ matrix.target_branch }}
