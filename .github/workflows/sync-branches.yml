@@ -1,4 +1,4 @@
-name: Sync Carrot
+name: Sync Branches
 
 on:
   schedule:
@@ -8,142 +8,41 @@ on:
 permissions:
   contents: write
 
-concurrency:
-  group: sync-carrot
-  cancel-in-progress: false
-
 jobs:
   sync:
-    name: Sync Carrot
     runs-on: ubuntu-latest
-    timeout-minutes: 60
-
-    env:
-      GIT_LFS_FORCE_PROGRESS: "1"
-      GIT_TERMINAL_PROMPT: "0"
-      SOURCE_REPO: https://github.com/ajouatom/openpilot.git
-      SOURCE_BRANCH: carrot-wip
-      TARGET_BRANCH: Carrot
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
           lfs: false
           token: ${{ secrets.GH_TOKEN }}
 
-      - name: Configure Git and LFS
+      - name: Configure
         run: |
-          set -euo pipefail
-
           git lfs install --local
-          git config lfs.concurrenttransfers 16
+          git remote add carrot https://github.com/ajouatom/openpilot.git
 
-          git remote remove upstream 2>/dev/null || true
-          git remote add upstream "$SOURCE_REPO"
-
-          echo "Source repository: $SOURCE_REPO"
-          echo "Source branch: $SOURCE_BRANCH"
-          echo "Target branch: $TARGET_BRANCH"
-
-      - name: Check Version
-        id: version
+      - name: Sync Carrot
         run: |
-          set -euo pipefail
+          set -e
 
-          SOURCE_SHA=$(git ls-remote upstream \
-            "refs/heads/$SOURCE_BRANCH" | awk '{print $1}')
-
-          TARGET_SHA=$(git ls-remote origin \
-            "refs/heads/$TARGET_BRANCH" | awk '{print $1}')
-
-          echo "Source SHA: $SOURCE_SHA"
-          echo "Target SHA: $TARGET_SHA"
-
-          if [ -z "$SOURCE_SHA" ]; then
-            echo "ERROR: Source branch not found."
-            exit 1
-          fi
-
-          if [ "$SOURCE_SHA" = "$TARGET_SHA" ]; then
-            echo "Already up to date. Skip synchronization."
-            echo "needs_sync=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "New version detected."
-            echo "needs_sync=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Fetch Git Objects
-        if: steps.version.outputs.needs_sync == 'true'
-        run: |
-          set -euo pipefail
-
-          echo "========== Fetch Git Objects =========="
-
-          git fetch --progress --unshallow upstream \
-            +refs/heads/$SOURCE_BRANCH:refs/remotes/upstream/source \
+          git fetch carrot \
+            +refs/heads/carrot-wip:refs/remotes/carrot/carrot-wip \
             --no-tags
 
-          git branch -f sync-source refs/remotes/upstream/source
+          git branch -f sync-carrot refs/remotes/carrot/carrot-wip
 
-          echo "Git fetch completed."
+          git lfs fetch --all carrot sync-carrot
+          git lfs push --all origin sync-carrot
 
-      - name: Download LFS Objects
-        if: steps.version.outputs.needs_sync == 'true'
-        run: |
-          set -euo pipefail
-
-          echo "========== Download LFS Objects =========="
-
-          git lfs fetch --all upstream sync-source
-
-          echo "LFS download completed."
-          du -sh .git/lfs/objects || true
-
-      - name: Upload LFS Objects
-        if: steps.version.outputs.needs_sync == 'true'
-        run: |
-          set -euo pipefail
-
-          echo "========== Upload LFS Objects =========="
-
-          git lfs push --all origin sync-source
-
-          echo "LFS upload completed."
-
-      - name: Push Target Branch
-        if: steps.version.outputs.needs_sync == 'true'
-        run: |
-          set -euo pipefail
-
-          echo "========== Push Target Branch =========="
-
-          git push --progress origin \
-            refs/heads/sync-source:refs/heads/$TARGET_BRANCH \
+          git push origin \
+            refs/heads/sync-carrot:refs/heads/Carrot \
             --force
 
-          echo "Branch push completed."
-
-      - name: Verify Synchronization
+      - name: Show Result
+        if: always()
         run: |
-          set -euo pipefail
-
-          echo "========== Verify Synchronization =========="
-
-          SYNC_SHA=$(git rev-parse refs/remotes/upstream/source 2>/dev/null \
-            || git ls-remote upstream \
-            "refs/heads/$SOURCE_BRANCH" | awk '{print $1}')
-
-          TARGET_SHA=$(git ls-remote origin \
-            "refs/heads/$TARGET_BRANCH" | awk '{print $1}')
-
-          echo "Expected SHA: $SYNC_SHA"
-          echo "Target SHA:   $TARGET_SHA"
-
-          if [ -n "$SYNC_SHA" ] && [ "$SYNC_SHA" = "$TARGET_SHA" ]; then
-            echo "Synchronization successful."
-          else
-            echo "ERROR: Commit SHA mismatch."
-            exit 1
-          fi
+          git ls-remote --heads origin refs/heads/Carrot
